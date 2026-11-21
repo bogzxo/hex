@@ -11,8 +11,12 @@ internal sealed record HexLinkTreeFile(string Path, string? Hash, long Size)
     public bool Big => Hash is null;
 }
 
-/// <summary>A workspace folder's tree, the commit its repository is at (null for none) and every file git would carry.</summary>
-internal sealed record HexLinkManifest(string Folder, string? Head, IReadOnlyList<HexLinkTreeFile> Files);
+/// <summary>
+/// A workspace folder's tree, the commit its repository is at (null for none), every file git would carry, and the
+/// repository's first commit (<see cref="Root"/>, null outside one or before its first commit), which is what tells two
+/// clones of one repository from two repositories that only share a folder name.
+/// </summary>
+internal sealed record HexLinkManifest(string Folder, string? Head, IReadOnlyList<HexLinkTreeFile> Files, string? Root = null);
 
 /// <summary>A file of a watched tree that changed, its new hash (null with <see cref="Deleted"/> when it went, or when it's too big).</summary>
 internal sealed record HexLinkTreeChange(string Path, string? Hash, bool Deleted = false);
@@ -53,7 +57,7 @@ internal sealed class HexLinkTree
     /// </summary>
     public HexLinkManifest Manifest()
     {
-        string? head = null;
+        string? head = null, root = null;
         List<string>? relative = null;
         if (HexLinkGit.Why() is null)
         {
@@ -64,6 +68,7 @@ internal sealed class HexLinkTree
                 relative = [.. listed.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.Ordinal).Take(MOST_FILES)];
                 GitResult at = GitProcess.Run(Root, ["rev-parse", "HEAD"]);
                 head = at.Ok && HexLinkGit.IsCommitId(at.Output.Trim()) ? at.Output.Trim() : null;
+                root = head is null ? null : RootOf(head);
             }
         }
 
@@ -86,7 +91,26 @@ internal sealed class HexLinkTree
                 hashes.TryRemove(full, out _);
         }
 
-        return new HexLinkManifest(Folder.Name, head, files);
+        return new HexLinkManifest(Folder.Name, head, files, root);
+    }
+
+    // The first commit of the repository, worked out once per head (it only moves if history is rewritten). A history
+    // with several first commits (subtrees merged in) is known by the least of them, which both sides work out alike.
+    // Swapped whole, a manifest is made on more than one thread
+    private sealed record RootKnown(string Head, string? Root);
+
+    private volatile RootKnown? rootKnown;
+
+    private string? RootOf(string head)
+    {
+        if (rootKnown is { } known && known.Head == head)
+            return known.Root;
+        GitResult roots = GitProcess.Run(Root, ["rev-list", "--max-parents=0", "HEAD"]);
+        string? root = roots.Ok
+            ? roots.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Where(HexLinkGit.IsCommitId).Order(StringComparer.Ordinal).FirstOrDefault()
+            : null;
+        rootKnown = new RootKnown(head, root);
+        return root;
     }
 
     /// <summary>A file of the tree by its path inside the folder (forward slashes), null when it isn't one the tree carries.</summary>
@@ -198,7 +222,7 @@ internal sealed class HexLinkTree
             entries.Add((JsonNode)entry);
         }
 
-        return new JsonObject { ["folder"] = manifest.Folder, ["head"] = manifest.Head, ["entries"] = entries };
+        return new JsonObject { ["folder"] = manifest.Folder, ["head"] = manifest.Head, ["root"] = manifest.Root, ["entries"] = entries };
     }
 
     /// <summary>A manifest read off the wire with limits, its paths only those of the folder it says.</summary>
@@ -214,8 +238,9 @@ internal sealed class HexLinkTree
             files.Add(new HexLinkTreeFile(path, hash, Math.Max(0, HexLinkData.Long(entry, "size") ?? 0)));
         }
 
-        string? head = HexLinkData.String(said, "head", 64);
-        return new HexLinkManifest(folder, head is not null && HexLinkGit.IsCommitId(head) ? head : null, files);
+        string? head = HexLinkData.String(said, "head", 64), root = HexLinkData.String(said, "root", 64);
+        return new HexLinkManifest(folder, head is not null && HexLinkGit.IsCommitId(head) ? head : null, files,
+            root is not null && HexLinkGit.IsCommitId(root) ? root : null);
     }
 }
 
