@@ -6,12 +6,28 @@ internal sealed partial class HexLinkTree
 {
     private readonly record struct HashStamp(long Length, long Written, long Created, string Hash, string? Text, string? Eol);
 
-    private const int CacheVersion = 1;
+    private const int CacheVersion = 2;
     private const int MaximumCacheBytes = 256 * 1024 * 1024;
     private readonly string? cacheFile;
     private readonly Lock scan = new();
     private bool cacheLoaded;
-    private long computedHashes, cachedHashes;
+    private long computedHashes, cachedHashes, modeChanges, cachedModes;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> rememberedModes = new(PlatformPaths.Comparer);
+
+    internal bool? Mode(string full) => OperatingSystem.IsWindows()
+        ? rememberedModes.TryGetValue(full, out bool stored) ? stored : null
+        : File.GetUnixFileMode(full).HasFlag(UnixFileMode.UserExecute);
+
+    internal void RememberMode(string full, bool? executable)
+    {
+        if (OperatingSystem.IsWindows() && executable is { } mode &&
+            (!rememberedModes.TryGetValue(full, out bool before) || before != mode))
+        {
+            rememberedModes[full] = mode;
+            Interlocked.Increment(ref modeChanges);
+            InvalidateSnapshot();
+        }
+    }
 
     internal long ComputedHashes => Interlocked.Read(ref computedHashes);
 
@@ -29,12 +45,14 @@ internal sealed partial class HexLinkTree
             if (stream.Length > MaximumCacheBytes)
                 return;
             using var reader = new BinaryReader(stream);
-            if (reader.ReadInt32() != CacheVersion)
+            int version = reader.ReadInt32();
+            if (version is not (1 or CacheVersion))
                 return;
             int count = reader.ReadInt32();
             if (count is < 0 or > MOST_FILES)
                 return;
             var entries = new Dictionary<string, HashStamp>(count, StringComparer.Ordinal);
+            var modes = new Dictionary<string, bool>(PlatformPaths.Comparer);
             for (int i = 0; i < count; i++)
             {
                 string relative = ReadCacheText(reader, 4 * HexLinkFiles.MOST_PATH) ?? string.Empty;
@@ -44,12 +62,20 @@ internal sealed partial class HexLinkTree
                     (text is not null && (text.Length != 64 || !text.All(char.IsAsciiHexDigit))) ||
                     (eol is not null && eol is not ("lf" or "crlf" or "none")))
                     return;
-                entries.Add(Path.Combine(Root, relative.Replace('/', Path.DirectorySeparatorChar)), new HashStamp(length, written, created, hash, text, eol));
+                string full = Path.Combine(Root, relative.Replace('/', Path.DirectorySeparatorChar));
+                entries.Add(full, new HashStamp(length, written, created, hash, text, eol));
+                if (version >= 2 && reader.ReadByte() is byte mode && mode != 0)
+                    modes[full] = mode == 2;
             }
             if (stream.Position == stream.Length)
             {
                 foreach (var (full, value) in entries)
                     hashes.TryAdd(full, value);
+                if (OperatingSystem.IsWindows())
+                {
+                    foreach (var (full, mode) in modes)
+                        rememberedModes.TryAdd(full, mode);
+                }
             }
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
@@ -60,8 +86,8 @@ internal sealed partial class HexLinkTree
 
     private void SaveCache(IReadOnlyList<HexLinkTreeFile> files)
     {
-        long changes = ComputedHashes;
-        if (cacheFile is null || cachedHashes == changes)
+        long changes = ComputedHashes, modes = Interlocked.Read(ref modeChanges);
+        if (cacheFile is null || (cachedHashes == changes && cachedModes == modes))
             return;
 
         string temp = cacheFile + "." + Guid.NewGuid().ToString("N") + ".hexlink";
@@ -87,6 +113,7 @@ internal sealed partial class HexLinkTree
                     WriteCacheText(writer, entry.Hash);
                     WriteCacheText(writer, entry.Text);
                     WriteCacheText(writer, entry.Eol);
+                    writer.Write((byte)(file.Executable switch { true => 2, false => 1, null => 0 }));
                     count++;
                 }
                 stream.Position = sizeof(int);
@@ -94,6 +121,7 @@ internal sealed partial class HexLinkTree
             }
             File.Move(temp, cacheFile, overwrite: true);
             cachedHashes = changes;
+            cachedModes = modes;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {

@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json.Nodes;
 
 using Hex.Core;
 
@@ -8,6 +9,105 @@ namespace Hex.Tests;
 
 public sealed partial class HexLinkSyncTests
 {
+
+    [Fact]
+    public async Task Binary_sync_copies_files_over_the_legacy_cap_in_each_direction()
+    {
+        using var pair = new LinkedPair(EDIT, EDIT);
+        byte[] fromA = new byte[HexLinkFiles.MOST_READ + 1024], fromB = new byte[fromA.Length];
+        new Random(21).NextBytes(fromA);
+        new Random(22).NextBytes(fromB);
+        File.WriteAllBytes(Path.Combine(pair.A.Work, "large-a.bin"), fromA);
+        File.WriteAllBytes(Path.Combine(pair.B.Work, "large-b.bin"), fromB);
+
+        HexLinkPeer peer = await PackedPeer(pair);
+        using var sync = SyncOf(pair, peer);
+        await sync.Start();
+        await Settled(sync);
+
+        Assert.Equal(HexLinkFiles.Hash(fromA), HashLarge(Path.Combine(pair.B.Work, "large-a.bin")));
+        Assert.Equal(HexLinkFiles.Hash(fromB), HashLarge(Path.Combine(pair.A.Work, "large-b.bin")));
+        Assert.Empty(sync.Skipped);
+        Assert.Empty(sync.Conflicts);
+    }
+
+    [Fact]
+    public async Task An_interrupted_stream_resumes_from_a_checked_prefix_on_the_next_link()
+    {
+        using var pair = new LinkedPair(EDIT, EDIT);
+        HexLinkPeer first = await PackedPeer(pair);
+        byte[] bytes = new byte[HexLinkFiles.MOST_READ + 1024];
+        new Random(23).NextBytes(bytes);
+        string source = Path.Combine(pair.A.Work, "resume.bin");
+        File.WriteAllBytes(source, bytes);
+        var transfer = new HexLinkFileTransfer("work/resume.bin", bytes.Length, HexLinkFiles.Hash(bytes));
+        const int prefix = 1024 * 1024;
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(LONG_MS));
+
+        var metadata = transfer.Json();
+        new HexLinkFileTransfer.Checkpoint(0, null).PutIn(metadata);
+        await using (HexLinkSession.BulkUpload upload = await first.Session.OpenBulkAsync("sync/file/write", bytes.Length, metadata, timeout.Token))
+        {
+            await upload.WriteAsync(bytes.AsMemory(0, prefix), timeout.Token);
+            while (true)
+            {
+                var reply = await first.Session.Ask("sync/file/resume", transfer.Json(), timeout.Token);
+                if (HexLinkFileTransfer.Checkpoint.Of(reply!.AsObject(), bytes.Length).Offset == prefix)
+                    break;
+                await Task.Delay(40, timeout.Token);
+            }
+
+            first.Session.Close("test interruption");
+        }
+
+        Assert.True(await Until(() => pair.LinkA.PeerOf(DeviceB.Id) is null && pair.LinkB.PeerOf(DeviceA.Id) is null));
+        HexLinkPeer resumed = await PackedPeer(pair);
+        var checkpoint = (await resumed.Session.Ask("sync/file/resume", transfer.Json(), timeout.Token))!.AsObject();
+        Assert.Equal(new HexLinkFileTransfer.Checkpoint(prefix, HexLinkFiles.Hash(bytes.AsSpan(0, prefix))),
+            HexLinkFileTransfer.Checkpoint.Of(checkpoint, bytes.Length));
+        await resumed.WriteStreamedFile(transfer, source, timeout.Token);
+        Assert.Equal(transfer.Hash, HashLarge(Path.Combine(pair.B.Work, "resume.bin")));
+        var completed = (await resumed.Session.Ask("sync/file/resume", transfer.Json(), timeout.Token))!.AsObject();
+        Assert.Equal(0, HexLinkFileTransfer.Checkpoint.Of(completed, bytes.Length).Offset);
+    }
+
+
+    [Fact]
+    public async Task Equal_directory_digests_leave_only_changed_entries_on_the_wire()
+    {
+        using var pair = new LinkedPair(EDIT, EDIT);
+        Put(pair.A, "same/one.txt", "equal");
+        Put(pair.B, "same/one.txt", "equal");
+        Put(pair.A, "changed/two.txt", "previous");
+        Put(pair.B, "changed/two.txt", "next");
+        HexLinkPeer peer = await PackedPeer(pair);
+        HexLinkManifest basis = new HexLinkTree(pair.A.Workspace.Folders[0]).Manifest();
+        HexLinkDirectoryDigests digests = HexLinkDirectoryDigests.From(basis);
+        var offer = digests.Offer();
+
+        var said = (await peer.Session.Ask("sync/watch", new JsonObject
+        {
+            ["folder"] = basis.Folder,
+            ["paged"] = true,
+            ["directories"] = offer.DeepClone()
+        }))!.AsObject();
+        Assert.Equal("work/same", Assert.Single(said["equal_directories"]!.AsArray())!.GetValue<string>());
+        HexLinkManifest changed = HexLinkTree.Of(said);
+        Assert.Equal("work/changed/two.txt", Assert.Single(changed.Files).Path);
+        Assert.Throws<HexLinkException>(() => digests.Reconstruct(changed, new JsonArray(JsonValue.Create("work/unknown")), offer, 2));
+
+        HexLinkManifest restored = await peer.WatchTree(basis.Folder, _ => { }, basis: basis);
+        Assert.True(restored.Certified);
+        Assert.Equal(2, restored.Files.Count);
+        Assert.Equal(HexLinkFiles.Hash(Encoding.UTF8.GetBytes("next")), restored.Files.Single(each => each.Path == "work/changed/two.txt").Hash);
+    }
+
+    private static string HashLarge(string path)
+    {
+        using FileStream file = HexLinkFileTransfer.Read(path);
+        return Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(file));
+    }
+
     private static async Task<HexLinkPeer> PackedPeer(LinkedPair pair)
     {
         var (a, b) = Pair();

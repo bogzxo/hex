@@ -40,7 +40,7 @@ internal sealed partial class HexLinkSync
     private TaskCompletionSource? drained;
 
     // The first comparison done: what differs queued, both trees watched from now on
-    private void Begin(HexLinkManifest mine, HexLinkManifest theirs, HexLinkTreeWatch watch)
+    private void Begin(HexLinkManifest mine, HexLinkManifest theirs, HexLinkTreeSubscription watch)
     {
         var here = new Dictionary<string, HexLinkTreeFile>(StringComparer.Ordinal);
         foreach (HexLinkTreeFile file in mine.Files)
@@ -99,17 +99,23 @@ internal sealed partial class HexLinkSync
                 HexLinkTreeFile? mineFile = here.GetValueOrDefault(path), theirsFile = remote.GetValueOrDefault(path);
                 string? m = mineFile?.Hash, t = theirsFile?.Hash;
                 bool mineThere = mineFile is not null, theirsThere = theirsFile is not null;
-                if (m is not null && bases.TryGetValue(path, out HexLinkSyncAgreed? agreed) && agreed.Local == m && agreed.Remote == t)
+                if (peer.Session.SupportsBulk && m is not null && m == t && mineFile!.Executable != theirsFile!.Executable)
                 {
-                    // Where both were left, line ends and all
+                    differ.Add(path, TransferSize(mineFile, theirsFile));
+                }
+                else if (m is not null && bases.TryGetValue(path, out HexLinkSyncAgreed? agreed) && agreed.Local == m && agreed.Remote == t)
+                {
+                    // Where both were left, line ends and all. Older state did not record executable mode.
+                    if (agreed.Executable is null && mineFile!.Executable is { } mode && mode == theirsFile?.Executable)
+                        SetBase(path, agreed with { Executable = mode });
                 }
                 else if (m is not null && m == t)
                 {
                     // The same on both, agreed whatever was known before, a conflict settled by hand on both sides with it
                     if (mineFile!.Text is { } same && mineFile.Eol is not null)
-                        SetBase(path, new HexLinkSyncAgreed(m, m, same, EolIn(mineFile.Eol), EolIn(mineFile.Eol)));
+                        SetBase(path, new HexLinkSyncAgreed(m, m, same, EolIn(mineFile.Eol), EolIn(mineFile.Eol), mineFile.Executable));
                     else
-                        Agree(path, m);
+                        SetBase(path, Identical(m) with { Executable = mineFile!.Executable });
                     conflicts.Remove(path);
                 }
                 else if (m is not null && t is not null && mineFile!.Text is { } text && text == theirsFile!.Text)
@@ -159,7 +165,7 @@ internal sealed partial class HexLinkSync
     }
 
     private static long TransferSize(HexLinkTreeFile? here, HexLinkTreeFile? there) =>
-        here is { Big: true } || there is { Big: true } ? 0 : Math.Min(HexLinkFiles.MOST_READ, Math.Max(here?.Size ?? 0, there?.Size ?? 0));
+        here is { Big: true } || there is { Big: true } ? 0 : Math.Max(here?.Size ?? 0, there?.Size ?? 0);
 
     // This side's tree changed (its watcher's thread): what isn't settled already is queued
     private void Saw(IReadOnlyList<HexLinkTreeChange> changes)
@@ -186,7 +192,8 @@ internal sealed partial class HexLinkSync
                 // A file written here from the other side, reported back by the watcher with the hash it was agreed at
                 bool settled = change.Deleted
                     ? agreed is null && theirs is null
-                    : change.Hash is not null && agreed is not null && change.Hash == agreed.Local && theirs?.Hash == agreed.Remote;
+                    : change.Hash is not null && agreed is not null && change.Hash == agreed.Local && theirs?.Hash == agreed.Remote &&
+                        (change.Executable is null || change.Executable == agreed.Executable);
                 if (!settled || change.PreviousPath is not null || CaseDiffers(change.Path))
                     dirty.Add(change.Path);
             }
@@ -229,7 +236,8 @@ internal sealed partial class HexLinkSync
                     continue;
                 There(change);
                 bases.TryGetValue(change.Path, out HexLinkSyncAgreed? agreed);
-                bool settled = change.Deleted ? agreed is null : change.Hash is not null && change.Hash == agreed?.Remote;
+                bool settled = change.Deleted ? agreed is null : change.Hash is not null && change.Hash == agreed?.Remote &&
+                    (change.Executable is null || change.Executable == agreed.Executable);
                 if (!settled)
                     dirty.Add(change.Path);
             }
@@ -248,7 +256,7 @@ internal sealed partial class HexLinkSync
             RemoveRemote(change.Path);
         else
         {
-            remote[change.Path] = new HexLinkTreeFile(change.Path, change.Hash, 0, change.Text, change.Eol);
+            remote[change.Path] = new HexLinkTreeFile(change.Path, change.Hash, change.Size, change.Text, change.Eol, change.Executable);
             thereNames.Add(change.Path);
         }
     }
@@ -673,12 +681,12 @@ internal sealed partial class HexLinkSync
         if (HexLinkTree.RegularFile(full, tree.Root) is { } info)
         {
             if (info.Length > HexLinkFiles.MOST_READ)
-                mine = new HexLinkTreeFile(wire, null, info.Length);
+                mine = await ReadStreamedMetadata(wire, full, info, stop);
             else
             {
                 localBytes = await HexLinkFiles.ReadSharedAsync(full, stop);
                 TextInfo text = TextOf(localBytes);
-                mine = new HexLinkTreeFile(wire, HexLinkFiles.Hash(localBytes), localBytes.LongLength, text.Norm, EolWord(text.Eol));
+                mine = new HexLinkTreeFile(wire, HexLinkFiles.Hash(localBytes), localBytes.LongLength, text.Norm, EolWord(text.Eol), tree.Mode(full));
             }
         }
         HexLinkTreeFile? theirs;
@@ -698,6 +706,14 @@ internal sealed partial class HexLinkSync
         }
 
         Unskip(wire);
+        if (held?.HasUnsavedChanges != true && mine is not null && theirs is not null &&
+            await ReconcileMode(wire, full, mine, theirs, agreed, localBytes, stop))
+            return;
+        if ((mine?.Size ?? 0) > HexLinkFiles.MOST_READ || (theirs?.Size ?? 0) > HexLinkFiles.MOST_READ)
+        {
+            await ReconcileStreamed(wire, full, mine, theirs, agreed, held, stop);
+            return;
+        }
         if (held?.HasUnsavedChanges == true)
             return;
         string? m = mine?.Hash, t = theirs?.Hash;
@@ -848,7 +864,8 @@ internal sealed partial class HexLinkSync
 
         try
         {
-            await ApplyLocal(full, wire, expected, written, stop, null);
+            await ApplyLocal(full, wire, expected, written, stop, file.Executable ?? theirs.Executable);
+            tree.RememberMode(full, file.Executable ?? theirs.Executable);
         }
         catch (HexLinkException e) when (EditorDirty(e))
         {
@@ -857,7 +874,7 @@ internal sealed partial class HexLinkSync
         }
 
         lock (gate)
-            SetBase(wire, AgreedOf(written, file.Bytes));
+            SetBase(wire, AgreedOf(written, file.Bytes) with { Executable = file.Executable ?? theirs.Executable });
 
         Interlocked.Increment(ref received);
         Notify();
@@ -990,9 +1007,9 @@ internal sealed partial class HexLinkSync
                 }
 
                 byte[] sending = Converted(bytes, info, there);
-                await PushPacked(wire, theirs, sending, stop);
+                await PushPacked(wire, theirs, sending, tree.Mode(full), stop);
                 lock (gate)
-                    SetBase(wire, AgreedOf(bytes, sending));
+                    SetBase(wire, AgreedOf(bytes, sending) with { Executable = tree.Mode(full) });
             }
 
             Interlocked.Increment(ref sent);

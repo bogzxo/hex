@@ -8,6 +8,7 @@ internal sealed partial class HexLinkHost
     {
         if (session.SupportsBulk)
         {
+            InstallStreamedFiles();
             session.RegisterBulkReceiver("sync/pack/write", HexLinkRights.Edit, (length, metadata, _) =>
                 ValueTask.FromResult<IHexLinkBulkSink>(new HexLinkFilePack.Sink(length,
                     (entries, cancel) => ApplyFilePack(metadata, entries, cancel))));
@@ -35,7 +36,8 @@ internal sealed partial class HexLinkHost
                 string full = ResolveFile(entry.Path);
                 if (ignored.Contains(entry.Path[prefix.Length..]))
                     throw new HexLinkException(HexLinkErrors.NOT_ALLOWED, "Link cannot write an ignored file.");
-                string? hash = await services.CompareAndReplace(full, entry.Path, entry.Base, entry.Bytes, cancel);
+                string? hash = await services.CompareAndReplace(full, entry.Path, entry.Base, entry.Bytes, cancel, entry.Executable);
+                tree.RememberMode(full, entry.Executable);
                 result = new(entry.Path, hash);
             }
             catch (HexLinkException error)
@@ -79,8 +81,9 @@ internal sealed partial class HexLinkHost
                 byte[] bytes = await HexLinkFiles.ReadSharedAsync(full, cancel);
                 if (bytes.Length > HexLinkFilePack.MaximumFile)
                     throw new HexLinkException(HexLinkErrors.TOO_BIG, $"The file {path} has outgrown a Link file pack.");
-                files.Add(new HexLinkFilePack.Entry(path, bytes, Executable: OperatingSystem.IsWindows()
-                    ? null : File.GetUnixFileMode(full).HasFlag(UnixFileMode.UserExecute)));
+                int slash = path.IndexOf('/');
+                HexLinkTree tree = TreeOf(new JsonObject { ["folder"] = path[..slash] });
+                files.Add(new HexLinkFilePack.Entry(path, bytes, Executable: tree.Mode(full)));
             }
             catch (HexLinkException error)
             {

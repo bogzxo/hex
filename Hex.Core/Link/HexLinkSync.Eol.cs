@@ -30,7 +30,7 @@ internal enum HexLinkEol
 /// differ only in line ends (a Windows checkout with core.autocrlf against a Mac's), the hash of its text with every
 /// CR LF made LF (<see cref="Text"/>, null for a binary file or one not read), and each side's line ends.
 /// </summary>
-internal sealed record HexLinkSyncAgreed(string Local, string Remote, string? Text = null, HexLinkEol LocalEol = HexLinkEol.Unknown, HexLinkEol RemoteEol = HexLinkEol.Unknown);
+internal sealed record HexLinkSyncAgreed(string Local, string Remote, string? Text = null, HexLinkEol LocalEol = HexLinkEol.Unknown, HexLinkEol RemoteEol = HexLinkEol.Unknown, bool? Executable = null);
 
 internal sealed partial class HexLinkSync
 {
@@ -121,7 +121,9 @@ internal sealed partial class HexLinkSync
         Count(agreed, 1);
         // What the other side has, with its text and line ends when they're known (its text is this side's, they agreed)
         string? eol = agreed.Text is null ? null : EolWord(agreed.RemoteEol) is "lf" or "crlf" or "none" ? EolWord(agreed.RemoteEol) : null;
-        remote[path] = new HexLinkTreeFile(path, agreed.Remote, 0, eol is null ? null : agreed.Text, eol);
+        HexLinkTreeFile? previous = remote.GetValueOrDefault(path);
+        remote[path] = new HexLinkTreeFile(path, agreed.Remote, previous?.Size ?? 0, eol is null ? null : agreed.Text, eol,
+            agreed.Executable ?? previous?.Executable);
         tries.Remove(path);
     }
 

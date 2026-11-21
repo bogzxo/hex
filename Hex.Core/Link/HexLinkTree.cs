@@ -11,7 +11,7 @@ namespace Hex.Core;
 /// CRLF checkout from an LF one of the same file without reading either. Both null for binary, mixed or a peer that
 /// doesn't say them.
 /// </summary>
-internal sealed record HexLinkTreeFile(string Path, string? Hash, long Size, string? Text = null, string? Eol = null)
+internal sealed record HexLinkTreeFile(string Path, string? Hash, long Size, string? Text = null, string? Eol = null, bool? Executable = null)
 {
     /// <summary>Past what a link reads, listed without its hash.</summary>
     public bool Big => Hash is null;
@@ -29,7 +29,7 @@ internal sealed record HexLinkManifest(string Folder, string? Head, IReadOnlyLis
 /// A file of a watched tree that changed, its new hash (null with <see cref="Deleted"/> when it went, or when it's too
 /// big), and its text's hash and line ends as <see cref="HexLinkTreeFile"/> has them.
 /// </summary>
-internal sealed record HexLinkTreeChange(string Path, string? Hash, bool Deleted = false, string? Text = null, string? Eol = null, string? PreviousPath = null);
+internal sealed record HexLinkTreeChange(string Path, string? Hash, bool Deleted = false, string? Text = null, string? Eol = null, string? PreviousPath = null, long Size = 0, bool? Executable = null);
 
 /// <summary>
 /// A workspace folder's tree as the working-tree sync sees it: every file git would carry (tracked, and untracked but
@@ -53,13 +53,15 @@ internal sealed partial class HexLinkTree
     private readonly ConcurrentDictionary<string, HashStamp> hashes = new(StringComparer.Ordinal);
 
     private readonly Func<HexExcludes> excludes;
+    private readonly bool streamLarge;
     private readonly ConcurrentDictionary<string, string> movedCase = new(StringComparer.OrdinalIgnoreCase);
 
-    public HexLinkTree(HexLinkFolder folder, Func<HexExcludes>? excludes = null, string? cacheDirectory = null)
+    public HexLinkTree(HexLinkFolder folder, Func<HexExcludes>? excludes = null, string? cacheDirectory = null, bool streamLarge = false)
     {
         Folder = folder;
         Root = Path.GetFullPath(folder.Path);
         this.excludes = excludes ?? (() => HexExcludes.Usual);
+        this.streamLarge = streamLarge;
         if (cacheDirectory is not null)
         {
             string key = HexLinkFiles.Hash(System.Text.Encoding.UTF8.GetBytes(Root));
@@ -81,14 +83,24 @@ internal sealed partial class HexLinkTree
     /// </summary>
     public HexLinkManifest Manifest() => Manifest(verify: false);
 
-    internal HexLinkManifest Manifest(bool verify)
+    internal HexLinkManifest Manifest(bool verify, bool reuse = true)
     {
         lock (scan)
         {
             RequireRoot();
+            long version = Volatile.Read(ref scanVersion);
+            if (shareFreshScans && reuse && !verify && lastScan is { } previous &&
+                version == lastScanVersion && Environment.TickCount64 - scannedAt < 250)
+                return previous;
             LoadCache();
             HexLinkManifest manifest = Scan(verify);
             SaveCache(manifest.Files);
+            if (shareFreshScans)
+            {
+                lastScan = manifest;
+                lastScanVersion = version;
+                scannedAt = Environment.TickCount64;
+            }
             return manifest;
         }
     }
@@ -207,11 +219,12 @@ internal sealed partial class HexLinkTree
         string wire = Folder.Name + "/" + relative;
         if (wire.Length > HexLinkFiles.MOST_PATH)
             throw new IOException($"The path {wire} is too long for a link to list.");
-        if (info.Length > HexLinkFiles.MOST_READ)
+        if (info.Length > HexLinkFiles.MOST_READ && (!streamLarge || info.Length > HexLinkFileTransfer.MaximumLength))
             return new HexLinkTreeFile(wire, null, info.Length);
 
         var (hash, text, eol) = HashOf(full, info, verify);
-        return new HexLinkTreeFile(wire, hash, info.Length, text, eol);
+        bool? executable = Mode(full);
+        return new HexLinkTreeFile(wire, hash, info.Length, text, eol, executable);
     }
 
     // File.Exists suppresses access and I/O failures. Only a filesystem not-found result can establish absence.
@@ -261,10 +274,14 @@ internal sealed partial class HexLinkTree
     internal static bool SyncArtifact(string relative)
     {
         ReadOnlySpan<char> name = relative.AsSpan(relative.LastIndexOf('/') + 1);
-        return name.Contains(HexLinkSync.THEIRS, StringComparison.OrdinalIgnoreCase) ||
+        return CacheArtifact(name) || name.Contains(HexLinkSync.THEIRS, StringComparison.OrdinalIgnoreCase) ||
             (!name.IsEmpty && name[0] == '.' && name.EndsWith(".hexlink", StringComparison.OrdinalIgnoreCase)) ||
             (name.Length == 46 && name.StartsWith(".hex-save-", StringComparison.Ordinal) && name.EndsWith(".tmp", StringComparison.Ordinal));
     }
+
+    internal static bool CacheArtifact(ReadOnlySpan<char> name) =>
+        (name.Length == 72 && name.EndsWith(".hexpart", StringComparison.OrdinalIgnoreCase)) ||
+        (name.Length == 75 && name.StartsWith("tree-", StringComparison.OrdinalIgnoreCase) && name.EndsWith(".cache", StringComparison.OrdinalIgnoreCase));
 
     internal void NoteCase(string relative)
     {
@@ -374,11 +391,26 @@ internal sealed partial class HexLinkTree
             known.Length == length && known.Written == written && known.Created == created)
             return (known.Hash, known.Text, known.Eol);
 
-        byte[] bytes = HexLinkFiles.ReadShared(full);
-        string hash = HexLinkFiles.Hash(bytes);
-        var (text, eol) = HexLinkSync.TextAndEol(bytes);
+        string hash;
+        string? text = null, eol = null;
+        if (length > HexLinkFiles.MOST_READ)
+        {
+            using FileStream file = HexLinkFileTransfer.Read(full);
+            hash = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(file));
+            if (file.Length != length)
+                throw new IOException($"{full} changed while Link read its manifest.");
+        }
+        else
+        {
+            byte[] bytes = HexLinkFiles.ReadShared(full);
+            if (bytes.LongLength != length)
+                throw new IOException($"{full} changed while Link read its manifest.");
+            hash = HexLinkFiles.Hash(bytes);
+            (text, eol) = HexLinkSync.TextAndEol(bytes);
+        }
+
         info.Refresh();
-        if (bytes.LongLength != length || info.Length != length || info.LastWriteTimeUtc.Ticks != written || info.CreationTimeUtc.Ticks != created)
+        if (info.Length != length || info.LastWriteTimeUtc.Ticks != written || info.CreationTimeUtc.Ticks != created)
             throw new IOException($"{full} changed while Link read its manifest.");
         hashes[full] = new HashStamp(length, written, created, hash, text, eol);
         Interlocked.Increment(ref computedHashes);
@@ -444,6 +476,8 @@ internal sealed partial class HexLinkTree
             else
                 entry["hash"] = file.Hash;
             Text(entry, file.Text, file.Eol);
+            if (file.Executable is { } executable)
+                entry["executable"] = executable;
             entries.Add((JsonNode)entry);
         }
 
@@ -487,7 +521,8 @@ internal sealed partial class HexLinkTree
             if (!big && (hash is not { Length: 64 } || !hash.All(char.IsAsciiHexDigit)))
                 throw HexLinkException.Invalid($"The peer sent an invalid manifest hash for {path}.");
             var (text, eol) = hash is null ? (null, null) : TextOf(entry);
-            files.Add(new HexLinkTreeFile(path, hash, Math.Max(0, HexLinkData.Long(entry, "size") ?? 0), text, eol));
+            files.Add(new HexLinkTreeFile(path, hash, Math.Max(0, HexLinkData.Long(entry, "size") ?? 0), text, eol,
+                HexLinkData.Bool(entry, "executable")));
         }
 
         string? head = HexLinkData.String(said, "head", 64), root = HexLinkData.String(said, "root", 64);
@@ -525,6 +560,9 @@ internal sealed partial class HexLinkTree
         if (change.PreviousPath is { } previous)
             said["previous"] = previous;
         Text(said, change.Text, change.Eol);
+        said["size"] = change.Size;
+        if (change.Executable is { } executable)
+            said["executable"] = executable;
         return said;
     }
 
@@ -536,7 +574,9 @@ internal sealed partial class HexLinkTree
         string? hash = HexLinkData.String(said, "hash", 64);
         var (text, eol) = hash is null ? (null, null) : TextOf(said);
         string? previous = HexLinkData.String(said, "previous", HexLinkFiles.MOST_PATH);
-        return new HexLinkTreeChange(path, hash, Text: text, Eol: eol, PreviousPath: previous is not null && OnlyCase(path, previous) ? previous : null);
+        return new HexLinkTreeChange(path, hash, Text: text, Eol: eol,
+            PreviousPath: previous is not null && OnlyCase(path, previous) ? previous : null,
+            Size: Math.Max(0, HexLinkData.Long(said, "size") ?? 0), Executable: HexLinkData.Bool(said, "executable"));
     }
 }
 
@@ -558,7 +598,7 @@ internal sealed class HexLinkTreeWatch : IDisposable
     private readonly SemaphoreSlim looking = new(1, 1);
     private readonly HashSet<string> pending = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> caseMoves = new(StringComparer.Ordinal);
-    private Dictionary<string, string?> known = new(StringComparer.Ordinal);
+    private Dictionary<string, (string? Hash, bool? Executable)> known = new(StringComparer.Ordinal);
     private bool everything, seeded, disposed, verifyOnScan;
     private static readonly TimeSpan VerifyEvery = TimeSpan.FromMinutes(5);
     private long verifyAt = Environment.TickCount64 + (long)VerifyEvery.TotalMilliseconds;
@@ -614,7 +654,7 @@ internal sealed class HexLinkTreeWatch : IDisposable
             if (disposed)
                 return;
             foreach (HexLinkTreeFile file in from.Files)
-                known[file.Path] = file.Hash;
+                known[file.Path] = (file.Hash, file.Executable);
             seeded = true;
             TimeSpan interval = watcher is not null && Rescan >= TimeSpan.FromSeconds(15) ? Rescan * 3 : Rescan;
             rescan.Change(interval, interval);
@@ -658,6 +698,7 @@ internal sealed class HexLinkTreeWatch : IDisposable
                 pending.Add(relative);
         }
 
+        tree.InvalidateSnapshot();
         Poke();
     }
 
@@ -721,22 +762,23 @@ internal sealed class HexLinkTreeWatch : IDisposable
                     replaced ??= new HashSet<string>(StringComparer.Ordinal);
                     replaced.Add(from);
                     replaced.Add(to);
-                    changes.Add(new HexLinkTreeChange(to, file.Hash, Text: file.Text, Eol: file.Eol, PreviousPath: from));
+                    changes.Add(new HexLinkTreeChange(to, file.Hash, Text: file.Text, Eol: file.Eol, PreviousPath: from, Size: file.Size, Executable: file.Executable));
                 }
             }
 
             if (whole)
             {
-                HexLinkManifest now = tree.Manifest(verify);
+                HexLinkManifest now = tree.Manifest(verify, reuse: false);
                 if (verify)
                     verifyAt = Environment.TickCount64 + (long)VerifyEvery.TotalMilliseconds;
                 var then = known;
-                var next = new Dictionary<string, string?>(StringComparer.Ordinal);
+                var next = new Dictionary<string, (string? Hash, bool? Executable)>(StringComparer.Ordinal);
                 foreach (HexLinkTreeFile file in now.Files)
                 {
-                    next[file.Path] = file.Hash;
-                    if (replaced?.Contains(file.Path) != true && (!then.TryGetValue(file.Path, out string? was) || was != file.Hash || (file.Big && was is not null)))
-                        changes.Add(new HexLinkTreeChange(file.Path, file.Hash, Text: file.Text, Eol: file.Eol));
+                    next[file.Path] = (file.Hash, file.Executable);
+                    if (replaced?.Contains(file.Path) != true &&
+                        (!then.TryGetValue(file.Path, out var was) || was != (file.Hash, file.Executable)))
+                        changes.Add(new HexLinkTreeChange(file.Path, file.Hash, Text: file.Text, Eol: file.Eol, Size: file.Size, Executable: file.Executable));
                 }
 
                 Dictionary<string, int>? added = null;
@@ -763,7 +805,7 @@ internal sealed class HexLinkTreeWatch : IDisposable
                     if (move.PreviousPath is not { } previous)
                         continue;
                     next.Remove(previous);
-                    next[move.Path] = move.Hash;
+                    next[move.Path] = (move.Hash, move.Executable);
                 }
                 known = next;
             }
@@ -778,15 +820,15 @@ internal sealed class HexLinkTreeWatch : IDisposable
                     if (replaced?.Contains(wire) == true)
                         continue;
                     HexLinkTreeFile? file = tree.FileOf(relative);
-                    bool had = known.TryGetValue(wire, out string? was);
+                    bool had = known.TryGetValue(wire, out var was);
                     if (file is null)
                     {
                         if (had && tree.Gone(relative))
                             changes.Add(new HexLinkTreeChange(wire, null, Deleted: true));
                     }
-                    else if (!had || was != file.Hash)
+                    else if (!had || was != (file.Hash, file.Executable))
                     {
-                        changes.Add(new HexLinkTreeChange(wire, file.Hash, Text: file.Text, Eol: file.Eol));
+                        changes.Add(new HexLinkTreeChange(wire, file.Hash, Text: file.Text, Eol: file.Eol, Size: file.Size, Executable: file.Executable));
                     }
                 }
 
@@ -797,7 +839,7 @@ internal sealed class HexLinkTreeWatch : IDisposable
                     if (change.Deleted)
                         known.Remove(change.Path);
                     else
-                        known[change.Path] = change.Hash;
+                        known[change.Path] = (change.Hash, change.Executable);
                 }
             }
 
@@ -832,7 +874,7 @@ internal sealed class HexLinkTreeWatch : IDisposable
         }
     }
 
-    private static Dictionary<string, int> AddedNames(Dictionary<string, string?> known, List<HexLinkTreeChange> changes)
+    private static Dictionary<string, int> AddedNames(Dictionary<string, (string? Hash, bool? Executable)> known, List<HexLinkTreeChange> changes)
     {
         var added = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         for (int index = 0; index < changes.Count; index++)

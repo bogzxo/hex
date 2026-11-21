@@ -59,8 +59,12 @@ internal sealed partial class DawnScene
 
         public string? TreeCacheDirectory => hex.linkData is { } data ? Path.Combine(data, LINK_SYNC_STATES) : null;
 
-        public Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes, CancellationToken cancel) =>
-            hex.LinkCompareAndReplace(full, wire, baseHash, bytes, cancel);
+        public Task<string?> CompareAndReplace(string full, string wire, string? baseHash, Stream? source,
+            long length, string? expectedHash, CancellationToken cancel, bool? executable) =>
+            hex.LinkCompareAndReplaceStream(full, wire, baseHash, source, length, expectedHash, cancel, executable);
+
+        public Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes, CancellationToken cancel, bool? executable = null) =>
+            hex.LinkCompareAndReplace(full, wire, baseHash, bytes, cancel, executable);
 
         public void Presence(HexLinkDevice device, HexLinkPresence? presence) => hex.PostLink(() =>
         {
@@ -88,10 +92,7 @@ internal sealed partial class DawnScene
     internal async Task<string?> LinkCompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes,
         CancellationToken cancel, bool? executable = null)
     {
-        LinkTabStamp before = await OnEditorForLink(() => LinkTabBeforeWrite(full)).WaitAsync(cancel);
-        if (before.Dirty)
-            throw new HexLinkException(HexLinkErrors.CONFLICT, $"{wire} has unsaved changes in the editor.",
-                new JsonObject { ["hash"] = HexLinkFiles.HashOf(full), ["editor_dirty"] = true });
+        LinkTabStamp before = await LinkTabForCheckedWrite(full, wire, cancel);
 
         string? hash = await HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel, executable).ConfigureAwait(false);
         if (bytes is not null && HexLinkFiles.Decode(bytes) is { } decoded &&

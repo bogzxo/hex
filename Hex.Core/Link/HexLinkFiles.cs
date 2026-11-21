@@ -79,6 +79,8 @@ internal static partial class HexLinkFiles
         {
             if (part.Equals(".git", StringComparison.OrdinalIgnoreCase))
                 throw Refused(wire, "git's own folder is never shared");
+            if (HexLinkTree.CacheArtifact(part))
+                throw Refused(wire, "Link's cache and staging files are never shared");
         }
 
         if (excludes is not null && parts.Length > 1)
@@ -414,14 +416,22 @@ internal static partial class HexLinkFiles
     /// Stages a length- and hash-checked stream beside the destination and publishes it through the same
     /// compare-and-replace gate as a small linked write. The caller owns the source stream.
     /// </summary>
-    internal static async Task<string?> CompareAndReplace(string full, string wire, string? baseHash, Stream source,
-        long length, string expectedHash, CancellationToken cancel, bool? executable = null)
+    internal static async Task<string?> CompareAndReplace(string full, string wire, string? baseHash, Stream? source,
+        long length, string? expectedHash, CancellationToken cancel, bool? executable = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(length);
         full = Path.GetFullPath(full);
         cancel.ThrowIfCancellationRequested();
         if (Directory.Exists(full))
             throw HexLinkException.Invalid($"{wire} is a folder.");
+
+        if (source is null)
+        {
+            if (baseHash is null)
+                throw HexLinkException.Invalid("A streamed deletion needs a base hash.");
+            await PublishStreamed(full, wire, baseHash, null, executable, cancel).ConfigureAwait(false);
+            return null;
+        }
 
         string folder = Path.GetDirectoryName(full)!;
         Directory.CreateDirectory(folder);
@@ -450,24 +460,30 @@ internal static partial class HexLinkFiles
                     throw HexLinkException.Invalid($"The streamed file {wire} did not match its SHA-256.");
             }
 
-            PathWrite gate = JoinPath(full);
-            bool entered = false;
-            try
-            {
-                await gate.Turn.WaitAsync(cancel).ConfigureAwait(false);
-                entered = true;
-                await ReplaceChecked(full, wire, baseHash, temp, executable, cancel, fullHash: true).ConfigureAwait(false);
-                return next;
-            }
-            finally
-            {
-                LeavePath(full, gate, entered);
-            }
+            await PublishStreamed(full, wire, baseHash, temp, executable, cancel).ConfigureAwait(false);
+            return next;
         }
         finally
         {
             System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
             try { File.Delete(temp); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        }
+    }
+
+    private static async Task PublishStreamed(string full, string wire, string? baseHash, string? temp,
+        bool? executable, CancellationToken cancel)
+    {
+        PathWrite gate = JoinPath(full);
+        bool entered = false;
+        try
+        {
+            await gate.Turn.WaitAsync(cancel).ConfigureAwait(false);
+            entered = true;
+            await ReplaceChecked(full, wire, baseHash, temp, executable, cancel, fullHash: true).ConfigureAwait(false);
+        }
+        finally
+        {
+            LeavePath(full, gate, entered);
         }
     }
 

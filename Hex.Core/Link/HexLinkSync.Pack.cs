@@ -183,12 +183,12 @@ internal sealed partial class HexLinkSync
         return await Asked(() => peer.Read(path, cancel), cancel);
     }
 
-    private async Task<string> PushPacked(string path, string? baseHash, byte[] bytes, CancellationToken cancel)
+    private async Task<string> PushPacked(string path, string? baseHash, byte[] bytes, bool? executable, CancellationToken cancel)
     {
         if (packedWrites is not null && !noPackWrites && bytes.Length <= HexLinkFilePack.MaximumFile)
         {
             var answer = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-            packedWrites.Add(new PendingWrite(new HexLinkFilePack.Entry(path, bytes, baseHash), cancel, answer));
+            packedWrites.Add(new PendingWrite(new HexLinkFilePack.Entry(path, bytes, baseHash, executable), cancel, answer));
             try
             {
                 return await answer.Task.WaitAsync(cancel);

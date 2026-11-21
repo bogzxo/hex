@@ -93,7 +93,8 @@ internal sealed partial class HexLinkSync
                         else if (kept is JsonObject pair && HashIn(pair["local"]) is { } local && HashIn(pair["remote"]) is { } remote)
                         {
                             keptBases[path] = new HexLinkSyncAgreed(local, remote, HashIn(pair["text"]),
-                                EolIn(HexLinkData.String(pair, "local_eol", 10)), EolIn(HexLinkData.String(pair, "remote_eol", 10)));
+                                EolIn(HexLinkData.String(pair, "local_eol", 10)), EolIn(HexLinkData.String(pair, "remote_eol", 10)),
+                                HexLinkData.Bool(pair, "executable"));
                         }
                     }
                 }
@@ -176,7 +177,8 @@ internal sealed partial class HexLinkSync
                     ["remote"] = agreed.Remote,
                     ["text"] = agreed.Text,
                     ["local_eol"] = EolWord(agreed.LocalEol),
-                    ["remote_eol"] = EolWord(agreed.RemoteEol)
+                    ["remote_eol"] = EolWord(agreed.RemoteEol),
+                    ["executable"] = agreed.Executable
                 };
             }
             state = new JsonObject

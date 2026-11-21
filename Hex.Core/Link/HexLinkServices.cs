@@ -50,9 +50,13 @@ internal interface IHexLinkServices
     /// <summary>Where working-tree stat and hash caches survive a reconnect.</summary>
     string? TreeCacheDirectory => null;
 
+    Task<string?> CompareAndReplace(string full, string wire, string? baseHash, Stream? source, long length,
+        string? expectedHash, CancellationToken cancel, bool? executable) =>
+        HexLinkFiles.CompareAndReplace(full, wire, baseHash, source, length, expectedHash, cancel, executable);
+
     /// <summary>Applies a linked write or deletion only if the local file still matches its base hash.</summary>
-    Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes, CancellationToken cancel) =>
-        HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel);
+    Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes, CancellationToken cancel, bool? executable = null) =>
+        HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel, executable);
 
     /// <summary>Buffers explicitly shared by the host editor, across all its connections.</summary>
     HexLinkDocuments? Documents => null;
