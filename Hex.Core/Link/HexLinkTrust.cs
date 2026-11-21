@@ -174,6 +174,8 @@ internal sealed class HexLinkTrust
             yield return "steer";
         if (rights.HasFlag(HexLinkRights.Edit))
             yield return "edit";
+        if (rights.HasFlag(HexLinkRights.Predict))
+            yield return "predict";
     }
 
     /// <summary>Rights from those words, the ones it doesn't know left out.</summary>
@@ -187,6 +189,7 @@ internal sealed class HexLinkTrust
                 "view" => HexLinkRights.View,
                 "steer" => HexLinkRights.Steer,
                 "edit" => HexLinkRights.Edit,
+                "predict" => HexLinkRights.Predict,
                 _ => HexLinkRights.None
             };
         }

@@ -85,6 +85,7 @@ internal sealed partial class HexLinkPeer : IDisposable
         Device = Device with { Name = HexLinkNames.Clean(Device.Name) ?? HexLinkNames.Clean(session.Connection.Device.Name) ?? Device.Id[..Math.Min(8, Device.Id.Length)] };
         Granted = HexLinkData.RightsOf(said, "granted");
         Workspace = WorkspaceOf(HexLinkData.Object(said, "workspace"));
+        TakeServes(said);
         Changed?.Invoke();
     }
 
@@ -108,6 +109,8 @@ internal sealed partial class HexLinkPeer : IDisposable
     {
         try
         {
+            if (PredictTold(method, parameters))
+                return;
             switch (method)
             {
                 case "fleet/changed":

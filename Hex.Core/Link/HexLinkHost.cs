@@ -61,12 +61,15 @@ internal sealed partial class HexLinkHost : IDisposable
         "sync/flush" => SyncFlush(parameters),
         "git/bundle" => GitBundle(parameters, cancel),
         "patch/offer" => PatchOffer(parameters),
+        "predict/start" => PredictStart(parameters),
         _ => throw new HexLinkException(HexLinkErrors.METHOD_NOT_FOUND, $"A link has no {(method.Length > 60 ? method[..60] : method)}.")
     };
 
     /// <summary>A notification from the other end taken, true when it was this half's (presence), false to pass it to the peer.</summary>
     public bool Told(string method, JsonObject parameters)
     {
+        if (method == "predict/cancel")
+            return PredictCancel(parameters);
         if (method != "presence/set")
             return false;
 
@@ -133,6 +136,7 @@ internal sealed partial class HexLinkHost : IDisposable
         session.Tell("link/rights", new JsonObject { ["granted"] = HexLinkData.Words(Rights) });
         if (!HexLinkAllowed.Has(Rights, HexLinkRights.View))
             StopWatching();
+        ServesMoved();
     }
 
     // What's asked of a device's right for a method, refused (and logged) when it hasn't it
@@ -154,6 +158,7 @@ internal sealed partial class HexLinkHost : IDisposable
             ["protocol"] = PROTOCOL,
             ["device"] = HexLinkData.DeviceJson(services.Device),
             ["granted"] = HexLinkData.Words(rights),
+            ["serves"] = Serves(),
             ["workspace"] = new JsonObject
             {
                 ["name"] = workspace.Name,
@@ -286,6 +291,7 @@ internal sealed partial class HexLinkHost : IDisposable
     {
         fleet.Dispose();
         StopWatching();
+        StopPredicting();
     }
 
     // The watches of chats and files let go of, when the link goes or may no longer see
