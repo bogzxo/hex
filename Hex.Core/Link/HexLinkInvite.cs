@@ -60,8 +60,16 @@ internal sealed class HexLinkInvite
             return false;
 
         Span<byte> bytes = stackalloc byte[HeaderSize + MaxEndpoints * 17];
-        if (!Base64Url.TryDecodeFromChars(text.AsSpan(Prefix.Length), bytes, out int written) || written < HeaderSize)
+        int written;
+        try
+        {
+            if (!Base64Url.TryDecodeFromChars(text.AsSpan(Prefix.Length), bytes, out written) || written < HeaderSize)
+                return false;
+        }
+        catch (FormatException)
+        {
             return false;
+        }
         int port = BinaryPrimitives.ReadUInt16BigEndian(bytes);
         long seconds = BinaryPrimitives.ReadInt64BigEndian(bytes[2..]);
         int count = bytes[74];
