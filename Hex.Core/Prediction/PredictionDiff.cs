@@ -19,7 +19,7 @@ internal static class PredictionDiff
 
         // A newline added to both, so that every line ends with one and a line added at the end is a line like any other
         string before = old + "\n", after = updated + "\n";
-        string[] oldLines = before.Split('\n'), newLines = after.Split('\n');
+        string[] oldLines = before.Split('\n')[..^1], newLines = after.Split('\n')[..^1];
         int[] oldStarts = Starts(oldLines), newStarts = Starts(newLines);
 
         var edits = new List<PredictionEdit>();

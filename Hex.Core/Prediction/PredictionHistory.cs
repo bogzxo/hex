@@ -51,9 +51,10 @@ internal sealed class PredictionHistory
             if (Diffed(before, text) is not { } hunk)
                 return;
 
-            // Typing on in the same place runs on into the last event, diffed again from before it
+            // Typing on in the same place runs on into the last event, diffed again from before it; the hunks' context
+            // isn't counted in how near they are
             if (changes.Count > 0 && changes[^1] is { Predicted: false } last && last.Path == path && lastBefore is not null
-                && hunk.OldStart <= last.NewEnd + NEAR && hunk.OldEnd + NEAR >= last.NewStart
+                && hunk.OldStart <= last.NewEnd + NEAR - 2 * CONTEXT && hunk.OldEnd + NEAR >= last.NewStart + 2 * CONTEXT
                 && Diffed(lastBefore, text) is { } merged)
             {
                 changes.RemoveAt(changes.Count - 1);
