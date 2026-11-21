@@ -15,7 +15,7 @@ internal enum HexLinkProvisionPhase
 internal sealed record HexLinkProvisionProgress(HexLinkProvisionPhase Phase, int RepositoryIndex, int RepositoryCount,
     long BytesDone = 0, long BytesTotal = 0, int FilesDone = 0, int FilesTotal = 0, IReadOnlyList<HexLinkProvisionSkip>? Skipped = null);
 
-internal sealed record HexLinkProvisionFolder(string Name, string Path);
+internal sealed record HexLinkProvisionFolder(string Name, string Path, HexLinkAuthority? Authority = null);
 
 internal sealed record HexLinkProvisionSkip(string Path, string Reason, bool File = false);
 
@@ -35,7 +35,7 @@ internal sealed record HexLinkProvisionPlan(IReadOnlyList<HexLinkProvisionFolder
 
     public JsonObject ToJson() => new()
     {
-        ["folders"] = new JsonArray([.. Folders.Select(folder => (JsonNode)new JsonObject { ["name"] = folder.Name, ["path"] = folder.Path })]),
+        ["folders"] = new JsonArray([.. Folders.Select(folder => (JsonNode)new JsonObject { ["name"] = folder.Name, ["path"] = folder.Path, ["authority"] = folder.Authority?.ToJson() })]),
         ["repositories"] = new JsonArray([.. Repositories.Select(repo => (JsonNode)new JsonObject
         {
             ["id"] = repo.Id, ["path"] = repo.Path, ["head"] = repo.Head,
@@ -69,7 +69,7 @@ internal sealed record HexLinkProvisionPlan(IReadOnlyList<HexLinkProvisionFolder
             string name = HexLinkData.Need(folder, "name", 201), path = HexLinkData.Need(folder, "path", HexLinkFiles.MOST_PATH + 1);
             if (name.Length is 0 or > 200 || name.Contains('/') || name.Contains('\\') || !names.Add(name))
                 throw HexLinkException.Invalid("The workspace plan has an invalid or repeated folder name.");
-            folders.Add(new HexLinkProvisionFolder(name, path));
+            folders.Add(new HexLinkProvisionFolder(name, path, HexLinkAuthority.Of(HexLinkData.Object(folder, "authority"))));
         }
         foreach (JsonNode? entry in repositoryEntries)
         {
@@ -146,6 +146,7 @@ internal interface IHexLinkBundleSource
 internal interface IHexLinkProvisionOffers
 {
     void WorkspaceOffered(HexLinkDevice device, string workspace);
+    HexLinkWorkspace WorkspaceForProvision(string? folder);
 }
 
 internal sealed partial class HexLinkPeer : IHexLinkBundleSource
@@ -222,7 +223,7 @@ internal static partial class HexLinkProvision
             skipped.AddRange(notes);
             plan = plan with { Deleted = deleted };
         }
-        HexLinkFolder[] local = [.. plan.Folders.Select(folder => new HexLinkFolder(folder.Name, Resolve(destination, folder.Path)))];
+        HexLinkFolder[] local = [.. plan.Folders.Select(folder => new HexLinkFolder(folder.Name, Resolve(destination, folder.Path), folder.Authority))];
         foreach (HexLinkFolder folder in local)
             Directory.CreateDirectory(folder.Path);
         await CopyWorkingTrees(peer, plan, local, destination, journal, progress, cancel, skipped: skipped);

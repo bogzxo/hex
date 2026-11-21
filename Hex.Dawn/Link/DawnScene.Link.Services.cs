@@ -103,6 +103,7 @@ internal sealed partial class DawnScene
         public Task<string> PatchOffered(HexLinkDevice device, string title, string diff) => hex.LinkPatchOffered(device, title, diff);
 
         public void WorkspaceOffered(HexLinkDevice device, string workspace) => hex.LinkWorkspaceOffered(device, workspace);
+        public HexLinkWorkspace WorkspaceForProvision(string? folder) => hex.LinkProvisionExport(folder);
 
         public void Audit(string what, HexLinkDevice who, string detail)
         {

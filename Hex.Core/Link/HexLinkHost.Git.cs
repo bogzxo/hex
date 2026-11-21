@@ -34,7 +34,8 @@ internal sealed partial class HexLinkHost
             {
                 string? folder = HexLinkData.String(parameters, "folder", 200);
                 string? repositoryPath = HexLinkData.String(parameters, "repository_path", HexLinkFiles.MOST_PATH + 1);
-                HexLinkWorkspace workspace = services.Workspace;
+                HexLinkWorkspace workspace = services is IHexLinkProvisionOffers offers && folder is null
+                    ? offers.WorkspaceForProvision(folder) : services.Workspace;
                 bool defer = folder is null && HexLinkData.Bool(parameters, "defer_worktree") == true;
                 HexLinkHostedProvision hosted = await Task.Run(() => HexLinkWorkspaces.Provision(workspace, folder, transfer.Token, repositoryPath, defer), transfer.Token);
                 hostedProvision = hosted;

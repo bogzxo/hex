@@ -68,6 +68,7 @@ internal sealed partial class HexLinkHost : IDisposable
         "chat/get" => ChatGet(parameters),
         "chat/watch" => ChatWatch(parameters),
         "chat/unwatch" => Task.FromResult<JsonNode?>(ChatUnwatch(parameters)),
+        "claims/watch" => ClaimsWatch(parameters),
         "chat/answer" => ChatAnswer(parameters),
         "tools/list" => Task.FromResult<JsonNode?>(ToolsList()),
         "tools/call" => ToolsCall(parameters, cancel),
@@ -107,6 +108,8 @@ internal sealed partial class HexLinkHost : IDisposable
             GitBundleCancel(parameters);
             return true;
         }
+        if (method == "claims/delta")
+            return ClaimsNotice(parameters);
         if (method != "presence/set")
             return false;
 
@@ -322,6 +325,7 @@ internal sealed partial class HexLinkHost : IDisposable
         {
             fileRule.Value = CanReachToolFile;
             HexLinkAllowed.SetEditorFileRule(arguments, CanReachToolFile);
+            HexLinkClaimCaller.Bind(arguments, Device);
             if (name is "hex_edit" or "hex_write" or "hex_edit_symbol" or "hex_rename" or "hex_git_diff")
             {
                 string? path = HexLinkData.String(arguments, "path", HexLinkFiles.MOST_PATH + 1);

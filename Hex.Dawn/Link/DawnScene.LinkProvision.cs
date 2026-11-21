@@ -44,6 +44,7 @@ internal sealed partial class DawnScene
                     PostLink(() => Say(skipped));
             }
 
+            LinkBindProvisionedFolders(peer, folders);
             LinkKeepProvisionedFolders(deviceId, folders);
             await OnEditorForLink(() =>
             {
@@ -96,7 +97,7 @@ internal sealed partial class DawnScene
         try
         {
             await LinkEnsureWorktreePublication();
-            await peer.ShareProvision(workspace.Name, cancel);
+            await peer.ShareProvision(LinkProvisionExport(null).Name, cancel);
             return null;
         }
         catch (HexLinkException e)

@@ -378,6 +378,7 @@ internal sealed partial class DawnScene
         // Where the person is here told, and where the others are drawn (DawnScene.LinkPresence)
         if (link is not null)
         {
+            UpdateLinkClaims(dt);
             UpdateLinkDocument(dt);
             UpdateLinkLiveDocuments(dt);
             UpdateLinkPresence();
