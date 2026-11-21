@@ -12,8 +12,10 @@ namespace Hex.Dawn;
 internal sealed partial class DawnScene
 {
     // A game of its own in a folder of its own, a layout next to its languages the way a game has them. Away from the
-    // test's folder, a localisation folder next to that would have every other layout of the test reading its keys
-    private static string TextsGame => Path.Combine(Path.GetTempPath(), "horizon-hex-selftest-texts", "ui");
+    // test's folder, a localisation folder next to that would have every other layout of the test reading its keys. One
+    // for each run, by its process id like the test's folder: two runs at once wrote each other's language, and Escape
+    // found the other run's words in it (the sweep of old runs' folders takes it a day on)
+    private static string TextsGame => Path.Combine(Path.GetTempPath(), $"horizon-hex-selftest-texts-{System.Environment.ProcessId}", "ui");
 
     private const string TEXTS_LAYOUT = "// texts, laid out with Hex.\n"
         + "// Load it with UILayout.Load, every component is there under the name it has here.\n#define layout\n\n"
