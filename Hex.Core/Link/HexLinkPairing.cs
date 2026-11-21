@@ -13,7 +13,7 @@ namespace Hex.Core;
 /// <param name="Code">Six digits, the same on both screens unless somebody is in the middle.</param>
 /// <param name="Address">Where the other device is, for showing.</param>
 /// <param name="Ended">Cancelled when the pairing ends without this side's answer (the other declined, two minutes passed, the connection broke), so a dialog asking can close.</param>
-internal sealed record HexLinkPairing(HexLinkDevice Other, string Code, string Address, CancellationToken Ended);
+internal sealed record HexLinkPairing(HexLinkDevice Other, string Code, string Address, CancellationToken Ended, bool Invited = false);
 
 /// <summary>How a pairing ended, on either side.</summary>
 /// <param name="Paired">Whether both people confirmed and each stored the other.</param>

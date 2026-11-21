@@ -44,14 +44,7 @@ internal sealed partial class HexLinkTransport
     public Action<HexLinkPairResult>? Paired { get; set; }
 
     /// <summary>Whether an unknown device may pair now.</summary>
-    public bool PairingOpen
-    {
-        get
-        {
-            lock (gate)
-                return pairing is not null && DateTime.UtcNow < pairing.Until;
-        }
-    }
+    public bool PairingOpen => PairingUntil is not null;
 
     /// <summary>When the pairing window closes, null when it's closed.</summary>
     public DateTime? PairingUntil
@@ -59,7 +52,7 @@ internal sealed partial class HexLinkTransport
         get
         {
             lock (gate)
-                return pairing is not null && DateTime.UtcNow < pairing.Until ? pairing.Until : null;
+                return pairing is not null && DateTime.UtcNow < pairing.Until ? pairing.Until : ActiveInvite?.Until.UtcDateTime;
         }
     }
 
@@ -70,6 +63,7 @@ internal sealed partial class HexLinkTransport
     /// </summary>
     public void OpenPairing(TimeSpan window, Func<HexLinkPairing, Task<HexLinkRights?>> ask)
     {
+        CloseInvite();
         var opened = new PairingWindow(DateTime.UtcNow + window, ask);
         lock (gate)
         {
@@ -85,6 +79,7 @@ internal sealed partial class HexLinkTransport
     /// <summary>Closes the pairing window. A pairing already under way goes on to its end.</summary>
     public void ClosePairing()
     {
+        CloseInvite();
         PairingWindow? was;
         lock (gate)
         {
@@ -131,9 +126,9 @@ internal sealed partial class HexLinkTransport
 
     /// <summary>The host's end of a pairing, from the joiner's <c>pair</c> line on. Whether the connection was kept as a link.</summary>
     private async Task<bool> HostPairing(SslStream ssl, Socket socket, HexLinkDevice device, string address, CancellationToken stop,
-        HexLinkBulkSupport bulk = HexLinkBulkSupport.None)
+        HexLinkBulkSupport bulk = HexLinkBulkSupport.None, Func<HexLinkPairing, Task<HexLinkRights?>>? invited = null)
     {
-        Func<HexLinkPairing, Task<HexLinkRights?>>? ask = TakePairing();
+        Func<HexLinkPairing, Task<HexLinkRights?>>? ask = invited ?? TakePairing();
         if (ask is null)
         {
             using var quick = CancellationTokenSource.CreateLinkedTokenSource(stop);
@@ -150,28 +145,32 @@ internal sealed partial class HexLinkTransport
         string code = "";
         try
         {
-            await Say(ssl, HelloLine("pair"), ended.Token);
-            byte[]? commitment = HexLinkSas.BytesAfter(await ReadLine(ssl, ended.Token), "commit");
-            if (commitment is null)
+            if (invited is null)
             {
-                await Say(ssl, "NO mismatch", ended.Token);
-                result = HexLinkPairResult.Failed("mismatch", device);
-                return false;
+                await Say(ssl, HelloLine("pair"), ended.Token);
+                byte[]? commitment = HexLinkSas.BytesAfter(await ReadLine(ssl, ended.Token), "commit");
+                if (commitment is null)
+                {
+                    await Say(ssl, "NO mismatch", ended.Token);
+                    result = HexLinkPairResult.Failed("mismatch", device);
+                    return false;
+                }
+
+                byte[] hostNonce = RandomNumberGenerator.GetBytes(HexLinkSas.NONCE);
+                await Say(ssl, "nonce " + HexLinkSas.Hex(hostNonce), ended.Token);
+                byte[]? joinerNonce = HexLinkSas.BytesAfter(await ReadLine(ssl, ended.Token), "reveal");
+                if (joinerNonce is null || !HexLinkSas.Keeps(commitment, joinerNonce))
+                {
+                    await Say(ssl, "NO mismatch", ended.Token);
+                    result = HexLinkPairResult.Failed("mismatch", device);
+                    return false;
+                }
+
+                await Say(ssl, "ready", ended.Token);
+                code = HexLinkSas.CodeOf(identity.Id, device.Id, hostNonce, joinerNonce);
             }
 
-            byte[] hostNonce = RandomNumberGenerator.GetBytes(HexLinkSas.NONCE);
-            await Say(ssl, "nonce " + HexLinkSas.Hex(hostNonce), ended.Token);
-            byte[]? joinerNonce = HexLinkSas.BytesAfter(await ReadLine(ssl, ended.Token), "reveal");
-            if (joinerNonce is null || !HexLinkSas.Keeps(commitment, joinerNonce))
-            {
-                await Say(ssl, "NO mismatch", ended.Token);
-                result = HexLinkPairResult.Failed("mismatch", device);
-                return false;
-            }
-
-            await Say(ssl, "ready", ended.Token);
-            code = HexLinkSas.CodeOf(identity.Id, device.Id, hostNonce, joinerNonce);
-            (string verdict, HexLinkRights granted) = await Decide(ssl, ask, new HexLinkPairing(device, code, address, ended.Token), ended);
+            (string verdict, HexLinkRights granted) = await Decide(ssl, ask, new HexLinkPairing(device, code, address, ended.Token, Invited: invited is not null), ended);
             if (verdict != "paired")
             {
                 result = HexLinkPairResult.Failed(verdict, device, code);
@@ -225,7 +224,7 @@ internal sealed partial class HexLinkTransport
     /// how it ended; when paired, each side has stored the other and the connection carries on as a link (Connection),
     /// unless there was one up already. Only <paramref name="cancel"/> throws.
     /// </summary>
-    public async Task<HexLinkPairResult> Pair(string host, int port, Func<HexLinkPairing, Task<HexLinkRights?>> ask, CancellationToken cancel)
+    public async Task<HexLinkPairResult> Pair(string host, int port, Func<HexLinkPairing, Task<HexLinkRights?>> ask, CancellationToken cancel, HexLinkInvite? invite = null)
     {
         using var ended = CancellationTokenSource.CreateLinkedTokenSource(cancel);
         ended.CancelAfter(PAIRING_MS);
@@ -236,27 +235,37 @@ internal sealed partial class HexLinkTransport
         bool kept = false;
         try
         {
-            (ssl, Socket socket, string pin, address) = await Connect(host, port, ended.Token);
-            await Say(ssl, HelloLine("pair"), ended.Token);
+            (ssl, Socket socket, string pin, address) = invite is null
+                ? await Connect(host, port, ended.Token)
+                : await ConnectInvite(invite, ended.Token);
+            string mode = invite is null ? "pair" : "invite";
+            await Say(ssl, HelloLine(mode), ended.Token);
             Hello? hello = ParseHello(await Answer(ssl, ended.Token), pin);
-            if (hello is null || hello.Mode != "pair" || hello.Version != 1)
-                return result = HexLinkPairResult.Failed("failed");
+            if (hello is null || hello.Mode != mode || hello.Version != 1)
+                return result = HexLinkPairResult.Failed(invite is null ? "failed" : "version");
             device = hello.Device;
 
-            byte[] joinerNonce = RandomNumberGenerator.GetBytes(HexLinkSas.NONCE);
-            await Say(ssl, "commit " + HexLinkSas.Hex(HexLinkSas.CommitmentOf(joinerNonce)), ended.Token);
-            byte[]? hostNonce = HexLinkSas.BytesAfter(await Answer(ssl, ended.Token), "nonce");
-            if (hostNonce is null)
-                return result = HexLinkPairResult.Failed("mismatch", device);
-            await Say(ssl, "reveal " + HexLinkSas.Hex(joinerNonce), ended.Token);
-            if (await Answer(ssl, ended.Token) != "ready")
-                return result = HexLinkPairResult.Failed("mismatch", device);
+            if (invite is not null)
+                await AuthenticateInvite(ssl, invite, ended.Token);
+            else
+            {
+                byte[] joinerNonce = RandomNumberGenerator.GetBytes(HexLinkSas.NONCE);
+                await Say(ssl, "commit " + HexLinkSas.Hex(HexLinkSas.CommitmentOf(joinerNonce)), ended.Token);
+                byte[]? hostNonce = HexLinkSas.BytesAfter(await Answer(ssl, ended.Token), "nonce");
+                if (hostNonce is null)
+                    return result = HexLinkPairResult.Failed("mismatch", device);
+                await Say(ssl, "reveal " + HexLinkSas.Hex(joinerNonce), ended.Token);
+                if (await Answer(ssl, ended.Token) != "ready")
+                    return result = HexLinkPairResult.Failed("mismatch", device);
 
-            code = HexLinkSas.CodeOf(pin, identity.Id, hostNonce, joinerNonce);
-            (string verdict, HexLinkRights granted) = await Decide(ssl, ask, new HexLinkPairing(device, code, address, ended.Token), ended);
+                code = HexLinkSas.CodeOf(pin, identity.Id, hostNonce, joinerNonce);
+            }
+
+            (string verdict, HexLinkRights granted) = await Decide(ssl, ask, new HexLinkPairing(device, code, address, ended.Token, Invited: invite is not null), ended);
             if (verdict != "paired")
                 return result = HexLinkPairResult.Failed(verdict, device, code);
 
+            port = invite?.Port ?? port;
             trust.Add(device, granted, address, port);
             result = new HexLinkPairResult(true, "paired", device, code, granted, null);
             try

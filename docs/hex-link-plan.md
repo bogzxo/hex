@@ -114,8 +114,17 @@ pins. Because the joiner committed to its nonce before seeing the host's, and th
 seeing the joiner's, neither nonce can be chosen to steer the code, so the codes agree by chance once in a
 million, and a miss closes the window. No secret is typed, so there's nothing to guess offline.
 
-A QR code of `hex-link://address:port#fingerprint` is shown beside the code for a device with a camera (a tablet
-later); it saves typing the address and lets the joiner check the fingerprint by itself, the code still decides.
+An invitation is a single `hex-link:v1.` token carrying private addresses, a port, the host's full
+public-key pin, expiry, and a random 256-bit secret. Send it privately to the person pairing. The joiner
+tries the listed endpoints in parallel and uses the first successful TLS handshake with the expected pin.
+It sends no invitation proof until TLS authenticates the host's key.
+
+The new `invite` handshake mode exchanges fresh nonces, then role-specific HMAC-SHA256 proofs over both
+TLS pins and both nonces. The host keeps the invitation in memory for at most five minutes, removes it
+atomically after one valid proof, and invalidates it after five incorrect proofs. Wrong proofs are audited
+without recording the token or secret. Even a declined or interrupted confirmation consumes a valid invite.
+The proof replaces comparing the six-digit code. Both operators still approve their local grants, with
+Predict off by default. Entering an address or choosing Nearby still uses the original code comparison.
 
 ### 3.4 Rights, least privilege
 What a device may do is the host's to say, per device, and is checked by the host on every request.

@@ -99,7 +99,7 @@ internal sealed partial class HexLinkTransport
     }
 
     /// <summary>A TCP connection and the TLS handshake as the client, the server's pin noted, nothing yet said.</summary>
-    private async Task<(SslStream Ssl, Socket Socket, string Pin, string Address)> Connect(string host, int port, CancellationToken cancel)
+    private async Task<(SslStream Ssl, Socket Socket, string Pin, string Address)> Connect(string host, int port, CancellationToken cancel, Func<string, bool>? accepts = null)
     {
         var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
         SslStream? ssl = null;
@@ -119,10 +119,12 @@ internal sealed partial class HexLinkTransport
             string? pin = null;
             try
             {
-                await ssl.AuthenticateAsClientAsync(ClientOptions(seen => pin = seen), cancel);
+                await ssl.AuthenticateAsClientAsync(ClientOptions(seen => pin = seen, accepts), cancel);
             }
             catch (AuthenticationException e)
             {
+                if (pin is not null && accepts?.Invoke(pin) == false)
+                    throw new HexLinkRefused("pin", $"{address} answered as another device than the one invited", e);
                 throw new HexLinkRefused("refused", $"{address} refused the handshake, {e.Message}", e);
             }
 
@@ -229,7 +231,7 @@ internal sealed partial class HexLinkTransport
         if (line is null)
             return null;
         string[] parts = line.Split(' ', 4);
-        if (parts.Length != 4 || parts[0] != "HEX-LINK" || !int.TryParse(parts[1], out int version) || parts[2] is not ("link" or "pair"))
+        if (parts.Length != 4 || parts[0] != "HEX-LINK" || !int.TryParse(parts[1], out int version) || parts[2] is not ("link" or "pair" or "invite"))
             return null;
 
         string name = "", os = "", arch = "", said = "";
