@@ -200,6 +200,24 @@ public sealed class HexLinkFilesTests : IDisposable
     }
 
     [Fact]
+    public async Task Excluded_files_are_refused_by_every_file_rpc()
+    {
+        using var pair = await LinkedPair.Up(HexLinkRights.View | HexLinkRights.Edit);
+        string hidden = Path.Combine(pair.A.Work, ".vs");
+        Directory.CreateDirectory(hidden);
+        File.WriteAllText(Path.Combine(hidden, "private.txt"), "private");
+        const string wire = "work/.vs/private.txt";
+        string hash = HexLinkFiles.Hash("private"u8);
+        Assert.DoesNotContain(await pair.PeerA.List("work"), entry => entry.Name == ".vs");
+        Assert.Equal(HexLinkErrors.NOT_ALLOWED, await CodeOf(pair.PeerA.List("work/.vs")));
+        Assert.Equal(HexLinkErrors.NOT_ALLOWED, await CodeOf(pair.PeerA.Read(wire)));
+        Assert.Equal(HexLinkErrors.NOT_ALLOWED, await CodeOf(pair.PeerA.Write(wire, hash, "changed"u8.ToArray())));
+        Assert.Equal(HexLinkErrors.NOT_ALLOWED, await CodeOf(pair.PeerA.Delete(wire, hash)));
+        Assert.Equal(HexLinkErrors.NOT_ALLOWED, await CodeOf(pair.PeerA.Watch(wire)));
+        Assert.Equal("private", File.ReadAllText(Path.Combine(hidden, "private.txt")));
+    }
+
+    [Fact]
     public void The_read_checks_actual_bytes_past_the_limit()
     {
         byte[] bytes = new byte[HexLinkFiles.MOST_READ + 2];
@@ -215,13 +233,49 @@ public sealed class HexLinkFilesTests : IDisposable
         string full = Path.Combine(work, "src", "a.cs");
         const string wire = "work/src/a.cs";
         string before = HexLinkFiles.HashOf(full)!;
-        Task<string?> first = HexLinkFiles.CompareAndReplace(full, wire, before, "new contents"u8.ToArray(), default);
-        Task<string?> second = HexLinkFiles.CompareAndReplace(full, wire, before, null, default);
-        string? after = await first;
-        var conflict = await Assert.ThrowsAsync<HexLinkException>(() => second);
+        async Task<HexLinkException?> Change(byte[]? bytes)
+        {
+            try
+            {
+                await HexLinkFiles.CompareAndReplace(full, wire, before, bytes, default);
+                return null;
+            }
+            catch (HexLinkException failure)
+            {
+                return failure;
+            }
+        }
+
+        HexLinkException?[] outcomes = await Task.WhenAll(Change("new contents"u8.ToArray()), Change(null));
+        var conflict = Assert.Single(outcomes.OfType<HexLinkException>());
         Assert.Equal(HexLinkErrors.CONFLICT, conflict.Code);
-        Assert.Equal(after, HexLinkPeer.ConflictHash(conflict));
-        Assert.Equal("new contents", File.ReadAllText(full));
+        Assert.Equal(HexLinkFiles.HashOf(full), HexLinkPeer.ConflictHash(conflict));
+        if (outcomes[0] is null)
+            Assert.Equal("new contents", File.ReadAllText(full));
+        else
+            Assert.False(File.Exists(full));
+    }
+
+    [Fact]
+    public async Task An_editor_save_and_a_link_write_share_the_publication_gate()
+    {
+        string full = Path.Combine(work, "src", "a.cs");
+        string before = File.ReadAllText(full);
+        Task local, remote;
+        using (HexLinkFiles.LockForLocalWrite(full))
+        {
+            local = Task.Run(() => DocumentFile.Write(full, "local", new UTF8Encoding(false)));
+            remote = HexLinkFiles.CompareAndReplace(full, "work/src/a.cs", HexLinkFiles.HashOf(full), "remote"u8.ToArray(), default);
+            Assert.True(Eventually(() => Directory.EnumerateFiles(Path.GetDirectoryName(full)!, ".hex-save-*.tmp").Any()));
+            Assert.False(local.IsCompleted);
+            Assert.False(remote.IsCompleted);
+            Assert.Equal(before, File.ReadAllText(full));
+        }
+
+        await local;
+        int? remoteResult = await CodeOf(remote);
+        Assert.True(remoteResult is null or HexLinkErrors.CONFLICT);
+        Assert.Equal("local", File.ReadAllText(full));
     }
 
     [Fact]
