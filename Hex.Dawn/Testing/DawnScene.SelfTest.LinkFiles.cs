@@ -157,7 +157,7 @@ internal sealed partial class DawnScene
         test.Check("link-files: a file under bin/ made while it runs stays here", () => !File.Exists(Path.Combine(theirs, "bin", "later.txt")));
         test.Run(() => Console.WriteLine($"[Hex self-test] link-files: {Sync()?.Summary}"));
 
-        TestLinkRemoteFiles(test, () => peer, peerWork);
+        TestLinkRemoteFiles(test, () => peer, peerWork, mine);
         TestLinkRepository(test, () => peer, mine, theirs);
 
         // A's rights on B down to View: the sync goes pull-only, what changes here stays here, what changes there comes
@@ -193,16 +193,136 @@ internal sealed partial class DawnScene
         });
     }
 
-    private void TestLinkRemoteFiles(HexPointerScript test, Func<HexLinkPeer?> peer, string peerWork)
+    // A file of a folder only B has opened here as B's, edited and saved back, then saved again after B changed it: a
+    // conflict, nothing written over, and taking theirs; a file of the synced folder opens as the local one
+    private void TestLinkRemoteFiles(HexPointerScript test, Func<HexLinkPeer?> peer, string peerWork, string mine)
     {
+        string notes = Path.Combine(peerWork, "notes.txt");
+        string wire = $"{LINK_PEER_FOLDER}/notes.txt";
+        Task<string?>? opened = null;
+        HexDocument? tab = null;
+        var sent = new List<string?>();
+        static string Read(string file) => File.Exists(file) ? File.ReadAllText(file) : "(no file)";
+
+        test.Run(() =>
+        {
+            File.WriteAllText(notes, "Notes on B.\n");
+            LinkRemoteSent = (_, how) => sent.Add(how);
+            if (peer() is { } other)
+                opened = LinkOpenRemote(other.Device.Id, wire);
+        });
+        test.WaitFor(() => opened is { IsCompleted: true }, 20.0f);
+        test.Check("link-files: a file of a folder only B has opens here as a tab of B's, under the link data folder", () =>
+        {
+            tab = document;
+            Console.WriteLine($"[Hex self-test] link-files: remote tab {LinkRemoteTitle(document)} at {document.Path}, {opened?.Result}");
+            return opened is { IsCompletedSuccessfully: true, Result: null } && document.Path is { } path && PlatformPaths.IsUnder(path, Path.Combine(LinkDataFolder, LINK_REMOTE_FOLDER))
+                && document.Editor.Text == "Notes on B.\n" && LinkRemoteTitle(document) == $"notes.txt ({LINK_PEER_NAME})" && !document.Editor.ReadOnly;
+        });
+
+        test.Run(() =>
+        {
+            if (tab is not null && documents.Contains(tab))
+            {
+                Show(tab);
+                Rewrite(tab, "Edited from A.\n");
+                Save();
+            }
+        });
+        test.WaitFor(() => sent.Count > 0, 15.0f);
+        test.Check("link-files: saving the remote tab writes it on B's disk", () => sent.FirstOrDefault() is null && sent.Count == 1 && Read(notes) == "Edited from A.\n");
+
+        // Changed here and then on B before it's saved: the save is a conflict and B's stays
+        test.Run(() =>
+        {
+            if (tab is null || !documents.Contains(tab))
+                return;
+            Show(tab);
+            Rewrite(tab, "A's second edit.\n");
+            File.WriteAllText(notes, "Changed on B meanwhile.\n");
+            Save();
+        });
+        test.WaitFor(() => sent.Count > 1, 15.0f);
+        test.Check("link-files: a stale save is a conflict offered its ways out, nothing written over on B", () =>
+            sent.Count == 2 && sent[1] == "conflict" && Read(notes) == "Changed on B meanwhile.\n");
+        test.Run(() =>
+        {
+            if (tab?.Path is { } copy)
+                LinkRemoteSettle(copy, "theirs");
+        });
+        test.WaitFor(() => tab?.Editor.Text == "Changed on B meanwhile.\n", 15.0f);
+        test.Check("link-files: taking theirs makes the tab B's version", () => tab?.Editor.Text == "Changed on B meanwhile.\n" && !HasChanges(tab));
+
+        // A file of the synced folder is this workspace's own
+        test.Run(() =>
+        {
+            LinkRemoteSent = null;
+            if (peer() is { } other)
+                opened = LinkOpenRemote(other.Device.Id, $"{LINK_SYNC_FOLDER}/README.md");
+        });
+        test.WaitFor(() => opened is { IsCompleted: true }, 20.0f);
+        test.Check("link-files: opening a file of the synced folder opens the local file", () =>
+            opened is { IsCompletedSuccessfully: true, Result: null } && document.Path is { } path && PlatformPaths.Same(path, Path.Combine(mine, "README.md")));
     }
 
+    // B's repository cloned into a new folder over the link, then a commit made on B fetched into refs/remotes/hex-b
     private void TestLinkRepository(HexPointerScript test, Func<HexLinkPeer?> peer, string mine, string theirs)
     {
+        string into = Path.Combine(LinkTestFolder("hex-link-clone-"), "cloned");
+        Task<string?>? cloned = null;
+        Task<string>? fetched = null;
+        string? theirHead = null;
+        static string Head(string repo, string what = "HEAD") => GitProcess.Run(repo, ["rev-parse", what]) is { Ok: true } said ? said.Output.Trim() : "(none)";
+
+        test.Run(() =>
+        {
+            if (peer() is { } other)
+                cloned = LinkClone(other.Device.Id, LINK_SYNC_FOLDER, into);
+        });
+        test.WaitFor(() => cloned is { IsCompleted: true }, 60.0f);
+        test.Check("link-files: a clone from B over the link has B's HEAD and no remote", () =>
+        {
+            Console.WriteLine($"[Hex self-test] link-files: clone said {(cloned is { IsCompletedSuccessfully: true } ? cloned.Result : cloned?.Exception?.Message)}");
+            return cloned is { IsCompletedSuccessfully: true, Result: null } && Head(into) == Head(theirs) && Head(into).Length == 40
+                && GitProcess.Run(into, ["remote"]) is { Ok: true } remotes && remotes.Output.Trim().Length == 0;
+        });
+
+        test.Run(() =>
+        {
+            GitProcess.Run(theirs, ["add", "-A"]);
+            GitProcess.Run(theirs, ["-c", "user.name=Hex B", "-c", "user.email=b@localhost", "commit", "-q", "-m", "On B"]);
+            theirHead = Head(theirs);
+            if (peer() is { } other)
+                fetched = LinkFetch(other.Device.Id, mine, LINK_SYNC_FOLDER);
+        });
+        test.WaitFor(() => fetched is { IsCompleted: true }, 60.0f);
+        test.Check("link-files: a fetch from B brings its new commit into refs/remotes/hex-b", () =>
+        {
+            Console.WriteLine($"[Hex self-test] link-files: fetch said {(fetched is { IsCompletedSuccessfully: true } ? fetched.Result : fetched?.Exception?.Message)}");
+            return fetched is { IsCompletedSuccessfully: true } && theirHead is { Length: 40 } && Head(mine, "refs/remotes/hex-b/main") == theirHead;
+        });
+
+        // This side's index brought to B's commit (the files are the same, the sync made them so), for the patch later
+        test.Run(() => GitProcess.Run(mine, ["reset", "-q", "refs/remotes/hex-b/main"]));
     }
 
+    // While pull-only, a change here stays here: offered to B as a patch, B applies it
     private void TestLinkOfferPatch(HexPointerScript test, Func<HexLinkPeer?> peer, string mine, string theirs)
     {
+        Task<string>? answered = null;
+        string shared = Path.Combine(mine, "src", "shared.txt"), sharedThere = Path.Combine(theirs, "src", "shared.txt");
+        test.Run(() =>
+        {
+            File.WriteAllText(shared, "Offered from A.\n");
+            if (peer() is { } other)
+                answered = LinkOfferChanges(other.Device.Id, mine, "From A");
+        });
+        test.WaitFor(() => answered is { IsCompleted: true }, 60.0f);
+        test.Check("link-files: changes offered to B arrive as a patch and B applies it", () =>
+        {
+            Console.WriteLine($"[Hex self-test] link-files: the offer was {(answered is { IsCompletedSuccessfully: true } ? answered.Result : answered?.Exception?.Message)}");
+            return answered is { IsCompletedSuccessfully: true, Result: "applied" } && File.ReadAllText(sharedThere) == "Offered from A.\n" && LinkTestPeerSaid("patch \"From A\" applied");
+        });
     }
 
     /// <summary>
