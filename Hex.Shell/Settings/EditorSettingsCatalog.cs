@@ -177,6 +177,10 @@ public static class EditorSettingsCatalog
         new("no_ai", HexText.Get("settings_catalog.no_ai_title"), UIFormKind.Flag, HexText.Get("settings_catalog.no_ai_help"), RUN),
         new("agents_resume_after_limit", HexText.Get("settings_catalog.agents_resume_after_limit_title"), UIFormKind.Flag, HexText.Get("settings_catalog.agents_resume_after_limit_help"), RUN),
         new("agents_auto_settle_seconds", HexText.Get("settings_catalog.agents_auto_settle_seconds_title"), UIFormKind.Whole, HexText.Get("settings_catalog.agents_auto_settle_seconds_help"), RUN, Least: 0.0f, Most: 3600.0f),
+        new("link", HexText.Get("settings_catalog.link_title"), UIFormKind.Flag, HexText.Get("settings_catalog.link_help"), RUN),
+        new("link_port", HexText.Get("settings_catalog.link_port_title"), UIFormKind.Whole, HexText.Get("settings_catalog.link_port_help"), RUN, Least: 1024.0f, Most: 65535.0f),
+        new("link_name", HexText.Get("settings_catalog.link_name_title"), UIFormKind.Text, HexText.Get("settings_catalog.link_name_help"), RUN, Placeholder: HexText.Get("settings_catalog.link_name_placeholder")),
+        new("link_discoverable", HexText.Get("settings_catalog.link_discoverable_title"), UIFormKind.Flag, HexText.Get("settings_catalog.link_discoverable_help"), RUN),
 
         new("snap", HexText.Get("settings_catalog.snap_title"), UIFormKind.Whole, HexText.Get("settings_catalog.snap_help"), DESIGNER, Least: 0.0f, Most: 16.0f),
         new("canvas_handles", HexText.Get("settings_catalog.canvas_handles_title"), UIFormKind.Flag, HexText.Get("settings_catalog.canvas_handles_help"), DESIGNER)
@@ -324,6 +328,10 @@ public static class EditorSettingsCatalog
         ["no_ai"] = Values.Bool(false),
         ["agents_resume_after_limit"] = Values.Bool(true),
         ["agents_auto_settle_seconds"] = new NumberValue(30.0f),
+        ["link"] = Values.Bool(false),
+        ["link_port"] = new NumberValue(47833.0f),
+        ["link_name"] = new StringValue(string.Empty),
+        ["link_discoverable"] = Values.Bool(true),
         ["reopen_last"] = Values.Bool(false),
         ["persistent_process"] = Values.Bool(false),
         ["persistent_at_login"] = Values.Bool(false),

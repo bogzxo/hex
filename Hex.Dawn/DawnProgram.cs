@@ -26,6 +26,8 @@ public static partial class DawnProgram
     private const string ARGUMENT_WINDOW = "--window";
     private const string ARGUMENT_FRESH = "--fresh";
     private const string ARGUMENT_MCP = "--mcp";
+    private const string ARGUMENT_LINK = "--link";
+    private const string ARGUMENT_LINK_PORT = "--link-port";
     private const string ARGUMENT_FACE = "--face";
     private const string ARGUMENT_NO_AI = Hex.Core.HexAi.ARGUMENT;
 
@@ -178,6 +180,8 @@ public static partial class DawnProgram
             Folder: folder,
             Fresh: args.Contains(ARGUMENT_FRESH),
             Mcp: args.Contains(ARGUMENT_MCP),
+            Link: args.Contains(ARGUMENT_LINK),
+            LinkPort: int.TryParse(ValueOf(args, ARGUMENT_LINK_PORT), NumberStyles.None, CultureInfo.InvariantCulture, out int linkPort) && linkPort is > 0 and <= 65535 ? linkPort : null,
             Face: ValueOf(args, ARGUMENT_FACE),
             // The self test of No AI is a run without the agents, there's no taking them out of one that has them
             NoAi: args.Contains(ARGUMENT_NO_AI) || (selfTest && ValuesOf(args, ARGUMENT_SELF_TEST).Contains(NO_AI_SUITE, StringComparer.OrdinalIgnoreCase)),
