@@ -37,6 +37,9 @@ internal sealed class NotebookCellView
     public int StateShown { get; set; } = -1;
     public long TimeShown { get; set; } = -1;
 
+    /// <summary>Whether a running cell's button showed stop, pointed at, rather than its spinner.</summary>
+    public bool StopShown { get; set; }
+
     /// <summary>A code cell's outlined frame round its editor, null for a markdown cell, whose editor goes without.</summary>
     public StackPanel? Frame { get; set; }
 

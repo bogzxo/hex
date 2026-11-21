@@ -1,5 +1,7 @@
 using Hex.Core.Notebooks;
 
+using Horizon.Graphics;
+
 using Horizon.UI.Components;
 
 namespace Hex.Dawn;
@@ -103,9 +105,10 @@ internal sealed partial class DawnScene
         test.Run(() => RunCells(notebookShown!, [notebookShown!.Model.Cells[1], notebookShown.Model.Cells[^1]]));
         test.WaitFor(() => notebookShown!.Run.RunningSince(notebookShown.Model.Cells[^1]) is not null, 90);
         test.Settle(1.3f);
-        test.Check("notebook cells: a running cell's seconds go up under its count and its button stops it", () =>
+        test.Check("notebook cells: a running cell's seconds go up under its count and its button is a spinner that stops it", () =>
             cellViews[^1] is { } running && running.Count.Text == "[*]" && running.Took.Text is "1 s" or "2 s"
-            && running.RunButton.Icon == "debug-stop" && running.Took.Color == NotebookLookNow().Accent);
+            && running.RunButton.Icon == "loading~spin" && running.RunButton.Tooltip == Said("notebook.stop_cell_tip")
+            && running.Took.Color == NotebookLookNow().Accent);
         test.Check("notebook cells: the bar says how far the run's got", () => runProgress.Visible && runProgress.Text == Said("notebook.running_of", ("n", "2"), ("count", "2")));
         test.Check("notebook cells: the kernel's dot is busy", () => kernelButton.Icon == "loading~spin" && interruptButton.Enabled);
         test.Run(() => PickCell(notebookShown!, cellViews.Count - 1, edit: false));
@@ -119,6 +122,122 @@ internal sealed partial class DawnScene
         test.Check("notebook cells: the kernel's dot is idle, in the success colour", () =>
             kernelButton.Icon == "circle-filled" && kernelButton.IconColor == compositor.Skin!.SuccessColor && !interruptButton.Enabled);
         test.Run(() => Shot("notebook-ran"));
+        TestNotebookThrobbers(test, animated: true);
+        TestNotebookThrobbers(test, animated: false);
         test.Run(() => StopKernel(notebookShown!));
+    }
+
+    /// <summary>
+    /// The second cell made to sleep 3 s at its end and the third waiting behind it, the two buttons in their gutters
+    /// looked at three times as they go and the running one's seconds read. With the UI's motion on both are spinners
+    /// that turn, no two pictures of either the same, and pointed at, the running one's is stop. At 0 they stand
+    /// still and the seconds still go up.
+    /// </summary>
+    private void TestNotebookThrobbers(HexPointerScript test, bool animated)
+    {
+        string how = animated ? "with the UI's motion on" : "with the UI's motion at 0";
+        float animation = 1.0f;
+        string source = string.Empty;
+        Task<ImagePixels>? capture = null;
+        var running = new List<byte[]>();
+        var queued = new List<byte[]>();
+        var seconds = new List<string>();
+        var icons = new List<string>();
+        bool inside = true;
+        void Picture()
+        {
+            test.Run(() => { Engine.WindowManager.RequestFrames(); capture = Engine.CapturePixels(); });
+            test.WaitFor(() => capture!.IsCompleted, 10);
+            test.Run(() =>
+            {
+                ImagePixels frame = capture!.Result;
+                foreach (var (index, pictures) in ((int, List<byte[]>)[])[(1, running), (2, queued)])
+                {
+                    Button button = cellViews[index].RunButton;
+                    System.Numerics.Vector4 box = McpBox(button.Module!, button.Bounds);
+                    inside &= box.X >= 0 && box.Y >= 0 && box.X + box.Z <= frame.Width && box.Y + box.W <= frame.Height;
+                    pictures.Add(PixelsOf(frame, box));
+                }
+
+                seconds.Add(cellViews[1].Took.Text);
+                icons.Add(cellViews[1].RunButton.Icon + " " + cellViews[2].RunButton.Icon);
+            });
+        }
+
+        bool Turned(List<byte[]> pictures) => pictures.Count == 3 && pictures[0].Length > 0
+            && !pictures[0].AsSpan().SequenceEqual(pictures[1]) && !pictures[1].AsSpan().SequenceEqual(pictures[2]);
+        // The last two, the first can be taken as the waiting cell's button is still changing from play to its spinner
+        bool Still(List<byte[]> pictures) => pictures.Count == 3 && pictures[1].Length > 0 && pictures[1].AsSpan().SequenceEqual(pictures[2]);
+
+        test.Run(() =>
+        {
+            animation = settings.UiAnimation;
+            settings.UiAnimation = animated ? 1.0f : 0.0f;
+            ApplyEffects();
+            source = notebookShown!.Model.Cells[1].Source;
+            notebookShown.Model.Cells[1].Source = source + "\nimport time\ntime.sleep(3)";
+            notebookShown.Remake = true;
+        });
+        test.Wait();
+        test.Run(() =>
+        {
+            PickCell(notebookShown!, 1, edit: false);
+            RunCells(notebookShown!, [notebookShown!.Model.Cells[1], notebookShown.Model.Cells[2]]);
+        });
+        test.WaitFor(() => notebookShown!.Run.RunningSince(notebookShown.Model.Cells[1]) is not null, 30);
+        test.Settle(0.2f);
+        Picture();
+        test.Settle(0.3f);
+        Picture();
+        test.Settle(1.0f);
+        Picture();
+        test.Check($"notebook cells: {how}, the running cell and the one waiting behind it have spinners in their gutters", () =>
+            inside && icons.Count == 3 && icons.All(icon => icon == "loading~spin loading~spin"));
+        if (animated)
+        {
+            test.Check("notebook cells: the running cell's spinner turns", () => Turned(running));
+            test.Check("notebook cells: the waiting cell's spinner turns", () => Turned(queued));
+        }
+        else
+            test.Check("notebook cells: with the UI's motion at 0, both spinners stand still", () => Still(running) && Still(queued));
+
+        test.Check($"notebook cells: {how}, the running cell's seconds go up", () =>
+            seconds.Count == 3 && seconds[0] == "0 s" && seconds[2] is "1 s" or "2 s");
+        if (animated)
+        {
+            // Pointed at, the running cell's spinner is the stop it always was, and back to turning once the pointer's off it
+            test.Hover(() => cellViews[1].RunButton.Module!.ToWorld(cellViews[1].RunButton.Bounds.Center));
+            test.Wait();
+            test.Check("notebook cells: pointed at, the running cell's spinner is stop", () =>
+                notebookShown!.Run.RunningSince(notebookShown.Model.Cells[1]) is not null && cellViews[1].RunButton.Icon == "debug-stop");
+            test.Hover(() => cellViews[1].Count.Module!.ToWorld(cellViews[1].Count.Bounds.Center));
+            test.Wait();
+            test.Check("notebook cells: and a spinner again once the pointer's off it", () =>
+                notebookShown!.Run.RunningSince(notebookShown.Model.Cells[1]) is null || cellViews[1].RunButton.Icon == "loading~spin");
+        }
+
+        test.WaitFor(() => notebookShown!.Run.Queued.Count == 0 && notebookShown.Waiting.Count == 0, 20);
+        test.Wait();
+        test.Check($"notebook cells: {how}, done, both buttons are play again", () =>
+            cellViews[1].RunButton.Icon == "play" && cellViews[2].RunButton.Icon == "play");
+        test.Run(() =>
+        {
+            notebookShown!.Model.Cells[1].Source = source;
+            notebookShown.Remake = true;
+            settings.UiAnimation = animation;
+            ApplyEffects();
+        });
+        test.Wait();
+    }
+
+    // Helper method for the pixels of a box of the window, a box in window pixels, x and y its top left
+    private static byte[] PixelsOf(ImagePixels frame, System.Numerics.Vector4 box)
+    {
+        int x = Math.Clamp((int)box.X, 0, frame.Width), y = Math.Clamp((int)box.Y, 0, frame.Height);
+        int width = Math.Clamp((int)MathF.Ceiling(box.Z), 0, frame.Width - x), height = Math.Clamp((int)MathF.Ceiling(box.W), 0, frame.Height - y);
+        byte[] cut = new byte[width * height * 4];
+        for (int row = 0; row < height; row++)
+            Array.Copy(frame.Pixels, ((y + row) * frame.Width + x) * 4, cut, row * width * 4, width * 4);
+        return cut;
     }
 }

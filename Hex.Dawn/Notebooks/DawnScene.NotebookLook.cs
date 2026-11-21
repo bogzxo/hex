@@ -135,7 +135,14 @@ internal sealed partial class DawnScene
             CellState.Done or CellState.Failed => notebook.Run.Took(cell) ?? -1,
             _ => -1
         };
-        if (view.CountShown == counted && view.StateShown == (int)state && view.TimeShown == time)
+        // A running cell's button is a spinner that turns into stop while it's pointed at, so it reads as working and
+        // stopping it is where it always was. Its seconds are said again at the next whole second, a tick asked for
+        // then, so they go up on time in a window that's ticking slowly with nothing else happening (the UI's motion at
+        // 0, the spinner still)
+        bool stop = state == CellState.Running && view.RunButton.IsHovered;
+        if (state == CellState.Running)
+            Engine.WindowManager.RequestTickIn((1000 - (now - notebook.Run.RunningSince(cell)!.Value) % 1000) / 1000.0 + 0.01);
+        if (view.CountShown == counted && view.StateShown == (int)state && view.TimeShown == time && view.StopShown == stop)
             return;
 
         if (view.CountShown != counted)
@@ -150,7 +157,7 @@ internal sealed partial class DawnScene
             _ => string.Empty
         };
 
-        if (view.StateShown != (int)state)
+        if (view.StateShown != (int)state || view.StopShown != stop)
         {
             Vector4? colour = state switch
             {
@@ -164,8 +171,8 @@ internal sealed partial class DawnScene
             view.Took.Dim = colour is null;
             view.RunButton.Icon = state switch
             {
-                CellState.Running => "debug-stop",
-                CellState.Queued => "loading~spin",
+                CellState.Running when stop => "debug-stop",
+                CellState.Running or CellState.Queued => "loading~spin",
                 _ => "play"
             };
             view.RunButton.IconColor = state == CellState.Running ? look.Accent : null;
@@ -175,6 +182,7 @@ internal sealed partial class DawnScene
         view.CountShown = counted;
         view.StateShown = (int)state;
         view.TimeShown = time;
+        view.StopShown = stop;
     }
 
     /// <summary>A time the way the gutter says it, milliseconds under a second, tenths of a second under a minute, then minutes.</summary>
