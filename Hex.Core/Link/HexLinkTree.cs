@@ -104,6 +104,8 @@ internal sealed partial class HexLinkTree
 
         bool onDiskNames = relative is null;
         relative ??= Walk();
+        // Detect a capped root listing before nested repositories replace any of its entries.
+        CheckCount(relative.Count);
         var nested = AddNestedGitFiles(relative);
         CheckCount(relative.Count);
         var files = new List<HexLinkTreeFile>(relative.Count);
