@@ -147,8 +147,17 @@ internal sealed partial class DawnScene
 
             if (chat.CacheRead > 0 && chat.InputTokens > 0)
                 ContextLine("database", Said("noon.cache", ("read", Count(chat.CacheRead)), ("share", (100.0 * chat.CacheRead / chat.InputTokens).ToString("0"))));
-            int turns = chat.Entries.Count(entry => entry.Kind == HexAgentEntryKind.User);
-            int calls = chat.Entries.Count(entry => entry.Kind == HexAgentEntryKind.Tool);
+            // Counted by their places in one go, a closure and an enumerator over the chat's entries for each count
+            int turns = 0, calls = 0;
+            IReadOnlyList<HexAgentEntry> said = chat.Entries;
+            for (int at = 0; at < said.Count; at++)
+            {
+                if (said[at].Kind == HexAgentEntryKind.User)
+                    turns++;
+                else if (said[at].Kind == HexAgentEntryKind.Tool)
+                    calls++;
+            }
+
             ContextLine("history", Said("noon.turns", ("turns", turns.ToString()), ("calls", calls.ToString())));
         }
 
@@ -174,8 +183,14 @@ internal sealed partial class DawnScene
 
         // Who it works with, a click opens them
         HexAgentChat? parent = chat.Parent is { } up ? ChatById(up) : null;
-        HexAgentChat[] started = [.. agentChats.Where(each => each.Parent == chat.Id)];
-        if (parent is not null || started.Length > 0)
+        List<HexAgentChat> started = [];
+        for (int at = 0; at < agentChats.Count; at++)
+        {
+            if (agentChats[at].Parent == chat.Id)
+                started.Add(agentChats[at]);
+        }
+
+        if (parent is not null || started.Count > 0)
         {
             ContextSection(Said("noon.family"));
             if (parent is not null)
