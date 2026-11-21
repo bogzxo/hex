@@ -314,3 +314,52 @@ relay for machines with no route between them, the debugger shared read-only, a 
 | A remote chat mirrored at the cost of a big chat every change | Patches by row version, only for the chat on screen, the fleet is rows only. |
 | Editor-thread stalls from a busy link | Rate limits; everything off the editor's thread but the queued calls. |
 | The UI's size | Remote chats reuse the local rows; the Link window is one layout. |
+
+## Status
+
+Kept current by the orchestrator (chat #107) at every phase change, so another agent can take over.
+Last updated 2026-11-21, during phase 2.
+
+**Where things are**
+- Integration branch: hex `feat/hex-link`, worktree `../hexwt-link` (beside `hex/`). No engine changes so far (engine
+  stays at development 68b7e11, HIDL bf0f436). Nothing is pushed.
+- Engine copies to build against (never the live engine), in
+  `hex/Hex/bin/Debug/net11.0/data/agents/temp/scratch/link/`: `engine` (orchestrator), `engine-transport`
+  (wiring worker), `engine-protocol` (sync worker). Build: `dotnet build Hex/Hex.csproj -p:HorizonRoot=<engine>/
+  -p:HidlRoot=<engine>/Horizon.HIDL/`.
+- Mac rig: `scratch/link/mac/` (`mac-sync.sh [branch]`, `mac-build.sh`, `mac-test.sh [filter]`,
+  `mac-hex.sh ENV=.. -- args`, `mac-kill.sh`, README.md). Mac clones in `~/hexmac/link/{hex,horizon}`. PC is
+  192.168.0.50 / Tailscale 100.81.32.118, Mac 192.168.0.30 / 100.80.122.37. A windowed Hex runs on the Mac from
+  plain ssh while the person is logged in there. On the PC a worktree `Hex.exe` listening needs the Windows
+  Firewall prompt allowed once; `dotnet Hex.dll` uses the existing .NET Host rule.
+
+**Done**
+- Design, decisions, TLS spike (this document).
+- Phase 1a transport + pairing: merged (5c9b371, bdc9722). Phase 1b protocol + remote hub + sync wire pieces: merged
+  (106c471, f340236). Glue 1d1cb46. 141 `HexLink` unit tests pass on Windows and macOS. PC and Mac paired and
+  linked over LAN and Tailscale with the transport's console harness (TLS 1.2 to the Mac).
+
+**Running**
+- #111 `feat/hex-link-wiring` (`../hexwt-link-wiring`): phase 2, `Hex.Dawn/Link/DawnScene.Link*.cs`, settings
+  `link*`, `--link`, tools `hex_link_devices/call/spawn`, self tests `link` and `link-peer`.
+- #112 `feat/hex-link-sync` (`../hexwt-link-sync`): `Hex.Core/Link/HexLinkSync*.cs`, the working-tree sync engine.
+
+**Next, in order**
+1. Review and merge #111 and #112 into `feat/hex-link`; unit tests and the `link` self test green; `mac-sync`,
+   `mac-build`, `mac-test`.
+2. Phase 3 UI worker: Link window, pairing dialog, status item, a section per device in Agentic's fleet, remote
+   chats in both machines' chat lists with a device badge, the **Runs on** picker in the box.
+3. Phase 4 worker: Open Remote File, save back and conflicts, presence, clone, fetch and offer changes; and the
+   sync engine's glue: start and show sync per folder, `hex_link_sync` tool, pulled writes routed through open tabs.
+4. Phase 6: predictions over Link with chat #110 (`feat/edit-prediction`): right `Predict = 8`,
+   `predict/start|chunk|done|cancel`, glue to their `HexPredictionRelay` seam. Waits on their seam commit.
+5. Phase 5 on two machines, LAN and Tailscale: `link-peer` listening on one and dialling from the other, each
+   way; a real agent on the Mac started from the PC and the other way; pairing, revocation, an unpaired device
+   refused; a capture of the wire (TLS, none of the text); a file edit synced; then the report to chat #3.
+
+**Open**
+- The Keychain path on macOS and `secret-tool` on Linux are untested (ssh has no unlocked Keychain; the file
+  fallback is what runs there).
+- mDNS from the Mac to the PC wasn't heard when the Mac's process was started over ssh; an address typed in works.
+- The `mcp` self test fails 6 of 44 on the Mac (keys and file writes), not a Link suite, not looked into.
+- Later than v1: live co-editing, a relay, the debugger shared.
