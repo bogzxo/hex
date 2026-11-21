@@ -2,6 +2,7 @@ using System.Text;
 
 using Hex.Core;
 using Hex.Core.Git;
+using Hex.Dawn;
 
 using static Hex.Tests.HexLinkTestKit;
 
@@ -143,6 +144,26 @@ public sealed class HexLinkGitTests
         Assert.True(manifest.Files.Single(file => file.Path == "work/big.dat").Big);
 
         Assert.Equal(HexLinkErrors.NOT_FOUND, await CodeOf(pair.PeerA.Manifest("nowhere")));
+    }
+
+    [Fact]
+    public void Exactly_one_side_owns_automatic_sync_when_either_side_can_view()
+    {
+        HexLinkRights view = HexLinkRights.View, edit = view | HexLinkRights.Edit;
+        HexLinkRights[] grants = [HexLinkRights.None, view, edit];
+        foreach (HexLinkRights listenerGrants in grants)
+        foreach (HexLinkRights diallerGrants in grants)
+        {
+            bool listenerOwns = DawnScene.LinkAutoSyncOwner(false, listenerGrants, diallerGrants);
+            bool diallerOwns = DawnScene.LinkAutoSyncOwner(true, diallerGrants, listenerGrants);
+            Assert.Equal(listenerGrants == HexLinkRights.None && diallerGrants == HexLinkRights.None ? 0 : 1,
+                (listenerOwns ? 1 : 0) + (diallerOwns ? 1 : 0));
+            if (listenerGrants == edit && diallerGrants != edit)
+                Assert.True(diallerOwns);
+            if (diallerGrants == edit && listenerGrants != edit)
+                Assert.True(listenerOwns);
+        }
+        Assert.True(DawnScene.LinkAutoSyncOwner(false, edit, edit));
     }
 
     [Fact]

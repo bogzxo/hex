@@ -11,10 +11,24 @@ internal sealed partial class DawnScene
         if (HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))
         {
             LinkSyncResume(peer);
-            LinkSyncStartSharedFolders(peer);
+            if (LinkAutoSyncOwner(peer.Session.Connection.Dialled, peer.Session.Connection.Rights, peer.Granted))
+                LinkSyncStartSharedFolders(peer);
         }
         LinkFilesJoined(peer);
         LinkPresenceJoined(peer);
+    }
+
+    // One engine compares and watches both sides. If either side can push, it owns the automatic sync.
+    internal static bool LinkAutoSyncOwner(bool dialled, HexLinkRights localGrants, HexLinkRights remoteGrants)
+    {
+        if (!HexLinkAllowed.Has(remoteGrants, HexLinkRights.View))
+            return false;
+        if (!HexLinkAllowed.Has(localGrants, HexLinkRights.View))
+            return true;
+
+        bool canPush = HexLinkAllowed.Has(remoteGrants, HexLinkRights.Edit);
+        bool otherCanPush = HexLinkAllowed.Has(localGrants, HexLinkRights.Edit);
+        return canPush != otherCanPush ? canPush : !dialled;
     }
 
     // A matching workspace folder starts on connect unless the person turned it off. The sync still checks Git identity.
