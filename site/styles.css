@@ -655,7 +655,7 @@ button.link {
 
 /* The three faces named under the pitch, each in its colour and a way to its part of the page, so the names the rest of
    the page uses mean something from the first screen */
-.faces {
+.face-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
@@ -1624,14 +1624,22 @@ pre {
   }
 }
 
-/* Hex next to VS Code, a card a measurement, each drawn to its own scale since the units differ. Hex's bar in the
-   accent, VS Code's in the dim colour */
+/* Hex next to the other editor, a card a measurement, each drawn to its own scale since the units differ. Hex's bar in
+   the accent, the other one's in a blue it may find familiar (lighter on the dark page, for its words' contrast) */
 .vs {
+  --other: light-dark(#0065a9, #3fa9f5);
+
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
   gap: 1px;
   overflow: hidden;
   margin: 1.25rem 0 0;
+
+  /* Eight cards, two rows of four where there's the room */
+  @media (width >= 70rem) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
   padding: 0;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -1641,6 +1649,7 @@ pre {
   & > li {
     padding: 1.1rem 1.25rem 1.25rem;
     background: var(--surface);
+    container-type: inline-size;
   }
 
   & h4 {
@@ -1658,7 +1667,7 @@ pre {
 
 .vs-bar {
   display: grid;
-  grid-template-columns: 4.5rem 1fr minmax(5.5rem, auto);
+  grid-template-columns: 6.5rem 1fr minmax(5.5rem, auto);
   gap: 0.75rem;
   align-items: center;
   margin-block-start: 0.45rem;
@@ -1667,6 +1676,7 @@ pre {
 
   & > span:first-child {
     color: var(--dim);
+    white-space: nowrap;
   }
 
   & i {
@@ -1682,13 +1692,35 @@ pre {
     white-space: nowrap;
   }
 
-  &.code i {
-    background: var(--dim);
-    opacity: 0.6;
+  /* Hex in its own colour, Dawn's, its name and its number with its bar */
+  &:not(.code) > span:first-child,
+  &:not(.code) > b {
+    color: var(--accent);
   }
 
-  &.code > :last-child {
-    color: var(--dim);
+  &:not(.code) > span:first-child {
+    font-weight: 700;
+  }
+
+  &.code i {
+    background: var(--other);
+  }
+
+  &.code > span {
+    color: var(--other);
+  }
+}
+
+/* A narrow card: the name and the number on a line, the bar the whole width under them */
+@container (inline-size < 22rem) {
+  .vs-bar {
+    grid-template-columns: 1fr auto;
+    row-gap: 0.3rem;
+
+    & i {
+      grid-column: 1 / -1;
+      grid-row: 2;
+    }
   }
 }
 
@@ -1800,8 +1832,15 @@ details:not([open])::details-content {
   gap: 0.6rem;
 }
 
+/* At the foot of the card where the cards are a grid, so the buttons of a row line up; right under the words in a
+   rail on a phone, where a card is alone and a gap over its button would only look empty */
 .face-button {
   margin-block-start: auto;
+
+  @media (width < 44rem) {
+    margin-block-start: 0;
+  }
+
   padding: 0.35rem 0;
   border: 0;
   background: none;
@@ -2040,6 +2079,68 @@ details:not([open])::details-content {
   ::view-transition-old(*),
   ::view-transition-new(*) {
     animation: none !important;
+  }
+}
+
+/* Motion, the way Hex has it: short, eased, and only where something arrives or answers you. The pitch comes in once as
+   the page opens, a line after another and the picture last; the bars of the numbers grow to their values as they come
+   into sight, moved by the page's own scroll so a phone has it as much as a desktop; a picture of the gallery leans in
+   a little under a pointer. Only opacity, translate and scale move, and none of it for anybody who asked for less */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes arrive {
+    from {
+      opacity: 0;
+      translate: 0 0.9rem;
+    }
+  }
+
+  .hero .pitch > * {
+    animation: arrive 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+
+  .hero .pitch > :nth-child(2) { animation-delay: 70ms; }
+  .hero .pitch > :nth-child(3) { animation-delay: 140ms; }
+  .hero .pitch > :nth-child(4) { animation-delay: 210ms; }
+  .hero .pitch > :nth-child(5) { animation-delay: 280ms; }
+  .hero .pitch > :nth-child(n + 6) { animation-delay: 350ms; }
+
+  .hero .proof {
+    animation: arrive 0.8s 0.3s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+
+  @supports ((animation-timeline: view()) and (animation-range: entry)) {
+    @keyframes grow {
+      from {
+        scale: 0 1;
+      }
+    }
+
+    .bars i,
+    .vs-bar i {
+      transform-origin: 0 50%;
+      animation: grow linear both;
+      animation-timeline: view();
+      /* Whole by the time it's all on screen, so a bar read anywhere on the page is never part grown */
+      animation-range: entry 0% entry 100%;
+    }
+  }
+
+  @media (hover: hover) {
+    .gallery a img {
+      transition: scale 0.4s cubic-bezier(0.2, 0.7, 0.2, 1);
+    }
+
+    .gallery a:hover img {
+      scale: 1.03;
+    }
+
+    .face-chips a {
+      transition: translate 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    }
+
+    .face-chips a:hover {
+      translate: 0 -1px;
+    }
   }
 }
 

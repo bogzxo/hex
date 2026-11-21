@@ -41,7 +41,7 @@
         </button>
         <ul id="site-menu" class="site-menu" popover>
           <li><a href="#numbers">Numbers</a></li>
-          <li><a href="#switch">From VS Code</a></li>
+          <li><a href="#switch">Switching</a></li>
           <li><a href="#gallery">Gallery</a></li>
           <li><a href="#features">Features</a></li>
           <li class="dusk"><a href="#dusk">Dusk</a></li>
@@ -71,13 +71,13 @@
         <p class="familiar">A familiar interface ;)</p>
         <p class="lede"><strong>This is Hex: It opens, you write code, and it gets the fuck out of your way.</strong></p>
         <p class="sub">That's the entire fucking point. A native code editor, a proper terminal, a place for your agents, and the tools around them. No Electron. No Chromium in a trench coat. No account to open a text file. No shaming you by denying access to first-party extensions.</p>
-        <ul class="faces" aria-label="Hex's three faces, one program">
+        <ul class="face-chips" aria-label="Hex's three faces, one program">
           <li><a href="#features"><b>Dawn</b> the code editor</a></li>
           <li class="dusk"><a href="#dusk"><b>Dusk</b> the terminal</a></li>
           <li class="noon"><a href="#agents"><b>Agentic</b> your agents</a></li>
         </ul>
         <div class="actions">
-          <a class="button" href="#get-it"><!-- release:button -->Download Hex 3.1.2 Amphetamine<!-- /release:button --></a>
+          <a class="button" href="#get-it"><!-- release:button -->Download Hex 3.2.0 Amphetamine<!-- /release:button --></a>
           <a class="button quiet" href="#numbers">Show me the receipts</a>
           <a class="button quiet" href="https://github.com/bogzxo/hex">Source on GitHub</a>
           <button type="button" class="button quiet" commandfor="request" command="show-modal">Request a feature</button>
@@ -131,47 +131,59 @@
           <p class="note">Start to the window on screen, the same build both ways, 7 cold launches and 36 wakes, medians. Asleep, Hex keeps 296 MiB of private memory committed so it can wake without loading anything again, regardless, Windows pages nearly all of it out to disk, and the 5 MiB is what actually stays in RAM.</p>
         </div>
 
-        <h3 class="numbers-head">Next to VS Code</h3>
-        <p>The same machine, the same projects and the same file open, both editors with C# support: VS Code 1.147 with C# Dev Kit, C#, Python, Jupyter and C++ installed, Hex with its own C# server. Each opened six times in turn after a thrown-away launch, medians.</p>
-        <ul class="vs rise" aria-label="Hex next to VS Code">
+        <h3 class="numbers-head">Next to the other editor</h3>
+        <p>You know the one, built on a browser. The same machine, with the same projects and files open, both with C# support: its current release with its C# kit, C#, Python, Jupyter and C++ extensions installed, Hex with its own C# server. Each opened three times in turn after a thrown-away launch, medians.</p>
+        <ul class="vs rise" aria-label="Hex next to the other editor">
             <li>
               <h4>Ready, a small project</h4>
               <p>Start to the editor on screen with the file open</p>
-              <div class="vs-bar"><span>Hex</span><i style="--v: 507; --max: 1302"></i><b>507 ms</b></div>
-              <div class="vs-bar code"><span>VS Code</span><i style="--v: 1302; --max: 1302"></i><span>1,302 ms</span></div>
+              <div class="vs-bar"><span>Hex</span><i style="--v: 536; --max: 1268"></i><b>536 ms</b></div>
+              <div class="vs-bar code"><span>The other one</span><i style="--v: 1268; --max: 1268"></i><span>1,268 ms</span></div>
             </li>
             <li>
               <h4>Ready, a large repository</h4>
               <p>Horizon, 995 C# files and 193,000 lines</p>
-              <div class="vs-bar"><span>Hex</span><i style="--v: HXR; --max: MAXR"></i><b>HXR ms</b></div>
-              <div class="vs-bar code"><span>VS Code</span><i style="--v: CXR; --max: MAXR"></i><span>CXR ms</span></div>
+              <div class="vs-bar"><span>Hex</span><i style="--v: 951; --max: 1547"></i><b>951 ms</b></div>
+              <div class="vs-bar code"><span>The other one</span><i style="--v: 1547; --max: 1547"></i><span>1,547 ms</span></div>
             </li>
             <li>
               <h4>Memory, a small project</h4>
               <p>Every process of each, language servers included, 30 s in</p>
-              <div class="vs-bar"><span>Hex</span><i style="--v: 382; --max: 2136"></i><b>382 MiB</b></div>
-              <div class="vs-bar code"><span>VS Code</span><i style="--v: 2136; --max: 2136"></i><span>2,136 MiB</span></div>
+              <div class="vs-bar"><span>Hex</span><i style="--v: 383; --max: 2629"></i><b>383 MiB</b></div>
+              <div class="vs-bar code"><span>The other one</span><i style="--v: 2629; --max: 2629"></i><span>2,629 MiB</span></div>
             </li>
             <li>
               <h4>Memory, a large repository</h4>
               <p>The same, on Horizon</p>
-              <div class="vs-bar"><span>Hex</span><i style="--v: HXM; --max: MAXM"></i><b>HXM MiB</b></div>
-              <div class="vs-bar code"><span>VS Code</span><i style="--v: CXM; --max: MAXM"></i><span>CXM MiB</span></div>
+              <div class="vs-bar"><span>Hex</span><i style="--v: 473; --max: 3126"></i><b>473 MiB</b></div>
+              <div class="vs-bar code"><span>The other one</span><i style="--v: 3126; --max: 3126"></i><span>3,126 MiB</span></div>
+            </li>
+            <li>
+              <h4>CPU, a small project</h4>
+              <p>Of the whole processor, 12 threads, sat untouched 30 s in</p>
+              <div class="vs-bar"><span>Hex</span><i style="--v: 0.08; --max: 1.3"></i><b>0.08%</b></div>
+              <div class="vs-bar code"><span>The other one</span><i style="--v: 1.3; --max: 1.3"></i><span>1.3%</span></div>
+            </li>
+            <li>
+              <h4>CPU, a large repository</h4>
+              <p>The same, on Horizon</p>
+              <div class="vs-bar"><span>Hex</span><i style="--v: 0.12; --max: 9.2"></i><b>0.12%</b></div>
+              <div class="vs-bar code"><span>The other one</span><i style="--v: 9.2; --max: 9.2"></i><span>9.2%</span></div>
             </li>
             <li>
               <h4>Processes</h4>
               <p>Running on Horizon, 30 s in</p>
-              <div class="vs-bar"><span>Hex</span><i style="--v: HXP; --max: MAXP"></i><b>HXP</b></div>
-              <div class="vs-bar code"><span>VS Code</span><i style="--v: CXP; --max: MAXP"></i><span>CXP</span></div>
+              <div class="vs-bar"><span>Hex</span><i style="--v: 3; --max: 47"></i><b>3</b></div>
+              <div class="vs-bar code"><span>The other one</span><i style="--v: 47; --max: 47"></i><span>47</span></div>
             </li>
             <li>
               <h4>On disk</h4>
-              <p>The installed program, all of it</p>
-              <div class="vs-bar"><span>Hex</span><i style="--v: HXD; --max: MAXD"></i><b>HXD MiB</b></div>
-              <div class="vs-bar code"><span>VS Code</span><i style="--v: CXD; --max: MAXD"></i><span>CXD MiB</span></div>
+              <p>The program as installed, extensions and language servers aside</p>
+              <div class="vs-bar"><span>Hex</span><i style="--v: 116; --max: 1092"></i><b>116 MiB</b></div>
+              <div class="vs-bar code"><span>The other one</span><i style="--v: 1092; --max: 1092"></i><span>1,092 MiB</span></div>
             </li>
         </ul>
-        <p class="note">Hex's time is its own first frame, VS Code's its own workbench ready, each from its process starting; both carry on loading their language servers after that. VS Code ran with a fresh profile and the extensions above, Hex with fresh settings. Memory is private bytes summed over each editor's whole tree of processes.</p>
+        <p class="note">Hex's time is its own first frame, the other editor's its own "workbench ready", each from its process starting; both carry on loading their language servers after that. It ran with a fresh profile and the extensions above, Hex with fresh settings. Memory is private bytes summed over each editor's whole tree of processes, CPU the share of the whole processor that tree used over 10 s once each had been open for 30, the other editor's still indexing Horizon then.</p>
 
         <details class="fold">
           <summary>Every measurement, and how they were taken</summary>
@@ -213,16 +225,16 @@
 
     <section id="switch">
       <div class="wrap">
-        <p class="eyebrow">Coming from VS Code</p>
+        <p class="eyebrow">Coming from another editor</p>
         <h2>Switch without starting over</h2>
-        <ul class="features row swipe" data-label="Coming from VS Code">
+        <ul class="features row swipe" data-label="Coming from another editor">
           <li class="rise">
             <h3>Your keys already work</h3>
-            <p>VS Code's shortcuts out of the box. Visual Studio's are one switch away.</p>
+            <p>The shortcuts you learnt in that other editor, out of the box. Visual Studio's are one switch away.</p>
           </li>
           <li class="rise">
             <h3>Your settings come with you</h3>
-            <p>Import your <code>settings.json</code> and a folder's <code>.vscode/settings.json</code>. Every change is previewed first, and whatever Hex can't take is listed, not silently dropped.</p>
+            <p>Point Hex at your old editor's <code>settings.json</code>, yours and a folder's. Every change is previewed first, and whatever Hex can't take is listed, not silently dropped.</p>
           </li>
           <li class="rise">
             <h3>The same language servers</h3>
@@ -230,7 +242,7 @@
           </li>
           <li class="rise">
             <h3>What doesn't come over</h3>
-            <p>VS Code extensions don't run in Hex. Its own are small HIDL scripts with a catalogue inside the editor. If your workflow lives in one marketplace extension, check the catalogue first, or <button type="button" class="link" commandfor="request" command="show-modal">request it</button>.</p>
+            <p>The other editor's extensions don't run in Hex. Its own are small HIDL scripts with a catalogue inside the editor. If your workflow lives in one marketplace extension, check the catalogue first, or <button type="button" class="link" commandfor="request" command="show-modal">request it</button>.</p>
           </li>
         </ul>
       </div>
@@ -257,7 +269,7 @@
           </figure>
           <figure class="rise">
             <a href="images/terminal-states-1600.webp"><img src="images/terminal-states-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A C# file over the terminal panel, its second tab marked failed, and a bar under the pane saying Exited with code 2, Press Enter to restart"></a>
-            <figcaption><b>Shells that report their exit.</b> The code on screen, the pane kept, the tab flagged.</figcaption>
+            <figcaption><b>Shells that report their exit.</b> The exit code stays on screen and the tab is flagged.</figcaption>
           </figure>
           <figure class="rise">
             <a href="images/completion-1600.webp"><img src="images/completion-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A completion list under mixer. offering Add, the Clipped event, methods and the Peak and SampleRate properties, each name in the colour its kind has in the code, with Add's signature beside it"></a>
@@ -289,7 +301,7 @@
           </figure>
           <figure class="rise">
             <a href="images/notebook-1600.webp"><img src="images/notebook-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The engineering sample notebook after Run All: Python cells numbered with their run times, each printing a PASS line and a typeset equation for a cantilever's deflection, an RC circuit's charge and a pipe's pressure drop, and the kernel idle on the bar"></a>
-            <figcaption><b>Notebooks.</b> Real kernels, typeset maths, every cell timed.</figcaption>
+            <figcaption><b>Notebooks.</b> Real kernels and typeset maths, with every cell timed.</figcaption>
           </figure>
           <figure class="rise">
             <a href="images/markdown-1600.webp"><img src="images/markdown-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A Markdown preview with headings, typeset equations, a table of voices and a task list"></a>
@@ -359,7 +371,7 @@
                 <button type="button" class="face-button" aria-expanded="false" aria-controls="more-find-your-shit">More<span class="visually-hidden"> about Find your shit</span></button>
               </div>
               <div class="face back" id="more-find-your-shit">
-                <p>Import VS Code settings instead of rebuilding your preferences by hand.</p>
+                <p>Import your old editor's settings instead of rebuilding your preferences by hand.</p>
                 <button type="button" class="face-button">Back<span class="visually-hidden"> to Find your shit</span></button>
               </div>
             </div>
@@ -552,7 +564,7 @@
 
     <section id="get-it">
       <div class="wrap">
-        <p class="eyebrow"><!-- release:title -->Hex 3.1.2 Amphetamine<!-- /release:title --></p>
+        <p class="eyebrow"><!-- release:title -->Hex 3.2.0 Amphetamine<!-- /release:title --></p>
         <h2>Get it</h2>
         <p>One download, nothing else to install, not even .NET. Setup adds shortcuts and keeps Hex up to date; Portable is a ZIP you unpack and run.</p>
 
@@ -584,17 +596,15 @@
         </ul>
         <p class="note"><a href="https://github.com/bogzxo/hex/releases">All releases</a> · <a href="https://github.com/bogzxo/hex/blob/master/RELEASE_NOTES.md">What changed</a> · <a href="https://github.com/bogzxo/hex/blob/master/docs/installer.md">Installation details</a></p>
         <!-- What's new in the latest release, put in from its notes by .github/site-release.py when the page is published -->
-        <div class="whats-new"><!-- release:notes -->
-<h3>What's new in 3.1.2 Amphetamine</h3>
-<p>Badges in Agentic, a settings window that finds what you changed, a welcome page that fills the window, and a lot that feels quicker.</p>
-<details><summary>Everything in 3.1.2</summary><h4>Agentic</h4>
-<ul><li>each agent's card says how it's doing on a badge, Working in blue with a beating dot, Failed in red, a finished chat you haven't seen in the accent</li><li>the tabs' counts are badges, Inbox's in the accent, the Plan's green once every step is done, and the Plan's bar is green the whole way rather than going red at 100%</li><li>Details counts each tool on a badge in the tool's colour</li><li>/ commands complete wherever the word is in the box, Tab takes only that word, Enter sends a command written out in full, and a message that starts with a slash is sent as a message</li><li>the list of / commands walks with held arrow keys, Up goes up it rather than closing it, and it scrolls smoothly past its first page</li><li>a picture opened full screen zooms round the pointer and keeps the part you dragged to in sight</li><li>agents can read git's diff of a file and see which files other chats' plans are about to change</li></ul>
+        <div class="whats-new"><!-- release:notes --><h3>What's new in 3.2.0 Amphetamine</h3>
+<p>Sharper text, a Hex that stays ready in the background, and agents that share their servers, keep their data in one place and get eight new tools.</p>
+<details><summary>Everything in 3.2.0</summary><h4>text</h4>
+<ul><li>letters are made at the size they're drawn instead of out of a distance field, their x height and baseline on whole pixels, so text at 100% and 125% is crisp where it was soft</li><li>subpixel smoothing the way Windows' ClearType draws it, on a screen under 150% when Windows has ClearType on, grey on Mac, Linux, phones and Retina screens; Text smoothing in Settings picks auto, subpixel or grayscale</li><li>text no longer steps at its edges while a window slides or fades in</li><li>one interface size for the whole of Hex, the title bar and its menus included, on top of the screen's own scale; View, Interface Size and Settings pick it, and the code's zoom and the terminal's font go on top of it</li></ul>
 <h4>the editor</h4>
-<ul><li>the settings window has All, Modified and Commonly used under its search, a press each; what sets a setting sits beside what it says, the key shows when you look at a row, and a changed setting has a dot</li><li>the welcome page uses the whole window, three columns on a wide one, with Getting started for the settings nobody finds by looking</li><li>spelling is checked as you type in comments, text, Markdown and page words, never code</li><li>notification cards slide, fade and make room smoothly instead of jumping</li><li>No AI in Settings or <code>--no-ai</code> leaves the agents out altogether</li></ul>
-<h4>languages</h4>
-<ul><li>the Language Servers window sets up each language a step at a time, and says every server is optional, set up only the ones you want</li><li>a notebook's code cells are read by its language's server, so a missing import is underlined</li><li>servers that wait to be asked what's wrong with a file (TypeScript 7's) are asked</li></ul></details>
-<p class="note"><a href="https://github.com/bogzxo/hex/releases/tag/v3.1.2">The release on GitHub</a></p>
-<!-- /release:notes --></div>
+<ul><li>Persistent Process in Settings (and Speed on the welcome page): closing the window puts Hex to sleep instead of quitting, a few MB of memory and no CPU, and opening Hex again shows a window in well under a second; File, Exit still quits</li><li>Start with Windows starts Hex asleep when you sign in, so the first window is as quick as the rest</li><li>Hex starts quicker, the first frame sooner and the work that can wait done a moment after</li><li>a file with a line a fifth of a megabyte long (an agent's chat saved as JSON) opens and scrolls at once, coloured all along</li><li>every right-click menu is grouped and short enough to read, what throws something away last and in the error colour, the Run menu split into the session, stepping and what's looked at</li><li>a workspace whose .gitignore leaves out the repositories cloned into it has their code indexed again</li><li>the About box shows Hex's icon again</li><li>closing the window while it was idle no longer skips asking about unsaved changes</li><li>the usage limits shown for Claude are the latest it said, and a limit that's been reached shows 100%</li><li>keys that clashed (Properties and Agentic's fleet, Allow and Deny) only answer where they mean something</li><li>many places do less work each frame, and work that blocked the window happens beside it</li></ul>
+<h4>Agentic</h4>
+<ul><li>the Plan tab is a plan to work from: what's being done now, what needs you, what's next, the steps done folded away, filters, a step's note, files and owner a click away, and steps you add, edit, reorder or drop reach the agent</li><li>a chat's title is renamed in place on its card, from its menu, F2 or a double click</li><li>Agent Data in the Agents menu and at the foot of Agentic says how much the chats, pictures and the agents' files take, and clears old chats, pictures nothing mentions and temporary files; it all lives in a data folder next to Hex</li><li>Claude Code agents share Hex's servers instead of each starting its own: one Roslyn navigator for a workspace, no language servers of their own, a gigabyte less for every agent running</li><li>new tools for agents, in any language with a language server: callers and callees a few levels deep, implementations, type hierarchies, a rename across every file at once, a line's fixes, a file's errors, a declaration replaced by name and the projects and what uses what; hex_edit and hex_write answer with the file's errors after</li><li>an agent can show you pictures in the chat, and a tool's row opens or reveals the files it was given from its menu</li><li>the thinking dots no longer make the chat jump</li><li>Claude Code's chat carries on after a /compact instead of failing</li><li>the setting that keeps Claude Code on Hex's tools says plainly what each choice does</li></ul></details>
+<p class="note"><a href="https://github.com/bogzxo/hex/releases/tag/v3.2.0">The release on GitHub</a></p><!-- /release:notes --></div>
       </div>
     </section>
 
