@@ -118,6 +118,14 @@ internal sealed partial class DawnScene
 
                 // How long each part takes is said after it, the slow ones are the ones to look at
                 var took = new System.Diagnostics.Stopwatch();
+                // A part that debugs C# on a machine without netcoredbg is skipped and said so, it can only fail there,
+                // and F5 without a debugger asks how to run the file, a question nobody answers
+                if (NEEDS_CSHARP_DEBUGGER.Contains(name) && !debugger.CanDebug(Path.Combine(testFolder, "Program.cs")))
+                {
+                    test.Run(() => Console.WriteLine($"[Hex self-test] {name} skipped: no C# debugger (netcoredbg) on this machine"));
+                    continue;
+                }
+
                 test.Run(() => { Console.WriteLine($"[Hex self-test] {name}"); took.Restart(); });
                 test.BeginPart(name, PartLimit);
                 MakeTestFiles();
@@ -137,6 +145,15 @@ internal sealed partial class DawnScene
     }
 
     private const string REPEAT_VARIABLE = "HEX_SELFTEST_REPEAT";
+
+    // The parts that debug C# under netcoredbg, skipped where there is none
+    private static readonly HashSet<string> NEEDS_CSHARP_DEBUGGER =
+    [
+        "frame-values", "csharp-data-tips", "csharp-exceptions", "csharp-run-to", "csharp-edit-variable", "debug-threads",
+        "set-next-statement", "debug-completion", "data-breakpoints", "debug-workspace-switch", "variable-pages",
+        "watch-object", "watch-value", "debug-modules", "disassembly", "debug-memory", "launch-profile-environment",
+        "dotnet-task-environment", "dotnet-target-frameworks", "dotnet-runtime-options"
+    ];
 
     // How long a part may take by the clock before the rest of it is skipped and the run goes on, ten minutes unless
     // HEX_SELFTEST_PART_MINUTES says otherwise. The slowest take a few minutes on a busy machine; one waiting on a
