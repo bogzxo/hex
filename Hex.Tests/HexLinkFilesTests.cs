@@ -50,6 +50,27 @@ public sealed class HexLinkFilesTests : IDisposable
         Assert.Equal(work, HexLinkFiles.Resolve(folders, "work"));
     }
 
+    [Fact]
+    public void A_file_being_written_here_is_read_for_a_device_and_the_writer_carries_on()
+    {
+        string log = Path.Combine(work, "src", "log.txt");
+        File.WriteAllText(log, "first\n");
+
+        // A program here appending, as a log or the person's editor would, while the device reads it
+        using (var writer = new FileStream(log, FileMode.Append, FileAccess.Write, FileShare.Read))
+        {
+            JsonObject read = HexLinkFiles.Read(log, "work/src/log.txt");
+            Assert.Equal("first\n", read["text"]!.GetValue<string>());
+            Assert.Equal(HexLinkFiles.Hash(Encoding.UTF8.GetBytes("first\n")), HexLinkFiles.HashOf(log));
+            writer.Write(Encoding.UTF8.GetBytes("second\n"));
+        }
+
+        // And a save here while the device holds the file open for reading isn't turned away
+        using (var reading = new FileStream(log, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            File.AppendAllText(log, "third\n");
+        Assert.Equal("first\nsecond\nthird\n", File.ReadAllText(log));
+    }
+
     [Theory]
     [InlineData("work/../outside/secret.txt")]
     [InlineData("work/src/../../outside/secret.txt")]

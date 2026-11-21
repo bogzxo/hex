@@ -165,12 +165,30 @@ internal static class HexLinkFiles
     {
         try
         {
-            return File.Exists(full) ? Hash(File.ReadAllBytes(full)) : null;
+            return File.Exists(full) ? Hash(ReadShared(full)) : null;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// A workspace file's bytes, read without holding anybody else off it: File.ReadAllBytes shares the file for reading
+    /// only, so on Windows the person saving it, or a program appending to it, would fail while a linked device reads.
+    /// </summary>
+    public static byte[] ReadShared(string full)
+    {
+        using var stream = new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        return ReadAll(stream);
+    }
+
+    // All of a stream, the length it has now a guess only, a file being written may grow or shrink as it's read
+    private static byte[] ReadAll(FileStream stream)
+    {
+        var bytes = new MemoryStream(stream.Length is > 0 and < int.MaxValue ? (int)stream.Length : 0);
+        stream.CopyTo(bytes);
+        return bytes.ToArray();
     }
 
     /// <summary>
@@ -186,7 +204,7 @@ internal static class HexLinkFiles
         if (info.Length > MOST_READ)
             throw new HexLinkException(HexLinkErrors.TOO_BIG, $"{wire} is {info.Length / 1024 / 1024} MB, a link reads files of up to {MOST_READ / 1024 / 1024} MB.", new JsonObject { ["size"] = info.Length });
 
-        byte[] bytes = File.ReadAllBytes(full);
+        byte[] bytes = ReadShared(full);
         var read = new JsonObject
         {
             ["path"] = wire,
