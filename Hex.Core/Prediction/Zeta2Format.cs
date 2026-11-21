@@ -20,8 +20,16 @@ internal sealed class Zeta2Format : IPredictionFormat
     public const string CURSOR = "<|user_cursor|>";
     public const string ACCEPTED = "// User accepted prediction:\n";
 
-    // Zed's budgets: the editable region, the context round it, the whole prompt (less a tenth to be safe), edit events
-    private const int REGION_TOKENS = 350;
+    // The editable region comes back whole, the lines before the caret first, so its size is what a prediction costs:
+    // at 50 tokens a second Zed's 350 tokens with the caret in the middle is over three seconds before the edit starts.
+    // Here it's smaller and mostly below the caret, where the next edit usually is, a few lines above for the model to
+    // find its place. HEX_PREDICT_REGION_TOKENS tries another size.
+    private const int USUAL_REGION_TOKENS = 150;
+    private const int ABOVE_SHARE = 4;
+    private static readonly int REGION_TOKENS = int.TryParse(Environment.GetEnvironmentVariable("HEX_PREDICT_REGION_TOKENS"), out int asked)
+        ? Math.Clamp(asked, 30, 350) : USUAL_REGION_TOKENS;
+
+    // Zed's other budgets: the context round the region, the whole prompt (less a tenth to be safe), edit events
     private const int CONTEXT_TOKENS = 150;
     private const int PROMPT_TOKENS = 4096;
     private const int MOST_EVENTS = 6;
@@ -152,7 +160,8 @@ internal sealed class Zeta2Format : IPredictionFormat
 
     /// <summary>
     /// The editable region round the caret and the context round that, as offsets: the caret's line and the lines
-    /// below and above it in turn up to 350 tokens, cut back to a blank line where one is near its ends, then up to
+    /// below and above it in turn up to the region's tokens (a quarter of them at most above the caret while there are
+    /// lines below to take), cut back to a blank line where one is near its ends, then up to
     /// 150 tokens more of context above and below in turn. Never mid line.
     /// </summary>
     internal static (int RegionStart, int RegionEnd, int ContextStart, int ContextEnd) Ranges(string text, int caret)
@@ -169,7 +178,7 @@ internal sealed class Zeta2Format : IPredictionFormat
         if (caretLine < 0)
             caretLine = ~caretLine - 1;
 
-        int top = caretLine, bottom = caretLine, size = Size(caretLine);
+        int top = caretLine, bottom = caretLine, size = Size(caretLine), sizeAbove = 0;
         int most = REGION_TOKENS * PredictionTokens.BYTES;
         for (bool grew = true; grew;)
         {
@@ -179,8 +188,10 @@ internal sealed class Zeta2Format : IPredictionFormat
                 size += Size(++bottom);
                 grew = true;
             }
-            if (top > 0 && size + Size(top - 1) <= most)
+            bool roomAbove = sizeAbove + (top > 0 ? Size(top - 1) : 0) <= most / ABOVE_SHARE || bottom + 1 >= count;
+            if (top > 0 && roomAbove && size + Size(top - 1) <= most)
             {
+                sizeAbove += Size(top - 1);
                 size += Size(--top);
                 grew = true;
             }

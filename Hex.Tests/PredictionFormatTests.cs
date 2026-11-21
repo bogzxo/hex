@@ -53,14 +53,16 @@ public sealed class PredictionFormatTests
     }
 
     [Fact]
-    public void A_large_file_has_an_editable_region_of_about_350_tokens_and_150_of_context()
+    public void A_large_file_has_an_editable_region_of_about_150_tokens_mostly_below_the_caret_and_150_of_context()
     {
         string text = string.Join('\n', Enumerable.Range(0, 400).Select(i => $"    int value{i} = {i};"));
         int caret = text.IndexOf("value200", StringComparison.Ordinal);
 
         var (regionStart, regionEnd, contextStart, contextEnd) = Zeta2Format.Ranges(text, caret);
 
-        Assert.InRange(PredictionTokens.Of(text[regionStart..regionEnd]), 300, 350);
+        Assert.InRange(PredictionTokens.Of(text[regionStart..regionEnd]), 120, 150);
+        Assert.True(caret - regionStart < (regionEnd - caret) / 2, "most of the region is below the caret");
+        Assert.True(text[regionStart..caret].Contains('\n'), "a few lines above the caret are in it");
         Assert.InRange(PredictionTokens.Of(text[contextStart..regionStart]) + PredictionTokens.Of(text[regionEnd..contextEnd]), 100, 151);
     }
 
