@@ -1,6 +1,7 @@
 using Hex.Shell;
 
 using Horizon.HIDL.Runtime;
+using Horizon.UI;
 using Horizon.UI.Components;
 
 namespace Hex.Dawn;
@@ -17,6 +18,12 @@ internal sealed partial class DawnScene
         bool browsingWas = false;
         List<string> Listed() => [.. HexSearch.OpenableFilesUnder([root], _ => true).Select(file => HexSearch.RelativeTo([root], file))];
         bool InExplorer(string name) => explorer.explorerRows.Any(row => row.Path == Path.Combine(root, name));
+
+        // A folder of the top on a row of its own, or leading a chain of folders that have only a folder in each, VS
+        // Code's compact folders: .github with only workflows in it is the one row .github/workflows
+        UITreeItem? TopRowOf(string name) => explorer.explorerRows.FirstOrDefault(row =>
+            row.Row.Parent?.Tooltip is { } parent && PlatformPaths.Same(parent, root) && (row.Path == Path.Combine(root, name) || PlatformPaths.IsUnder(row.Path, Path.Combine(root, name)))).Row;
+        bool ShownAtTop(string name) => TopRowOf(name) is not null;
         void Write(string relative, string text = "needle\n")
         {
             string path = Path.Combine(root, relative);
@@ -79,8 +86,11 @@ internal sealed partial class DawnScene
         });
         test.WaitFor(() => InExplorer("src"), 3.0f);
         test.Check("excludes: the explorer still shows .github, .env, vendor, node_modules and bin, only .git is gone", () =>
-            InExplorer(".github") && InExplorer(".env") && InExplorer("vendor") && InExplorer("node_modules") && InExplorer("bin") && InExplorer("root.log")
-            && !InExplorer(".git"));
+            ShownAtTop(".github") && InExplorer(".env") && ShownAtTop("vendor") && ShownAtTop("node_modules") && ShownAtTop("bin") && InExplorer("root.log")
+            && !ShownAtTop(".git"));
+        test.Check("excludes: .github with only workflows in it and bin with only Debug are a row each, .github/workflows and bin/Debug", () =>
+            TopRowOf(".github") is { Text: ".github/workflows" } github && github.Tooltip == Path.Combine(root, ".github", "workflows")
+            && TopRowOf("bin") is { Text: "bin/Debug" } && TopRowOf("vendor") is { Text: "vendor" });
         test.Run(() => SettingsPage!.Enter("files_exclude", UIFormList.Value([.. HexSettings.UsualFilesExclude, "**/*.log"])));
         test.WaitFor(() => !InExplorer("root.log"), 3.0f);
         test.Check("excludes: **/*.log added to files_exclude hides the logs from the explorer and logs/app.log from search", () =>

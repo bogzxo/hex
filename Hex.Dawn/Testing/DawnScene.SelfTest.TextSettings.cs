@@ -257,7 +257,8 @@ internal sealed partial class DawnScene
                 FormatOnSave = true,
                 FilesExclude = ["**/*.log"],
                 SearchExclude = ["**/fixtures", "vendor/"],
-                SearchUseIgnoreFiles = false
+                SearchUseIgnoreFiles = false,
+                ExplorerAutoReveal = false
             };
             if (written.Save() is not null)
                 return false;
@@ -265,7 +266,7 @@ internal sealed partial class DawnScene
             var read = new HexSettings(file);
             return read is { TabSize: 3, InsertSpaces: false, DetectIndentation: false, LineNumbers: false, IndentGuides: false, UseEditorConfig: false }
                 && read is { RenderWhitespace: "boundary", CursorStyle: "underline", CaretFastAfter: 2.0f, CaretFastRate: 120.0f, StickyScroll: false, FormatOnSave: true } && read.Rulers.SequenceEqual([80, 120])
-                && read is { SearchUseIgnoreFiles: false } && read.FilesExclude.SequenceEqual(["**/*.log"]) && read.SearchExclude.SequenceEqual(["**/fixtures", "vendor/"])
+                && read is { SearchUseIgnoreFiles: false, ExplorerAutoReveal: false } && read.FilesExclude.SequenceEqual(["**/*.log"]) && read.SearchExclude.SequenceEqual(["**/fixtures", "vendor/"])
                 && SettingsSections.Read(file) is { } all && SettingsSections.Section(all, SettingsSections.EDITOR).Keys.Order(StringComparer.Ordinal)
                     .SequenceEqual(keys.Order(StringComparer.Ordinal));
         });
