@@ -1,6 +1,11 @@
+using System.Buffers.Binary;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
+
+using Microsoft.Win32.SafeHandles;
 
 namespace Hex.Core;
 
@@ -11,7 +16,7 @@ namespace Hex.Core;
 /// <c>..</c>, alternate data streams, Windows' device names and short names, anything under <c>.git</c>, and a path
 /// whose links (symbolic links, junctions) lead out of the folder. Everything here is pure enough to be tested alone.
 /// </summary>
-internal static class HexLinkFiles
+internal static partial class HexLinkFiles
 {
     /// <summary>The biggest file read or written over a link, in bytes.</summary>
     public const int MOST_READ = 8 * 1024 * 1024;
@@ -34,7 +39,7 @@ internal static class HexLinkFiles
     /// A wire path made a full path inside one of the workspace's folders, or refused (not allowed) with why. The full
     /// path is the real one, every link along it followed, which is what's then read or written.
     /// </summary>
-    public static string Resolve(IReadOnlyList<HexLinkFolder> folders, string wire)
+    public static string Resolve(IReadOnlyList<HexLinkFolder> folders, string wire, HexExcludes? excludes = null)
     {
         if (string.IsNullOrEmpty(wire) || wire.Length > MOST_PATH)
             throw Refused(wire, "it's empty or too long");
@@ -76,7 +81,38 @@ internal static class HexLinkFiles
                 throw Refused(wire, "git's own folder is never shared");
         }
 
+        if (excludes is not null && parts.Length > 1)
+        {
+            bool directory = Directory.Exists(at);
+            string requested = string.Join('/', parts, 1, parts.Length - 1);
+            if (Excluded(excludes, requested, directory) || Excluded(excludes, inside.Replace('\\', '/'), directory))
+                throw Refused(wire, "the workspace excludes it");
+        }
+
         return at;
+    }
+
+    private static bool Excluded(HexExcludes excludes, string relative, bool directory)
+    {
+        for (int slash = relative.IndexOf('/'); slash >= 0; slash = relative.IndexOf('/', slash + 1))
+        {
+            if (excludes.Hidden(relative[..slash], folder: true))
+                return true;
+        }
+        return excludes.Hidden(relative, directory);
+    }
+
+    internal static bool MayReach(IReadOnlyList<HexLinkFolder> folders, string wire, HexExcludes excludes)
+    {
+        try
+        {
+            Resolve(folders, wire, excludes);
+            return true;
+        }
+        catch (HexLinkException)
+        {
+            return false;
+        }
     }
 
     // A name along a wire path, refused when it isn't a plain one
@@ -123,9 +159,9 @@ internal static class HexLinkFiles
 
     /// <summary>
     /// What's in a folder of the workspace, its entries {name, kind (file or folder), size}, folders first. The empty
-    /// path lists the workspace's folders themselves. <c>.git</c> is left out.
+    /// path lists the workspace's folders themselves. Entries outside the jail and excluded entries are left out.
     /// </summary>
-    public static JsonObject List(IReadOnlyList<HexLinkFolder> folders, string wire)
+    public static JsonObject List(IReadOnlyList<HexLinkFolder> folders, string wire, HexExcludes? excludes = null)
     {
         var entries = new JsonArray();
         if (string.IsNullOrEmpty(wire))
@@ -135,12 +171,13 @@ internal static class HexLinkFiles
             return new JsonObject { ["path"] = string.Empty, ["entries"] = entries, ["more"] = false };
         }
 
-        string full = Resolve(folders, wire);
+        excludes ??= HexExcludes.Usual;
+        string full = Resolve(folders, wire, excludes);
         if (!Directory.Exists(full))
             throw HexLinkException.NotFound($"There's no folder {wire}.");
 
         var found = new DirectoryInfo(full).EnumerateFileSystemInfos("*", new EnumerationOptions { IgnoreInaccessible = true, AttributesToSkip = 0, ReturnSpecialDirectories = false })
-            .Where(info => !info.Name.Equals(".git", StringComparison.OrdinalIgnoreCase))
+            .Where(info => MayReach(folders, wire.TrimEnd('/') + "/" + info.Name, excludes))
             .Take(MOST_LISTED + 1)
             .ToList();
         bool more = found.Count > MOST_LISTED;
@@ -214,7 +251,16 @@ internal static class HexLinkFiles
         if (info.Length > MOST_READ)
             throw new HexLinkException(HexLinkErrors.TOO_BIG, $"{wire} is {info.Length / 1024 / 1024} MB, a link reads files of up to {MOST_READ / 1024 / 1024} MB.", new JsonObject { ["size"] = info.Length });
 
-        byte[] bytes = ReadShared(full);
+        byte[] bytes;
+        try
+        {
+            using var stream = new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            bytes = ReadBounded(stream, wire);
+        }
+        catch (FileNotFoundException)
+        {
+            throw HexLinkException.NotFound($"There's no file {wire}.");
+        }
         var read = new JsonObject
         {
             ["path"] = wire,
@@ -237,6 +283,30 @@ internal static class HexLinkFiles
         }
 
         return read;
+    }
+
+    internal static byte[] ReadBounded(Stream stream, string wire)
+    {
+        using var bytes = new MemoryStream(stream.CanSeek ? (int)Math.Min(stream.Length, MOST_READ) : 0);
+        byte[] buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(64 * 1024);
+        try
+        {
+            while (bytes.Length < MOST_READ)
+            {
+                int read = stream.Read(buffer, 0, (int)Math.Min(buffer.Length, MOST_READ - bytes.Length));
+                if (read == 0)
+                    return bytes.ToArray();
+                bytes.Write(buffer, 0, read);
+            }
+            if (stream.ReadByte() >= 0)
+                throw new HexLinkException(HexLinkErrors.TOO_BIG, $"{wire} exceeds the {MOST_READ / 1024 / 1024} MB read limit.",
+                    new JsonObject { ["size"] = MOST_READ + 1 });
+            return bytes.ToArray();
+        }
+        finally
+        {
+            System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 
     /// <summary>
@@ -292,27 +362,175 @@ internal static class HexLinkFiles
     /// hash it has now, when it isn't. A null base is a new file, which conflicts with one that's there. The bytes are
     /// written as they came, so whatever encoding and mark they were in stays. Hands back the new hash.
     /// </summary>
-    public static async Task<string> Write(string full, string wire, string? baseHash, byte[] bytes, Func<string, byte[], Task> write)
+    public static async Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes,
+        CancellationToken cancel, bool? executable = null)
     {
-        if (bytes.Length > MOST_READ)
+        if (bytes is { Length: > MOST_READ })
             throw new HexLinkException(HexLinkErrors.TOO_BIG, $"A link writes files of up to {MOST_READ / 1024 / 1024} MB.");
+        full = Path.GetFullPath(full);
+        PathWrite gate;
+        lock (writing)
+        {
+            if (!writing.TryGetValue(full, out gate!))
+                writing.Add(full, gate = new PathWrite());
+            gate.Users++;
+        }
+
+        try
+        {
+            await gate.Turn.WaitAsync(cancel).ConfigureAwait(false);
+            try
+            {
+                return await ReplaceChecked(full, wire, baseHash, bytes, executable, cancel).ConfigureAwait(false);
+            }
+            finally
+            {
+                gate.Turn.Release();
+            }
+        }
+        finally
+        {
+            lock (writing)
+            {
+                if (--gate.Users == 0)
+                {
+                    writing.Remove(full);
+                    gate.Turn.Dispose();
+                }
+            }
+        }
+    }
+
+    private sealed class PathWrite
+    {
+        public SemaphoreSlim Turn { get; } = new(1, 1);
+        public int Users { get; set; }
+    }
+
+    private static readonly Dictionary<string, PathWrite> writing = new(PlatformPaths.Comparer);
+
+    private static async Task<string?> ReplaceChecked(string full, string wire, string? baseHash, byte[]? bytes,
+        bool? executable, CancellationToken cancel)
+    {
+        cancel.ThrowIfCancellationRequested();
         if (Directory.Exists(full))
             throw HexLinkException.Invalid($"{wire} is a folder.");
 
-        string? now = HashOf(full);
-        bool exists = File.Exists(full);
-        if (baseHash is null ? exists : !string.Equals(now, baseHash, StringComparison.OrdinalIgnoreCase))
+        string? temp = null;
+        string? now = null;
+        try
         {
-            throw new HexLinkException(HexLinkErrors.CONFLICT,
-                exists ? $"{wire} changed since it was read." : baseHash is null ? $"{wire} is already there." : $"{wire} isn't there any more.",
-                new JsonObject { ["hash"] = now });
-        }
+            if (bytes is not null)
+            {
+                string folder = Path.GetDirectoryName(full)!;
+                Directory.CreateDirectory(folder);
+                temp = Path.Combine(folder, $".{Path.GetFileName(full)}.{Guid.NewGuid():N}.hexlink");
+                await using var staged = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+                await staged.WriteAsync(bytes, cancel).ConfigureAwait(false);
+            }
 
-        if (Path.GetDirectoryName(full) is { } folder)
-            Directory.CreateDirectory(folder);
-        await write(full, bytes);
-        return Hash(bytes);
+            string? next = bytes is null ? null : Hash(bytes);
+            DateTime written = File.GetLastWriteTimeUtc(full);
+            using FileStream? current = OpenForComparison(full);
+            long length = current?.Length ?? 0;
+            if (current is not null && length <= MOST_READ)
+                now = Convert.ToHexStringLower(await SHA256.HashDataAsync(current, cancel).ConfigureAwait(false));
+
+            if (baseHash is null ? current is not null : !string.Equals(baseHash, now, StringComparison.OrdinalIgnoreCase))
+                throw Conflict(wire, now);
+
+            if (temp is not null && !OperatingSystem.IsWindows() && (current is not null || executable.HasValue))
+            {
+                const UnixFileMode execute = UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute;
+                UnixFileMode mode = File.GetUnixFileMode(current is null ? temp : full);
+                mode = executable switch
+                {
+                    true => mode | UnixFileMode.UserExecute,
+                    false => mode & ~execute,
+                    _ => mode
+                };
+                File.SetUnixFileMode(temp, mode);
+            }
+
+            cancel.ThrowIfCancellationRequested();
+            if (current is not null && (current.Length != length || File.GetLastWriteTimeUtc(full) != written))
+                throw Conflict(wire, null);
+
+            // The open handle denies writers on Windows, while sharing delete for the rename itself. Unix sharing
+            // is advisory. The metadata recheck also catches ordinary saves there, up to the final rename window.
+            if (temp is not null)
+            {
+                if (OperatingSystem.IsWindows() && current is not null)
+                    ReplaceWhileOpenOnWindows(temp, full);
+                else
+                    File.Move(temp, full, overwrite: current is not null);
+            }
+            else if (current is not null)
+                File.Delete(full);
+            return next;
+        }
+        catch (IOException failure) when ((failure.HResult & 0xffff) is 17 or 32 or 33 or 80 or 183)
+        {
+            throw Conflict(wire, now);
+        }
+        finally
+        {
+            if (temp is not null)
+            {
+                try { File.Delete(temp); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            }
+        }
     }
+
+    private static FileStream? OpenForComparison(string full)
+    {
+        try
+        {
+            return new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 4096, useAsync: true);
+        }
+        catch (IOException e) when (e is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return null;
+        }
+    }
+
+    // MoveFileEx refuses to replace a file with any open handles. FileRenameInfoEx can replace the checked file
+    // while we hold its write-denying handle.
+    private static void ReplaceWhileOpenOnWindows(string temp, string full)
+    {
+        const uint delete = 0x00010000, openExisting = 3;
+        const int fileRenameInfoEx = 22, replaceWithOpenHandles = 0x01 | 0x02;
+        using SafeFileHandle staged = CreateFile(LongWindowsPath(temp), delete, (uint)(FileShare.ReadWrite | FileShare.Delete),
+            0, openExisting, 0, 0);
+        if (staged.IsInvalid)
+            throw RenameFailure(Marshal.GetLastPInvokeError());
+
+        int lengthOffset = IntPtr.Size * 2;
+        int nameOffset = lengthOffset + sizeof(int);
+        string path = LongWindowsPath(full);
+        int nameBytes = Encoding.Unicode.GetByteCount(path);
+        byte[] info = new byte[nameOffset + nameBytes + sizeof(char)];
+        BinaryPrimitives.WriteInt32LittleEndian(info, replaceWithOpenHandles);
+        BinaryPrimitives.WriteInt32LittleEndian(info.AsSpan(lengthOffset), nameBytes);
+        Encoding.Unicode.GetBytes(path, info.AsSpan(nameOffset));
+        if (SetFileInformationByHandle(staged, fileRenameInfoEx, info, (uint)info.Length) == 0)
+            throw RenameFailure(Marshal.GetLastPInvokeError());
+    }
+
+    private static string LongWindowsPath(string path) => path.StartsWith(@"\\?\", StringComparison.Ordinal) ? path
+        : path.StartsWith(@"\\", StringComparison.Ordinal) ? @"\\?\UNC\" + path[2..] : @"\\?\" + path;
+
+    private static IOException RenameFailure(int error) =>
+        new(new Win32Exception(error).Message, unchecked((int)(0x80070000u | (uint)error)));
+
+    [LibraryImport("kernel32.dll", EntryPoint = "CreateFileW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    private static partial SafeFileHandle CreateFile(string file, uint access, uint sharing, nint security, uint disposition, uint flags, nint template);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    private static partial int SetFileInformationByHandle(SafeFileHandle handle, int kind, byte[] information, uint size);
+
+    private static HexLinkException Conflict(string wire, string? hash) =>
+        new(HexLinkErrors.CONFLICT, $"{wire} changed since it was read.", new JsonObject { ["hash"] = hash });
 
     /// <summary>
     /// A file written whole or not at all: into a temp file beside it, then moved over it, so a reader or a crash

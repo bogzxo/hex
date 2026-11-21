@@ -175,32 +175,6 @@ internal sealed partial class HexLinkHost
         session.Tell("sync/changed", new JsonObject { ["folder"] = folder, ["changes"] = said });
     }
 
-    // A file deleted if it's still what the deleter read
-    private async Task<JsonNode?> FsDelete(JsonObject parameters)
-    {
-        Need(HexLinkRights.Edit, "fs/delete");
-        string wire = HexLinkData.Need(parameters, "path", HexLinkFiles.MOST_PATH);
-        string full = HexLinkFiles.Resolve(Folders, wire);
-        string baseHash = HexLinkData.Need(parameters, "base", 64);
-        services.Audit("edit", Device, $"fs/delete {wire}");
-
-        await writing.WaitAsync();
-        try
-        {
-            if (!File.Exists(full))
-                throw HexLinkException.NotFound($"There's no file {wire}.");
-            string? now = HexLinkFiles.HashOf(full);
-            if (!string.Equals(now, baseHash, StringComparison.OrdinalIgnoreCase))
-                throw new HexLinkException(HexLinkErrors.CONFLICT, $"{wire} changed since it was read.", new JsonObject { ["hash"] = now });
-            await services.DeleteFile(full);
-            return new JsonObject { ["path"] = wire };
-        }
-        finally
-        {
-            writing.Release();
-        }
-    }
-
     private void StopTrees()
     {
         foreach (var (_, watch) in treeWatches)

@@ -52,6 +52,11 @@ internal sealed partial class DawnScene
 
         public Task DeleteFile(string fullPath) => Task.Run(() => File.Delete(fullPath));
 
+        public HexExcludes Excludes => HexExcludes.Of(hex.settings);
+
+        public Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes, CancellationToken cancel) =>
+            hex.LinkCompareAndReplace(full, wire, baseHash, bytes, cancel);
+
         public void Presence(HexLinkDevice device, HexLinkPresence? presence) => hex.PostLink(() =>
         {
             hex.linkPresence[device.Id] = new LinkPresenceSeen(device, presence, DateTime.UtcNow);
@@ -73,6 +78,26 @@ internal sealed partial class DawnScene
         public bool ServesPredictions => hex.LinkPredictServes();
 
         public IAsyncEnumerable<string> Predict(HexLinkPrediction request, CancellationToken cancel) => hex.LinkPredictMake(request, cancel);
+    }
+
+    internal async Task<string?> LinkCompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes,
+        CancellationToken cancel, bool? executable = null)
+    {
+        if (await OnEditorForLink(() => Context.Documents.Find(full) is { } open && HasChanges(open)).WaitAsync(cancel))
+            throw new HexLinkException(HexLinkErrors.CONFLICT, $"{wire} has unsaved changes in the editor.",
+                new JsonObject { ["hash"] = HexLinkFiles.HashOf(full) });
+
+        string? hash = await HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel, executable).ConfigureAwait(false);
+        if (bytes is not null && HexLinkFiles.Decode(bytes) is { } decoded)
+        {
+            await OnEditorForLink(() =>
+            {
+                if (Context.Documents.Find(full) is { } open && !HasChanges(open))
+                    LinkTakeIntoTab(full, decoded.Text);
+                return true;
+            }).ConfigureAwait(false);
+        }
+        return hash;
     }
 
     // Bytes as text when they're UTF-8 (a byte order mark let go of), null when they aren't, which goes to the disk as they are

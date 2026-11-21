@@ -40,6 +40,13 @@ internal interface IHexLinkServices
     /// <summary>The workspace open now, swapped whole when it changes.</summary>
     HexLinkWorkspace Workspace { get; }
 
+    /// <summary>The workspace's current files.exclude patterns.</summary>
+    HexExcludes Excludes => HexExcludes.Usual;
+
+    /// <summary>Applies a linked write or deletion only if the local file still matches its base hash.</summary>
+    Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes, CancellationToken cancel) =>
+        HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel);
+
     /// <summary>Buffers explicitly shared by the host editor, across all its connections.</summary>
     HexLinkDocuments? Documents => null;
 

@@ -55,10 +55,10 @@ internal sealed partial class HexLinkHost : IDisposable
         "doc/join" or "doc/poll" or "doc/edit" => Task.FromResult<JsonNode?>(DocumentRequest(method, parameters)),
         "fs/list" => Task.FromResult<JsonNode?>(FsList(parameters)),
         "fs/read" => Task.FromResult<JsonNode?>(FsRead(parameters)),
-        "fs/write" => FsWrite(parameters),
+        "fs/write" => FsWrite(parameters, cancel),
         "fs/watch" => Task.FromResult<JsonNode?>(FsWatch(parameters)),
         "fs/unwatch" => Task.FromResult<JsonNode?>(FsUnwatch(parameters)),
-        "fs/delete" => FsDelete(parameters),
+        "fs/delete" => FsDeleteChecked(parameters, cancel),
         "sync/manifest" => SyncManifest(parameters, cancel),
         "sync/watch" => SyncWatch(parameters, cancel),
         "sync/unwatch" => Task.FromResult<JsonNode?>(SyncUnwatch(parameters)),
@@ -74,6 +74,11 @@ internal sealed partial class HexLinkHost : IDisposable
     {
         if (method == "predict/cancel")
             return PredictCancel(parameters);
+        if (method == "git/cancel")
+        {
+            GitBundleCancel(parameters);
+            return true;
+        }
         if (method != "presence/set")
             return false;
 
@@ -96,6 +101,8 @@ internal sealed partial class HexLinkHost : IDisposable
         PresenceSaid?.Invoke(this, presence);
         return true;
     }
+
+    partial void GitBundleCancel(JsonObject parameters);
 
     /// <summary>A presence read off the wire, null for nowhere.</summary>
     public static HexLinkPresence? PresenceOf(JsonObject said)

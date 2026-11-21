@@ -177,6 +177,69 @@ public sealed class HexLinkFilesTests : IDisposable
         Assert.Throws<HexLinkException>(() => HexLinkFiles.List(folders, "work/.git"));
     }
 
+    [Fact]
+    public void Workspace_excludes_apply_to_children_and_symlink_targets()
+    {
+        var excludes = new HexExcludes(["**/*.private", "**/secrets"], [], false);
+        string secrets = Path.Combine(work, "src", "secrets");
+        Directory.CreateDirectory(secrets);
+        File.WriteAllText(Path.Combine(secrets, "file.txt"), "private");
+        File.WriteAllText(Path.Combine(work, "src", "hidden.private"), "private");
+        Assert.Equal("a.cs", Assert.Single(HexLinkFiles.List(folders, "work/src", excludes)["entries"]!.AsArray())!["name"]!.GetValue<string>());
+        Assert.False(HexLinkFiles.MayReach(folders, "work/src/secrets/file.txt", excludes));
+        Assert.False(HexLinkFiles.MayReach(folders, "work/src/new.private", excludes));
+
+        string alias = Path.Combine(work, "alias");
+        try { Directory.CreateSymbolicLink(alias, secrets); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            if (!Junction(alias, secrets))
+                return;
+        }
+        Assert.False(HexLinkFiles.MayReach(folders, "work/alias/file.txt", excludes));
+    }
+
+    [Fact]
+    public void The_read_checks_actual_bytes_past_the_limit()
+    {
+        byte[] bytes = new byte[HexLinkFiles.MOST_READ + 2];
+        using var growing = new MemoryStream(bytes) { Position = 1 };
+        var failure = Assert.Throws<HexLinkException>(() => HexLinkFiles.ReadBounded(growing, "work/file.txt"));
+        Assert.Equal(HexLinkErrors.TOO_BIG, failure.Code);
+        Assert.Equal(HexLinkFiles.MOST_READ + 1, growing.Position - 1);
+    }
+
+    [Fact]
+    public async Task Writes_and_deletes_with_the_same_base_cannot_both_win()
+    {
+        string full = Path.Combine(work, "src", "a.cs");
+        const string wire = "work/src/a.cs";
+        string before = HexLinkFiles.HashOf(full)!;
+        Task<string?> first = HexLinkFiles.CompareAndReplace(full, wire, before, "new contents"u8.ToArray(), default);
+        Task<string?> second = HexLinkFiles.CompareAndReplace(full, wire, before, null, default);
+        string? after = await first;
+        var conflict = await Assert.ThrowsAsync<HexLinkException>(() => second);
+        Assert.Equal(HexLinkErrors.CONFLICT, conflict.Code);
+        Assert.Equal(after, HexLinkPeer.ConflictHash(conflict));
+        Assert.Equal("new contents", File.ReadAllText(full));
+    }
+
+    [Fact]
+    public async Task A_local_writer_with_an_open_handle_on_windows_is_not_overwritten()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+        string full = Path.Combine(work, "src", "a.cs");
+        string before = HexLinkFiles.HashOf(full)!;
+        using (var writer = new FileStream(full, FileMode.Open, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete))
+        {
+            var conflict = await Assert.ThrowsAsync<HexLinkException>(() =>
+                HexLinkFiles.CompareAndReplace(full, "work/src/a.cs", before, "new contents"u8.ToArray(), default));
+            Assert.Equal(HexLinkErrors.CONFLICT, conflict.Code);
+        }
+        Assert.Equal(before, HexLinkFiles.HashOf(full));
+    }
+
     [Theory]
     [InlineData(new byte[] { 0xEF, 0xBB, 0xBF, (byte)'h', (byte)'i', 13, 10 }, "utf-8-bom", "crlf")]
     [InlineData(new byte[] { 0xFF, 0xFE, (byte)'h', 0, (byte)'i', 0, 10, 0 }, "utf-16le", "lf")]
