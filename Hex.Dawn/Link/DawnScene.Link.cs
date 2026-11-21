@@ -545,6 +545,10 @@ internal sealed partial class DawnScene
         linkGitWait = LINK_GIT_EVERY;
         linkWorkspaceAsking = true;
         string name = explorer.workspace.FilePath is { } file ? Path.GetFileNameWithoutExtension(file) : string.Empty;
+
+        // The folders at once, so a hello said before git has answered says them; their repositories when it has
+        if (!folders.SequenceEqual(services.Workspace.Folders.Select(folder => folder.Path), PlatformPaths.Comparer))
+            services.Workspace = HexLinkWorkspaces.Describe(name, folders, _ => null) with { Repositories = services.Workspace.Repositories };
         _ = Task.Run(() =>
         {
             HexLinkWorkspace described;
