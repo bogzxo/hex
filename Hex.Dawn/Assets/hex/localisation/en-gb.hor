@@ -3119,6 +3119,48 @@ let strings = {
         commit_title: "{name} @ {commit}"
     },
 
+    // Edit prediction: its commands, its item in the status bar and the notice the first time it's switched on
+    prediction: {
+        menu: "Edit Predictions",
+        menu_text: "Switch them on or off, ask for one now, or set them up",
+        toggle: "Toggle Edit Predictions",
+        toggle_language: "Toggle Edit Predictions for This Language",
+        predict_now: "Predict Now",
+        accept: "Accept Edit Prediction",
+        accept_word: "Accept Next Word of Edit Prediction",
+        dismiss: "Dismiss Edit Prediction",
+        settings: "Edit Prediction Settings",
+        menu_on: "Switch Edit Predictions On",
+        menu_off: "Switch Edit Predictions Off",
+        menu_language_on: "Switch Them On for {language}",
+        menu_language_off: "Switch Them Off for {language}",
+        on_now: "Edit predictions are on",
+        off_now: "Edit predictions are off",
+        language_on: "Edit predictions are on for {language}",
+        language_off: "Edit predictions are off for {language}",
+        item_on: "Predictions",
+        item_off: "Predictions off",
+        item_not_set_up: "Predictions not set up",
+        item_folder_off: "Predictions off in this folder",
+        item_language_off: "Predictions off for {language}",
+        item_file_off: "Predictions off for this file",
+        item_waiting: "Predicting",
+        item_unreachable: "Can't reach the server",
+        item_unauthorized: "Key refused",
+        item_no_model: "No such model",
+        item_timed_out: "Prediction timed out",
+        item_bad_answer: "The server's answer made no sense",
+        item_refused: "Predictions refused",
+        tip_from: "Edit predictions from {host}, model {model}",
+        tip_device: "Edit predictions from {device}, over Hex Link",
+        tip_remote: "The code round the caret is sent to {host}, which isn't this machine",
+        tip_latency: "The last took {first} ms to its first piece and {total} ms in all, {prompt} tokens asked and {output} pieces back",
+        tip_cache: "The last came from the cache in {total} ms",
+        tip_press: "Press for the switches and the settings",
+        a_device: "a paired device",
+        notice: "Edit predictions are on. As you type, the lines round the caret, your last edits and a few lines of the files you edited last are sent to {host}. Files that hold secrets never are, and nothing is sent while you aren't typing."
+    },
+
     // Change Language Mode (Ctrl+K M or the language in the status bar), and Configure File Association
     language_mode: {
         change: "Change Language Mode",

@@ -395,6 +395,9 @@ public static class EditorSettingsCatalog
         ["edit_predictions_workspace"] = Values.Bool(true),
         ["edit_predictions_share"] = Values.Bool(false),
 
+        // Remembered once the first notice of what predictions send was given, never a row
+        ["edit_predictions_notice_done"] = Values.Bool(false),
+
         ["snap"] = new NumberValue(0.0f),
         ["canvas_handles"] = Values.Bool(true)
     };

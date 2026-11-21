@@ -64,6 +64,9 @@ internal sealed partial class HexSettings
     /// <summary>Whether this Hex offers its predictions to the devices paired with it over Hex Link.</summary>
     public bool EditPredictionsShare;
 
+    /// <summary>Whether the notice of what is sent and where was given, the first time predictions were switched on. Given once.</summary>
+    public bool EditPredictionsNoticeDone;
+
     /// <summary>
     /// The patterns of files never sent that are in force: the user's and, while the folder has some of its own, the
     /// folder's added to them. A folder can add patterns, never take one of the user's away.
@@ -162,6 +165,7 @@ internal sealed partial class HexSettings
             },
             (settings, written) => written.Add(EDIT_PREDICTIONS_EXCLUDE, Horizon.HIDL.Library.Natives.List(settings.EditPredictionsExclude))),
         Flag("edit_predictions_workspace", settings => settings.EditPredictionsWorkspace, (settings, value) => settings.EditPredictionsWorkspace = value),
-        Flag("edit_predictions_share", settings => settings.EditPredictionsShare, (settings, value) => settings.EditPredictionsShare = value)
+        Flag("edit_predictions_share", settings => settings.EditPredictionsShare, (settings, value) => settings.EditPredictionsShare = value),
+        Flag("edit_predictions_notice_done", settings => settings.EditPredictionsNoticeDone, (settings, value) => settings.EditPredictionsNoticeDone = value)
     ];
 }

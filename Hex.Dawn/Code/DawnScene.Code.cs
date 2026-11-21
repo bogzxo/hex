@@ -77,6 +77,7 @@ internal sealed partial class DawnScene
         editor.ArtPath = name => ArtFileOf(prepared, name);
         editor.ArtSkin = () => stage.Skin;
         editor.OnContextMenu = point => codeEditing.ShowCodeMenu(prepared, point, AddSpellingMenu);
+        PreparePrediction(prepared);
     }
 
     /// <summary>
@@ -121,6 +122,7 @@ internal sealed partial class DawnScene
         {
             codeDirty = true;
             documentEdited?.Invoke(changed);
+            PredictionEdited(changed);
 
             // What's wrong moves along with the lines typed in above it (CodeEditor), the Problems panel's lines with it
             if (changed == document)
