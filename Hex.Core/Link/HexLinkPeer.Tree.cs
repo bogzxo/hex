@@ -61,9 +61,7 @@ internal sealed partial class HexLinkPeer
         {
             if (HexLinkData.String(change, "path", HexLinkFiles.MOST_PATH) is not { } path || !path.StartsWith(folder + "/", StringComparison.Ordinal))
                 continue;
-            changes.Add(HexLinkData.Bool(change, "deleted") == true
-                ? new HexLinkTreeChange(path, null, Deleted: true)
-                : new HexLinkTreeChange(path, HexLinkData.String(change, "hash", 64)));
+            changes.Add(HexLinkTree.ChangeOf(path, change));
         }
 
         if (changes.Count > 0)

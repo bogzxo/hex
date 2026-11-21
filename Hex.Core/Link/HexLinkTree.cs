@@ -4,8 +4,14 @@ using Hex.Core.Git;
 
 namespace Hex.Core;
 
-/// <summary>A file of a workspace folder's tree as a manifest lists it: its wire path, the hash of its bytes (null when it's too big to hash), its size.</summary>
-internal sealed record HexLinkTreeFile(string Path, string? Hash, long Size)
+/// <summary>
+/// A file of a workspace folder's tree as a manifest lists it: its wire path, the hash of its bytes (null when it's too
+/// big to hash), its size, and for text with one kind of line end (or none) the hash of its text with CR LF made LF
+/// (<see cref="Text"/>) and which kind it has (<see cref="Eol"/>, "lf", "crlf" or "none"), so two sides can tell a
+/// CRLF checkout from an LF one of the same file without reading either. Both null for binary, mixed or a peer that
+/// doesn't say them.
+/// </summary>
+internal sealed record HexLinkTreeFile(string Path, string? Hash, long Size, string? Text = null, string? Eol = null)
 {
     /// <summary>Past what a link reads, listed without its hash.</summary>
     public bool Big => Hash is null;
@@ -18,8 +24,11 @@ internal sealed record HexLinkTreeFile(string Path, string? Hash, long Size)
 /// </summary>
 internal sealed record HexLinkManifest(string Folder, string? Head, IReadOnlyList<HexLinkTreeFile> Files, string? Root = null);
 
-/// <summary>A file of a watched tree that changed, its new hash (null with <see cref="Deleted"/> when it went, or when it's too big).</summary>
-internal sealed record HexLinkTreeChange(string Path, string? Hash, bool Deleted = false);
+/// <summary>
+/// A file of a watched tree that changed, its new hash (null with <see cref="Deleted"/> when it went, or when it's too
+/// big), and its text's hash and line ends as <see cref="HexLinkTreeFile"/> has them.
+/// </summary>
+internal sealed record HexLinkTreeChange(string Path, string? Hash, bool Deleted = false, string? Text = null, string? Eol = null);
 
 /// <summary>
 /// A workspace folder's tree as the working-tree sync sees it: every file git would carry (tracked, and untracked but
@@ -35,7 +44,7 @@ internal sealed class HexLinkTree
     // Folders a tree that isn't a repository never has in it, what builds and packages make
     private static readonly HashSet<string> SKIPPED = new(StringComparer.OrdinalIgnoreCase) { ".git", "bin", "obj", "node_modules" };
 
-    private readonly ConcurrentDictionary<string, (long Length, long Written, string Hash)> hashes = new(PlatformPaths.Comparer);
+    private readonly ConcurrentDictionary<string, (long Length, long Written, string Hash, string? Text, string? Eol)> hashes = new(PlatformPaths.Comparer);
 
     public HexLinkTree(HexLinkFolder folder)
     {
@@ -127,7 +136,8 @@ internal sealed class HexLinkTree
             string wire = Folder.Name + "/" + relative;
             if (info.Length > HexLinkFiles.MOST_READ)
                 return new HexLinkTreeFile(wire, null, info.Length);
-            return new HexLinkTreeFile(wire, HashOf(full, info), info.Length);
+            var (hash, text, eol) = HashOf(full, info);
+            return new HexLinkTreeFile(wire, hash, info.Length, text, eol);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -140,15 +150,18 @@ internal sealed class HexLinkTree
         relative.Length > 0 && relative[0] != '/' && !relative.Contains('\\') && !relative.Contains(':')
         && relative.Split('/').All(part => part.Length > 0 && part != "." && part != ".." && !part.Equals(".git", StringComparison.OrdinalIgnoreCase));
 
-    // A file's hash, read only when its length or time written moved since it was last hashed
-    private string HashOf(string full, FileInfo info)
+    // A file's hash, and its text's and line ends when it's text with one kind of them, read only when its length or
+    // time written moved since it was last hashed
+    private (string Hash, string? Text, string? Eol) HashOf(string full, FileInfo info)
     {
         long written = info.LastWriteTimeUtc.Ticks;
         if (hashes.TryGetValue(full, out var known) && known.Length == info.Length && known.Written == written)
-            return known.Hash;
-        string hash = HexLinkFiles.Hash(File.ReadAllBytes(full));
-        hashes[full] = (info.Length, written, hash);
-        return hash;
+            return (known.Hash, known.Text, known.Eol);
+        byte[] bytes = File.ReadAllBytes(full);
+        string hash = HexLinkFiles.Hash(bytes);
+        var (text, eol) = HexLinkSync.TextAndEol(bytes);
+        hashes[full] = (info.Length, written, hash, text, eol);
+        return (hash, text, eol);
     }
 
     // The files of a folder that isn't a repository, by walking it, what builds make left out
@@ -219,6 +232,7 @@ internal sealed class HexLinkTree
                 entry["big"] = true;
             else
                 entry["hash"] = file.Hash;
+            Text(entry, file.Text, file.Eol);
             entries.Add((JsonNode)entry);
         }
 
@@ -235,12 +249,52 @@ internal sealed class HexLinkTree
             if (HexLinkData.String(entry, "path", HexLinkFiles.MOST_PATH) is not { } path || !path.StartsWith(folder + "/", StringComparison.Ordinal))
                 continue;
             string? hash = HexLinkData.Bool(entry, "big") == true ? null : HexLinkData.String(entry, "hash", 64);
-            files.Add(new HexLinkTreeFile(path, hash, Math.Max(0, HexLinkData.Long(entry, "size") ?? 0)));
+            var (text, eol) = hash is null ? (null, null) : TextOf(entry);
+            files.Add(new HexLinkTreeFile(path, hash, Math.Max(0, HexLinkData.Long(entry, "size") ?? 0), text, eol));
         }
 
         string? head = HexLinkData.String(said, "head", 64), root = HexLinkData.String(said, "root", 64);
         return new HexLinkManifest(folder, head is not null && HexLinkGit.IsCommitId(head) ? head : null, files,
             root is not null && HexLinkGit.IsCommitId(root) ? root : null);
+    }
+
+    // A file's text hash and line ends said beside its hash, when it has them; a peer from before they were said sends
+    // neither, and the sync reads the file instead
+    private static void Text(JsonObject entry, string? text, string? eol)
+    {
+        if (text is null || eol is null)
+            return;
+        entry["text"] = text;
+        entry["eol"] = eol;
+    }
+
+    // A text hash and line ends read off the wire, both or neither, only a hash and one of the three words
+    private static (string? Text, string? Eol) TextOf(JsonObject entry)
+    {
+        string? text = HexLinkData.String(entry, "text", 64), eol = HexLinkData.String(entry, "eol", 8);
+        return text is { Length: 64 } && text.All(char.IsAsciiHexDigit) && eol is "lf" or "crlf" or "none" ? (text.ToLowerInvariant(), eol) : (null, null);
+    }
+
+    /// <summary>A change of a watched tree as sync/changed says it.</summary>
+    public static JsonObject ChangeJson(HexLinkTreeChange change)
+    {
+        if (change.Deleted)
+            return new JsonObject { ["path"] = change.Path, ["deleted"] = true };
+        if (change.Hash is null)
+            return new JsonObject { ["path"] = change.Path, ["big"] = true };
+        var said = new JsonObject { ["path"] = change.Path, ["hash"] = change.Hash };
+        Text(said, change.Text, change.Eol);
+        return said;
+    }
+
+    /// <summary>A change read off sync/changed with limits, its path already checked to be of the folder.</summary>
+    public static HexLinkTreeChange ChangeOf(string path, JsonObject said)
+    {
+        if (HexLinkData.Bool(said, "deleted") == true)
+            return new HexLinkTreeChange(path, null, Deleted: true);
+        string? hash = HexLinkData.String(said, "hash", 64);
+        var (text, eol) = hash is null ? (null, null) : TextOf(said);
+        return new HexLinkTreeChange(path, hash, Text: text, Eol: eol);
     }
 }
 
@@ -368,7 +422,7 @@ internal sealed class HexLinkTreeWatch : IDisposable
                 {
                     next[file.Path] = file.Hash;
                     if (!then.TryGetValue(file.Path, out string? was) || was != file.Hash || (file.Big && was is not null))
-                        changes.Add(new HexLinkTreeChange(file.Path, file.Hash));
+                        changes.Add(new HexLinkTreeChange(file.Path, file.Hash, Text: file.Text, Eol: file.Eol));
                 }
 
                 foreach (string gone in then.Keys.Where(path => !next.ContainsKey(path)))
@@ -394,7 +448,7 @@ internal sealed class HexLinkTreeWatch : IDisposable
                     else if (!had || was != file.Hash)
                     {
                         known[wire] = file.Hash;
-                        changes.Add(new HexLinkTreeChange(wire, file.Hash));
+                        changes.Add(new HexLinkTreeChange(wire, file.Hash, Text: file.Text, Eol: file.Eol));
                     }
                 }
             }

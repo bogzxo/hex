@@ -76,6 +76,23 @@ internal sealed partial class HexLinkSync
     }
 
     /// <summary>
+    /// What a tree's manifest says of a file beside its hash, so two sides can tell files that only differ in line ends
+    /// without reading them: the hash of its text with CR LF made LF and its line ends ("lf", "crlf" or "none"). Both null
+    /// for a binary file or text with more than one kind of line end.
+    /// </summary>
+    public static (string? Text, string? Eol) TextAndEol(byte[] bytes)
+    {
+        TextInfo info = TextOf(bytes);
+        return info.Eol switch
+        {
+            HexLinkEol.Lf => (info.Norm, "lf"),
+            HexLinkEol.Crlf => (info.Norm, "crlf"),
+            HexLinkEol.None => (info.Norm, "none"),
+            _ => (null, null)
+        };
+    }
+
+    /// <summary>
     /// Whether two files are the same as far as the sync's concerned: the same bytes, or both text that only differs
     /// in CR LF against LF.
     /// </summary>
@@ -102,7 +119,9 @@ internal sealed partial class HexLinkSync
         RemoveBase(path);
         bases[path] = agreed;
         Count(agreed, 1);
-        There(path, agreed.Remote);
+        // What the other side has, with its text and line ends when they're known (its text is this side's, they agreed)
+        string? eol = agreed.Text is null ? null : EolWord(agreed.RemoteEol) is "lf" or "crlf" or "none" ? EolWord(agreed.RemoteEol) : null;
+        remote[path] = new HexLinkTreeFile(path, agreed.Remote, 0, eol is null ? null : agreed.Text, eol);
         tries.Remove(path);
     }
 
