@@ -363,6 +363,18 @@ internal sealed partial class DawnScene
             "auto_save_delay" => new NumberValue(hex.settings.AutoSaveDelay),
             "canvas_handles" => Values.Bool(hex.settings.CanvasHandles),
             "snap" => new NumberValue(hex.settings.Snap),
+            "edit_predictions" => Values.Bool(hex.settings.EditPredictions),
+            "edit_predictions_provider" => new StringValue(hex.settings.EditPredictionsProvider),
+            "edit_predictions_api_url" => new StringValue(hex.settings.EditPredictionsApiUrl),
+            EditorSettingsCatalog.PREDICTION_KEY => new StringValue(hex.settings.EditPredictionsApiKey),
+            "edit_predictions_model" => new StringValue(hex.settings.EditPredictionsModel),
+            "edit_predictions_prompt_format" => new StringValue(hex.settings.EditPredictionsPromptFormat),
+            "edit_predictions_max_tokens" => new NumberValue(hex.settings.EditPredictionsMaxTokens),
+            "edit_predictions_debounce" => new NumberValue(hex.settings.EditPredictionsDebounce),
+            "edit_predictions_disabled_languages" => Natives.List(hex.settings.EditPredictionsDisabledLanguages),
+            HexSettings.EDIT_PREDICTIONS_EXCLUDE => Natives.List(hex.settings.EditPredictionsExclude),
+            "edit_predictions_workspace" => Values.Bool(hex.settings.EditPredictionsWorkspace),
+            "edit_predictions_share" => Values.Bool(hex.settings.EditPredictionsShare),
             "files_associations" => UIFormPairs.Value(hex.settings.FileAssociations.Select(pair => (pair.Key, pair.Value))),
             "disabled_extensions" => Natives.List(hex.ExtensionNames().Where((_, at) => !hex.extensions.All[at].Enabled)),
             _ => null
@@ -673,6 +685,49 @@ internal sealed partial class DawnScene
                     break;
                 case ("snap", NumberValue snap):
                     settings.Snap = Math.Clamp(MathF.Round(snap.Value), 0.0f, 16.0f);
+                    break;
+                case ("edit_predictions", BooleanValue predicts):
+                    settings.EditPredictions = predicts.Value;
+                    break;
+                case ("edit_predictions_provider", StringValue { Value: "ollama" or "openai" or "link" } provider):
+                    // Ollama's own address follows the provider to its OpenAI completions and back, any other URL stays
+                    settings.EditPredictionsProvider = provider.Value;
+                    string url = Hex.Core.PredictionSettings.UrlForProvider(provider.Value, settings.EditPredictionsApiUrl);
+                    if (url != settings.EditPredictionsApiUrl)
+                    {
+                        settings.EditPredictionsApiUrl = url;
+                        hex.SettingsPage?.Refresh("edit_predictions_api_url");
+                    }
+                    break;
+                case ("edit_predictions_api_url", StringValue predictionUrl):
+                    settings.EditPredictionsApiUrl = predictionUrl.Value.Trim();
+                    break;
+                case (EditorSettingsCatalog.PREDICTION_KEY, StringValue predictionKey):
+                    settings.EditPredictionsApiKey = predictionKey.Value.Trim();
+                    break;
+                case ("edit_predictions_model", StringValue predictionModel):
+                    settings.EditPredictionsModel = predictionModel.Value.Trim();
+                    break;
+                case ("edit_predictions_prompt_format", StringValue { Value: "infer" or "zeta2" or "qwen" or "code_llama" or "star_coder" or "deepseek_coder" or "code_gemma" or "codestral" } format):
+                    settings.EditPredictionsPromptFormat = format.Value;
+                    break;
+                case ("edit_predictions_max_tokens", NumberValue predictionTokens):
+                    settings.EditPredictionsMaxTokens = (int)Math.Clamp(MathF.Round(predictionTokens.Value), 16.0f, 2048.0f);
+                    break;
+                case ("edit_predictions_debounce", NumberValue predictionPause):
+                    settings.EditPredictionsDebounce = (int)Math.Clamp(MathF.Round(predictionPause.Value), 0.0f, 2000.0f);
+                    break;
+                case ("edit_predictions_disabled_languages", ListValue offLanguages):
+                    settings.EditPredictionsDisabledLanguages = HexSettings.Patterns(offLanguages);
+                    break;
+                case (HexSettings.EDIT_PREDICTIONS_EXCLUDE, ListValue neverSent):
+                    settings.EditPredictionsExclude = HexSettings.Patterns(neverSent);
+                    break;
+                case ("edit_predictions_workspace", BooleanValue predictsHere):
+                    settings.EditPredictionsWorkspace = predictsHere.Value;
+                    break;
+                case ("edit_predictions_share", BooleanValue shares):
+                    settings.EditPredictionsShare = shares.Value;
                     break;
                 case ("files_associations", ObjectValue associations):
                     // the open files pick the new languages up next tick, see UpdateLanguageModes

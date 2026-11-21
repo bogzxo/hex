@@ -58,8 +58,20 @@ public class HexSettingsGoldenTests
         ["backdrop_image"] = Text(@"C:\pictures\a.png"),
         ["last_workspace"] = Text(@"C:\work\hex"),
         ["extension_catalog"] = Text(@"C:\catalogue"),
-        ["git_account"] = Text("  somebody  ")
+        ["git_account"] = Text("  somebody  "),
+        ["edit_predictions_provider"] = Text("openai"),
+        ["edit_predictions_prompt_format"] = Text("zeta2"),
+        ["edit_predictions_api_key"] = Text("sk-test-not-a-key"),
+        ["edit_predictions_disabled_languages"] = Natives.List(["python", " rust ", "python"]),
+        ["edit_predictions_exclude"] = Natives.List(["**/.env", "**/private/**"])
     };
+
+    // The API key is written protected, different on every machine and every time it's made, and never in a golden. It's
+    // only given a value where protecting it touches no Keychain or secret service (PredictionSettingsTests has the rest)
+    private const string API_KEY = "edit_predictions_api_key";
+
+    private static string Shown(string key, IRuntimeValue value) =>
+        key == API_KEY ? "(not shown)" : Written(value).ReplaceLineEndings(" ");
 
     private static HIDLObject Input(string which)
     {
@@ -79,6 +91,9 @@ public class HexSettingsGoldenTests
                 ("low", StringValue) => Values.Bool(true),
                 _ => null
             };
+
+            if (key == API_KEY && !OperatingSystem.IsWindows() && !HexLinkSecrets.FileOnlyByEnvironment)
+                value = null;
 
             if (value is not null)
                 input.Add(key, value);
@@ -112,7 +127,7 @@ public class HexSettingsGoldenTests
             string file = Path.Combine(folder, "settings.hor");
             File.WriteAllText(file, SettingsSections.Write(file, (SettingsSections.EDITOR, Input(which))));
             var settings = new HexSettings(file);
-            string got = string.Join("\n", settings.EditorValues().Select(pair => $"{pair.Key} = {Written(pair.Value).ReplaceLineEndings(" ")}")) + "\n";
+            string got = string.Join("\n", settings.EditorValues().Select(pair => $"{pair.Key} = {Shown(pair.Key, pair.Value)}")) + "\n";
 
             string golden = Path.Combine(Here(), "Goldens", $"settings_{which}.txt");
             if (System.Environment.GetEnvironmentVariable("HEX_RECORD_GOLDENS") == "1")
@@ -122,7 +137,9 @@ public class HexSettingsGoldenTests
             // And what a save writes reads back the same, key for key
             Assert.Null(settings.Save());
             var again = new HexSettings(file);
-            Assert.Equal(got, string.Join("\n", again.EditorValues().Select(pair => $"{pair.Key} = {Written(pair.Value).ReplaceLineEndings(" ")}")) + "\n");
+            Assert.Equal(got, string.Join("\n", again.EditorValues().Select(pair => $"{pair.Key} = {Shown(pair.Key, pair.Value)}")) + "\n");
+            Assert.Equal(settings.EditPredictionsApiKey, again.EditPredictionsApiKey);
+            Assert.DoesNotContain("sk-test-not-a-key", File.ReadAllText(file));
         }
         finally
         {
