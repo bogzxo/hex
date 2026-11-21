@@ -278,7 +278,7 @@ internal sealed partial class DawnScene
                         continue;
 
                     string choices = setting.Choices is { Length: > 0 } listed ? $"\nOne of {string.Join(", ", listed)}." : string.Empty;
-                    yield return McpToolResult.Text($"{setting.Key} = {McpValue(source.Get(setting.Key))} ({setting.Kind}, {source.Section} section, comes as {McpValue(source.Default(setting.Key))}"
+                    yield return McpToolResult.Text($"{setting.Key} = {McpValue(EditorSettingsCatalog.Masked(setting.Key, source.Get(setting.Key)))} ({setting.Kind}, {source.Section} section, comes as {McpValue(source.Default(setting.Key))}"
                         + $"{(source.IsModified(setting.Key) ? ", changed" : string.Empty)}).\n{setting.Title}. {Plain(setting.Help)}{choices}");
                     yield break;
                 }
@@ -286,7 +286,7 @@ internal sealed partial class DawnScene
                 if (find is not null && !setting.Key.Contains(find, StringComparison.OrdinalIgnoreCase) && !setting.Title.Contains(find, StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                said.Append($"{setting.Key} = {McpValue(source.Get(setting.Key))}  ({setting.Title}{(source.IsModified(setting.Key) ? ", changed" : string.Empty)})\n");
+                said.Append($"{setting.Key} = {McpValue(EditorSettingsCatalog.Masked(setting.Key, source.Get(setting.Key)))}  ({setting.Title}{(source.IsModified(setting.Key) ? ", changed" : string.Empty)})\n");
             }
         }
 
@@ -308,6 +308,13 @@ internal sealed partial class DawnScene
         if (key is "link" or "link_port" or "link_discoverable")
         {
             yield return McpToolResult.Error($"{key} opens Hex to other machines, it's only changed by hand.");
+            yield break;
+        }
+
+        // A secret is typed into the settings window by the person whose it is, never handed over or back through here
+        if (EditorSettingsCatalog.IsSecret(key))
+        {
+            yield return McpToolResult.Error($"{key} is a secret, it's only changed by hand in the settings window.");
             yield break;
         }
 

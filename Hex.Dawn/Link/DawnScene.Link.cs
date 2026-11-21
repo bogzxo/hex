@@ -75,6 +75,7 @@ internal sealed partial class DawnScene
         linkItem = statusBar.Add("$(link)", right: true, pressed: ShowLinkWindow, tooltip: Said("link.status_tip_none"));
         linkItem.IsVisible = () => linkTransport is not null;
         BuildLinkUi();
+        BindLinkPredictions();
         ApplyLink();
         AppDomain.CurrentDomain.ProcessExit -= StopLinkAtExit;
         AppDomain.CurrentDomain.ProcessExit += StopLinkAtExit;
