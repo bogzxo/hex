@@ -100,6 +100,9 @@ internal sealed partial class DawnScene : Scene
     // What has to be put together again before the next frame, so a click never rebuilds what it is in the middle of
     private bool tabsDirty = true, treeDirty = true, inspectorDirty = true, codeDirty = true;
 
+    // The palette's git colours the tabs were last made with, see RebuildMarked
+    private (Vector4, Vector4, Vector4) tabsColouredWith;
+
     // Where files are opened from and new ones saved to without a workspace
     private string browseDirectory;
 
@@ -592,6 +595,15 @@ internal sealed partial class DawnScene : Scene
 
         // The side's rows aren't made again under a name being typed over in them, they are once it's done
         bool treeHeld = treeDirty && sideTree.Edited is not null;
+
+        // The tabs take git's colours from the palette as they're made, so another look makes them again. A tab kept the
+        // dark look's yellow in the day look, all but invisible on its pill
+        if (compositor.Skin?.Palette is { } palette && (palette.Warning, palette.Success, palette.Error) is var gitColours && gitColours != tabsColouredWith)
+        {
+            tabsColouredWith = gitColours;
+            tabsDirty = true;
+        }
+
         if (tabsDirty) RebuildTabs();
         if (treeDirty && !treeHeld) RebuildTree();
         if (inspectorDirty) RebuildInspector();

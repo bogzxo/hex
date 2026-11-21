@@ -27,6 +27,7 @@ internal sealed partial class DawnScene
     {
         OnCode(test, dataFile);
         TestLooksContrast(test);
+        TestActiveTabContrast(test);
         TestTabWalk(test);
         TestStillWithoutMotion(test);
     }
@@ -115,6 +116,84 @@ internal sealed partial class DawnScene
             ApplyKeyLayer();
         });
         test.Settle(0.3f);
+    }
+
+    /// <summary>
+    /// The open tab's title against its lit pill in every look, with a file git has as changed open, whose tab has git's
+    /// colour. That colour was the title's, and in the day look it kept the dark look's yellow, all but gone on the pill.
+    /// </summary>
+    private void TestActiveTabContrast(HexPointerScript test)
+    {
+        string themeBefore = settings.EditorTheme, skinBefore = settings.EditorSkin;
+        bool keysBefore = settings.VisualStudioKeys;
+        string repo = Path.Combine(testFolder, "tab_contrast_repo");
+        string changed = Path.Combine(repo, "Mixer.cs");
+
+        test.Run(() =>
+        {
+            DeleteGitFolder(repo);
+            Directory.CreateDirectory(repo);
+            File.WriteAllText(changed, "class Mixer { }\n");
+            Git(repo, "init", "-q", "-b", "main");
+            Git(repo, "config", "user.name", "Hex self test");
+            Git(repo, "config", "user.email", "selftest@example.com");
+            Git(repo, "add", ".");
+            Git(repo, "commit", "-q", "-m", "First go");
+            File.WriteAllText(changed, "class Mixer { int voices; }\n");
+            explorer.AddFolder(repo);
+            Open(dataFile);
+            Open(changed);
+        });
+        StripTab? Lit() => docTabs.Selected >= 0 && docTabs.Selected < docTabs.Tabs.Count ? docTabs.Tabs[docTabs.Selected] : null;
+        test.WaitFor(() => Lit() is { TitleColor: not null } && docTabs.Tabs.Count >= 2, 5.0f * GIT_PATIENCE);
+
+        foreach (HexLook look in HexLooks.BuiltIn)
+        {
+            string? failed = null;
+            test.Run(() => PickLook(look));
+            test.Settle(0.3f);
+            test.Run(() =>
+            {
+                UIPalette palette = compositor.Skin!.Palette;
+                Vector4 ground = Over(palette.Panel, new Vector4(0, 0, 0, 1));
+                Vector4 fill = Over(TabStrip.OpenFill(compositor.Skin), ground);
+                Vector4 label = Over(docTabs.TitleColorOf(docTabs.Selected, compositor.Skin), fill);
+                float ratio = UIPalette.Contrast(label, fill);
+                bool fresh = Lit() is { TitleColor: { } git } && git == palette.Warning;
+                Console.WriteLine($"[Hex self-test] contrast: {look.Name}, the open tab's title {ratio.ToString("0.00", CultureInfo.InvariantCulture)}:1 on its pill (at least 4.5), git's colour {(fresh ? "the look's" : "LEFT FROM ANOTHER LOOK")}");
+                if (ratio < UIPalette.READS || !fresh)
+                    failed = $"{ratio.ToString("0.00", CultureInfo.InvariantCulture)}:1{(fresh ? "" : ", git's colour left from another look")}";
+            });
+            test.Run(() => Engine.WindowManager.RequestFrames());
+            test.Settle(0.5f);
+            test.Run(() => Shot($"a11y-tab-{look.Name.Replace(' ', '-').ToLowerInvariant()}"));
+            test.Check($"accessibility: {look.Name}, the open tab's title reads at 4.5:1 on its pill with a changed file open", () =>
+            {
+                if (failed is not null)
+                    Console.WriteLine($"[Hex self-test] contrast: {look.Name} open tab too low: {failed}");
+                return failed is null;
+            });
+        }
+
+        test.Run(() =>
+        {
+            foreach (HexDocument open in documents.ToList())
+            {
+                if (open.Path is { } path && PlatformPaths.IsUnder(path, repo))
+                {
+                    Show(open);
+                    CloseNow();
+                }
+            }
+            explorer.RemoveFolder(repo);
+            PickLook(HexLooks.Solstice);
+            UseEditorSkin(skinBefore, themeBefore, save: false);
+            settings.VisualStudioKeys = keysBefore;
+            ApplyKeyLayer();
+        });
+        test.Wait();
+        test.Run(() => DeleteGitFolder(repo));
+        OnCode(test, dataFile);
     }
 
     /// <summary>What a stop is, for the printout, its kind and what it says or shows.</summary>
