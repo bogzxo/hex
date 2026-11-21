@@ -75,10 +75,14 @@ public sealed class HexLinkSyncTests
         return so();
     }
 
+    // Where a sync is and what it skipped and why, for a test's failure to say
+    private static string Said(HexLinkSync sync) =>
+        sync.Summary + string.Concat(sync.Skipped.Select(each => $"; {each.Path}: {each.Why}")) + string.Concat(sync.Conflicts.Select(each => $"; conflict {each.Path}"));
+
     private static async Task Settled(HexLinkSync sync)
     {
         await sync.Flush().WaitAsync(TimeSpan.FromMilliseconds(LONG_MS));
-        Assert.True(await Until(() => sync.State is HexLinkSyncState.Idle or HexLinkSyncState.PullOnly), sync.Summary);
+        Assert.True(await Until(() => sync.State is HexLinkSyncState.Idle or HexLinkSyncState.PullOnly), Said(sync));
     }
 
     private static void Git(string folder, params string[] arguments)
@@ -116,13 +120,13 @@ public sealed class HexLinkSyncTests
 
         await sync.Start();
         Assert.Contains(sync.State, new[] { HexLinkSyncState.Syncing, HexLinkSyncState.Idle });
-        Assert.True(await Until(() => Get(pair.B, "a.txt") == "from A" && Get(pair.B, "sub/deep/x.txt") == "deep A" && Get(pair.A, "b.txt") == "from B"), sync.Summary);
+        Assert.True(await Until(() => Get(pair.B, "a.txt") == "from A" && Get(pair.B, "sub/deep/x.txt") == "deep A" && Get(pair.A, "b.txt") == "from B"), Said(sync));
         await Settled(sync);
         Assert.Equal(2, sync.Sent);
         Assert.Equal(1, sync.Received);
         Assert.Empty(sync.Conflicts);
         Assert.Equal(HexLinkSyncState.Idle, sync.State);
-        Assert.Contains("in sync", sync.Summary);
+        Assert.Contains("in sync", Said(sync));
     }
 
     [Fact]
@@ -155,14 +159,14 @@ public sealed class HexLinkSyncTests
         await Settled(sync);
 
         Put(pair.A, "code.cs", "class A { int here; }");
-        Assert.True(await Until(() => Get(pair.B, "code.cs") == "class A { int here; }"), sync.Summary);
+        Assert.True(await Until(() => Get(pair.B, "code.cs") == "class A { int here; }"), Said(sync));
         await Settled(sync);
         Assert.Equal(1, sync.Sent);
 
         Put(pair.B, "code.cs", "class A { int there; }");
         Put(pair.B, "new/made-there.cs", "new");
-        Assert.True(await Until(() => Get(pair.A, "code.cs") == "class A { int there; }" && Get(pair.A, "new/made-there.cs") == "new"), sync.Summary);
-        Assert.True(await Until(() => sync.Received == 2), sync.Summary);
+        Assert.True(await Until(() => Get(pair.A, "code.cs") == "class A { int there; }" && Get(pair.A, "new/made-there.cs") == "new"), Said(sync));
+        Assert.True(await Until(() => sync.Received == 2), Said(sync));
 
         // This side's tree looked over whole: the files written from there are at their bases, nothing goes back
         await Settled(sync);
@@ -199,7 +203,7 @@ public sealed class HexLinkSyncTests
 
         using HexLinkSync sync = SyncOf(pair);
         await sync.Start();
-        Assert.True(await Until(() => sync.Conflicts.Count == 3), sync.Summary);
+        Assert.True(await Until(() => sync.Conflicts.Count == 3), Said(sync));
         await Settled(sync);
         Assert.Equal("mine", Get(pair.A, "f.txt"));
         Assert.Equal("theirs", Get(pair.B, "f.txt"));
@@ -228,7 +232,7 @@ public sealed class HexLinkSyncTests
         await Settled(sync);
         // Settled files move again as usual
         Put(pair.A, "f.txt", "after");
-        Assert.True(await Until(() => Get(pair.B, "f.txt") == "after"), sync.Summary);
+        Assert.True(await Until(() => Get(pair.B, "f.txt") == "after"), Said(sync));
         Assert.Equal("theirs e", Get(pair.B, ".editorconfig"));
     }
 
@@ -244,7 +248,7 @@ public sealed class HexLinkSyncTests
 
         Put(pair.B, "race.txt", "saved there");
         Put(pair.A, "race.txt", "saved here");
-        Assert.True(await Until(() => sync.Conflicts.Count == 1), sync.Summary);
+        Assert.True(await Until(() => sync.Conflicts.Count == 1), Said(sync));
         await Settled(sync);
         Assert.Equal("saved here", Get(pair.A, "race.txt"));
         Assert.Equal("saved there", Get(pair.B, "race.txt"));
@@ -272,12 +276,12 @@ public sealed class HexLinkSyncTests
 
         using HexLinkSync sync = SyncOf(pair);
         await sync.Start();
-        Assert.True(await Until(() => !Has(pair.A, "while-off.txt")), sync.Summary);
+        Assert.True(await Until(() => !Has(pair.A, "while-off.txt")), Said(sync));
 
         File.Delete(Path.Combine(pair.A.Work, "gone-here.txt"));
-        Assert.True(await Until(() => !Has(pair.B, "gone-here.txt")), sync.Summary);
+        Assert.True(await Until(() => !Has(pair.B, "gone-here.txt")), Said(sync));
         File.Delete(Path.Combine(pair.B.Work, "gone-there.txt"));
-        Assert.True(await Until(() => !Has(pair.A, "gone-there.txt")), sync.Summary);
+        Assert.True(await Until(() => !Has(pair.A, "gone-there.txt")), Said(sync));
         await Settled(sync);
         Assert.Empty(sync.Conflicts);
     }
@@ -304,7 +308,7 @@ public sealed class HexLinkSyncTests
 
         using HexLinkSync sync = SyncOf(pair);
         await sync.Start();
-        Assert.True(await Until(() => sync.Conflicts.Count == 2), sync.Summary);
+        Assert.True(await Until(() => sync.Conflicts.Count == 2), Said(sync));
         await Settled(sync);
         Assert.Equal("changed there", Get(pair.B, "d.txt"));
         Assert.False(Has(pair.A, "d.txt"));
@@ -338,7 +342,7 @@ public sealed class HexLinkSyncTests
 
         Put(pair.A, "bin/Release/more.dll", "more");
         Put(pair.A, "src/marker.txt", "marker");
-        Assert.True(await Until(() => Get(pair.B, "src/marker.txt") == "marker"), sync.Summary);
+        Assert.True(await Until(() => Get(pair.B, "src/marker.txt") == "marker"), Said(sync));
         await Settled(sync);
         Assert.Equal("built there", Get(pair.B, "bin/Debug/app.dll"));
         Assert.Equal("built here", Get(pair.A, "bin/Debug/app.dll"));
@@ -356,13 +360,13 @@ public sealed class HexLinkSyncTests
         Put(pair.A, "small.txt", "small");
         using HexLinkSync sync = SyncOf(pair);
         await sync.Start();
-        Assert.True(await Until(() => Get(pair.B, "small.txt") == "small"), sync.Summary);
+        Assert.True(await Until(() => Get(pair.B, "small.txt") == "small"), Said(sync));
         await Settled(sync);
         HexLinkSyncSkipped big = Assert.Single(sync.Skipped);
         Assert.Equal("work/big.bin", big.Path);
         Assert.Contains("MB", big.Why);
         Assert.False(Has(pair.B, "big.bin"));
-        Assert.Contains("1 skipped", sync.Summary);
+        Assert.Contains("1 skipped", Said(sync));
     }
 
     [Fact]
@@ -429,9 +433,9 @@ public sealed class HexLinkSyncTests
         Assert.Equal(HexLinkSyncState.PullOnly, sync.State);
         Assert.True(sync.PullOnly);
         Assert.Contains("Edit", sync.Why);
-        Assert.True(await Until(() => Get(pair.A, "theirs.txt") == "comes here"), sync.Summary);
+        Assert.True(await Until(() => Get(pair.A, "theirs.txt") == "comes here"), Said(sync));
         Put(pair.B, "theirs.txt", "changed there");
-        Assert.True(await Until(() => Get(pair.A, "theirs.txt") == "changed there"), sync.Summary);
+        Assert.True(await Until(() => Get(pair.A, "theirs.txt") == "changed there"), Said(sync));
         await Settled(sync);
         Assert.False(Has(pair.B, "mine.txt"));
         Assert.Equal(0, sync.Sent);
@@ -445,18 +449,18 @@ public sealed class HexLinkSyncTests
         using HexLinkSync sync = SyncOf(pair);
         await sync.Start();
         Put(pair.A, "x.txt", "one");
-        Assert.True(await Until(() => Get(pair.B, "x.txt") == "one"), sync.Summary);
+        Assert.True(await Until(() => Get(pair.B, "x.txt") == "one"), Said(sync));
 
         pair.AOnB = HexLinkRights.View;
         pair.LinkB.RightsMoved(DeviceA.Id);
         Assert.True(await Until(() => !HexLinkAllowed.Has(pair.PeerB.Granted, HexLinkRights.Edit)));
         Put(pair.A, "x.txt", "two");
-        Assert.True(await Until(() => sync.State == HexLinkSyncState.PullOnly), sync.Summary);
+        Assert.True(await Until(() => sync.State == HexLinkSyncState.PullOnly), Said(sync));
         Assert.Equal("one", Get(pair.B, "x.txt"));
 
         // Changes there still come
         Put(pair.B, "y.txt", "from there");
-        Assert.True(await Until(() => Get(pair.A, "y.txt") == "from there"), sync.Summary);
+        Assert.True(await Until(() => Get(pair.A, "y.txt") == "from there"), Said(sync));
     }
 
     [Fact]
@@ -469,7 +473,7 @@ public sealed class HexLinkSyncTests
         // Taken away without telling, the next write is refused
         pair.AOnB = HexLinkRights.View;
         Put(pair.A, "z.txt", "refused");
-        Assert.True(await Until(() => sync.State == HexLinkSyncState.PullOnly), sync.Summary);
+        Assert.True(await Until(() => sync.State == HexLinkSyncState.PullOnly), Said(sync));
         Assert.False(Has(pair.B, "z.txt"));
     }
 
@@ -499,7 +503,7 @@ public sealed class HexLinkSyncTests
 
         // Told to go on anyway, it syncs the working trees as they are
         await sync.Start(force: true);
-        Assert.True(await Until(() => Get(pair.B, "loose.txt") == "not committed" && Get(pair.B, "later.txt") == "committed later"), sync.Summary);
+        Assert.True(await Until(() => Get(pair.B, "loose.txt") == "not committed" && Get(pair.B, "later.txt") == "committed later"), Said(sync));
     }
 
     [Fact]
@@ -626,7 +630,7 @@ public sealed class HexLinkSyncTests
         using HexLinkSync sync = SyncOf(pair);
         await Assert.ThrowsAsync<InvalidOperationException>(() => sync.Flush());
         Assert.NotNull(await sync.Resolve("work/x.txt", HexLinkSyncKeep.Mine));
-        Assert.Contains("off", sync.Summary);
+        Assert.Contains("off", Said(sync));
     }
 
     [Fact]

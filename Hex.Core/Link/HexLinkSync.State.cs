@@ -19,7 +19,7 @@ internal sealed partial class HexLinkSync
     private const long SAVE_EVERY_MS = 2000;
 
     // The state file's version, and the most of what it keeps
-    private const int STATE_VERSION = 1, MOST_BASES = HexLinkTree.MOST_FILES;
+    private const int STATE_VERSION = 2, MOST_BASES = HexLinkTree.MOST_FILES;
 
     /// <summary>
     /// The name of the state file of a device and a folder: both made safe for a file name, and a short hash of the
@@ -71,24 +71,33 @@ internal sealed partial class HexLinkSync
     // there or can't be read is no bases, everything compared afresh, which only ever costs conflicts, never a loss.
     private void Load()
     {
-        var keptBases = new Dictionary<string, string>(StringComparer.Ordinal);
+        var keptBases = new Dictionary<string, HexLinkSyncAgreed>(StringComparer.Ordinal);
         var keptConflicts = new Dictionary<string, HexLinkSyncConflict>(StringComparer.Ordinal);
         try
         {
             if (File.Exists(StateFile) && JsonNode.Parse(File.ReadAllBytes(StateFile)) is JsonObject state
-                && HexLinkData.Int(state, "version") == STATE_VERSION
+                && HexLinkData.Int(state, "version") is 1 or STATE_VERSION
                 && HexLinkData.String(state, "device", 200) == peer.Device.Id
                 && HexLinkData.String(state, "folder", 200) == folder.Name)
             {
                 if (HexLinkData.Object(state, "bases") is { } said)
                 {
-                    foreach (var (path, hash) in said)
+                    foreach (var (path, kept) in said)
                     {
                         if (keptBases.Count >= MOST_BASES)
                             break;
-                        if (path.Length <= HexLinkFiles.MOST_PATH && !Ours(path) && hash is JsonValue value && value.GetValueKind() == JsonValueKind.String
-                            && value.GetValue<string>() is { Length: 64 } text && text.All(char.IsAsciiHexDigit))
-                            keptBases[path] = text.ToLowerInvariant();
+                        if (path.Length > HexLinkFiles.MOST_PATH || Ours(path))
+                            continue;
+                        // Version 1 kept one hash, the same bytes on both sides; version 2 each side's and their line ends
+                        if (kept is JsonValue && HashIn(kept) is { } both)
+                        {
+                            keptBases[path] = Identical(both);
+                        }
+                        else if (kept is JsonObject pair && HashIn(pair["local"]) is { } local && HashIn(pair["remote"]) is { } remote)
+                        {
+                            keptBases[path] = new HexLinkSyncAgreed(local, remote, HashIn(pair["text"]),
+                                EolIn(HexLinkData.String(pair, "local_eol", 10)), EolIn(HexLinkData.String(pair, "remote_eol", 10)));
+                        }
                     }
                 }
 
@@ -111,12 +120,43 @@ internal sealed partial class HexLinkSync
             conflicts.Clear();
             skipped.Clear();
             tries.Clear();
-            foreach (var (path, hash) in keptBases)
-                bases[path] = hash;
+            localLf = localCrlf = remoteLf = remoteCrlf = 0;
+            foreach (var (path, agreed) in keptBases)
+            {
+                bases[path] = agreed;
+                Count(agreed, 1);
+            }
+
             foreach (var (path, conflict) in keptConflicts)
                 conflicts[path] = conflict;
         }
     }
+
+    // A hash kept in the state file, lower case, null when it isn't one
+    private static string? HashIn(JsonNode? kept) =>
+        kept is JsonValue value && value.GetValueKind() == JsonValueKind.String && value.GetValue<string>() is { Length: 64 } text && text.All(char.IsAsciiHexDigit)
+            ? text.ToLowerInvariant()
+            : null;
+
+    private static HexLinkEol EolIn(string? said) => said switch
+    {
+        "none" => HexLinkEol.None,
+        "lf" => HexLinkEol.Lf,
+        "crlf" => HexLinkEol.Crlf,
+        "mixed" => HexLinkEol.Mixed,
+        "binary" => HexLinkEol.Binary,
+        _ => HexLinkEol.Unknown
+    };
+
+    private static string? EolWord(HexLinkEol eol) => eol switch
+    {
+        HexLinkEol.None => "none",
+        HexLinkEol.Lf => "lf",
+        HexLinkEol.Crlf => "crlf",
+        HexLinkEol.Mixed => "mixed",
+        HexLinkEol.Binary => "binary",
+        _ => null
+    };
 
     private readonly Lock saving = new();
     private long savedAt;
@@ -128,8 +168,17 @@ internal sealed partial class HexLinkSync
         lock (gate)
         {
             var said = new JsonObject();
-            foreach (var (path, hash) in bases.OrderBy(each => each.Key, StringComparer.Ordinal))
-                said[path] = hash;
+            foreach (var (path, agreed) in bases.OrderBy(each => each.Key, StringComparer.Ordinal))
+            {
+                said[path] = new JsonObject
+                {
+                    ["local"] = agreed.Local,
+                    ["remote"] = agreed.Remote,
+                    ["text"] = agreed.Text,
+                    ["local_eol"] = EolWord(agreed.LocalEol),
+                    ["remote_eol"] = EolWord(agreed.RemoteEol)
+                };
+            }
             state = new JsonObject
             {
                 ["version"] = STATE_VERSION,

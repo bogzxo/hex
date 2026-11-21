@@ -14,9 +14,11 @@ internal sealed partial class HexLinkSync
     // The most skipped files listed
     private const int MOST_SKIPPED = 2000;
 
-    // Per wire path: the hash both sides last agreed on, what the other side has now as far as it's said (a file whose
-    // hash is null is too big to hash), the conflicts waiting and what doesn't travel
-    private readonly Dictionary<string, string> bases = new(StringComparer.Ordinal);
+    // Per wire path: what both sides last agreed on (each side's hash of it, which differ when only their line ends do),
+    // what the other side has now as far as it's said (a file whose hash is null is too big to hash), the conflicts
+    // waiting and what doesn't travel
+    private readonly Dictionary<string, HexLinkSyncAgreed> bases = new(StringComparer.Ordinal);
+    private int eolOnly;
     private readonly Dictionary<string, HexLinkTreeFile> remote = new(StringComparer.Ordinal);
     private readonly Dictionary<string, HexLinkSyncConflict> conflicts = new(StringComparer.Ordinal);
     private readonly Dictionary<string, HexLinkSyncSkipped> skipped = new(StringComparer.Ordinal);
@@ -70,7 +72,11 @@ internal sealed partial class HexLinkSync
             {
                 string? m = here.GetValueOrDefault(path)?.Hash, t = remote.GetValueOrDefault(path)?.Hash;
                 bool mineThere = here.ContainsKey(path), theirsThere = remote.ContainsKey(path);
-                if (m is not null && m == t)
+                if (m is not null && bases.TryGetValue(path, out HexLinkSyncAgreed? agreed) && agreed.Local == m && agreed.Remote == t)
+                {
+                    // Where both were left, line ends and all
+                }
+                else if (m is not null && m == t)
                 {
                     // The same on both, agreed whatever was known before, a conflict settled by hand on both sides with it
                     Agree(path, m);
@@ -78,7 +84,7 @@ internal sealed partial class HexLinkSync
                 }
                 else if (!mineThere && !theirsThere)
                 {
-                    bases.Remove(path);
+                    RemoveBase(path);
                     conflicts.Remove(path);
                 }
                 else
@@ -113,10 +119,12 @@ internal sealed partial class HexLinkSync
             {
                 if (Ours(change.Path))
                     continue;
-                bases.TryGetValue(change.Path, out string? agreed);
+                bases.TryGetValue(change.Path, out HexLinkSyncAgreed? agreed);
                 remote.TryGetValue(change.Path, out HexLinkTreeFile? theirs);
                 // A file written here from the other side, reported back by the watcher with the hash it was agreed at
-                bool settled = change.Deleted ? agreed is null && theirs is null : change.Hash is not null && change.Hash == agreed && theirs?.Hash == agreed;
+                bool settled = change.Deleted
+                    ? agreed is null && theirs is null
+                    : change.Hash is not null && agreed is not null && change.Hash == agreed.Local && theirs?.Hash == agreed.Remote;
                 if (!settled)
                     dirty.Add(change.Path);
             }
@@ -146,8 +154,8 @@ internal sealed partial class HexLinkSync
                 if (Ours(change.Path))
                     continue;
                 There(change);
-                bases.TryGetValue(change.Path, out string? agreed);
-                bool settled = change.Deleted ? agreed is null : change.Hash is not null && change.Hash == agreed;
+                bases.TryGetValue(change.Path, out HexLinkSyncAgreed? agreed);
+                bool settled = change.Deleted ? agreed is null : change.Hash is not null && change.Hash == agreed?.Remote;
                 if (!settled)
                     dirty.Add(change.Path);
             }
@@ -174,15 +182,19 @@ internal sealed partial class HexLinkSync
             remote[path] = new HexLinkTreeFile(path, hash, 0);
     }
 
-    // Both sides have a path at a hash (or neither has it), the base from now on (under the gate)
+    // Both sides have a path with the same bytes (or neither has it), the base from now on (under the gate)
     private void Agree(string path, string? hash)
     {
         if (hash is null)
-            bases.Remove(path);
-        else
-            bases[path] = hash;
-        There(path, hash);
-        tries.Remove(path);
+        {
+            RemoveBase(path);
+            There(path, null);
+            tries.Remove(path);
+        }
+        else if (!bases.TryGetValue(path, out HexLinkSyncAgreed? was) || was.Local != hash || was.Remote != hash)
+        {
+            SetBase(path, Identical(hash));
+        }
     }
 
     // A path queued to be looked at, after whatever's already being done with it
@@ -382,9 +394,23 @@ internal sealed partial class HexLinkSync
         if (ignored)
             return;
 
-        HexLinkTreeFile? mine = File.Exists(full) ? tree.FileOf(wire[(folder.Name.Length + 1)..]) : null;
+        // This side's file hashed from what's on the disk now, never a hash cached by its length and time written, which
+        // two saves within one tick of the clock can share
+        HexLinkTreeFile? mine = null;
+        try
+        {
+            var info = new FileInfo(full);
+            if (info.Exists)
+                mine = new HexLinkTreeFile(wire, info.Length > HexLinkFiles.MOST_READ ? null : HexLinkFiles.Hash(await File.ReadAllBytesAsync(full, stop)), info.Length);
+        }
+        catch (IOException)
+        {
+            // Being written, looked at again in a moment
+            Again(wire);
+            return;
+        }
         HexLinkTreeFile? theirs;
-        string? agreed;
+        HexLinkSyncAgreed? agreed;
         bool held;
         lock (gate)
         {
@@ -401,6 +427,10 @@ internal sealed partial class HexLinkSync
 
         Unskip(wire);
         string? m = mine?.Hash, t = theirs?.Hash;
+        // Each side still at what it agreed, which may be the same file with different line ends
+        if (agreed is not null && m == agreed.Local && t == agreed.Remote)
+            return;
+
         if (m == t)
         {
             bool settled;
@@ -423,17 +453,18 @@ internal sealed partial class HexLinkSync
         if (held)
             return;
 
+        // Each side is looked at against its own agreed hash: only one moved, that one goes to the other
         if (agreed is not null)
         {
-            if (m == agreed)
+            if (m == agreed.Local)
             {
                 await Pull(wire, full, m, stop);
                 return;
             }
 
-            if (t == agreed)
+            if (t == agreed.Remote)
             {
-                await Push(wire, full, t, stop);
+                await Push(wire, full, agreed, t, stop);
                 return;
             }
         }
@@ -444,7 +475,7 @@ internal sealed partial class HexLinkSync
         }
         else if (t is null)
         {
-            await Push(wire, full, null, stop);
+            await Push(wire, full, null, null, stop);
             return;
         }
 
@@ -489,14 +520,18 @@ internal sealed partial class HexLinkSync
             return;
         }
 
-        string? now = HexLinkFiles.HashOf(full);
-        if (now == file.Hash)
+        byte[]? local;
+        try
         {
-            lock (gate)
-                Agree(wire, file.Hash);
+            local = File.Exists(full) ? await File.ReadAllBytesAsync(full, stop) : null;
+        }
+        catch (IOException)
+        {
+            Again(wire);
             return;
         }
 
+        string? now = local is null ? null : HexLinkFiles.Hash(local);
         if (now != expected)
         {
             // Changed here while it was being fetched, looked at again with both as they are now
@@ -506,22 +541,53 @@ internal sealed partial class HexLinkSync
             return;
         }
 
+        // The same here already, or the same but for line ends: what changed there was only its line ends, nothing's
+        // written and each side keeps its own
+        if (local is not null && SameText(local, file.Bytes))
+        {
+            lock (gate)
+                SetBase(wire, AgreedOf(local, file.Bytes));
+            if (now != file.Hash)
+                Interlocked.Increment(ref eolOnly);
+            Notify();
+            return;
+        }
+
+        // Written in this side's line ends: those of the file it replaces, or for a new one what most files here use
+        TextInfo info = TextOf(file.Bytes);
+        HexLinkEol here = local is null ? HexLinkEol.Unknown : TextOf(local).Eol;
+        if (here is not (HexLinkEol.Lf or HexLinkEol.Crlf))
+        {
+            lock (gate)
+                here = bases.GetValueOrDefault(wire)?.LocalEol ?? HexLinkEol.Unknown;
+        }
+
+        if (here is not (HexLinkEol.Lf or HexLinkEol.Crlf) && local is null)
+            here = Most(here: true);
+        byte[] written = Converted(file.Bytes, info, here);
+
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
         // Agreed before it's written, so this side's watcher reporting the write finds it settled and doesn't send it back
+        HexLinkSyncAgreed? before;
         lock (gate)
-            Agree(wire, file.Hash);
+        {
+            before = bases.GetValueOrDefault(wire);
+            SetBase(wire, AgreedOf(written, file.Bytes));
+        }
+
         try
         {
-            await WriteLocal(full, file.Bytes);
+            await WriteLocal(full, written);
         }
         catch (Exception)
         {
             lock (gate)
             {
-                if (expected is null)
-                    bases.Remove(wire);
+                if (before is null)
+                    RemoveBase(wire);
                 else
-                    bases[wire] = expected;
+                    SetBase(wire, before);
+                There(wire, file.Hash);
             }
 
             throw;
@@ -533,7 +599,7 @@ internal sealed partial class HexLinkSync
 
     // This side's version sent over the other's (or its delete), with what the other side had (theirs) as the base, so
     // the other side refuses it if it moved on meanwhile
-    private async Task Push(string wire, string full, string? theirs, CancellationToken stop)
+    private async Task Push(string wire, string full, HexLinkSyncAgreed? agreed, string? theirs, CancellationToken stop)
     {
         if (pullOnly)
             return;
@@ -581,10 +647,56 @@ internal sealed partial class HexLinkSync
                     return;
                 }
 
-                string hash = HexLinkFiles.Hash(bytes);
-                await Asked(() => peer.Write(wire, theirs, bytes, stop), stop);
+                TextInfo info = TextOf(bytes);
+                HexLinkEol there = HexLinkEol.Unknown;
+                if (info.Norm is not null && theirs is not null)
+                {
+                    // Only its line ends changed here since both agreed: nothing goes, this side's hash moves on
+                    if (agreed?.Text is { } text && text == info.Norm)
+                    {
+                        lock (gate)
+                            SetBase(wire, agreed with { Local = HexLinkFiles.Hash(bytes), LocalEol = info.Eol });
+                        Interlocked.Increment(ref eolOnly);
+                        Notify();
+                        return;
+                    }
+
+                    there = agreed?.RemoteEol ?? HexLinkEol.Unknown;
+                    if (there is not (HexLinkEol.Lf or HexLinkEol.Crlf))
+                    {
+                        // What the other side has isn't known by its line ends (a base from before they were kept, or
+                        // one agreed by hash alone), so it's read: the same but for line ends is nothing to send
+                        HexLinkFile now = await Asked(() => peer.Read(wire, stop), stop);
+                        if (now.Hash != theirs)
+                        {
+                            lock (gate)
+                                There(wire, now.Hash);
+                            Again(wire);
+                            return;
+                        }
+
+                        if (SameText(bytes, now.Bytes))
+                        {
+                            lock (gate)
+                                SetBase(wire, AgreedOf(bytes, now.Bytes));
+                            Interlocked.Increment(ref eolOnly);
+                            Notify();
+                            return;
+                        }
+
+                        there = TextOf(now.Bytes).Eol;
+                    }
+                }
+                else if (theirs is null && info.Norm is not null)
+                {
+                    // A new file there takes what most files there use
+                    there = Most(here: false);
+                }
+
+                byte[] sending = Converted(bytes, info, there);
+                await Asked(() => peer.Write(wire, theirs, sending, stop), stop);
                 lock (gate)
-                    Agree(wire, hash);
+                    SetBase(wire, AgreedOf(bytes, sending));
             }
 
             Interlocked.Increment(ref sent);
@@ -595,6 +707,13 @@ internal sealed partial class HexLinkSync
             // It moved on over there, looked at again with what it has now
             lock (gate)
                 There(wire, HexLinkPeer.ConflictHash(e));
+            Again(wire);
+        }
+        catch (HexLinkException e) when (e.Code == HexLinkErrors.NOT_FOUND)
+        {
+            // Gone there while its line ends were being looked at
+            lock (gate)
+                There(wire, null);
             Again(wire);
         }
         catch (HexLinkException e) when (e.Code == HexLinkErrors.NOT_ALLOWED)
@@ -627,10 +746,32 @@ internal sealed partial class HexLinkSync
                 return;
             }
 
-            if (file.Hash == HexLinkFiles.HashOf(full))
+            byte[]? local;
+            try
+            {
+                local = File.Exists(full) ? await File.ReadAllBytesAsync(full, stop) : null;
+            }
+            catch (IOException)
+            {
+                local = null;
+            }
+
+            if (local is null || HexLinkFiles.Hash(local) != mine)
             {
                 lock (gate)
-                    Agree(wire, file.Hash);
+                    There(wire, file.Hash);
+                Again(wire);
+                return;
+            }
+
+            // The same, or the same but for line ends (a CRLF checkout against an LF one): agreed as each side has it
+            if (SameText(local, file.Bytes))
+            {
+                lock (gate)
+                    SetBase(wire, AgreedOf(local, file.Bytes));
+                if (mine != file.Hash)
+                    Interlocked.Increment(ref eolOnly);
+                Notify();
                 return;
             }
 
@@ -644,7 +785,7 @@ internal sealed partial class HexLinkSync
         lock (gate)
         {
             conflicts[wire] = new HexLinkSyncConflict(wire, kind, copy, copyHash);
-            bases.Remove(wire);
+            RemoveBase(wire);
         }
 
         Save();
