@@ -217,7 +217,7 @@ internal sealed partial class HexLinkTransport
     {
         HexLinkDevice me = identity.Device;
         var about = new JsonObject { ["name"] = me.Name, ["os"] = me.Os, ["arch"] = me.Arch, ["version"] = me.Version };
-        if ((mode is "link" or "pair") && BulkSupport != HexLinkBulkSupport.None)
+        if ((mode is "link" or "pair" or "invite") && BulkSupport != HexLinkBulkSupport.None)
             about["bulk"] = BulkSupport == HexLinkBulkSupport.Zstandard ? "zstd-v1" : "raw-v1";
         return $"HEX-LINK 1 {mode} {about.ToJsonString()}";
     }

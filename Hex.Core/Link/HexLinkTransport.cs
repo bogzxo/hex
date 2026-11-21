@@ -305,7 +305,7 @@ internal sealed partial class HexLinkTransport : IDisposable
 
             if (hello.Mode == "invite")
             {
-                kept = await HostInvite(ssl, socket, hello.Device, address, stop, timeout.Token, () =>
+                kept = await HostInvite(ssl, socket, hello.Device, address, stop, timeout.Token, NegotiateBulk(hello.Bulk), () =>
                 {
                     handshakes.Release();
                     handshakeHeld = false;

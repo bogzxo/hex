@@ -43,6 +43,8 @@ public sealed class HexLinkInviteTests : IDisposable
         Assert.Equal(HexLinkRights.Predict, joiner.Trust.Find(host.Device.Id)!.Rights);
         Assert.Equal(HexLinkRights.View, host.Trust.Find(joiner.Device.Id)!.Rights);
         Assert.NotNull(paired.Connection);
+        Assert.Equal(HexLinkBulkSupport.Zstandard, paired.Connection.Bulk);
+        Assert.Equal(HexLinkBulkSupport.Zstandard, (await host.Accepted.Task.WaitAsync(HexLinkTestMachine.WAIT)).Bulk);
         Assert.Null(host.Transport.ActiveInvite);
         Assert.Equal("invite_expired", (await Pair(read!)).Reason);
     }

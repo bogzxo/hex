@@ -66,7 +66,7 @@ internal sealed partial class HexLinkTransport
 
     // Keep the connection counted against the handshake limit until it proves possession of the invitation.
     private async Task<bool> HostInvite(SslStream ssl, Socket socket, HexLinkDevice device, string address,
-        CancellationToken stop, CancellationToken handshake, Action proved)
+        CancellationToken stop, CancellationToken handshake, HexLinkBulkSupport bulk, Action proved)
     {
         InviteWindow? open;
         lock (gate)
@@ -118,7 +118,7 @@ internal sealed partial class HexLinkTransport
         HexLinkPairingTerms? terms = open.Terms?.Invoke();
         await Say(ssl, HexLinkInvite.TermsLine(terms), handshake);
         proved();
-        return await HostPairing(ssl, socket, device, address, stop, invited: open.Ask, terms: terms);
+        return await HostPairing(ssl, socket, device, address, stop, bulk, invited: open.Ask, terms: terms);
     }
 
     private async Task<HexLinkPairingTerms?> AuthenticateInvite(SslStream ssl, HexLinkInvite invite, CancellationToken ended)
