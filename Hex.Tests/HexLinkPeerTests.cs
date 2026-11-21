@@ -336,19 +336,21 @@ public sealed class HexLinkPeerTests
         pair.BOnA = HexLinkRights.View;
         pair.LinkA.RightsMoved(DeviceB.Id);
         string? changed = HexLinkFiles.HashOf(file);
+        int fleetVersion = pair.A.Fleet.Rows[chat.Id].Version;
         Assert.True(Eventually(() =>
         {
             pair.PeerA.Pump();
-            return pair.PeerA.Fleet.FirstOrDefault()?.Reply == "during revocation"
+            return pair.PeerA.Fleet.FirstOrDefault()?.Version == fleetVersion
                 && mirror.Entries.LastOrDefault()?.Text == "during revocation"
                 && hashes.Contains(changed) && changes.Any(change => change.Hash == changed);
-        }));
+        }), $"fleet {pair.PeerA.Fleet.FirstOrDefault()?.Version}/{fleetVersion}, mirror {mirror.Entries.LastOrDefault()?.Text}, file {hashes.Contains(changed)}, tree {changes.Any(change => change.Hash == changed)}");
 
         Moved(pair, chat, () => chat.Say("after regrant"));
+        fleetVersion = pair.A.Fleet.Rows[chat.Id].Version;
         Assert.True(Eventually(() =>
         {
             pair.PeerA.Pump();
-            return pair.PeerA.Fleet.FirstOrDefault()?.Reply == "after regrant"
+            return pair.PeerA.Fleet.FirstOrDefault()?.Version == fleetVersion
                 && mirror.Entries.LastOrDefault()?.Text == "after regrant";
         }));
     }
