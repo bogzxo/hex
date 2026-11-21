@@ -20,6 +20,9 @@ internal static class HexLinkErrors
     // than it may, which is told to wait rather than cut off
     public const int NOT_ALLOWED = -32001, CONFLICT = -32002, NOT_FOUND = -32003, TOO_BIG = -32004, BUSY = -32005;
 
+    // A prediction this machine's model couldn't make, or doesn't share (data.status says how, in a word)
+    public const int PREDICTION_FAILED = -32006;
+
     // What a link's own end says when the link went before an answer came, never on the wire
     public const int CLOSED = -32099, TIMED_OUT = -32098;
 }
