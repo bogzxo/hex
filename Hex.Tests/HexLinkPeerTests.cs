@@ -83,19 +83,35 @@ public sealed class HexLinkPeerTests
         pair.A.OnEditor(() => pair.A.Hub.Add(chat));
         await pair.PeerA.WatchFleet();
 
-        int heard = 0;
-        pair.PeerA.Changed = () => Interlocked.Increment(ref heard);
+        // When each fleet/changed was heard, rather than how many in a second of wall clock, which a loaded machine
+        // stretches (a slow second moved the chat fewer times, and its sends fell either side of the count)
+        var heard = new List<long>();
+        pair.PeerA.Changed = () =>
+        {
+            lock (heard)
+                heard.Add(Environment.TickCount64);
+        };
         long until = Environment.TickCount64 + 1000;
         int said = 0;
-        while (Environment.TickCount64 < until)
+        while (Environment.TickCount64 < until || said < 60)
         {
             Moved(pair, chat, () => chat.Say($"line {said++}"));
             Thread.Sleep(2);
         }
 
-        Thread.Sleep(400);
-        Assert.InRange(heard, 2, 8);
-        Assert.True(said > 50);
+        // The last of it arrives however it was coalesced: the mirror's row is the hub's last version
+        int last = 0;
+        pair.A.OnEditor(() => last = pair.A.Hub.Snapshot.Rows[chat.Id].Version);
+        Assert.True(Eventually(() => pair.PeerA.Fleet.FirstOrDefault(row => row.Id == chat.Id)?.Version == last));
+
+        long[] times;
+        lock (heard)
+            times = [.. heard];
+        // Moved sixty times and more, sent far fewer: never more than five in any second (one more for where the
+        // second's edges fall), so every sixth send is a second or more after the first of them
+        Assert.InRange(times.Length, 1, said / 4);
+        for (int i = 6; i < times.Length; i++)
+            Assert.True(times[i] - times[i - 6] >= 1000 - 100, $"sends {i - 6} and {i} were {times[i] - times[i - 6]} ms apart");
     }
 
     [Fact]
