@@ -36,10 +36,10 @@ internal sealed class HexLinkTestMachine : IDisposable
         };
     }
 
-    /// <summary>Listens on a free loopback-reachable port and says which.</summary>
+    /// <summary>Listens on a free IPv4 loopback port and says which.</summary>
     public int Listen()
     {
-        Transport.Start(0);
+        Transport.Start(0, loopbackOnly: true);
         return Transport.Port;
     }
 

@@ -20,10 +20,20 @@ internal sealed partial class DawnScene
     }
 
     // The device that serves this one now, or none, handed to the relay; on the editor's thread
-    private static void LinkPredictTakeSource(HexLinkPeer? source)
+    private void LinkPredictTakeSource(HexLinkPeer? source)
     {
         HexPredictionRelay.Remote = source is null ? null : LinkPredictionGlue.Remote(source);
         HexPredictionRelay.RemoteName = source?.Device.Name;
+        if (settings.EditPredictionsProvider != PredictionProviders.LINK)
+            return;
+
+        predictions.LinkSourceChanged();
+        predictionItemWritten = false;
+        if (predictionShownIn is { } shown)
+        {
+            predictionShownIn = null;
+            shown.Editor.ClearPrediction();
+        }
     }
 }
 

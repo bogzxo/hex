@@ -69,26 +69,25 @@ internal sealed partial class DawnScene
     /// that folder is synced with it, otherwise read into its copy and opened as a remote tab, watched there while it's
     /// open. Null when it's open, why when it isn't. From any thread.
     /// </summary>
-    internal async Task<string?> LinkOpenRemote(string deviceId, string wire)
+    internal async Task<string?> LinkOpenRemote(string deviceId, string wire, int? line = null)
     {
         if (link?.PeerOf(deviceId) is not { } peer)
             return Said("link.sync_not_linked", ("device", deviceId));
+        if (!HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))
+            return HexLinkException.NotAllowed("view").Message;
         string folder = wire.IndexOf('/') is > 0 and var slash ? wire[..slash] : wire;
 
         // A folder kept the same on both is the same file here
-        if (LinkSyncOf(deviceId, folder) is { State: HexLinkSyncState.Idle or HexLinkSyncState.Syncing or HexLinkSyncState.PullOnly }
-            && linkServices?.Workspace.Folders is { } here)
+        if (LinkSyncOf(deviceId, folder) is { State: HexLinkSyncState.Idle or HexLinkSyncState.Syncing or HexLinkSyncState.PullOnly } sync &&
+            LinkSyncedLocalFile(sync.LocalFolder, linkServices?.Workspace.Folders ?? [], wire) is { } local)
         {
-            try
+            return await OnEditorForLink(() =>
             {
-                string local = HexLinkFiles.Resolve(here, wire);
-                if (File.Exists(local))
-                    return await OnEditorForLink(() => Open(local) ? null : Said("link.remote_not_opened", ("path", wire)));
-            }
-            catch (HexLinkException)
-            {
-                // Not one of this workspace's after all, it's read over the link
-            }
+                if (!Open(local))
+                    return Said("link.remote_not_opened", ("path", wire));
+                LinkGoToRemoteLine(line);
+                return null;
+            });
         }
 
         try
@@ -110,7 +109,13 @@ internal sealed partial class DawnScene
                 // Too many watched there, it's opened unwatched
             }
 
-            return await OnEditorForLink(() => LinkShowRemote(peer, wire, copy, watchedHash ?? file.Hash, file.Text));
+            return await OnEditorForLink(() =>
+            {
+                string? error = LinkShowRemote(peer, wire, copy, watchedHash ?? file.Hash, file.Text);
+                if (error is null)
+                    LinkGoToRemoteLine(line);
+                return error;
+            });
         }
         catch (HexLinkException e)
         {
@@ -120,6 +125,14 @@ internal sealed partial class DawnScene
         {
             return e.Message;
         }
+    }
+
+    private void LinkGoToRemoteLine(int? line)
+    {
+        if (line is not { } at || !document.IsText)
+            return;
+        document.Editor.GoTo(at, 0);
+        document.Editor.Focus();
     }
 
     // The copy opened as a tab of the device's, on the editor's thread; null when it's open
@@ -437,6 +450,26 @@ internal sealed partial class DawnScene
     /* Picking a file of another machine's */
 
     // A device's workspace browsed a folder at a time, or searched, the file picked opened
+    internal static string? LinkSyncedLocalFile(HexLinkFolder synced, IReadOnlyList<HexLinkFolder> current, string wire)
+    {
+        // Root labels can be reassigned when same-basename workspaces are opened or reordered.
+        if (!current.Any(folder => PlatformPaths.Same(folder.Path, synced.Path)))
+            return null;
+
+        try
+        {
+            string local = HexLinkFiles.Resolve([synced], wire);
+            return File.Exists(local) ? local : null;
+        }
+        catch (HexLinkException)
+        {
+            return null;
+        }
+    }
+
+    internal static bool LinkHasRemoteSymbols(HexLinkPeer peer) =>
+        HexLinkAllowed.Has(peer.Granted, HexLinkRights.View) && peer.Tools.Any(tool => tool.Name == "hex_symbols");
+
     private void LinkOpenRemoteCommand(HexLinkPeer peer) => LinkBrowseRemote(peer, string.Empty);
 
     private void LinkBrowseRemote(HexLinkPeer peer, string path) => _ = Task.Run(async () =>
@@ -444,11 +477,16 @@ internal sealed partial class DawnScene
         try
         {
             IReadOnlyList<HexLinkEntry> entries = await peer.List(path);
+            // A newly paired peer can be browsed before its background tool discovery finishes.
+            if (path.Length == 0 && peer.Tools.Count == 0)
+                await peer.ListTools();
             PostLink(() =>
             {
                 var choices = new List<(string Text, Action Picked)>();
                 if (path.Length == 0 && peer.Tools.Any(tool => tool.Name == "hex_files"))
                     choices.Add((Said("link.remote_search"), () => LinkSearchRemote(peer)));
+                if (path.Length == 0 && LinkHasRemoteSymbols(peer))
+                    choices.Add((Said("link.remote_go_to_symbol"), () => LinkSearchRemoteSymbols(peer)));
                 if (path.Length > 0)
                     choices.Add(("..", () => LinkBrowseRemote(peer, path.Contains('/') ? path[..path.LastIndexOf('/')] : string.Empty)));
                 foreach (HexLinkEntry entry in entries)
@@ -512,9 +550,129 @@ internal sealed partial class DawnScene
         return wires;
     }
 
-    private void LinkOpenRemoteSaying(string deviceId, string wire) => _ = Task.Run(async () =>
+    private sealed record LinkSymbol(string Label, string Wire, int Line);
+
+    // Display paths can coincide when workspace roots have the same basename. Route from the indexed
+    // file on the host, where Link's unique folder names and the actual roots are both available.
+    private HexAnswer LinkSymbolLocations(HexCodeIndex index, JsonObject args) =>
+        LinkSymbolLocations(index.Current(), linkServices?.Workspace.Folders ?? [], args);
+
+    internal static HexAnswer LinkSymbolLocations(HexIndexSnapshot index, IReadOnlyList<HexLinkFolder> folders, JsonObject args)
     {
-        if (await LinkOpenRemote(deviceId, wire) is { } why)
+        var locations = new JsonArray();
+        string query = args.String("query") ?? string.Empty;
+        if (query.Trim().Length == 0)
+            return HexAnswer.Wrong("Say a name, or part of one, in query.");
+        int most = Math.Clamp(args.Integer("most") ?? 25, 1, 500);
+        foreach (var (file, symbol, _) in HexCodeIndex.FindSymbols(index, query, args.String("kind"), args.String("path")))
+        {
+            var folder = folders.FirstOrDefault(root => PlatformPaths.IsUnder(file.Path, root.Path));
+            if (folder is null)
+                continue;
+            string relative = Path.GetRelativePath(folder.Path, file.Path).Replace(Path.DirectorySeparatorChar, '/');
+            string wire = folder.Name + "/" + relative;
+            try
+            {
+                HexLinkFiles.Resolve(folders, wire);
+            }
+            catch (HexLinkException)
+            {
+                continue;
+            }
+            locations.Add((JsonNode)new JsonObject { ["wire"] = wire, ["line"] = symbol.Line, ["label"] = symbol.Kind + " " + symbol.Full });
+            if (locations.Count >= most)
+                break;
+        }
+        return new HexAnswer(locations.ToJsonString(), 0);
+    }
+
+    private static async Task<List<LinkSymbol>> LinkFindRemoteSymbols(HexLinkPeer peer, string query)
+    {
+        bool structured = peer.Tools.FirstOrDefault(tool => tool.Name == "hex_symbols")?.InputSchema["properties"]?["link_locations"] is not null;
+        var args = new JsonObject { ["query"] = query, ["most"] = 40 };
+        if (structured)
+            args["link_locations"] = true;
+        McpToolResult found = await peer.Call("hex_symbols", args);
+        if (found.IsError)
+            throw new HexLinkException(HexLinkErrors.NOT_ALLOWED, found.AllText());
+
+        var symbols = new List<LinkSymbol>();
+        string[] folders = [.. peer.Workspace.Folders.Select(folder => folder.Name)];
+        if (structured)
+        {
+            JsonArray locations;
+            try
+            {
+                locations = JsonNode.Parse(found.AllText()) as JsonArray ?? throw HexLinkException.Invalid("Expected an array of symbol locations.");
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                throw HexLinkException.Invalid("Invalid symbol locations.");
+            }
+            foreach (JsonObject item in locations.Take(40).OfType<JsonObject>())
+            {
+                string? wire = HexLinkData.String(item, "wire", HexLinkFiles.MOST_PATH + 1);
+                string? label = HexLinkData.String(item, "label", 512);
+                if (wire is null || wire.Length > HexLinkFiles.MOST_PATH || label is null || HexLinkData.Int(item, "line") is not int line || line < 0 || line == int.MaxValue)
+                    continue;
+                int slash = wire.IndexOf('/');
+                if (slash > 0 && folders.Contains(wire[..slash]))
+                    symbols.Add(new(label, wire, line));
+            }
+            return symbols;
+        }
+
+        foreach (string row in found.AllText().Split('\n'))
+        {
+            Match match = Regex.Match(row.TrimEnd('\r'), @"^([^:/\\][^:]*):([0-9]+) (\S+ .+?)(?:  .*)?$");
+            if (!match.Success || !int.TryParse(match.Groups[2].Value, out int line) || line < 1)
+                continue;
+            string path = match.Groups[1].Value.Replace('\\', '/');
+            int slash = path.IndexOf('/');
+            if (folders.Length == 1)
+                symbols.Add(new(match.Groups[3].Value, folders[0] + "/" + path, line - 1));
+            else if (slash > 0 && folders.Contains(path[..slash]) && !folders.Contains(path[..slash] + "-2", StringComparer.OrdinalIgnoreCase))
+                symbols.Add(new(match.Groups[3].Value, path, line - 1));
+        }
+        return symbols;
+    }
+
+    private void LinkSearchRemoteSymbols(HexLinkPeer peer)
+    {
+        string title = Said("link.remote_symbol_title", ("device", peer.Device.Name));
+        AskText(title, Said("link.remote_symbol_text"), string.Empty, Said("link.remote_search_button"), typed =>
+        {
+            string query = typed.Trim();
+            if (query.Length == 0)
+                return;
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    List<LinkSymbol> symbols = await LinkFindRemoteSymbols(peer, query);
+                    List<(string Text, Action Picked)> choices = [.. symbols.Select(symbol =>
+                        ($"{symbol.Label}   {symbol.Wire}:{symbol.Line + 1}", (Action)(() => LinkOpenRemoteSaying(peer.Device.Id, symbol.Wire, symbol.Line))))];
+
+                    PostLink(() =>
+                    {
+                        if (choices.Count == 0)
+                            Say(Said("link.remote_symbol_empty", ("query", query)));
+                        else
+                            ChooseFrom(title, query, choices);
+                    });
+                }
+                catch (HexLinkException e)
+                {
+                    PostLink(() => Say(e.Message, error: true));
+                }
+            });
+        });
+    }
+
+    private void LinkOpenRemoteSaying(string deviceId, string wire, int? line = null) => _ = Task.Run(async () =>
+    {
+        if (await LinkOpenRemote(deviceId, wire, line) is { } why)
             PostLink(() => Say(why, error: true));
     });
 }

@@ -67,6 +67,8 @@ internal sealed partial class HexLinkPeer : IDisposable
     /// </summary>
     public Action? Changed { get; set; }
 
+    internal event Action? RightsChanged;
+
     /// <summary>The link's gone.</summary>
     public bool IsClosed => session.IsClosed;
 
@@ -134,6 +136,7 @@ internal sealed partial class HexLinkPeer : IDisposable
                     break;
                 case "link/rights":
                     Granted = HexLinkData.RightsOf(parameters, "granted");
+                    RightsChanged?.Invoke();
                     Changed?.Invoke();
                     break;
                 default:

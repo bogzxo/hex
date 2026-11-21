@@ -45,6 +45,11 @@ internal static class PredictionHttp
         {
             response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token).ConfigureAwait(false);
         }
+        catch (OperationCanceledException exception) when (!deadline.IsCancellationRequested && exception.InnerException is TimeoutException)
+        {
+            // The handler's connection timeout can fire before the request deadline.
+            throw Unreachable(api, exception);
+        }
         catch (OperationCanceledException) when (!cancel.IsCancellationRequested)
         {
             throw TimedOut(api);

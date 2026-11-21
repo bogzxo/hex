@@ -141,8 +141,9 @@ internal sealed partial class DawnScene
     /// </summary>
     /// <param name="port">The port, the setting's (or --link-port's) when null, 0 for any free one.</param>
     /// <param name="home">A folder the key and the known devices go in, and data/ under it the audit log, for a self test; the settings and data folders when null.</param>
-    /// <param name="discover">Whether the LAN is looked at and told about this device, not for a self test.</param>
-    internal bool StartLink(int? port = null, string? home = null, bool? discover = null)
+    /// <param name="discover">Whether to look for devices on the LAN. Defaults to off in self-tests.</param>
+    /// <param name="loopbackOnly">Bind to IPv4 loopback and skip LAN discovery for local-only self-tests.</param>
+    internal bool StartLink(int? port = null, string? home = null, bool? discover = null, bool loopbackOnly = false)
     {
         if (linkTransport is not null)
             return true;
@@ -175,12 +176,12 @@ internal sealed partial class DawnScene
             };
             linkTrust.Changed += LinkTrustChanged;
             if (HexHost.Listens)
-                linkTransport.Start(port ?? options.LinkPort ?? settings.LinkPort);
+                linkTransport.Start(port ?? options.LinkPort ?? settings.LinkPort, loopbackOnly);
             linkOwner = this;
             linkFoldersSeen = [];
             linkLookWait = 0.0f;
             LinkLookAtWorkspace(force: true);
-            LinkAnnounce(discover ?? !options.SelfTest);
+            LinkAnnounce(!loopbackOnly && (discover ?? !options.SelfTest));
 
             Say(HexHost.Listens ? Said("link.started", ("port", linkTransport.Port.ToString(System.Globalization.CultureInfo.InvariantCulture))) : Said("link.started_dialling"));
             Console.WriteLine($"[Hex] Link is up as {linkIdentity.Name} ({linkIdentity.Device.Fingerprint}){(HexHost.Listens ? $" on port {linkTransport.Port}" : ", dialling only")}");
@@ -209,6 +210,7 @@ internal sealed partial class DawnScene
         }
 
         // What's shared over the links let go of before they go (DawnScene.LinkSync, LinkFiles, LinkPresence)
+        LinkDocumentStop();
         LinkShareStopAll();
         link?.Dispose();
         link = null;
@@ -309,7 +311,10 @@ internal sealed partial class DawnScene
 
         // Where the person is here told, and where the others are drawn (DawnScene.LinkPresence)
         if (link is not null)
+        {
+            UpdateLinkDocument(dt);
             UpdateLinkPresence();
+        }
 
         if (linkPairingPending is { IsDecided: true } decided)
         {
@@ -583,6 +588,8 @@ internal sealed partial class DawnScene
         if (linkWorkspaceAsking)
             return;
 
+        // Linked index tools also run when this Hex's local MCP pipe is disabled.
+        McpFolders();
         linkFoldersSeen = folders;
         linkGitWait = LINK_GIT_EVERY;
         linkWorkspaceAsking = true;

@@ -170,6 +170,17 @@ public sealed class PredictionProviderTests
     }
 
     [Fact]
+    public async Task A_connection_timeout_before_the_request_deadline_is_unreachable()
+    {
+        var server = new FakeServer(_ => throw new TaskCanceledException("Connection timed out.", new TimeoutException()));
+
+        var failure = await Failing(Ollama(server));
+
+        Assert.Equal(PredictionStatus.Unreachable, failure.Status);
+        Assert.Contains("localhost:11434", failure.Message);
+    }
+
+    [Fact]
     public async Task A_server_that_stalls_past_the_deadline_has_timed_out()
     {
         var stream = new PieceStream(["{\"response\":\"a\",\"done\":false}\n"], stall: true);

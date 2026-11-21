@@ -13,6 +13,16 @@ on the Mac's desktop started over ssh, except where it says the GUI session. Eng
 
 ## 1. One machine at a time
 
+### BOGROG development checkout
+
+The default Debug restore of `Hex/Hex.csproj` succeeded after adding NuGet.org to an untracked
+`NuGet.Config` at the common workspace root. BOGROG previously had no configured sources or
+package cache. A config under `hex/` alone left the sibling Horizon projects with NU1100.
+
+`hex_dev_test` with `FullyQualifiedName~HexLink` reported 204 passed, 0 failed, and 0 skipped
+in 33 seconds. The testhost stayed alive for about 203 seconds and had to be stopped before the
+tool returned the buffered result. The assertions passed, but clean test runner shutdown is unverified.
+
 | Run | Result |
 | --- | --- |
 | PC, `HexLink` unit tests | 176 of 176 (175 before, plus the shared-read test below) |
@@ -27,6 +37,8 @@ data beside the dll). One more place still assumes the process is Hex: the MCP c
 below used `Hex.exe` on the PC, which only dialled out, so Windows Firewall was never asked.
 
 ## 2. Across the machines: suite `link-cross`
+
+BOGROG subsequently ran `link-cross` over the LAN against the Apple M1 Mac, with the Mac listening and Windows dialing. Both processes passed 14/14 checks over TLS 1.2 using isolated profiles. Windows used the multiplayer validation build and the Mac used the existing `~/hexmac/link/hex` build (checkout `a2d64c0`). This interoperability run used the suite’s stand-in chat. The Tailscale and real-agent runs below are historical.
 
 One command a side, the same build, the listener first:
 
@@ -235,5 +247,107 @@ Suite fixes: 8803ecc.
 - On the Mac, Claude Code started from a Hex launched over ssh can't read its sign-in: the login Keychain answers
   "User interaction is not allowed" to an ssh session (`claude auth status`: loggedIn false), while from the GUI session
   it's signed in. Hex launched normally on the Mac is fine; the rig's `mac-hex-gui.sh` starts it in the GUI session.
-- `HexExtensions.Agents.cs` gives agents `ProcessPath` as Hex's MCP command, which is `dotnet` when Hex runs as
-  `dotnet Hex.dll`.
+## 8. Development checkout follow-up
+
+Agent MCP configurations now put the absolute path to `Hex.dll` before `--mcp-connect` when Hex runs under
+`dotnet`. The shared MCP proxy uses the same command builder. Both keep their existing arguments when Hex
+runs as an executable. The built-in agent launchers already consume the command and argument list.
+
+### Reproducing the Windows loopback coding check
+
+Run from a Hex checkout with its first-party `hex-extensions` submodule present and an authenticated Codex CLI on PATH. This uses two real Codex turns. Build once with `dotnet build Hex/Hex.csproj`. In two PowerShell terminals start in that checkout. Set `$role = 'listener'` in the first and `$role = 'dialler'` in the second. Run this block in each, starting the listener first and waiting for its “up as” log line. Choose the same available TCP port in both.
+
+```powershell
+$port = 47834
+$profilePath = Join-Path ([IO.Path]::GetTempPath()) ("hex-coding-" + [guid]::NewGuid().ToString('N'))
+$null = New-Item -ItemType Directory -Path $profilePath
+$env:HEX_HOME = $profilePath
+$env:HEX_REMOTE_PIPE = "hex-coding-" + [guid]::NewGuid().ToString('N')
+$env:HORIZON_AUDIO = 'off'
+$env:HEX_LINK_KEYSTORE = 'file'
+$env:HEX_LINK_TEST_NAME = "Fixture-$role"
+$env:HEX_LINK_TEST_AGENT = 'codex'
+$env:HEX_LINK_TEST_MODEL = 'gpt-6.2-astra'
+$env:HEX_LINK_TEST_LOOPBACK = '1'
+$env:HEX_LINK_TEST_CODING = '1'
+$env:HEX_LINK_TEST_MITM = $null
+$env:HEX_LINK_TEST_DIAL = $null
+$env:HEX_LINK_TEST_LISTEN = $null
+if ($role -eq 'listener') { $env:HEX_LINK_TEST_LISTEN = "$port" }
+else { $env:HEX_LINK_TEST_DIAL = "127.0.0.1:$port" }
+dotnet Hex/bin/Debug/net11.0/Hex.dll --mcp --selftest link-cross --exit --size 1000x700 |
+    Tee-Object -FilePath "$profilePath/stdout.log"
+$bytes = [IO.File]::ReadAllBytes("$profilePath/link-cross-work/LinkProbe.cs")
+$expected = [Text.Encoding]::UTF8.GetBytes("// Fixture-$role`n")
+[Convert]::ToBase64String($bytes) -ceq [Convert]::ToBase64String($expected)
+```
+
+Expect 15/15 and `True` in both terminals. Each caller starts an agent on its peer, waits for it and reads its reply. Each receiving process checks its own file against the expected UTF-8 bytes, including one LF. The final PowerShell comparison reads that file again after exit. The live editor's Link and MCP settings are separate from these disposable profiles.
+
+The original §2 suite uses a stand-in chat. The optional §3 real-agent check uses `uname -sm` and can approve a remote shell request. The explicit coding mode uses a source edit, requires IPv4 loopback, and leaves agent approval requests unanswered. For self-tests, `--mcp` starts the per-profile MCP server. The first-party Codex extension forwards `HEX_HOME` to its stdio bridge so the bridge can find that server's discovery listing. Earlier scratch variants used a separate test source and a copied extension to diagnose this routing problem. The procedure above uses the repository suite and extension.
+
+On BOGROG, run `4c7b45fd74e24ac69c7b71f5398e77d4` built the repository suite without a source override. Self-test catalog discovery loaded the first-party Codex extension from the checkout, with no private catalog or bundled Codex copy in the test output. The Windows processes connected at `127.0.0.1` using TLS 1.3 and `TLS_AES_256_GCM_SHA384`. The listener passed 15/15 and read its peer agent's completed reply after 14.3 s. The dialler passed 15/15 and read its peer agent's completed reply after 15.4 s. After both processes exited, each profile's file matched the expected bytes, including LF. The listener's Base64 was `Ly8gRml4dHVyZS1saXN0ZW5lcgo=` and the dialler's was `Ly8gRml4dHVyZS1kaWFsbGVyCg==`. Logs are under `scratch/agent12/<run>/{listener,dialler}/stdout.log` in the Hex agents temp directory.
+
+For this run, the Mac's documented LAN address answered SSH but BOGROG had no trusted host key for it. Its Tailscale address timed out on port 22. No Tailscale CLI on PATH or at its standard install path, service, or Tailscale IPv4 adapter was found on BOGROG. The two-machine results in §§2–3 remain historical.
+
+## 9. Current Windows and Mac QA
+
+Each Windows–macOS claim requires a current Mac run with the matching Windows source snapshot, including uncommitted and untracked inputs and the engine and extension revisions. Record the snapshot, build identity, OS and architecture, route, listener role, session type, check counts, exit codes and logs. The results in §§2–5 establish earlier coverage.
+
+The forward paired run used the Mac as listener and document host and Windows as dialler and guest. Both suites negotiated TLS 1.2 and both processes exited cleanly. The staged Mac checkout was `~/hexmac/review.3NDcYx`. The combined Link suites passed 100/100 on the current Mac and 100/100 on the preceding Windows build. They include scripted checks for rendered carets, selection and pointer, Follow, and remote symbol navigation. Live native input remains a separate acceptance check. A direct LAN connection from the Mac to the Windows listener at TCP 47834 was unreachable. An authenticated SSH reverse forward can exercise reversed application roles through Windows loopback. That route gives no Windows LAN listener coverage.
+
+| Current paired scenario | Direct LAN, Mac host / Windows guest | SSH forward, Windows host / Mac guest | What passed |
+| --- | --- | --- | --- |
+| `HEX_LINK_TEST_DOCUMENTS=1` | `d2`, 7/7 and 13/13 | `drev2`, 7/7 and 13/13 | Disjoint edits converge, same-offset inserts follow acceptance order, overlapping changes conflict, document edits are denied after Edit is removed, host close is detected, and caret, anchor and pointer payloads propagate within the session. |
+| `HEX_LINK_TEST_DOCUMENT_RECOVERY=1` | `r2`, 5/5 and 6/6 | `rrev2`, 5/5 and 6/6 | Exact Unicode round-trip, detached guest draft survives disconnect, known device reconnects, old session conflicts, explicit reconciliation advances the new session and the host disk keeps its original CRLF bytes. |
+
+The final `d2`, `drev2`, `r2` and `rrev2` runs verified exactly View and Edit on both ends and supersede the initial runs that reported Steer. Windows logs use `mac-review-01/<run>/run.log` under the Hex agents scratch directory. Mac logs use `<run>.log` in the staged review checkout. The initial fixture archive SHA-256 was `638940d3aa30df4f19c89ad8e53c98e047bab4fefd3ba437bab1a6e91ab94e90`. Mac combined output is in `local.log` in the staged checkout. Current baseline `base4` (direct LAN) and `baser4` (SSH-forwarded Windows listener) each passed 14/14 on both peers. Current LAN discovery `near2` passed 2/2 on both. Baseline audit logs show Edit save, Steer approval, blocked terminal, post-downgrade write denial, unknown identity, Forget and revoked redial. A separate native M1 Link and Prediction test run passed 410/410 with zero skipped, and the targeted native engine run exited zero.
+
+In `coding2`, Windows dialled its loopback SSH forward to a Mac GUI listener. Link negotiated TLS 1.2. The Mac initiated a real Codex source edit on Windows. The retained Windows fixture `mac-review-01/coding2/link-cross-work/LinkProbe.cs` contained `// WindowsQA` followed by LF and its SHA-256 was `404FC0CC759D0AF1286C52A5A2A09D263BAA7CA9BAC320FD40F502CDAE87BF92`. The reverse Claude turn hit quota and the Windows process log has no terminal suite total. The follow-up `directed5` used the same SSH-forwarded application roles with one real Codex turn initiated from the Mac GUI and executed on Windows. Both sides passed 15/15 and exited cleanly. The fixture confirmed the expected bytes and audit. The Windows-initiated source edit on the Mac remains open because of the Claude quota.
+
+### Feature ratings
+
+An 8.5 requires applicable current happy-path, denial or failure, and recovery or integrity evidence, with no open high-impact defect. For a Windows–macOS claim the ceiling is 7.5 without a matching current Mac run. Where the feature includes native interaction, inspect that interaction on both platforms. Record the test route and roles when limiting a claim to an exercised configuration.
+
+| Feature | Rating / 10 | Evidence and remaining acceptance check |
+| --- | ---: | --- |
+| TLS, trust, pairing and revocation | 8.5 scripted | Current baseline passed 14/14 on each host in both application roles. Covers unknown identity, Forget, revocation and re-dial refusal over the exercised routes. Manual consent and native keystores remain open. |
+| Discovery and loopback isolation | 8.5 | Current LAN mDNS passed 2/2 on each platform. Native suite assertions cover loopback isolation. Windows direct LAN TCP listener reachability remains open. |
+| Rights, MCP tools and audit | 8.5 scripted | Current baseline validated allowed Edit and Steer operations, blocked terminal, View downgrade denial and matching audit trail. Current document and worktree runs verified their minimal grants. |
+| Link window, fleet and Runs on | 6.5 | `link-ui` fixture covers switches, mirrors, naming and choice availability. Verify current native visuals, actual picker launch and loss of Steer on both platforms. |
+| Remote agents and coding | 8.5 Mac-initiated / 7.0 Windows-initiated | `directed5` completed a real Mac-initiated Codex edit on Windows, 15/15 on each peer, with exact-byte and audit proof. The earlier reverse Claude turn hit quota. Verify a current Windows-initiated source edit on the Mac. |
+| Remote browse, open, save, conflict and Git | 6.5 | `link-files` includes stale save, clone, fetch and patch. Run current native suites and verify real paired save and refusal with exact disk bytes. |
+| Go to Symbol | 7.5 | Current Mac native fixture passed indexed root, declaration line and opening the remote file. Verify matching current Windows evidence, View denial, synced local opening and ambiguous root labels. |
+| Working-tree sync and flush | 8.5 direct LAN | Current Mac-host/Windows-guest run passed 7/7 and 17/17 after the rights fix. It covered exact bytes and flush, dirty Undo, offline replay, conflict preservation and resolution, downgrade without a push, and regrant replay. Reverse roles remain pending. |
+| Presence and Follow | 8.0 | Current paired document presence payloads and current Mac rendered caret, selection, pointer and Follow fixture passed. Inspect native Windows behavior and live paired disconnect cleanup. |
+| Shared document merge protocol | 8.5 | Current paired concurrency, conflict, Edit downgrade and host close passed with exact bilateral View and Edit in both application roles. The Windows listener role used an SSH forward. |
+| Shared document editor workflow | 8.0 | Current Mac native editor suite and forward paired collaboration passed. Verify native Windows evidence, advertised View-only behavior and the full manual conflict/rejoin/save path. |
+| Shared document reconnect and integrity | 8.5 automated | Current paired recovery passed in both application roles with exact View and Edit, including Unicode and disk integrity. Native manual acceptance still includes rejoin, draft recovery and separate host and guest saves. |
+| Local autocomplete editor behavior | 8.5 scripted | Current native prediction suite passed 35/35 on Windows and Mac. Targeted Windows engine tests passed 17/17. |
+| Model provider failure and cancellation | 8.5 scripted | Current native 35/35 on both systems and Windows 187/187 targeted prediction and relay tests. Real Zeta 2 and Qwen2.5-Coder quality and latency remain unscored. |
+| Autocomplete privacy and settings | 8.5 scripted | Current prediction QA reports native suite coverage on both systems. |
+| Autocomplete responsiveness | 8.5 scripted | Current 33-key samples were 4.7 to 4.5 ms p95 with prediction enabled on Windows and 6.8 to 9.4 ms on Mac. Both met the suite's threshold. Real model load remains open. |
+| Linked autocomplete | 8.5 scripted | `netpred4` passed Mac listener 6/6 and Windows client 7/7 over direct LAN. `predreverse5` passed Windows listener 6/6 and Mac client 7/7 over SSH forwarding. Both used exactly Predict and verified editor acceptance, excluded buffers, provider cancellation, live revocation and wire-level denial. In-memory tests cover cache switching. Real model quality remains open. |
+
+The paired shared-document fixtures exercise the protocol and part of the editor lifecycle. Native manual acceptance should open the host and guest tabs from the palette, observe caret, selection and pointer independently, use Compare and Resume on an overlap, disconnect with a dirty draft, then rejoin and reconcile from the detached tab. Verify Undo and separate host and guest saves. The document commands currently require Edit to join a tab while View can read the buffer through the protocol. Verify the intended View-only user experience and align the command or the plan.
+
+### Paired working-tree check
+
+The opt-in `HEX_LINK_TEST_WORKTREE=1` fixture creates disposable repositories at the same deterministic commit. Run it on both peers through `link-cross` with a fresh profile and no other scenario selected. The listener runs the host checkpoints, and the dialler drives Sync, editor Save and Undo, reconnect and conflict resolution. The first direct LAN run, `work1`, passed 5/6 on the Mac host and 12/14 on Windows. Initial CRLF/LF comparison, editor Save and flush, dirty Undo, offline replay, conflict preservation, tool reporting for a conflict and explicit resolution passed. The first failure was the Windows wait for the live sync to enter pull-only after a remote rights change. The host timed out waiting for the guest, and the late Windows tool check lost its connection. The follow-up updates live sync state when new rights arrive and requeues held local paths on explicit Edit regrant. The focused Windows `HexLinkSyncTests` run passed 36/36, with zero skipped and exit code 0. It verified immediate revocation before a push, incoming reads, held edit replay after regrant and the fallback when the server denies a write before sending a grant update. The current direct LAN rerun `work4` passed 7/7 on the Mac listener and 17/17 on the Windows dialler with View and Edit as the initial grant. It verified the state changes before the first local push, remote changes still arrive, the denied edit stays local until regrant, and the held edit then reaches the peer without a second save. Logs are `mac-review-01/work4/run.log` on Windows and `work4.log` in the staged Mac checkout. In the SSH-forwarded reverse attempt, `workr4`, the Windows listener passed 6/8. The fixture called a restrictive disk read while the incoming save was replacing the file. It aborted the first wait and its corresponding assertion. The fixture now waits for the peer's flush marker and uses a shared read that retries transient I/O failures. The reverse rerun is pending.
+
+A separate Windows unit regression held a writable handle that allowed read, write and delete sharing. The old working-tree manifest omitted the file because its own restrictive read could not coexist with that handle. The tree and sync reads now allow all three sharing modes. The focused test failed before this change, then the full Windows `HexLinkSyncTests` suite passed 37/37 with zero skipped and exit code 0. The regression verified the previously omitted file's initial transfer, then an atomic save and exact destination bytes.
+
+Use disposable clones of the same commit. Give both peers Edit, start sync and confirm the initial manifests converge with Windows CRLF and Mac LF checkouts. Save from each side and wait for flush, then compare expected exact bytes on both disks. On one host keep an unsaved tab, receive a remote write, and verify the local draft is still recoverable with one Undo. Disconnect, edit different files on each side and create a delete-versus-edit conflict on the same file. Reconnect and verify nonconflicting changes converge, the conflicting bytes are preserved on both sides, and the conflict clears only after an explicit resolution. Drop to View and verify pulls still arrive while writes are denied. The fixture also calls `hex_link_sync` start and flush with an unresolved conflict and again in pull-only mode. Both replies must identify the incomplete sync or say that local changes stay local. Record roles, effective rights, commit, path, exact hashes and log markers.
+
+## 10. Shared-document stress on Apple M1
+
+The native Apple M1 run passed **16/16** protocol and stress cases with **0 skips** in **103 ms**. The target included six document protocol cases and all ten cases in `HexLinkMultiplayerStressTests`.
+
+| Stress cases | Coverage |
+| --- | --- |
+| Seven seeded races with 2–8 writers | 624 synchronized rounds and 3,024 committed revisions. Writers submit disjoint edits from a shared base. An independent model checks each reply against the submitting writer, then replays the commit order and compares every revision and full buffer ordinally. Each round also verifies that retrying an accepted proposal preserves the final snapshot and that concurrent reads agree. |
+| Near-limit Unicode | Eight insertions at the same offset follow host commit order while preserving the full Unicode buffer, including combining marks and emoji sequences. The merged buffer reaches the 131,072 UTF-16 code unit limit. A valid stale proposal that would overflow the merged buffer fails atomically, and writing succeeds again after space is freed. |
+| History and reopen | Revision zero is usable at the edge of the 32-entry history, where a duplicate retry is idempotent. Both a retry and a new proposal from that base conflict after eviction. Reopening the same path and text rejects an old epoch at revision zero and accepts a proposal in the new epoch. |
+| Genuine overlap | In 32 three-writer races, exactly one overlapping replacement commits, the disjoint stale append survives, and retrying the losing proposal leaves the final buffer and revision intact. |
+
+The stress cases verify 3,132 commits per pass. The seeds fix the proposals, while task scheduling determines their commit order. Ten additional runs of the same binary on Apple M1 passed **100/100** stress cases and verified **31,320 commits** across the repeats. Each run exited with code 0, and the repeat loop reported `TEN_ROUNDS_OK`.

@@ -12,13 +12,40 @@ namespace Hex.Dawn;
 // request it hears). Link's window opened, pairing started from it, the pairing dialog showing the code with nothing
 // ticked, View and Steer ticked and Pair pressed; the device then listed as connected with its switches; Agentic's
 // fleet showing a section of B's with its chat and the badge of B; picking it showing its rows under a banner saying
-// where it runs; a message typed and sent reaching B; Runs on listing B while it lets this one steer and not after B
-// takes Steer away, when the box is shut with the reason; and Forget taking the section away. A picture at each stage
+// where it runs; a message typed and sent reaching B; a new chat started on B through Runs on and then steered;
+// revocation closing its composer and removing B from Runs on; and Forget taking the section away. A picture at each stage
 // with HEX_SELFTEST_SHOTS set. Explicit-only, as the link part is.
 internal sealed partial class DawnScene
 {
     // What's typed in the box and sent to B's chat, and the environment that has B say each Steer request it hears
     private const string LINK_UI_SENT = "Hello from A over the link", LINK_TEST_UI = "HEX_LINK_TEST_UI";
+
+    private const string LINK_UI_AGENT = "link_ui_fixture", LINK_UI_AGENT_NAME = "Link fixture agent";
+    private const string LINK_UI_START = "Start from the Runs on picker", LINK_UI_FOLLOW = "Follow up on the same chat";
+    private const string LINK_UI_DENIED = "This follow-up must be refused", LINK_UI_OUTPUT = "link-ui-fixture-ran";
+
+    // This fixture's process emits a fixed line and exits. The prompt is never passed to the shell.
+    private HexExtension StartLinkUiAgent(string root)
+    {
+        string folder = Path.Combine(root, LINK_UI_AGENT);
+        Directory.CreateDirectory(folder);
+        string program = OperatingSystem.IsWindows() ? Path.Combine(System.Environment.SystemDirectory, "cmd.exe").Replace('\\', '/') : "/bin/echo";
+        string args = OperatingSystem.IsWindows()
+            ? $$"""["/d", "/c", "echo", "{{LINK_UI_OUTPUT}}"]"""
+            : $$"""["{{LINK_UI_OUTPUT}}"]""";
+        File.WriteAllText(Path.Combine(folder, HexExtension.FILE), $$"""
+            let extension = { name: "{{LINK_UI_AGENT_NAME}}" };
+            func on_start(hex) {
+                hex.agent({ id: "{{LINK_UI_AGENT}}", name: "{{LINK_UI_AGENT_NAME}}", run: {
+                    program: "{{program}}", stdin: false, arguments: (prompt, chat) => {{args}}
+                } });
+            }
+            """);
+        var extension = new HexExtension(folder, builtIn: false) { Enabled = true };
+        extensions.Add(extension);
+        extensions.Start(extension);
+        return extension;
+    }
 
     // B's side: what the other end was last said to be called
     private string? linkTestOtherName;
@@ -44,11 +71,15 @@ internal sealed partial class DawnScene
 
     private void TestLinkUi(HexPointerScript test)
     {
-        string home = LinkTestFolder("hex-link-ui-a-");
-        string peerHome = LinkTestFolder("hex-link-ui-b-");
+        string home = LinkTestFolder("hex-link-ui-a-", test);
+        string peerHome = LinkTestFolder("hex-link-ui-b-", test);
         HexLinkPeer? peer = null;
         string? peerId = null;
-        int peerChat = 0;
+        int peerChat = 0, spawnedChat = 0, localChatsMade = 0;
+        string? previousAgent = null;
+        bool localMcpWasRunning = false;
+        HexExtension? localFixture = null;
+        Task<McpToolResult>? refused = null;
 
         void Shot(string name) => test.Run(() =>
         {
@@ -57,6 +88,17 @@ internal sealed partial class DawnScene
         });
 
         Vector2 Centre(UIComponent? component) => component?.Bounds.Center ?? Vector2.Zero;
+        ContextMenu? OpenMenu() => chrome.Root.Children.OfType<ContextMenu>().FirstOrDefault(menu => menu.Showing is not null);
+        Vector2 MenuItem(string label) => OpenMenu() is { Showing: { } menu } open && menu.Items.Any(item => item.Label == label)
+            ? chrome.ToWorld(open.ItemBounds(label).Center) : Vector2.Zero;
+        bool SpawnedMirror() => spawnedChat > 0 && agentChat is not null && agentChat == linkRemoteMirror
+            && LinkRemoteOf(agentChat) is { } remote && remote.DeviceId == peerId && remote.Id == spawnedChat;
+        bool MirrorHas(string text) => agentChat?.Entries.Any(row => row.Text.Contains(text, StringComparison.Ordinal)) == true;
+        void ClearToasts()
+        {
+            foreach (UINotification card in toasts.Cards)
+                card.Close();
+        }
         Button? WindowButton(string label) => linkWindow is null ? null : Descendants(linkWindow).OfType<Button>().FirstOrDefault(button => button.Label == label && button.IsShownInHierarchy);
         ToggleButton? DialogRight(string name) => name switch { "view" => linkPairView, "steer" => linkPairSteer, "predict" => linkPairPredict, _ => linkPairEdit };
         AgentCardButton? RemoteCard(UIComponent rows) => Descendants(rows).OfType<AgentCardButton>().FirstOrDefault(card => LinkRemoteOf(card.Chat) is { } remote && remote.DeviceName == LINK_PEER_NAME && card.Chat.Shown == LINK_PEER_CHAT);
@@ -66,7 +108,7 @@ internal sealed partial class DawnScene
         {
             linkTestPeerSaid.Clear();
             StopLink();
-            if (!StartLink(port: 0, home: home, discover: false))
+            if (!StartLink(port: 0, home: home, loopbackOnly: true))
                 return;
             linkByTest = true;
             ShowFace(HexFace.Dawn);
@@ -78,6 +120,7 @@ internal sealed partial class DawnScene
         test.Check("link-ui: the window says how the key is kept (a self test's is the file alone, said as a warning)", () =>
             Descendants(linkWindow!).OfType<Label>().Any(label => label.Text.Contains(Said("link.key_file"), StringComparison.Ordinal)));
         Shot("link_ui_window_empty.png");
+        test.Check("link-ui: A listens on IPv4 loopback without LAN discovery", () => LinkTestBoundOnlyToLoopback);
 
         // Pairing started from the window, its countdown and addresses shown, B started to dial in
         test.Click(() => Centre(WindowButton(Said("link.pair_button"))));
@@ -217,6 +260,9 @@ internal sealed partial class DawnScene
         });
         test.Settle(0.3f);
         test.Check("link-ui: the box can send to B's chat while B lets this one steer", () => agentsSend.Enabled && !agentsInput.ReadOnly);
+        // A notification left by an earlier suite can cover Send until dismissed.
+        test.Run(ClearToasts);
+        test.WaitFor(() => toasts.Cards.Count == 0, 2.0f);
         test.Click(() => Centre(agentsSend));
         test.WaitFor(() => LinkTestPeerSaid("steered tool hex_agent_send"), 20.0f);
         test.Check("link-ui: what was sent reached B as hex_agent_send to its chat", () =>
@@ -236,27 +282,101 @@ internal sealed partial class DawnScene
             && LinkRunsOnMenu().Items.Any(item => item.Label == LINK_PEER_NAME));
         Shot("link_ui_runs_on.png");
 
-        // B takes Steer away: the box under B's chat is shut with the reason, Runs on gone
-        test.Run(() => _ = peer?.Write($"{LINK_PEER_FOLDER}/{LINK_FLAG_VIEW}", null, [1]));
-        test.WaitFor(() => peer?.Granted == HexLinkRights.View, 20.0f);
+        // A local fallback would start the same harmless process. Only B's copy should run.
         test.Run(() =>
         {
+            previousAgent = agentPicked;
+            localMcpWasRunning = mcpHost is not null;
+            localFixture = StartLinkUiAgent(home);
+            agentPicked = LINK_UI_AGENT;
+            localChatsMade = agentChatsMade;
+        });
+        test.Click(() => Centre(linkRunsOnPicker));
+        test.WaitFor(() => OpenMenu()?.Showing?.Items.Any(item => item.Label == LINK_PEER_NAME) == true, 3.0f);
+        test.Click(() => MenuItem(LINK_PEER_NAME));
+        test.WaitFor(() => peerId is not null && linkRemoteSystems.TryGetValue(peerId, out var systems)
+            && systems.Any(system => system.Id == LINK_UI_AGENT && !system.Missing), 12.0f);
+        test.Check("link-ui: choosing B from the open Runs on menu selects B and loads its agent systems", () =>
+            peer is not null && LinkRunsOnPeer() == peer && linkRemoteSystems.TryGetValue(peer.Device.Id, out var systems)
+            && systems.Any(system => system.Id == LINK_UI_AGENT && !system.Missing));
+        test.Click(() => Centre(Descendants(agentsOptions).OfType<Button>().FirstOrDefault(button =>
+            button.Tooltip == Said("link.runs_on_agent_tip", ("device", LINK_PEER_NAME)))));
+        test.WaitFor(() => OpenMenu()?.Showing?.Items.Any(item => item.Label == LINK_UI_AGENT_NAME) == true, 3.0f);
+        test.Click(() => MenuItem(LINK_UI_AGENT_NAME));
+        test.Run(() =>
+        {
+            if (peerId is not null && LinkRunsOnPeer()?.Device.Id == peerId && linkRemotePicked.GetValueOrDefault(peerId).Agent == LINK_UI_AGENT)
+                agentsInput.Text = LINK_UI_START;
+        });
+        test.WaitFor(() => agentsSend.Enabled, 3.0f);
+        test.Check("link-ui: the selected fixture agent can be sent a first prompt", () => agentsSend.Enabled && agentsInput.Text == LINK_UI_START);
+        test.Click(() => Centre(agentsSend));
+        test.WaitFor(() =>
+        {
+            if (agentChat is null || agentChat != linkRemoteMirror || LinkRemoteOf(agentChat) is not { } remote
+                || remote.DeviceId != peerId || remote.Id == peerChat)
+                return false;
+            spawnedChat = remote.Id;
+            return MirrorHas(LINK_UI_START) && MirrorHas(LINK_UI_OUTPUT)
+                && peer?.Fleet.Any(row => row.Id == spawnedChat && row.Agent == LINK_UI_AGENT) == true;
+        }, 20.0f);
+        test.Check("link-ui: Send starts a new fixture chat on B and opens its mirror with the first prompt and process output", () =>
+            SpawnedMirror() && MirrorHas(LINK_UI_START) && MirrorHas(LINK_UI_OUTPUT)
+            && peer?.Fleet.Any(row => row.Id == spawnedChat && row.Agent == LINK_UI_AGENT) == true);
+        test.Check("link-ui: sending the first prompt creates no local chat or agent run", () =>
+            agentChatsMade == localChatsMade && !agentChats.Any(chat => chat.Agent == LINK_UI_AGENT)
+            && !agentRuns.Any(run => run.Chat.Agent == LINK_UI_AGENT));
+        Shot("link_ui_runs_on_spawned.png");
+
+        test.WaitFor(() => SpawnedMirror() && agentChat is { Running: false }, 8.0f);
+        test.Run(ClearToasts);
+        test.WaitFor(() => toasts.Cards.Count == 0, 2.0f);
+        test.Run(() =>
+        {
+            if (SpawnedMirror())
+                agentsInput.Text = LINK_UI_FOLLOW;
+        });
+        test.WaitFor(() => agentsSend.Enabled, 3.0f);
+        test.Click(() => Centre(agentsSend));
+        test.WaitFor(() => SpawnedMirror() && MirrorHas(LINK_UI_FOLLOW)
+            && agentChat!.Entries.Count(row => row.Text == LINK_UI_OUTPUT) == 2, 15.0f);
+        test.Check("link-ui: a follow-up sent while Steer is granted runs on the same remote chat", () =>
+            SpawnedMirror() && MirrorHas(LINK_UI_FOLLOW) && agentChat!.Entries.Count(row => row.Text == LINK_UI_OUTPUT) == 2);
+
+        // B takes Steer away while the newly started chat is still open.
+        test.Run(() => _ = peer?.Write($"{LINK_PEER_FOLDER}/{LINK_FLAG_VIEW}", null, [1]));
+        test.WaitFor(() => peer?.Granted == HexLinkRights.View, 20.0f);
+        test.Settle(0.5f);
+        test.Check("link-ui: revocation keeps the spawned chat mirrored and makes its composer watch-only", () =>
+            SpawnedMirror() && MirrorHas(LINK_UI_FOLLOW) && agentsInput.ReadOnly && !agentsSend.Enabled
+            && agentsPlaceholder.Text == Said("link.chat_watch_only", ("device", LINK_PEER_NAME))
+            && !agentsStop.Enabled && agentsWaitStrip is not { Visible: true });
+        test.Run(() =>
+        {
+            if (peer is not null && spawnedChat > 0)
+                refused = peer.Send(spawnedChat, LINK_UI_DENIED);
+        });
+        test.WaitFor(() => refused?.IsCompleted == true, 8.0f);
+        test.Check("link-ui: B refuses a Steer request for the spawned chat after revocation", () =>
+            refused?.Exception?.GetBaseException() is HexLinkException { Code: HexLinkErrors.NOT_ALLOWED }
+            && SpawnedMirror() && !MirrorHas(LINK_UI_DENIED));
+        Shot("link_ui_watch_only.png");
+
+        test.Run(() =>
+        {
+            NewAgentChat();
             agentsOptionsDrawn = string.Empty;
             agentsWait = 0.0f;
         });
         test.Settle(0.4f);
         test.Check("link-ui: with Steer taken away on B, Runs on is gone from a new chat's box", () =>
-            LinkRunsOnDevices().Count == 0 && (linkRunsOnPicker is null || !linkRunsOnPicker.IsShownInHierarchy));
+            LinkRunsOnPeer() is null && LinkRunsOnDevices().Count == 0 && (linkRunsOnPicker is null || !linkRunsOnPicker.IsShownInHierarchy));
         test.Click(() => Centre(RemoteCard(noonFleetRows)));
         test.WaitFor(() => LinkRemoteOf(agentChat) is not null, 10.0f);
         test.Settle(0.5f);
-        test.Check("link-ui: with Steer taken away, B's chat's box is shut and says B lets this machine watch, not steer", () =>
-            agentsInput.ReadOnly && !agentsSend.Enabled && agentsPlaceholder.Text == Said("link.chat_watch_only", ("device", LINK_PEER_NAME))
-            && !agentsStop.Enabled && agentsWaitStrip is not { Visible: true });
         test.Check("link-ui: B's section's chips say View alone now", () =>
             !Descendants(noonFleetRows).OfType<Badge>().Any(badge => badge.Text == Said("link.right_title_steer"))
             && Descendants(noonFleetRows).OfType<Badge>().Any(badge => badge.Text == Said("link.right_title_view")));
-        Shot("link_ui_watch_only.png");
 
         // Forgotten from the window, asked once, B's section goes
         test.Run(ShowLinkWindow);
@@ -278,6 +398,27 @@ internal sealed partial class DawnScene
         Shot("link_ui_forgotten.png");
         test.WaitFor(() => linkTestPeer is null or { HasExited: true }, 60.0f);
         test.Check("link-ui: B left by itself once forgotten", () => linkTestPeer is { HasExited: true, ExitCode: 0 });
-        test.Run(() => ShowFace(HexFace.Dawn));
+        test.Run(() =>
+        {
+            foreach (HexAgentChat chat in agentChats.Where(chat => chat.Agent == LINK_UI_AGENT && chat.Id > localChatsMade).ToArray())
+                CloseAgentChat(chat);
+            if (!localMcpWasRunning && mcpHost is not null)
+                StopMcp();
+            if (localFixture is not null)
+            {
+                extensions.ForgetAgents(localFixture);
+                extensions.Remove(localFixture);
+            }
+
+            if (peerId is not null)
+            {
+                linkRemoteSystems.Remove(peerId);
+                linkRemotePicked.Remove(peerId);
+                if (linkRunsOn.GetValueOrDefault(LinkWorkspaceKey) == peerId)
+                    LinkPickRunsOn(null);
+            }
+            agentPicked = previousAgent;
+            ShowFace(HexFace.Dawn);
+        });
     }
 }

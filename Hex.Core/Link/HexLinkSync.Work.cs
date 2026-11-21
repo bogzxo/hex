@@ -29,6 +29,8 @@ internal sealed partial class HexLinkSync
     private readonly Queue<string> queue = new();
     private readonly HashSet<string> queued = new(StringComparer.Ordinal), running = new(StringComparer.Ordinal), again = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> tries = new(StringComparer.Ordinal);
+    private readonly HashSet<string> deferredPushes = new(StringComparer.Ordinal);
+    private int rightsVersion;
     private readonly SemaphoreSlim wake = new(0), slots = new(MOST_IN_FLIGHT, MOST_IN_FLIGHT);
     private int taking, delayed;
     private TaskCompletionSource? drained;
@@ -424,7 +426,7 @@ internal sealed partial class HexLinkSync
             }
             else if (info.Exists)
             {
-                byte[] bytes = await File.ReadAllBytesAsync(full, stop);
+                byte[] bytes = await HexLinkFiles.ReadSharedAsync(full, stop);
                 TextInfo text = TextOf(bytes);
                 mine = new HexLinkTreeFile(wire, HexLinkFiles.Hash(bytes), info.Length, text.Norm, EolWord(text.Eol));
             }
@@ -567,7 +569,7 @@ internal sealed partial class HexLinkSync
         byte[]? local;
         try
         {
-            local = File.Exists(full) ? await File.ReadAllBytesAsync(full, stop) : null;
+            local = File.Exists(full) ? await HexLinkFiles.ReadSharedAsync(full, stop) : null;
         }
         catch (IOException)
         {
@@ -645,18 +647,24 @@ internal sealed partial class HexLinkSync
     // the other side refuses it if it moved on meanwhile
     private async Task Push(string wire, string full, HexLinkSyncAgreed? agreed, string? theirs, CancellationToken stop)
     {
-        if (pullOnly)
-            return;
-        if (!HexLinkAllowed.Has(peer.Granted, HexLinkRights.Edit))
+        int grantedAt;
+        lock (gate)
         {
-            GoPullOnly(null);
-            return;
+            if (!live || !ready)
+                return;
+            if (pullOnly || !HexLinkAllowed.Has(peer.Granted, HexLinkRights.Edit))
+            {
+                deferredPushes.Add(wire);
+                return;
+            }
+
+            grantedAt = rightsVersion;
         }
 
         byte[]? bytes;
         try
         {
-            bytes = File.Exists(full) ? await File.ReadAllBytesAsync(full, stop) : null;
+            bytes = File.Exists(full) ? await HexLinkFiles.ReadSharedAsync(full, stop) : null;
         }
         catch (IOException)
         {
@@ -783,10 +791,10 @@ internal sealed partial class HexLinkSync
         }
         catch (HexLinkException e) when (e.Code == HexLinkErrors.NOT_ALLOWED)
         {
-            if (HexLinkData.String(e.Detail as JsonObject, "needs", 40) == HexLinkData.Word(HexLinkRights.Edit))
-                GoPullOnly(null);
-            else
+            if (HexLinkData.String(e.Detail as JsonObject, "needs", 40) != HexLinkData.Word(HexLinkRights.Edit))
                 Skip(wire, e.Message);
+            else
+                HoldDeniedPush(wire, grantedAt);
         }
     }
 
@@ -814,7 +822,7 @@ internal sealed partial class HexLinkSync
             byte[]? local;
             try
             {
-                local = File.Exists(full) ? await File.ReadAllBytesAsync(full, stop) : null;
+                local = File.Exists(full) ? await HexLinkFiles.ReadSharedAsync(full, stop) : null;
             }
             catch (IOException)
             {
@@ -880,10 +888,57 @@ internal sealed partial class HexLinkSync
         }
     }
 
-    private void GoPullOnly(string? why)
+    private void HoldDeniedPush(string path, int grantedAt)
     {
-        pullOnly = true;
-        Set(HexLinkSyncState.PullOnly, why ?? $"{peer.Device.Name} doesn't let this device write there (Edit)");
+        bool retry, changed = false;
+        lock (gate)
+        {
+            if (!live || !ready)
+                return;
+
+            // A newer grant can arrive while the refused request is in flight.
+            retry = grantedAt != rightsVersion && !pullOnly;
+            if (!retry)
+            {
+                deferredPushes.Add(path);
+                changed = !pullOnly;
+                pullOnly = true;
+                State = HexLinkSyncState.PullOnly;
+                Why = $"{peer.Device.Name} doesn't let this device write there (Edit)";
+            }
+        }
+
+        if (retry)
+            Again(path);
+        if (changed)
+            Notify();
+    }
+
+    private void UpdateRights()
+    {
+        lock (gate)
+        {
+            rightsVersion++;
+            bool nowPullOnly = !HexLinkAllowed.Has(peer.Granted, HexLinkRights.Edit);
+            if (!live || pullOnly == nowPullOnly)
+                return;
+            pullOnly = nowPullOnly;
+            if (!ready)
+                return;
+
+            State = pullOnly ? HexLinkSyncState.PullOnly : HexLinkSyncState.Syncing;
+            Why = pullOnly ? $"{peer.Device.Name} doesn't let this device write there (Edit)" : null;
+            if (!pullOnly)
+            {
+                // Recompare held paths against their bases before sending anything.
+                foreach (string path in deferredPushes)
+                    Dirty(path);
+                deferredPushes.Clear();
+            }
+        }
+
+        Notify();
+        CheckIdle();
     }
 
     private void Skip(string wire, string why)

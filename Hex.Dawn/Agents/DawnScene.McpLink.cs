@@ -215,21 +215,23 @@ internal sealed partial class DawnScene
             case "status":
                 return McpToolResult.Text(LinkSyncStatusSaid(peer.Device.Id));
             case "start":
-            {
-                if (await LinkSyncStartAndFlush(peer, folder!, args.Flag("force"), cancel) is { } why)
-                    return McpToolResult.Error($"{folder} isn't synced with {peer.Device.Name}: {why}");
-                return McpToolResult.Text($"{LinkSyncOf(peer.Device.Id, folder!)?.Summary}. Both sides are the same now; a file saved on either is written on the other within a moment. {LinkSpawnWhere(peer, folder!)}");
-            }
             case "flush":
             {
-                if (LinkSyncOf(peer.Device.Id, folder!) is not { State: HexLinkSyncState.Idle or HexLinkSyncState.Syncing or HexLinkSyncState.PullOnly })
+                bool flushing = action == "flush";
+                if (flushing && LinkSyncOf(peer.Device.Id, folder!) is not { State: HexLinkSyncState.Idle or HexLinkSyncState.Syncing or HexLinkSyncState.PullOnly })
                     return McpToolResult.Error($"{folder} isn't being synced with {peer.Device.Name}, hex_link_sync start turns it on.");
-                if (await LinkSyncStartAndFlush(peer, folder!, force: false, cancel) is { } why)
-                    return McpToolResult.Error(why);
-                HexLinkSync sync = LinkSyncOf(peer.Device.Id, folder!)!;
-                return McpToolResult.Text(sync.PullOnly
-                    ? $"{sync.Summary}. Pull-only: what changed there is here now, what changed here stays here."
-                    : $"Everything saved here in {folder} is on {peer.Device.Name} now ({sync.Summary}). Tell the agent there to build or test it.");
+                if (await LinkSyncStartAndFlush(peer, folder!, !flushing && args.Flag("force"), cancel) is { } why)
+                    return McpToolResult.Error(flushing ? why : $"{folder} isn't synced with {peer.Device.Name}: {why}");
+                if (LinkSyncOf(peer.Device.Id, folder!) is not { } sync)
+                    return McpToolResult.Error($"The sync of {folder} with {peer.Device.Name} stopped.");
+
+                if (sync.PullOnly)
+                    return McpToolResult.Text($"{sync.Summary}. Pull-only: changes saved here stay here.");
+                if (sync.Conflicts.Count > 0 || sync.Skipped.Count > 0)
+                    return McpToolResult.Text($"{sync.Summary}. Some files have not synced. Use hex_link_sync status to review conflicts and skipped files.");
+                return McpToolResult.Text(flushing
+                    ? $"Saved changes to syncable files in {folder} reached {peer.Device.Name} ({sync.Summary}). Tell the agent there to build or test them."
+                    : $"{sync.Summary}. Saved changes to syncable files can now travel both ways. {LinkSpawnWhere(peer, folder!)}");
             }
             case "stop":
                 return McpToolResult.Text(LinkSyncStop(peer.Device.Id, folder!)

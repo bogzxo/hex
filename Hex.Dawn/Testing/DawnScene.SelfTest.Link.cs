@@ -20,22 +20,26 @@ namespace Hex.Dawn;
 internal sealed partial class DawnScene
 {
     // The environment B is told what to do by, and how long it serves at most
+    private const string LINK_TEST_LOOPBACK = "HEX_LINK_TEST_LOOPBACK";
     private const string LINK_TEST_DIAL = "HEX_LINK_TEST_DIAL", LINK_TEST_LISTEN = "HEX_LINK_TEST_LISTEN", LINK_TEST_GRANT = "HEX_LINK_TEST_GRANT",
         LINK_TEST_SECONDS = "HEX_LINK_TEST_SECONDS", LINK_TEST_FOLDER = "HEX_LINK_TEST_FOLDER";
 
     // What B calls itself, its workspace's folder and its stand-in chat, and the flag files A writes there for it
     private const string LINK_PEER_NAME = "Hex B", LINK_PEER_FOLDER = "link-peer-work", LINK_PEER_CHAT = "Link stand-in",
-        LINK_FLAG_ROW = "link-test-add-row.flag", LINK_FLAG_VIEW = "link-test-view-only.flag", LINK_FLAG_PRESENCE = "link-test-presence.flag", LINK_LATER_ROW = "A later row, added when A asked";
+        LINK_FLAG_ROW = "link-test-add-row.flag", LINK_FLAG_VIEW = "link-test-view-only.flag", LINK_FLAG_PRESENCE = "link-test-presence.flag", LINK_FLAG_POINTER_AWAY = "link-test-pointer-away.flag", LINK_LATER_ROW = "A later row, added when A asked";
 
     // B, while it runs, what it printed, and the folders the part made
     private Process? linkTestPeer;
     private readonly ConcurrentQueue<string> linkTestPeerSaid = new();
     private readonly List<string> linkTestFolders = [];
 
+    private bool LinkTestBoundOnlyToLoopback =>
+        System.Net.IPAddress.Loopback.Equals(linkTransport?.ListeningAddress) && linkDiscovery is null;
+
     private void TestLink(HexPointerScript test)
     {
-        string home = LinkTestFolder("hex-link-a-");
-        string peerHome = LinkTestFolder("hex-link-b-");
+        string home = LinkTestFolder("hex-link-a-", test);
+        string peerHome = LinkTestFolder("hex-link-b-", test);
         string peerWork = Path.Combine(peerHome, LINK_PEER_FOLDER);
         LinkPairingAsk? asked = null;
         HexLinkPeer? peer = null;
@@ -52,7 +56,7 @@ internal sealed partial class DawnScene
         {
             linkTestPeerSaid.Clear();
             StopLink();
-            if (!StartLink(port: 0, home: home, discover: false))
+            if (!StartLink(port: 0, home: home, loopbackOnly: true))
                 return;
             linkByTest = true;
             LinkOpenPairing(TimeSpan.FromMinutes(3));
@@ -61,6 +65,8 @@ internal sealed partial class DawnScene
         });
         test.Check("link: Link comes up at a free port, nothing listening before, the pairing window open", () =>
             LinkOn && LinkPort > 0 && LinkPairingUntil is not null && linkTestPeer is not null);
+
+        test.Check("link: A listens on IPv4 loopback without LAN discovery", () => LinkTestBoundOnlyToLoopback);
 
         // B dials and pairs; A's person is asked with the code and grants what B may do here
         test.WaitFor(() => LinkPairingPending is not null || linkTestPeer is { HasExited: true }, 90.0f);
@@ -224,6 +230,7 @@ internal sealed partial class DawnScene
     private void TestLinkPeer(HexPointerScript test)
     {
         string? dial = System.Environment.GetEnvironmentVariable(LINK_TEST_DIAL);
+        bool loopbackOnly = System.Environment.GetEnvironmentVariable(LINK_TEST_LOOPBACK) == "1";
         int listen = int.TryParse(System.Environment.GetEnvironmentVariable(LINK_TEST_LISTEN), NumberStyles.None, CultureInfo.InvariantCulture, out int port) ? port : 0;
         float seconds = float.TryParse(System.Environment.GetEnvironmentVariable(LINK_TEST_SECONDS), NumberStyles.Float, CultureInfo.InvariantCulture, out float asked) ? asked : 120.0f;
         HexLinkRights grant = LinkTestGrant(System.Environment.GetEnvironmentVariable(LINK_TEST_GRANT));
@@ -232,6 +239,7 @@ internal sealed partial class DawnScene
         Task<HexLinkPairResult>? paired = null;
         bool cut = false, refused = false, wasLinked = false;
         string? otherId = null;
+        bool ui = System.Environment.GetEnvironmentVariable(LINK_TEST_UI) == "1";
 
         // Accepting without a person, only here: what the environment says is granted, the code said for A to compare
         Task<HexLinkRights?> Accept(HexLinkPairing pairing)
@@ -251,6 +259,11 @@ internal sealed partial class DawnScene
             if (syncFolder is not null)
                 linkTestExtraFolders = [work];
             settings.LinkName = LINK_PEER_NAME;
+            if (ui)
+            {
+                StartLinkUiAgent(work);
+                agentPicked = LINK_UI_AGENT;
+            }
 
             standIn = new HexAgentChat(++agentChatsMade, "link_stand_in") { Name = LINK_PEER_CHAT };
             standIn.Ask("Build the thing on this machine");
@@ -260,7 +273,7 @@ internal sealed partial class DawnScene
             Console.WriteLine($"[Hex self-test] link-peer: rows {LinkTestRows(standIn)}");
 
             StopLink();
-            if (!StartLink(port: listen, discover: false))
+            if (!StartLink(port: listen, discover: false, loopbackOnly: loopbackOnly))
                 return;
             linkByTest = true;
             LinkRedialRefused = (id, why) =>
@@ -287,6 +300,9 @@ internal sealed partial class DawnScene
             }
         });
 
+        if (loopbackOnly)
+            test.Check("link-peer: B listens on IPv4 loopback without LAN discovery", () => LinkTestBoundOnlyToLoopback);
+
         // The pairing that comes in, when it's B that listens, answered here as A's test answers its own
         test.WaitFor(() =>
         {
@@ -311,12 +327,12 @@ internal sealed partial class DawnScene
         });
 
         // Serving: what A asks for by the files it writes here done, until A cuts the link and the redial is refused
-        bool rowAdded = false, viewOnly = false, presenceSet = false;
-        bool ui = System.Environment.GetEnvironmentVariable(LINK_TEST_UI) == "1";
+        bool rowAdded = false, viewOnly = false, presenceSet = false, pointerAway = false;
         int uiLooked = 0;
         DateTime uiSteeredSeen = DateTime.MinValue;
         test.WaitFor(() =>
         {
+            LinkDocumentTestPeer(work);
             if (!rowAdded && File.Exists(Path.Combine(work, LINK_FLAG_ROW)) && standIn is not null)
             {
                 rowAdded = true;
@@ -339,8 +355,16 @@ internal sealed partial class DawnScene
             if (!presenceSet && syncFolder is not null && File.Exists(Path.Combine(work, LINK_FLAG_PRESENCE)) && Open(Path.Combine(syncFolder, "README.md")))
             {
                 presenceSet = true;
+                SwitchView(HexView.Code);
                 document.Editor.GoTo(0, 2);
+                compositor.PointerSource = () => new(document.Module.ToWorld(document.Editor.PlaceOf(new(0, 4))), false);
                 Console.WriteLine("[Hex self-test] link-peer: the caret is in README.md at 0:2");
+            }
+
+            if (presenceSet && !pointerAway && File.Exists(Path.Combine(work, LINK_FLAG_POINTER_AWAY)))
+            {
+                pointerAway = true;
+                compositor.PointerSource = () => new(new System.Numerics.Vector2(-100000, -100000), false);
             }
 
             // A patch the other offers applied, as the person here would press Apply (the link-files part)
@@ -355,6 +379,9 @@ internal sealed partial class DawnScene
             foreach (HexLinkAuditEntry entry in LinkAuditLatest(60))
                 Console.WriteLine($"[Hex self-test] link-peer: audit {entry.Event} {(entry.Device.Length > 8 ? entry.Device[..8] : entry.Device)} {entry.Detail}");
             StopLink();
+            if (ui)
+                StopMcp();
+            compositor.PointerSource = () => test.Pointer;
             if (standIn is not null)
                 agentChats.Remove(standIn);
         });
@@ -369,12 +396,21 @@ internal sealed partial class DawnScene
     private static string LinkTestRows(HexAgentChat chat) =>
         string.Join(" | ", chat.Entries.Select(entry => $"{entry.Kind}:{entry.Text.ReplaceLineEndings(" ")}"));
 
-    // A folder of the part's own in the temp folder, deleted in the tidy after it
-    private string LinkTestFolder(string prefix)
+    // Suites are all queued before they run. Create and track a folder during its own suite so the prior tidy cannot delete it.
+    private string LinkTestFolder(string prefix, HexPointerScript? test = null)
     {
         string folder = Path.Combine(Path.GetTempPath(), prefix + Guid.NewGuid().ToString("N")[..12]);
-        Directory.CreateDirectory(folder);
-        linkTestFolders.Add(folder);
+
+        void Create()
+        {
+            Directory.CreateDirectory(folder);
+            linkTestFolders.Add(folder);
+        }
+
+        if (test is null)
+            Create();
+        else
+            test.Run(Create);
         return folder;
     }
 
@@ -401,6 +437,7 @@ internal sealed partial class DawnScene
         start.Environment["HORIZON_AUDIO"] = "off";
         start.Environment[HexLinkSecrets.KEYSTORE_VARIABLE] = "file";
         start.Environment[LINK_TEST_DIAL] = dial;
+        start.Environment[LINK_TEST_LOOPBACK] = "1";
         start.Environment[LINK_TEST_SECONDS] = "150";
         start.Environment.Remove(LINK_TEST_LISTEN);
         start.Environment.Remove(LINK_TEST_FOLDER);
@@ -454,7 +491,7 @@ internal sealed partial class DawnScene
     /// <summary>After the link parts: B killed when it's still running, Link taken down, the part's folders deleted.</summary>
     private void TidyLinkTest()
     {
-        if (linkTestPeer is null && linkTestFolders.Count == 0)
+        if (!linkByTest && linkTestPeer is null && linkTestFolders.Count == 0)
             return;
         KillLinkTestPeer();
         StopLink();

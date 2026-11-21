@@ -93,7 +93,8 @@ internal sealed partial class HexLinkSync : IDisposable
 
     private HexLinkTreeWatch? local;
     private CancellationTokenSource stopping = new();
-    private bool live, remoteWatched, ready, pullOnly;
+    private bool live, remoteWatched, ready;
+    private volatile bool pullOnly;
     private List<HexLinkTreeChange>? early;
     private int sent, received;
 
@@ -118,6 +119,8 @@ internal sealed partial class HexLinkSync : IDisposable
 
     /// <summary>The folder synced, by the name both sides know it by.</summary>
     public string Folder => folder.Name;
+
+    internal HexLinkFolder LocalFolder => folder;
 
     /// <summary>Where the state (the bases and the open conflicts) is kept.</summary>
     public string StateFile { get; }
@@ -243,6 +246,8 @@ internal sealed partial class HexLinkSync : IDisposable
                 return;
             live = true;
             ready = false;
+            peer.RightsChanged += UpdateRights;
+            pullOnly = !HexLinkAllowed.Has(peer.Granted, HexLinkRights.Edit);
             early = [];
             stopping = new CancellationTokenSource();
         }
@@ -268,7 +273,6 @@ internal sealed partial class HexLinkSync : IDisposable
                 return;
             }
 
-            pullOnly = !HexLinkAllowed.Has(peer.Granted, HexLinkRights.Edit);
             peer.Session.Closed += LinkClosed;
 
             HexLinkManifest theirs = await peer.WatchTree(folder.Name, Heard, cancel);
@@ -288,7 +292,10 @@ internal sealed partial class HexLinkSync : IDisposable
             {
                 await Unwatch();
                 lock (gate)
+                {
                     live = false;
+                    peer.RightsChanged -= UpdateRights;
+                }
                 peer.Session.Closed -= LinkClosed;
                 Set(HexLinkSyncState.NeedsGit,
                     $"{folder.Name} is at {mine.Head[..10]} here and at {theirs.Head[..10]} on {peer.Device.Name}, bring them to the same commit with git first or go on anyway");
@@ -384,7 +391,7 @@ internal sealed partial class HexLinkSync : IDisposable
             // What both sides have once it's done, null when neither has it; whichever way it goes it's written in the
             // receiver's line ends, those of the file it replaces there or what most files there use
             HexLinkSyncAgreed? agreed;
-            byte[]? mine = File.Exists(full) ? await File.ReadAllBytesAsync(full, cancel) : null;
+            byte[]? mine = File.Exists(full) ? await HexLinkFiles.ReadSharedAsync(full, cancel) : null;
             if (keep == HexLinkSyncKeep.Mine)
             {
                 if (mine is null)
@@ -498,9 +505,11 @@ internal sealed partial class HexLinkSync : IDisposable
             local = null;
             waiting = drained;
             drained = null;
+            peer.RightsChanged -= UpdateRights;
             queue.Clear();
             queued.Clear();
             again.Clear();
+            deferredPushes.Clear();
         }
 
         try { stopping.Cancel(); } catch (ObjectDisposedException) { }

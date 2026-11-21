@@ -443,6 +443,32 @@ public sealed partial class HexLinkSyncTests
     }
 
     [Fact]
+    public async Task A_shareable_writer_does_not_hide_a_file_from_sync_and_atomic_save_still_travels()
+    {
+        using var pair = await LinkedPair.Up(EDIT, EDIT);
+        const string name = "shared-writer.txt";
+        const string initial = "before 😀\n";
+        const string updated = "after e\u0301\n";
+        Put(pair.A, name, initial);
+        string full = Path.Combine(pair.A.Work, name);
+        var folder = pair.A.Workspace.Folders[0];
+        using HexLinkSync sync = SyncOf(pair);
+        using (new FileStream(full, FileMode.Open, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete))
+        {
+            var manifest = new HexLinkTree(folder).Manifest();
+            Assert.Contains(manifest.Files, file => file.Path == folder.Name + "/" + name
+                && file.Hash == HexLinkFiles.Hash(Encoding.UTF8.GetBytes(initial)));
+            await sync.Start();
+            Assert.True(await Until(() => Get(pair.B, name) == initial), Said(sync));
+            await Settled(sync);
+        }
+
+        HexLinkFiles.WriteAtomic(full, Encoding.UTF8.GetBytes(updated));
+        await Settled(sync);
+        Assert.Equal(Encoding.UTF8.GetBytes(updated), HexLinkFiles.ReadShared(Path.Combine(pair.B.Work, name)));
+    }
+
+    [Fact]
     public async Task A_file_held_open_here_for_a_moment_is_still_pulled()
     {
         // On Windows a reader holding the file (an editor, a virus scanner, an indexer) stops it being moved over; the
@@ -466,7 +492,7 @@ public sealed partial class HexLinkSyncTests
     }
 
     [Fact]
-    public async Task Edit_taken_away_mid_sync_turns_it_pull_only()
+    public async Task Revoking_Edit_updates_sync_before_a_push_and_regrant_sends_held_edits()
     {
         using var pair = await LinkedPair.Up(EDIT, EDIT);
         using HexLinkSync sync = SyncOf(pair);
@@ -476,14 +502,21 @@ public sealed partial class HexLinkSyncTests
 
         pair.AOnB = HexLinkRights.View;
         pair.LinkB.RightsMoved(DeviceA.Id);
-        Assert.True(await Until(() => !HexLinkAllowed.Has(pair.PeerB.Granted, HexLinkRights.Edit)));
-        Put(pair.A, "x.txt", "two");
         Assert.True(await Until(() => sync.State == HexLinkSyncState.PullOnly), Said(sync));
+        Assert.Equal(HexLinkRights.View, pair.PeerB.Granted);
+        Put(pair.A, "x.txt", "two");
+        await Settled(sync);
         Assert.Equal("one", Get(pair.B, "x.txt"));
 
-        // Changes there still come
         Put(pair.B, "y.txt", "from there");
         Assert.True(await Until(() => Get(pair.A, "y.txt") == "from there"), Said(sync));
+
+        pair.AOnB = EDIT;
+        pair.LinkB.RightsMoved(DeviceA.Id);
+        Assert.True(await Until(() => Get(pair.B, "x.txt") == "two"), Said(sync));
+        await Settled(sync);
+        Assert.Equal(HexLinkSyncState.Idle, sync.State);
+        Assert.Equal(EDIT, pair.PeerB.Granted);
     }
 
     [Fact]
@@ -498,6 +531,12 @@ public sealed partial class HexLinkSyncTests
         Put(pair.A, "z.txt", "refused");
         Assert.True(await Until(() => sync.State == HexLinkSyncState.PullOnly), Said(sync));
         Assert.False(Has(pair.B, "z.txt"));
+
+        pair.AOnB = EDIT;
+        pair.LinkB.RightsMoved(DeviceA.Id);
+        Assert.True(await Until(() => Get(pair.B, "z.txt") == "refused"), Said(sync));
+        await Settled(sync);
+        Assert.Equal(HexLinkSyncState.Idle, sync.State);
     }
 
     [Fact]

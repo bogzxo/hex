@@ -183,6 +183,16 @@ internal static class HexLinkFiles
         return ReadAll(stream);
     }
 
+    /// <summary>Asynchronously reads a workspace file with the same sharing as <see cref="ReadShared"/>.</summary>
+    public static async Task<byte[]> ReadSharedAsync(string full, CancellationToken cancel)
+    {
+        using var stream = new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 4096, useAsync: true);
+        using var bytes = new MemoryStream(stream.Length is > 0 and < int.MaxValue ? (int)stream.Length : 0);
+        await stream.CopyToAsync(bytes, cancel).ConfigureAwait(false);
+        return bytes.ToArray();
+    }
+
     // All of a stream, the length it has now a guess only, a file being written may grow or shrink as it's read
     private static byte[] ReadAll(FileStream stream)
     {

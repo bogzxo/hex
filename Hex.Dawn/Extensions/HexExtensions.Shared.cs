@@ -25,9 +25,7 @@ internal sealed partial class HexExtensions
         if (name.Length == 0 || command.Length == 0 || string.IsNullOrEmpty(folder) || Hex.Core.HexAgentProcess.Find(command) is null)
             return Values.Null;
 
-        return Natives.Object(
-            ("command", new StringValue(System.Environment.ProcessPath ?? Path.Combine(Hex.Core.HexHost.ProgramFolder, "Hex.exe"))),
-            ("args", Natives.List(SharedServerArguments(name, folder, chat, System.Environment.ProcessId, command, arguments))));
+        return McpLaunchCommand(SharedServerArguments(name, folder, chat, System.Environment.ProcessId, command, arguments));
     }
 
     /// <summary>What the proxy is started with, its own arguments and after -- the server's command line.</summary>

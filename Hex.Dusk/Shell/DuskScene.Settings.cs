@@ -1,5 +1,7 @@
+using Hex.Core;
 using Hex.Shell;
 
+using Horizon.HIDL.Runtime;
 using Horizon.UI;
 using Horizon.UI.Components;
 
@@ -43,8 +45,10 @@ internal sealed partial class DuskScene
         // Each source keeps the keys of the section it doesn't have, so the two write side by side
         var text = new FileSectionSource(host.Settings.Path, SettingsSections.EDITOR, EditorSettingsCatalog.Text, EditorSettingsCatalog.Usual);
 
-        settingsView = new SettingsWindow([new TerminalSettingsSource(host, EditorSettingsCatalog.THEME), editor, text, new WindowsSource(), new DefaultTerminalSource(said => Notify(said, error: true))], CloseSettings, EditorSettingsCatalog.Parts,
-            sections: EditorSettingsCatalog.Sections, texts: SettingsPageTexts.Make());
+        settingsView = new SettingsWindow(
+            [new TerminalSettingsSource(host, EditorSettingsCatalog.THEME), new EditorSettingsSource(editor), text,
+                new WindowsSource(), new DefaultTerminalSource(said => Notify(said, error: true))],
+            CloseSettings, EditorSettingsCatalog.Parts, sections: EditorSettingsCatalog.Sections, texts: SettingsPageTexts.Make());
 
         // Dusk's window is the terminal's, the other parts fold away the first time it opens and a search puts the
         // terminal's rows a little over the rest
@@ -61,6 +65,56 @@ internal sealed partial class DuskScene
         AddLookPicker(settingsView);
         settingsView.Page.GoToPart(TERMINAL_PART);
         settingsView.Page.Search.Focus();
+    }
+
+    // Dusk writes Dawn's section directly, so it must translate the key at the file boundary itself.
+    private sealed class EditorSettingsSource(FileSectionSource file) : ISettingsSource
+    {
+        public string Section => file.Section;
+        public IReadOnlyList<UISetting> Settings => file.Settings;
+        public bool IsModified(string key) => file.IsModified(key);
+        public IRuntimeValue? Default(string key) => file.Default(key);
+        public void Reset(string key) => file.Reset(key);
+        public void Press(string key, int which) => file.Press(key, which);
+
+        public IRuntimeValue? Get(string key) => key == EditorSettingsCatalog.PREDICTION_KEY
+            ? new StringValue(ReadPredictionKey(file.Get(key)) ?? string.Empty)
+            : file.Get(key);
+
+        public void Set(string key, IRuntimeValue value)
+        {
+            if (key != EditorSettingsCatalog.PREDICTION_KEY)
+            {
+                file.Set(key, value);
+                return;
+            }
+
+            if (value is not StringValue text)
+                return;
+
+            string entered = text.Value.Trim();
+            // Submitting the empty box must preserve an unreadable key. Reset can still remove it explicitly.
+            if (entered.Length == 0 && ReadPredictionKey(file.Get(key)) is null)
+                return;
+
+            file.Set(key, new StringValue(PredictionKey.Wrap(entered)));
+        }
+
+        private static string? ReadPredictionKey(IRuntimeValue? value)
+        {
+            if (value is not StringValue stored)
+                return string.Empty;
+
+            try
+            {
+                string key = PredictionKey.Unwrap(stored.Value, out bool failed);
+                return failed ? null : key;
+            }
+            catch (HexLinkSecretsUnavailableException)
+            {
+                return null;
+            }
+        }
     }
 
     private void CloseSettings()

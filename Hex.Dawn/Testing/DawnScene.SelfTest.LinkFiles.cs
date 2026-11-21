@@ -25,9 +25,9 @@ internal sealed partial class DawnScene
 
     private void TestLinkFiles(HexPointerScript test)
     {
-        string home = LinkTestFolder("hex-link-files-a-");
-        string peerHome = LinkTestFolder("hex-link-files-b-");
-        string mine = Path.Combine(LinkTestFolder("hex-link-files-repo-"), LINK_SYNC_FOLDER);
+        string home = LinkTestFolder("hex-link-files-a-", test);
+        string peerHome = LinkTestFolder("hex-link-files-b-", test);
+        string mine = Path.Combine(LinkTestFolder("hex-link-files-repo-", test), LINK_SYNC_FOLDER);
         string theirs = Path.Combine(peerHome, LINK_SYNC_FOLDER);
         string peerWork = Path.Combine(peerHome, LINK_PEER_FOLDER);
         LinkPairingAsk? asked = null;
@@ -50,15 +50,18 @@ internal sealed partial class DawnScene
                 return;
             }
 
+            LinkTestSeedSymbol(theirs);
             StopLink();
             linkTestExtraFolders = [mine];
-            if (!StartLink(port: 0, home: home, discover: false))
+            if (!StartLink(port: 0, home: home, loopbackOnly: true))
                 return;
             linkByTest = true;
             LinkOpenPairing(TimeSpan.FromMinutes(3));
             LinkStartPeer(peerHome, $"127.0.0.1:{LinkPort}", new Dictionary<string, string> { [LINK_TEST_FOLDER] = theirs, [LINK_TEST_SECONDS] = "420" });
         });
         test.Check("link-files: the same repository here and in B's home, B started on its clone", () => why is null && linkTestPeer is not null);
+
+        test.Check("link-files: A listens on IPv4 loopback without LAN discovery", () => LinkTestBoundOnlyToLoopback);
 
         // Paired and linked, as the link part does it
         test.WaitFor(() => LinkPairingPending is not null || linkTestPeer is { HasExited: true }, 90.0f);
@@ -75,6 +78,8 @@ internal sealed partial class DawnScene
             peerId = peer?.Device.Id;
             return peer is { Granted: HexLinkRights.View | HexLinkRights.Steer | HexLinkRights.Edit } && peer.Workspace.Folders[0].Name == LINK_SYNC_FOLDER;
         });
+
+        TestLinkSymbolNavigation(test, () => peer);
 
         // Sync on: both trees compared, what only one side had copied to the other, what git ignores left where it is
         test.Run(() =>
@@ -174,8 +179,18 @@ internal sealed partial class DawnScene
         test.Settle(0.3f);
         test.Check("link-files: B's caret is drawn in A's open tab of the file, in B's colour with its name", () =>
             Context.Documents.Find(readme) is { } open && peerId is not null
-            && open.Editor.RangeHighlights.Any(range => range is { Line: 0, Column: 2 } && range.Colour.X == LinkDeviceColour(peerId).X)
-            && open.Editor.InlineHints.Any(hint => hint.Text.Contains(LINK_PEER_NAME, StringComparison.Ordinal)));
+            && open.Editor.RemoteCarets.Any(caret => caret is { Line: 0, Column: 2, Label: LINK_PEER_NAME } && caret.Id == peerId
+                && caret.Colour == LinkDeviceColour(peerId)));
+        test.WaitFor(() => Context.Documents.Find(readme)?.Editor.RemoteCarets.Any(remote => remote.Id == peerId && remote.PointerColumn == 4) == true, 5);
+        test.Check("link-files: B's mouse pointer reaches A independently of its text caret", () =>
+            Context.Documents.Find(readme)?.Editor.RemoteCarets.Any(remote => remote.Id == peerId
+                && remote is { Line: 0, Column: 2, PointerLine: 0, PointerColumn: 4 }) == true);
+        test.Run(() => _ = peer?.Write($"{LINK_PEER_FOLDER}/{LINK_FLAG_POINTER_AWAY}", null, [1]));
+        test.WaitFor(() => Context.Documents.Find(readme)?.Editor.RemoteCarets.Any(remote =>
+            remote.Id == peerId && remote.PointerLine is null) == true, 8);
+        test.Check("link-files: leaving the document hides B's pointer and keeps its caret", () =>
+            Context.Documents.Find(readme)?.Editor.RemoteCarets.Any(remote => remote.Id == peerId
+                && remote is { Line: 0, Column: 2, PointerLine: null, PointerColumn: null }) == true);
         test.Run(() =>
         {
             if (Context.Documents.Find(readme) is { } open)
@@ -298,7 +313,7 @@ internal sealed partial class DawnScene
     // B's repository cloned into a new folder over the link, then a commit made on B fetched into refs/remotes/hex-b
     private void TestLinkRepository(HexPointerScript test, Func<HexLinkPeer?> peer, string mine, string theirs)
     {
-        string into = Path.Combine(LinkTestFolder("hex-link-clone-"), "cloned");
+        string into = Path.Combine(LinkTestFolder("hex-link-clone-", test), "cloned");
         Task<string?>? cloned = null;
         Task<string>? fetched = null;
         string? theirHead = null;

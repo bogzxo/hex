@@ -35,6 +35,7 @@ public sealed class HexLinkTransportTests : IDisposable
     {
         (HexLinkConnection dialled, HexLinkConnection accepted) = await Link();
 
+        Assert.Equal(IPAddress.Loopback, mac.Transport.ListeningAddress);
         Assert.Equal(mac.Device.Id, dialled.Device.Id);
         Assert.Equal("Mac", dialled.Device.Name);
         Assert.True(dialled.Dialled);

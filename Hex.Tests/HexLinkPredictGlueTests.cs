@@ -113,6 +113,54 @@ public sealed class HexLinkPredictGlueTests : IDisposable
     }
 
     [Fact]
+    public async Task Changing_serving_devices_drops_the_ready_answer_and_does_not_reuse_its_cache()
+    {
+        var document = new object();
+        var engine = new PredictionEngine(TimeProvider.System)
+        {
+            Options = () => PredictionTestKit.Options() with { Provider = PredictionProviders.LINK },
+            Snapshot = asked => new PredictionSnapshot(asked, 1, "src/a.cs", "csharp", ["int x = "], 0, 8),
+        };
+
+        async Task Ask()
+        {
+            engine.PredictNow(document);
+            engine.Tick();
+            await engine.Running.WaitAsync(TimeSpan.FromMilliseconds(WAIT_MS));
+        }
+
+        var original = new ScriptedProvider("42;");
+        Share(original);
+        using (Linked first = await Linked.Up(HexLinkRights.Predict))
+        {
+            engine.Edited(document, 1);
+            await Ask();
+            Assert.False(Assert.IsType<PredictionResult>(engine.Take()).FromCache);
+            await Ask();
+            Assert.True(Assert.IsType<PredictionResult>(engine.Take()).FromCache);
+            await Ask();
+            Assert.Equal(1, original.Asked);
+        }
+
+        HexPredictionRelay.Remote = null;
+        engine.LinkSourceChanged();
+        Assert.Null(engine.Take());
+        await Ask();
+        Assert.Null(engine.Take());
+        Assert.Equal(PredictionStatus.Refused, engine.Status);
+
+        var replacement = new ScriptedProvider("17;");
+        Share(replacement);
+        using Linked second = await Linked.Up(HexLinkRights.Predict);
+        engine.LinkSourceChanged();
+        await Ask();
+        var answer = Assert.IsType<PredictionResult>(engine.Take());
+        Assert.Equal("17;", Assert.Single(answer.Edits).Text);
+        Assert.False(answer.FromCache);
+        Assert.Equal(1, replacement.Asked);
+    }
+
+    [Fact]
     public async Task A_cancel_on_the_laptop_reaches_the_desktops_provider_at_once()
     {
         var provider = new ScriptedProvider((_, cancel) => ScriptedProvider.Pieces(["a"], true, cancel));

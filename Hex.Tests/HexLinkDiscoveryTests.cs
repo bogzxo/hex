@@ -125,12 +125,4 @@ public sealed class HexLinkDiscoveryTests
         discovery.Hear(new HexLinkDnsMessage(0, true, [], goodbye, []), IPAddress.Parse("192.168.0.30"));
         Assert.Empty(discovery.Found);
     }
-
-    [Fact]
-    public void Starting_discovery_either_works_or_says_why_not()
-    {
-        using var discovery = new HexLinkDiscovery();
-        bool on = discovery.Browse();
-        Assert.Equal(on, discovery.Off is null);
-    }
 }

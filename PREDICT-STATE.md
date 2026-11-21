@@ -27,8 +27,25 @@ Test lines (last runs):
   is typed goes into the code where the number was"), then 572 of 572 on a rerun with the same build: flaky, not
   compared against a base build.
 
-Left / next step:
-- Run the prediction suite a few more times for the frame-time check's flakiness; if it repeats, look at
-  CancellationTokenSource.Cancel on the editor's thread in PredictionEngine.Stop (core) as a cause.
-- Rebase/merge onto feat/edit-prediction 02b8d6a (Zeta2Format change) and rerun.
-- Diagnostic Console lines in the self test (ghost/Tab) can be trimmed.
+Development checkout:
+- Glue and the smaller Zeta 2 editable region (`02b8d6a`) are both present in the `74e67ef` merge.
+- `PredictionEngine.Stop` now marks a request cancelled immediately and runs registered cancellation callbacks
+  off the editor thread. Synchronous callbacks were a possible cause of the frame-time spike.
+
+Next:
+- Repeat the prediction frame-time check to see whether the spike recurs. The results above predate this change.
+- The end-to-end model checks in `docs/edit-prediction-plan.md` are still pending.
+- The self-test still has diagnostic output for the ghost text and Tab.
+
+Dusk prediction settings:
+- Dusk's editor settings source now decodes the API key for the masked field and protects replacements with the same
+  codec Dawn uses. Existing keys entered directly in the settings file can still be edited. Clearing a readable key or
+  resetting the row restores the environment fallback.
+- An unreadable key leaves the field blank. Submitting it blank or editing another setting preserves the stored entry.
+  The user can replace it or remove it explicitly with Reset.
+- Reviewed the settings flow and diff. Runtime verification is pending.
+
+Dawn prediction typing:
+- Stepping over an auto-closed character can rebase the ghost caret without changing the document. Dawn records that
+  caret when the editor reports typed-through progress. For a text change, Dawn checks whether the editor still has
+  the prediction after processing the edit. No typed-through flag carries over to a later edit.

@@ -157,7 +157,7 @@ internal sealed class HexLinkTree
         long written = info.LastWriteTimeUtc.Ticks;
         if (hashes.TryGetValue(full, out var known) && known.Length == info.Length && known.Written == written)
             return (known.Hash, known.Text, known.Eol);
-        byte[] bytes = File.ReadAllBytes(full);
+        byte[] bytes = HexLinkFiles.ReadShared(full);
         string hash = HexLinkFiles.Hash(bytes);
         var (text, eol) = HexLinkSync.TextAndEol(bytes);
         hashes[full] = (info.Length, written, hash, text, eol);

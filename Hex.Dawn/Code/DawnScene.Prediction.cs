@@ -35,9 +35,6 @@ internal sealed partial class DawnScene
     private string[]? predictionShownLines;
     private string predictionShownPath = string.Empty;
 
-    // Set by the editor when the character just typed was the ghost text's next, read by the edit that follows it
-    private bool predictionTypedThrough;
-
     // A prediction taken: its edit going into the history off the editor's thread, the next asked for once it's in
     private Task? predictionAccepting;
     private HexDocument? predictionAcceptedIn;
@@ -69,24 +66,26 @@ internal sealed partial class DawnScene
     {
         CodeEditor editor = prepared.Editor;
         editor.OnPredictionEnded = taken => PredictionEnded(prepared, taken);
-        editor.OnPredictionTypedThrough = () => predictionTypedThrough = true;
+        editor.OnPredictionTypedThrough = () =>
+        {
+            // Stepping over an auto-closed character moves the ghost without a text change.
+            if (predictionShownIn == prepared)
+                predictionShownCaret = editor.Document.Caret;
+        };
     }
 
     /// <summary>
-    /// A document typed into (CodeChanged): the engine told its version and whether the edit typed through the ghost text,
-    /// which keeps it. Allocates nothing.
+    /// Tell the engine which document version changed and whether the prediction survived the edit.
     /// </summary>
     private void PredictionEdited(HexDocument changed)
     {
-        bool through = predictionTypedThrough;
-        predictionTypedThrough = false;
         if (changed != document || !PredictionSettings.On(settings))
             return;
 
         // An edit the prediction is still showing after was its own, typed through or a word of it taken (Ctrl+Right):
         // whatever ended it would have said so first
         UITextDocument text = changed.Editor.Document;
-        through = predictionShownIn == changed && (through || changed.Editor.HasPrediction);
+        bool through = predictionShownIn == changed && changed.Editor.HasPrediction;
         if (through)
         {
             predictionShownVersion = text.Version;

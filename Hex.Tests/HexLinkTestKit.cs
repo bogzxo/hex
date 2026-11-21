@@ -182,6 +182,8 @@ internal sealed class LinkServices : IHexLinkServices, IDisposable
 
     public HexLinkWorkspace Workspace { get; set; }
 
+    public HexLinkDocuments Documents { get; } = new();
+
     public HexHubSnapshot Fleet => Hub.Snapshot;
 
     public IReadOnlyDictionary<int, HexLinkChatExtra> FleetExtras { get; set; } = new Dictionary<int, HexLinkChatExtra>();

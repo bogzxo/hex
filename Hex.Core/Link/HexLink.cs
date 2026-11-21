@@ -80,6 +80,11 @@ internal sealed class HexLink(IHexLinkServices services) : IDisposable
             if (!host.Told(method, parameters))
                 peer.Told(method, parameters);
         };
+        host.DirectlyLinked = id =>
+        {
+            lock (links)
+                return links.Any(link => link.Session.Connection.Device.Id == id);
+        };
         host.PresenceSaid = Said;
         peer.Changed = () => Changed?.Invoke();
         session.Closed += (_, why) => Gone(joined, why);

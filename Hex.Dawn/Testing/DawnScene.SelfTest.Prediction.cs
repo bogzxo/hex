@@ -175,12 +175,12 @@ internal sealed partial class DawnScene
         PressKeys(test, "Alt+L");
         test.Check("prediction: Alt+L takes it", () => Line(9) == "        if (true)" && Line(10) == "        {" && Line(11) == "        }");
 
-        // Ctrl+Right takes a word of it, Escape lets go of the rest and nothing more is asked
+        // The platform's next-word shortcut takes a word, then Escape lets go of the rest.
         Start(GREETER.Replace("Greeter", "Words"), 4, 22, Answer("Out.WriteLine(1);"));
         Type(".");
         test.WaitFor(() => code.HasPrediction, 10.0f);
-        PressKeys(test, "Ctrl+Right");
-        test.Check("prediction: Ctrl+Right takes the next word", () => Line(4) == "        System.Console.Out" && Ghost() == ".WriteLine(1);");
+        PressKeys(test, OperatingSystem.IsMacOS() ? "Alt+Right" : "Ctrl+Right");
+        test.Check("prediction: the next-word shortcut takes the next word", () => Line(4) == "        System.Console.Out" && Ghost() == ".WriteLine(1);");
         test.Run(() => requests = server.Requests);
         PressKeys(test, "Escape");
         test.Settle(0.4f);
@@ -304,7 +304,13 @@ internal sealed partial class DawnScene
         Type(".");
         test.WaitFor(() => predictions.Status == PredictionStatus.Unreachable, 15.0f);
         test.Wait();
-        test.Check("prediction: a port nothing listens on says it can't reach the server", () => ItemSays("prediction.item_unreachable"));
+        test.Check("prediction: a port nothing listens on says it can't reach the server", () =>
+        {
+            bool unreachable = ItemSays("prediction.item_unreachable");
+            if (!unreachable)
+                Console.WriteLine($"[Hex self-test] prediction: dead port yielded {predictions.Status} ({predictions.StatusText}); item: {predictionItem.Text}");
+            return unreachable;
+        });
         Type("Out");
         test.Check("prediction: and the editor types on", () => Line(4) == "        System.Console.Out");
 

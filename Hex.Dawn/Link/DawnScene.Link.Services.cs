@@ -25,6 +25,8 @@ internal sealed partial class DawnScene
             set => workspace = value;
         }
 
+        public HexLinkDocuments Documents { get; } = new();
+
         public HexHubSnapshot Fleet => hex.hub.Snapshot;
 
         public IReadOnlyDictionary<int, HexLinkChatExtra> FleetExtras

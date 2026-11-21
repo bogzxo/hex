@@ -9,7 +9,7 @@ Decided with the person (2026-11-21):
 
 - **Shared code, v1:** the remote workspace (browse, search, open, save back with a conflict check), presence
   (who has what open, follow them), and the repository handed over by git (clone or fetch over the link, a patch
-  offered). Live character-by-character co-editing is a later phase (section 9).
+  offered). Development also supports live co-editing of one text buffer (section 5.7).
 - **Reach:** the LAN, found by mDNS, or an address typed in, which also works over a VPN the person runs
   (Tailscale, WireGuard). No relay, no server of ours.
 - **Rights:** asked at every pairing, on both machines, changeable per device afterwards.
@@ -219,9 +219,10 @@ answer as another machine's. So an agent on the Mac can read and search the PC's
 message one or start one there, as far as the PC allowed the Mac.
 
 ### 5.3 The remote workspace
-**Link › Open Remote File** lists the other workspace from its index (`hex_files`), a pick reads it with
-`fs/read` into `data/link/remote/<device>/<folder>/<path>` and opens that as a tab whose title says whose it is.
-Search and go-to-symbol over the remote workspace are `hex_search` and `hex_symbols` over `tools/call`.
+**Link › Open Remote File** browses folders with `fs/list` and finds files by name or path with `hex_files`.
+Picking a remote file reads it with `fs/read` into `data/link/remote/<device>/<folder>/<path>` and opens a tab
+whose title names the device. **Go to Symbol** uses `hex_symbols` over `tools/call` and opens the selected
+declaration at its line. Peers advertising `link_locations` return the host's wire path and zero-based line for each declaration. This distinguishes identically named roots and directories even when their display paths coincide. Older peers still return text rows. The `hex_search` tool is also available over `tools/call` for text search.
 
 **Saving** a remote tab sends `fs/write` with the hash the file had when it was read. The host writes it through
 the same path `hex_write` takes (an open tab with unsaved changes is changed in the editor, undo kept).
@@ -296,6 +297,33 @@ In the code: `HexLinkHost.Predict.cs`, `HexLinkPeer.Predict.cs` (`ServesPredicti
 `DawnScene.LinkPredict.cs`: `LinkPredictServing` and `LinkPredictServe`, which the prediction side binds, and
 `LinkPredictSource` with `LinkPredictSourceChanged`, which it reads to send its prompts to another machine.
 
+### 5.7 Editing a shared document
+
+Pair and connect the devices first. The host grants **Edit** to each guest who will work in the document. A peer
+with **View** may read the shared buffer, including unsaved changes. Grant **View** in both directions to see each
+other's presence.
+
+1. On the host, open a local workspace text file and choose **Link: Host shared document {path}** in the command
+   palette. Give guests the displayed path, such as `project/src/App.cs`.
+2. On a guest, choose **Link: Join shared document on {device}** and enter that path. Hex opens a local working copy.
+   Both tabs exchange unsaved edits. The host saves the original file from the host tab. A guest save writes the
+   local copy.
+3. Use **Link: Leave shared document {path}** to stop. The host ends the session for everyone. A guest detaches
+   its tab and keeps its text.
+
+The caret carries the device name and colour, and the selection uses the same colour. The mouse pointer appears
+as a small triangle at the nearest text position and disappears when it leaves the text editor. Changes to these
+indicators are sent at most twice a second.
+
+If overlapping edits conflict, Hex keeps the local draft open and pauses sharing from that tab. Choose
+**Link: Compare shared version with my draft**, reconcile the draft in the editing tab, then choose
+**Link: Resume with my edited draft**. You can also leave and keep the draft. The host orders simultaneous
+insertions at the same position by acceptance order.
+
+Each Hex editor can host or join one shared text buffer at a time. A buffer may contain up to 131,072 UTF-16 code
+units. The host keeps the last 32 revisions for merging. A draft based on an older revision can require manual
+reconciliation.
+
 ## 6. UI
 
 - **Status bar.** A link item while Link is on: how many devices are connected, breathing while one is steering.
@@ -318,7 +346,7 @@ In the code: `HexLinkHost.Predict.cs`, `HexLinkPeer.Predict.cs` (`ServesPredicti
 | TLS | SChannel, 1.3 | Apple's, 1.2 with .NET 11 | OpenSSL, 1.3 |
 | Key protection | DPAPI | Keychain, else 0600 file | libsecret, else 0600 file |
 | mDNS | Own responder on 5353 with address reuse, beside the system's | The same beside mDNSResponder | The same beside Avahi |
-| Firewall | Windows asks once when the listener opens; said in the window | Local Network permission for a bundled app | Whatever the distribution runs |
+| Firewall | A new Hex executable can prompt when it opens LAN-facing Link sockets. Local-only suites bind IPv4 loopback and skip mDNS. | Local Network permission for a bundled app | Whatever the distribution runs |
 | Everything else | Shared | Shared | Shared |
 
 Android (`HexHost`): can dial and watch, never listens (`HexHost.Listens` false).
@@ -336,8 +364,7 @@ Android (`HexHost`): can dial and watch, never listens (`HexHost.Listens` false)
 
 ## 9. Later
 
-Live co-editing of one buffer (operations transformed against the host's order, the host's buffer the truth), a
-relay for machines with no route between them, the debugger shared read-only, a tablet as a watcher, terminals.
+A relay for machines with no route between them, the debugger shared read-only, a tablet as a watcher, terminals.
 
 ## 10. Risks
 
@@ -404,4 +431,32 @@ engine (#112: bb03029, c61191b). 408 unit tests in the Link, settings, MCP and a
   fallback is what runs there).
 - mDNS from the Mac to the PC wasn't heard when the Mac's process was started over ssh; an address typed in works.
 - The `mcp` self test fails 6 of 44 on the Mac (keys and file writes), not a Link suite, not looked into.
-- Later than v1: live co-editing, a relay, the debugger shared.
+- Later work includes a relay and a shared debugger.
+
+### Development follow-up
+
+Development includes folder browsing, file-name search, and presence with Follow. From **Link › Open Remote File**
+for a device that grants View, choose **Go to Symbol** at the workspace root when the peer offers `hex_symbols`.
+The results use the shared workspace paths and show declaration names and line numbers. Picking one opens the file
+through the existing remote-file workflow and moves the caret to its declaration. A synced file opens locally.
+The host continues to check View for symbol queries and remote reads, and Edit for writes. Symbol navigation uses
+folder names from the index, so use folder browsing to distinguish roots that share a directory name.
+
+### Windows firewall and local tests
+
+The local `link`, `link-ui`, and `link-files` suites dial `127.0.0.1`. Both the host and its spawned
+`link-peer` used to open wildcard TCP listeners (`[::]` dual stack or `0.0.0.0` as a fallback), even with
+discovery off. They now request an ephemeral listener bound to `127.0.0.1` and skip LAN discovery. Each suite
+checks the actual bound address and checks that no discovery socket was started. The transport and pairing unit
+test fixture uses the same loopback bind.
+
+The discovery unit suite used to call `Browse()`, which binds `0.0.0.0:5353` and joins the mDNS multicast
+group. Its packet encoding, answers, and browser state are covered without sockets. The explicit two-device
+`link-nearby` suite asserts that the real mDNS browser starts without a socket error and then checks that it
+hears the second device. `link-cross`, standalone `link-peer` by default, and
+normal Link remain available across devices. Their LAN-facing sockets can still prompt on Windows, depending on
+the executable's firewall rules. See [two-machine test evidence](hex-link-test-evidence.md).
+
+Combined runs queue all suites before executing their steps. Each Link suite now creates and registers its temp
+folders while its own steps run, so the previous suite's cleanup cannot remove the next suite's Git working
+directory. Cleanup also stops a suite-owned listener if that suite times out before creating any folders.

@@ -33,11 +33,36 @@ internal sealed partial class DawnScene
         int listen = int.TryParse(System.Environment.GetEnvironmentVariable(LINK_TEST_LISTEN), NumberStyles.None, CultureInfo.InvariantCulture, out int port) ? port : 0;
         float seconds = float.TryParse(System.Environment.GetEnvironmentVariable(LINK_TEST_SECONDS), NumberStyles.Float, CultureInfo.InvariantCulture, out float asked) ? asked : 300.0f;
         string? agent = System.Environment.GetEnvironmentVariable(LINK_TEST_AGENT) is { Length: > 0 } wanted ? wanted : null;
+        bool loopbackOnly = System.Environment.GetEnvironmentVariable(LINK_TEST_LOOPBACK) == "1";
+        bool documentSoak = System.Environment.GetEnvironmentVariable("HEX_LINK_TEST_DOCUMENT_SOAK") == "1";
+        bool documents = documentSoak || System.Environment.GetEnvironmentVariable("HEX_LINK_TEST_DOCUMENTS") == "1";
+        bool recovery = System.Environment.GetEnvironmentVariable("HEX_LINK_TEST_DOCUMENT_RECOVERY") == "1";
+        bool worktree = System.Environment.GetEnvironmentVariable("HEX_LINK_TEST_WORKTREE") == "1";
+        bool prediction = System.Environment.GetEnvironmentVariable("HEX_LINK_TEST_PREDICTION") == "1";
+        bool files = System.Environment.GetEnvironmentVariable("HEX_LINK_TEST_FILES") == "1";
+        bool[] scenarios = [documents, recovery, worktree, prediction, files];
+        int selectedScenarios = scenarios.Count(selected => selected);
+        bool workspaceOnly = selectedScenarios > 0;
+        bool coding = System.Environment.GetEnvironmentVariable("HEX_LINK_TEST_CODING") == "1";
+        // By default both sides make a real turn. A one-way run makes only the caller's turn and checks the same file from both sides.
+        string? codingRole = System.Environment.GetEnvironmentVariable("HEX_LINK_TEST_CODING_ROLE");
+        bool codingCaller = codingRole == "caller", codingReceiver = codingRole == "receiver";
+        if (codingRole is not null && (!coding || (!codingCaller && !codingReceiver)))
+            throw new InvalidOperationException("The coding role must be caller or receiver and requires HEX_LINK_TEST_CODING=1.");
+        if (selectedScenarios > 1 || (workspaceOnly && (agent is not null || coding)))
+            throw new InvalidOperationException("Choose one link-cross scenario.");
+        if (coding && (!loopbackOnly || (!codingReceiver && agent is null) || (codingReceiver && agent is not null)))
+            throw new InvalidOperationException("Coding requires loopback. Set HEX_LINK_TEST_AGENT on each side starting an agent.");
         string model = System.Environment.GetEnvironmentVariable(LINK_TEST_MODEL) is { Length: > 0 } named ? named : "haiku";
         string? mitm = System.Environment.GetEnvironmentVariable(LINK_TEST_MITM) is { Length: > 0 } middle ? middle : null;
         string marker = System.Environment.GetEnvironmentVariable(LINK_TEST_MARKER) is { Length: > 0 } said ? said : "HEXLINK-PLAINTEXT-MARKER-7731";
         string myName = System.Environment.GetEnvironmentVariable(LINK_TEST_NAME) is { Length: > 0 } calledBy ? calledBy : "Hex " + System.Environment.MachineName;
+        var pairingRights = prediction ? HexLinkRights.Predict : HexLinkRights.View | HexLinkRights.Edit;
+        if (!workspaceOnly)
+            pairingRights |= HexLinkRights.Steer;
         bool dialler = dial is not null;
+        if (coding && dial is not null && (!TryLinkAddress(dial, HexLinkTransport.DEFAULT_PORT, out string codingHost, out _) || codingHost != "127.0.0.1"))
+            throw new InvalidOperationException("The coding fixture dials 127.0.0.1 only.");
         string role = dialler ? "dialler" : "listener";
         string work = Path.Combine(System.Environment.GetEnvironmentVariable("HEX_HOME") is { Length: > 0 } home ? home : Path.GetTempPath(), LINK_CROSS_FOLDER);
         string status = Path.Combine(work, LINK_CROSS_STATUS);
@@ -53,6 +78,9 @@ internal sealed partial class DawnScene
         Exception? terminalRefusal = null, conflict = null, notAllowed = null, strangerRefusal = null, mitmRefusal = null;
         string? writtenHash = null, myCode = null, otherId = null, agentReply = null, agentWhy = null;
         string theirs = string.Empty;
+        const string codingFile = "LinkProbe.cs";
+        string codingPath = Path.Combine(work, codingFile);
+        byte[]? remoteCodingBytes = null;
         bool cut = false, redialRefused = false, gotFile = false, droppedHere = false;
         var stop = new CancellationTokenSource();
 
@@ -71,7 +99,7 @@ internal sealed partial class DawnScene
         {
             myCode = pairing.Code;
             Say($"pairing with {pairing.Other.Name} ({pairing.Other.Fingerprint}) at {pairing.Address}, code {pairing.Code}");
-            return Task.FromResult<HexLinkRights?>(HexLinkRights.View | HexLinkRights.Steer | HexLinkRights.Edit);
+            return Task.FromResult<HexLinkRights?>(pairingRights);
         }
 
         test.Run(() =>
@@ -79,27 +107,35 @@ internal sealed partial class DawnScene
             if (Directory.Exists(work))
                 Directory.Delete(work, recursive: true);
             Directory.CreateDirectory(work);
-            File.WriteAllText(status, string.Empty);
+            if (files && !dialler)
+                PrepareLinkCrossFiles(work);
             explorer.OpenFolder(work);
+            if (!workspaceOnly)
+                File.WriteAllText(status, string.Empty);
             settings.LinkName = myName;
 
-            standIn = new HexAgentChat(++agentChatsMade, "link_stand_in") { Name = LINK_CROSS_CHAT };
-            standIn.Ask($"Build the thing on {myName}, {marker}");
-            standIn.Say("Working on it, the tests next.");
-            standIn.Approval("Run the tests", "dotnet test", allowed =>
+            if (!workspaceOnly)
             {
-                Say($"approval {(allowed ? "allowed" : "denied")}");
-                Mark($"approval {(allowed ? "allowed" : "denied")}");
-            });
-            agentChats.Add(standIn);
-            string rows = LinkTestRows(standIn);
-            Say($"rows {rows}");
-            Mark($"rows {LinkCrossHash(rows)}");
+                standIn = new HexAgentChat(++agentChatsMade, "link_stand_in") { Name = LINK_CROSS_CHAT };
+                standIn.Ask($"Build the thing on {myName}, {marker}");
+                standIn.Say("Working on it, the tests next.");
+                standIn.Approval("Run the tests", "dotnet test", allowed =>
+                {
+                    Say($"approval {(allowed ? "allowed" : "denied")}");
+                    Mark($"approval {(allowed ? "allowed" : "denied")}");
+                });
+                agentChats.Add(standIn);
+                string rows = LinkTestRows(standIn);
+                Say($"rows {rows}");
+                Mark($"rows {LinkCrossHash(rows)}");
+            }
 
             StopLink();
-            if (!StartLink(port: listen, discover: false))
+            if (!StartLink(port: listen, discover: false, loopbackOnly: loopbackOnly))
                 return;
             linkByTest = true;
+            if (documents && !dialler)
+                LinkCrossPublishDocument(work, documentSoak ? LINK_DOCUMENT_SOAK_START : "seed");
             Say($"{role}, up as {myName} ({LinkDevice?.Fingerprint}) on port {LinkPort}, {System.Runtime.InteropServices.RuntimeInformation.OSDescription}, {System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}");
             LinkRedialRefused = (_, why) =>
             {
@@ -132,10 +168,11 @@ internal sealed partial class DawnScene
             {
                 myCode = pending.Code;
                 Say($"pairing with {pending.Other.Name} ({pending.Other.Fingerprint}) at {pending.Address}, code {pending.Code}");
-                pending.Decide(HexLinkRights.View | HexLinkRights.Steer | HexLinkRights.Edit);
+                pending.Decide(pairingRights);
             }
 
-            return LinkPeers.FirstOrDefault() is { Workspace.Folders.Count: > 0 } || paired is { IsCompleted: true, Result.Paired: false };
+            return (prediction ? LinkPeers.FirstOrDefault() is not null : LinkPeers.FirstOrDefault() is { Workspace.Folders.Count: > 0 })
+                || paired is { IsCompleted: true, Result.Paired: false };
         }, seconds);
         test.Check("link-cross: paired with the other machine and linked", () =>
         {
@@ -147,9 +184,12 @@ internal sealed partial class DawnScene
                 return false;
             }
 
-            Mark($"code {myCode}");
             var ssl = LinkTransportOf(peer.Device.Id)?.Stream as SslStream;
             Say($"linked to {peer.Device.Name} ({peer.Device.Fingerprint}) os {peer.Device.Os} arch {peer.Device.Arch} version {peer.Device.Version}, at {LinkTransportOf(peer.Device.Id)?.Address}, over {ssl?.SslProtocol} {ssl?.NegotiatedCipherSuite}, it lets this one {string.Join(',', HexLinkTrust.RightsNames(peer.Granted))}");
+            if (workspaceOnly)
+                return peer.Granted == pairingRights;
+
+            Mark($"code {myCode}");
             Mark($"tls {ssl?.SslProtocol} {ssl?.NegotiatedCipherSuite}");
             // The other's status read over the link from now on, twice a second
             poll = Task.Run(async () =>
@@ -171,6 +211,24 @@ internal sealed partial class DawnScene
             });
             return true;
         });
+        if (workspaceOnly)
+        {
+            if (prediction)
+                TestLinkCrossPrediction(test, () => peer, dialler, work);
+            else if (documentSoak)
+                TestLinkCrossDocumentSoak(test, () => peer, dialler, work);
+            else if (documents)
+                TestLinkCrossDocuments(test, () => peer, dialler, work);
+            else if (recovery)
+                TestLinkCrossRecovery(test, () => peer, dial, work);
+            else if (files)
+                TestLinkCrossFiles(test, () => peer, dialler, work);
+            else
+                TestLinkCrossWorktree(test, () => peer, dial, work);
+            test.Run(StopLink);
+            return;
+        }
+
         test.WaitFor(() => Theirs("code ") is not null, 30.0f);
         test.Check("link-cross: both machines showed the same six-digit code", () =>
         {
@@ -272,7 +330,9 @@ internal sealed partial class DawnScene
                 {
                     try
                     {
-                        (agentReply, agentWhy) = await LinkCrossAgent(other, agent, model, Say);
+                        (agentReply, agentWhy) = await LinkCrossAgent(other, agent, model, coding, Say);
+                        if (codingCaller && agentWhy is null)
+                            remoteCodingBytes = (await other.Read($"{LINK_CROSS_FOLDER}/{codingFile}")).Bytes;
                     }
                     catch (Exception e)
                     {
@@ -283,11 +343,24 @@ internal sealed partial class DawnScene
             test.WaitFor(() =>
             {
                 LinkCrossIncoming(work, myFile, ref gotFile, Mark);
-                return agentRun is { IsCompleted: true };
+                return agentRun is { IsCompleted: true } && (!coding || codingCaller || File.Exists(codingPath));
             }, 420.0f);
-            test.Check($"link-cross: a real {agent} agent started on the other machine replies with that machine's uname", () =>
+            test.Check(coding ? $"link-cross: remote {agent} completed the edit and the fixture has the exact bytes" : $"link-cross: a real {agent} agent started on the other machine replies with that machine's uname", () =>
             {
                 Say($"agent reply: {agentReply ?? "(none)"}{(agentWhy is null ? string.Empty : ", " + agentWhy)}");
+                if (coding)
+                {
+                    byte[]? bytes = remoteCodingBytes;
+                    string? expectedName = peer?.Device.Name;
+                    if (!codingCaller)
+                    {
+                        bytes = File.Exists(codingPath) ? File.ReadAllBytes(codingPath) : null;
+                        expectedName = myName;
+                    }
+
+                    return agentWhy is null && agentReply?.Contains("fixture complete", StringComparison.OrdinalIgnoreCase) == true
+                        && expectedName is not null && LinkCrossCodingBytesMatch(bytes, expectedName);
+                }
                 string expect = peer?.Device.Os switch
                 {
                     "macos" => "Darwin",
@@ -297,6 +370,13 @@ internal sealed partial class DawnScene
                 };
                 return agentReply is not null && agentReply.Contains("pong", StringComparison.OrdinalIgnoreCase) && agentReply.Contains(expect, StringComparison.Ordinal);
             });
+        }
+
+        if (codingReceiver)
+        {
+            test.WaitFor(() => File.Exists(codingPath), 420.0f);
+            test.Check("link-cross: the incoming remote agent wrote the exact local fixture bytes", () =>
+                File.Exists(codingPath) && LinkCrossCodingBytesMatch(File.ReadAllBytes(codingPath), myName));
         }
 
         // Rights: once the other has watched and steered this side, it drops to View here, and this side to View there
@@ -312,7 +392,7 @@ internal sealed partial class DawnScene
             }
 
             return peer?.Granted == HexLinkRights.View && droppedHere;
-        }, agent is null ? 120.0f : 480.0f);
+        }, agent is null && !codingReceiver ? 120.0f : 480.0f);
         test.Run(() => step = peer?.Write($"{LINK_CROSS_FOLDER}/{myFile}", writtenHash, Encoding.UTF8.GetBytes("not allowed\n")).ContinueWith(done => notAllowed = done.Exception?.InnerException, TaskScheduler.Default));
         test.WaitFor(() => step is { IsCompleted: true }, 20.0f);
         test.Check("link-cross: with this side dropped to View by the other, its write is refused as needing edit", () =>
@@ -442,6 +522,7 @@ internal sealed partial class DawnScene
             linkByTest = true;
             Console.WriteLine($"[Hex self-test] link-nearby: up as {myName} ({LinkDevice?.Id[..8]}) on port {LinkPort}, looking for {seconds} s{(LinkNearbyOff is { } off ? ", can't look: " + off : string.Empty)}");
         });
+        test.Check("link-nearby: the mDNS browser started without a socket error", () => linkDiscovery is not null && LinkNearbyOff is null);
         test.WaitFor(() =>
         {
             string said = string.Join("; ", LinkNearby.Select(heard => $"{heard.Name} ({heard.Id8}) port {heard.Port} at {string.Join(',', heard.Addresses)}"));
@@ -495,20 +576,25 @@ internal sealed partial class DawnScene
     // A link's connection to a device, for its TLS stream and address
     private HexLinkConnection? LinkTransportOf(string id) => linkTransport?.LinkTo(id);
 
+    private static bool LinkCrossCodingBytesMatch(byte[]? bytes, string name) =>
+        bytes is not null && bytes.AsSpan().SequenceEqual(Encoding.UTF8.GetBytes($"// {name}\n"));
+
     /// <summary>
     /// A real agent started on the other machine with hex_link_spawn, told to run uname and say what it printed, its
     /// approvals answered from here over the link (a few at most), waited for over the link and its reply read back.
     /// The reply, or null and why.
     /// </summary>
-    private async Task<(string? Reply, string? Why)> LinkCrossAgent(HexLinkPeer other, string agent, string model, Action<string> say)
+    private async Task<(string? Reply, string? Why)> LinkCrossAgent(HexLinkPeer other, string agent, string model, bool coding, Action<string> say)
     {
-        string prompt = "Run the shell command `uname -sm` exactly once. Then reply with exactly one line and nothing else: "
+        string prompt = coding
+            ? $"Use your local Hex MCP hex_write tool to create LinkProbe.cs in the open workspace. The UTF-8 file must have one line terminated by LF, with no BOM. Write the line between BEGIN and END, excluding the markers:\nBEGIN\n// {other.Device.Name}\nEND\nUse no shell and no other writes. Reply with exactly: fixture complete"
+            : "Run the shell command `uname -sm` exactly once. Then reply with exactly one line and nothing else: "
             + "pong from <this machine's host name>: <what uname printed>";
         McpToolResult started = await McpTools.Call("hex_link_spawn", new JsonObject
         {
             ["device"] = other.Device.Name,
             ["prompt"] = prompt,
-            ["name"] = "Link pong",
+            ["name"] = coding ? "Link coding fixture" : "Link pong",
             ["agent"] = agent,
             ["model"] = model
         }, CancellationToken.None);
@@ -522,6 +608,8 @@ internal sealed partial class DawnScene
         DateTime until = DateTime.UtcNow.AddMinutes(6);
         while (DateTime.UtcNow < until)
         {
+            if (coding)
+                await Task.Delay(1000);
             McpToolResult waited = await McpTools.Call("hex_link_call", new JsonObject
             {
                 ["device"] = other.Device.Name,
@@ -530,6 +618,8 @@ internal sealed partial class DawnScene
             }, CancellationToken.None);
             HexLinkRow? row = other.Fleet.FirstOrDefault(each => each.Id == chat);
             say($"waited: {row?.State} {(row?.Waiting == true ? "waiting " : string.Empty)}{waited.AllText().ReplaceLineEndings(" / ")[..Math.Min(300, waited.AllText().Length)]}");
+            if (coding && row is { Waiting: true })
+                return (null, "The coding fixture requires approval.");
             if (row is { Waiting: true } && approvals < 4)
             {
                 approvals++;

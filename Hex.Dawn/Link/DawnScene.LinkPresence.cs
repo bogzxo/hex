@@ -9,18 +9,19 @@ namespace Hex.Dawn;
 // most twice a second (HexLinkPeer coalesces it). Nothing is sent while it stays put and nothing at all while no device
 // is linked. The others' (the wiring keeps the latest of each in LinkPresence) are drawn in a file this machine has open
 // too, mapped by the workspace-relative path: their caret a mark in the device's colour, their selection lit faintly,
-// and their name at the end of the line. Follow opens what a device's person has open and keeps the caret on theirs
+// and their name beside the caret. Follow opens what a device's person has open and keeps the caret on theirs
 // until the person here types or moves it.
 internal sealed partial class DawnScene
 {
     // What was last sent, so a tick that moved nothing sends nothing
     private string linkPresenceSent = string.Empty;
+    private long linkPresenceSampled;
 
     // What was last drawn, so marks are only made again when something of them moved
     private string linkPresenceDrawnKey = string.Empty;
 
     // The marks drawn into each tab, so they're taken out again without touching anybody else's
-    private readonly Dictionary<HexDocument, (IReadOnlyList<UICodeRangeHighlight> Ranges, IReadOnlyList<UICodeHint> Hints)> linkPresenceDrawn = [];
+    private readonly HashSet<HexDocument> linkPresenceDrawn = [];
 
     // The device followed, where the caret was put for it and the version of the text then, to tell the person moving off
     private string? linkFollowing;
@@ -106,8 +107,14 @@ internal sealed partial class DawnScene
     // This machine's caret, when it moved, to the devices that may see here
     private void LinkPresenceSend(IReadOnlyList<HexLinkPeer> peers)
     {
+        long now = Environment.TickCount64;
+        if (linkPresenceSent.Length != 0 && now - linkPresenceSampled < 250)
+            return;
+        linkPresenceSampled = now;
         HexLinkPresence? mine = LinkPresenceHere();
-        string key = mine is null ? "-" : $"{mine.File}:{mine.Line}:{mine.Column}:{mine.ToLine}:{mine.ToColumn}";
+        if (mine is not null && document.Editor.PointerTextPosition is { } pointer)
+            mine = mine with { PointerLine = pointer.Line, PointerColumn = pointer.Column };
+        string key = mine is null ? "-" : $"{mine.File}:{mine.Line}:{mine.Column}:{mine.ToLine}:{mine.ToColumn}:{mine.PointerLine}:{mine.PointerColumn}";
         if (key == linkPresenceSent)
             return;
         linkPresenceSent = key;
@@ -132,6 +139,8 @@ internal sealed partial class DawnScene
     /// <summary>A file here as a wire path, folder-name/relative/path: of a workspace folder, or the file of a remote tab; null otherwise.</summary>
     internal string? LinkWireOf(string path)
     {
+        if (linkDocument is { } shared && shared.Tab.Path is { } sharedPath && PlatformPaths.Same(sharedPath, path))
+            return shared.Base.Path;
         if (linkRemote.TryGetValue(path, out LinkRemoteTab? remote))
             return remote.Wire;
         foreach (HexLinkFolder folder in linkServices?.Workspace.Folders ?? [])
@@ -146,6 +155,8 @@ internal sealed partial class DawnScene
     /// <summary>Where a device's wire path is open here, the local file of a workspace folder of that name or the copy of a remote tab; null when it isn't.</summary>
     private HexDocument? LinkDocumentOf(string deviceId, string wire)
     {
+        if (linkDocument is { } shared && shared.Base.Path == wire && (shared.Peer is null || shared.Peer.Device.Id == deviceId))
+            return shared.Tab;
         foreach (LinkRemoteTab tab in linkRemote.Values)
         {
             if (tab.DeviceId == deviceId && tab.Wire == wire && Context.Documents.Find(tab.Copy) is { } copy)
@@ -171,60 +182,35 @@ internal sealed partial class DawnScene
     // The others' carets drawn into the tabs that have their files, when something of them moved
     private void LinkPresenceDraw()
     {
-        string key = string.Join("|", linkPresence.Values.Select(seen => $"{seen.Device.Id}:{seen.Presence?.File}:{seen.Presence?.Line}:{seen.Presence?.Column}:{seen.Presence?.ToLine}:{seen.Presence?.ToColumn}"))
+        string key = string.Join("|", linkPresence.Values.Select(seen => $"{seen.Device.Id}:{seen.Presence?.File}:{seen.Presence?.Line}:{seen.Presence?.Column}:{seen.Presence?.ToLine}:{seen.Presence?.ToColumn}:{seen.Presence?.PointerLine}:{seen.Presence?.PointerColumn}:{seen.Device.Name}"))
             + "#" + documents.Count;
-        if (key == linkPresenceDrawnKey)
+        if (key == linkPresenceDrawnKey && linkPresenceDrawn.All(documents.Contains))
             return;
         linkPresenceDrawnKey = key;
         LinkPresenceClear();
 
-        var ranges = new Dictionary<HexDocument, List<UICodeRangeHighlight>>();
-        var hints = new Dictionary<HexDocument, List<UICodeHint>>();
+        var carets = new Dictionary<HexDocument, List<UICodeRemoteCaret>>();
         foreach (LinkPresenceSeen seen in linkPresence.Values)
         {
-            if (seen.Presence is not { } where || LinkDocumentOf(seen.Device.Id, where.File) is not { IsText: true } open)
+            if (seen.Presence is not { File: not null } where || LinkDocumentOf(seen.Device.Id, where.File) is not { IsText: true } open)
                 continue;
-            Vector4 colour = LinkDeviceColour(seen.Device.Id);
-            List<UICodeRangeHighlight> marks = ranges.TryGetValue(open, out var had) ? had : ranges[open] = [];
-            // Their caret a narrow block over the character it's before, their selection lit faintly under the text
-            marks.Add(new UICodeRangeHighlight(where.Line, where.Column, 1, colour with { W = 0.55f }));
-            if (where.ToLine is { } toLine && where.ToColumn is { } toColumn)
-            {
-                (int fromLine, int fromColumn, int endLine, int endColumn) = (toLine, toColumn).CompareTo((where.Line, where.Column)) < 0
-                    ? (toLine, toColumn, where.Line, where.Column) : (where.Line, where.Column, toLine, toColumn);
-                for (int line = fromLine; line <= endLine && line - fromLine < 2000; line++)
-                {
-                    int start = line == fromLine ? fromColumn : 0;
-                    int end = line == endLine ? endColumn : int.MaxValue / 2;
-                    if (end > start)
-                        marks.Add(new UICodeRangeHighlight(line, start, end - start, colour with { W = 0.16f }));
-                }
-            }
-
-            (hints.TryGetValue(open, out var named) ? named : hints[open] = []).Add(new UICodeHint(where.Line, $"◂ {seen.Device.Name}"));
+            if (!carets.TryGetValue(open, out var participants))
+                carets[open] = participants = [];
+            participants.Add(new(seen.Device.Id, seen.Device.Name, where.Line, where.Column, where.ToLine ?? where.Line,
+                where.ToColumn ?? where.Column, LinkDeviceColour(seen.Device.Id), where.PointerLine, where.PointerColumn));
         }
 
-        foreach (HexDocument open in ranges.Keys)
+        foreach (var (open, participants) in carets)
         {
-            IReadOnlyList<UICodeRangeHighlight> drawnRanges = ranges[open];
-            IReadOnlyList<UICodeHint> drawnHints = hints.GetValueOrDefault(open) ?? [];
-            open.Editor.RangeHighlights = [.. open.Editor.RangeHighlights, .. drawnRanges];
-            open.Editor.InlineHints = [.. open.Editor.InlineHints, .. drawnHints];
-            linkPresenceDrawn[open] = (drawnRanges, drawnHints);
+            open.Editor.RemoteCarets = participants;
+            linkPresenceDrawn.Add(open);
         }
     }
 
-    // The marks drawn taken out again, leaving whatever else is in those lists
     private void LinkPresenceClear()
     {
-        foreach (var (open, drawn) in linkPresenceDrawn)
-        {
-            if (!documents.Contains(open) || open.DiffOf is not null)
-                continue;
-            open.Editor.RangeHighlights = [.. open.Editor.RangeHighlights.Where(range => !drawn.Ranges.Contains(range))];
-            open.Editor.InlineHints = [.. open.Editor.InlineHints.Where(hint => !drawn.Hints.Contains(hint))];
-        }
-
+        foreach (HexDocument open in linkPresenceDrawn)
+            open.Editor.RemoteCarets = [];
         linkPresenceDrawn.Clear();
     }
 
@@ -241,7 +227,7 @@ internal sealed partial class DawnScene
             return;
         }
 
-        if (!linkPresence.TryGetValue(id, out LinkPresenceSeen? seen) || seen.Presence is not { } where)
+        if (!linkPresence.TryGetValue(id, out LinkPresenceSeen? seen) || seen.Presence is not { File: not null } where)
             return;
         string key = $"{where.File}:{where.Line}:{where.Column}";
         if (key == linkFollowSeen)

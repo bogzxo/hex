@@ -38,6 +38,9 @@ internal sealed partial class HexLinkHost : IDisposable
     /// <summary>Where the device said it is, as it said it (presence/set), for <see cref="HexLink"/> to pass on.</summary>
     public Action<HexLinkHost, HexLinkPresence?>? PresenceSaid { get; set; }
 
+    /// <summary>Whether a connected device supplies its own presence and therefore ignores relays about it.</summary>
+    public Func<string, bool>? DirectlyLinked { get; set; }
+
     /// <summary>A request from the other end answered, or refused with why. What the session calls.</summary>
     public Task<JsonNode?> Handle(string method, JsonObject parameters, CancellationToken cancel) => method switch
     {
@@ -49,6 +52,7 @@ internal sealed partial class HexLinkHost : IDisposable
         "chat/answer" => ChatAnswer(parameters),
         "tools/list" => Task.FromResult<JsonNode?>(ToolsList()),
         "tools/call" => ToolsCall(parameters, cancel),
+        "doc/join" or "doc/poll" or "doc/edit" => Task.FromResult<JsonNode?>(DocumentRequest(method, parameters)),
         "fs/list" => Task.FromResult<JsonNode?>(FsList(parameters)),
         "fs/read" => Task.FromResult<JsonNode?>(FsRead(parameters)),
         "fs/write" => FsWrite(parameters),
@@ -82,7 +86,7 @@ internal sealed partial class HexLinkHost : IDisposable
         {
             // Another device's, passed on by the one at the other end: shown as said, never passed on again
             string id = HexLinkData.String(passedOn, "id", 80) ?? string.Empty;
-            if (id.Length == 0 || id == services.Device.Id)
+            if (id.Length == 0 || id == services.Device.Id || id == Device.Id || DirectlyLinked?.Invoke(id) == true)
                 return true;
             services.Presence(new HexLinkDevice(id, HexLinkData.String(passedOn, "name", 80) ?? id), presence);
             return true;
@@ -98,10 +102,15 @@ internal sealed partial class HexLinkHost : IDisposable
     {
         if (HexLinkData.String(said, "file", HexLinkFiles.MOST_PATH) is not { Length: > 0 } file)
             return null;
+        JsonObject? pointer = HexLinkData.Object(said, "pointer");
+        int? pointerLine = HexLinkData.Int(pointer, "line"), pointerColumn = HexLinkData.Int(pointer, "column");
+        if (pointerLine is not >= 0 || pointerColumn is not >= 0)
+            pointerLine = pointerColumn = null;
         JsonObject? selection = HexLinkData.Object(said, "selection");
         return new HexLinkPresence(file, Math.Max(0, HexLinkData.Int(said, "line") ?? 0), Math.Max(0, HexLinkData.Int(said, "column") ?? 0),
             HexLinkData.Int(selection, "line") is { } toLine && toLine >= 0 ? toLine : null,
-            HexLinkData.Int(selection, "column") is { } toColumn && toColumn >= 0 ? toColumn : null);
+            HexLinkData.Int(selection, "column") is { } toColumn && toColumn >= 0 ? toColumn : null,
+            pointerLine, pointerColumn);
     }
 
     /// <summary>A presence as the wire says it.</summary>
@@ -114,6 +123,8 @@ internal sealed partial class HexLinkHost : IDisposable
         said["column"] = presence.Column;
         if (presence.ToLine is { } toLine && presence.ToColumn is { } toColumn)
             said["selection"] = new JsonObject { ["line"] = toLine, ["column"] = toColumn };
+        if (presence.PointerLine is { } line && presence.PointerColumn is { } column)
+            said["pointer"] = new JsonObject { ["line"] = line, ["column"] = column };
         return said;
     }
 

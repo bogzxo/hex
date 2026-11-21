@@ -441,7 +441,19 @@ internal sealed partial class DawnScene
         // laid out by hand the keys are the overlay's, Enter and Escape and the arrows, and a menu that's open has the keys
         // to itself, Escape shuts it and nothing else
         if (compositor.Focus is not (TerminalView or ArrangeOverlay) && !compositor.KeysToPopup && !SettingsFindPressed())
-            commands.Keys.Update(Engine.Input.Keyboard, typing);
+        {
+            var keyboard = Engine.Input.Keyboard;
+            // Option+Right takes a word of the Mac editor's ghost before Go Forward can consume it.
+            if (OperatingSystem.IsMacOS() && compositor.Focus == code && code.PredictionIsGhost && !code.CompletionOpen
+                && !code.ReadOnly && !code.Document.HasSelection && !code.Document.HasExtraCarets
+                && keyboard.Alt && !keyboard.Primary && !keyboard.Shift && keyboard.WasPressed(Key.Right))
+            {
+                commands.Keys.CancelChord();
+                return;
+            }
+
+            commands.Keys.Update(keyboard, typing);
+        }
     }
 
     private static bool HasDialog(UICompositor ui)

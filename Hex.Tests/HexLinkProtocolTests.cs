@@ -418,11 +418,17 @@ public sealed class HexLinkProtocolTests
                 hubFromB = peer;
         }
 
+        // B cannot replace the presence of C, who has a direct authenticated connection to A.
+        var relayed = HexLinkHost.PresenceJson(new HexLinkPresence("work/forged.cs", 0, 0));
+        relayed["device"] = HexLinkData.DeviceJson(DeviceC);
+        hubFromB!.Session.Tell("presence/set", relayed);
+
         // B says where it is: A shows it and passes it on to C
-        hubFromB!.SetPresence(new HexLinkPresence("work/a.cs", 4, 2, 4, 9));
+        hubFromB!.SetPresence(new HexLinkPresence("work/a.cs", 4, 2, 4, 9, 8, 13));
         Assert.True(Eventually(() => hub.Presences.Any(each => each.Who == DeviceB && each.Where?.File == "work/a.cs")));
-        Assert.True(Eventually(() => others[1].Services.Presences.Any(each => each.Who.Id == DeviceB.Id && each.Where is { File: "work/a.cs", Line: 4, Column: 2, ToColumn: 9 })));
+        Assert.True(Eventually(() => others[1].Services.Presences.Any(each => each.Who.Id == DeviceB.Id && each.Where is { File: "work/a.cs", Line: 4, Column: 2, ToColumn: 9, PointerLine: 8, PointerColumn: 13 })));
         Assert.Equal("work/a.cs", link.PeerOf(DeviceB.Id)!.Presence?.File);
+        Assert.DoesNotContain(hub.Presences, each => each.Where?.File == "work/forged.cs");
 
         // C may no longer see A: it isn't told where B is any more
         rights[DeviceC.Id] = HexLinkRights.None;

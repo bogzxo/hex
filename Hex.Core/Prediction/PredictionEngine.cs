@@ -149,6 +149,22 @@ internal sealed class PredictionEngine(TimeProvider time)
         return result;
     }
 
+    /// <summary>The serving device changed. Drop its result and any failure backoff.</summary>
+    public void LinkSourceChanged()
+    {
+        lock (gate)
+        {
+            bool asking = flight is not null && !running.IsCompleted;
+            Stop(counted: true);
+            Volatile.Write(ref ready, null);
+            failures = 0;
+            retryAt = 0;
+            LastTiming = default;
+            SetStatus(PredictionStatus.Off, "");
+            pending |= asking;
+        }
+    }
+
     /// <summary>A prediction was taken: the next is asked for at once, without the debounce, while the hand is still on Tab.</summary>
     public void Accepted(object document)
     {
@@ -199,12 +215,13 @@ internal sealed class PredictionEngine(TimeProvider time)
         flight = null;
         if (counted && !running.IsCompleted)
             Interlocked.Increment(ref cancelled);
-        cancel.Cancel();
+        // Mark the request cancelled now, but run provider callbacks off the editor's thread.
+        _ = cancel.CancelAsync();
     }
 
     private IPredictionProvider? Provider(PredictionOptions options)
     {
-        if (provider is null || providerFor != options)
+        if (provider is null || providerFor != options || provider is LinkProvider { IsCurrent: false })
         {
             provider = PredictionProviders.Make(options);
             providerFor = options;
@@ -226,8 +243,9 @@ internal sealed class PredictionEngine(TimeProvider time)
             var input = new PredictionInput(snapshot.Path, snapshot.Language, text, caret,
                 History.Events(snapshot.Path), snapshot.Related?.Invoke() ?? []);
 
-            string key = PredictionCache.Key(text, caret, options.Model, format.Name);
-            if (Cache.TryGet(key, caret, out IReadOnlyList<PredictionEdit> cached, out int? cachedCaret))
+            PredictionCache? cache = asked is LinkProvider link ? link.Cache : Cache;
+            string? key = cache is null ? null : PredictionCache.Key(text, caret, options.Model, format.Name);
+            if (cache is not null && key is not null && cache.TryGet(key, caret, out IReadOnlyList<PredictionEdit> cached, out int? cachedCaret))
             {
                 var timing = new PredictionTiming(0, Elapsed(started), 0, 0);
                 Finish(snapshot, text, caret, cached, cachedCaret, true, timing, format, cancel);
@@ -262,7 +280,8 @@ internal sealed class PredictionEngine(TimeProvider time)
                 parsed = format.Parse(prompt, output.ToString(), true);
 
             var took = new PredictionTiming(first, Elapsed(started), PredictionTokens.Of(prompt.Request.Prompt), pieces);
-            Cache.Put(key, caret, parsed.Edits, parsed.CaretAfter);
+            if (key is not null)
+                cache?.Put(key, caret, parsed.Edits, parsed.CaretAfter);
             Finish(snapshot, text, caret, parsed.Edits, parsed.CaretAfter, false, took, format, cancel);
         }
         catch (OperationCanceledException) when (cancel.IsCancellationRequested)

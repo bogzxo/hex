@@ -24,7 +24,7 @@ internal sealed record HexLinkChatExtra(bool Waiting, string? PlanStep);
 /// Where somebody is in a file, said by a device as its caret moves: the file as a wire path, its line and column (from
 /// 0), and the other end of a selection when there is one. A null file is nowhere, the device closed it.
 /// </summary>
-internal sealed record HexLinkPresence(string? File, int Line, int Column, int? ToLine = null, int? ToColumn = null);
+internal sealed record HexLinkPresence(string? File, int Line, int Column, int? ToLine = null, int? ToColumn = null, int? PointerLine = null, int? PointerColumn = null);
 
 /// <summary>
 /// Everything a link needs of the editor it's part of, which Hex.Dawn gives it. Called from the links' own threads,
@@ -39,6 +39,9 @@ internal interface IHexLinkServices
 
     /// <summary>The workspace open now, swapped whole when it changes.</summary>
     HexLinkWorkspace Workspace { get; }
+
+    /// <summary>Buffers explicitly shared by the host editor, across all its connections.</summary>
+    HexLinkDocuments? Documents => null;
 
     /// <summary>The fleet as of the hub's last pump (HexAgentHub.Snapshot), read off the editor's thread as hex_agent_wait does.</summary>
     HexHubSnapshot Fleet { get; }

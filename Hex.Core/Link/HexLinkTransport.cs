@@ -82,6 +82,16 @@ internal sealed partial class HexLinkTransport : IDisposable
     /// <summary>The port it listens on, the one picked when Start was given 0, 0 while it isn't listening.</summary>
     public int Port { get; private set; }
 
+    /// <summary>The address the listener is bound to, if it is running.</summary>
+    internal IPAddress? ListeningAddress
+    {
+        get
+        {
+            lock (gate)
+                return (listener?.LocalEndPoint as IPEndPoint)?.Address;
+        }
+    }
+
     /// <summary>Whether it's listening.</summary>
     public bool Listening
     {
@@ -128,17 +138,17 @@ internal sealed partial class HexLinkTransport : IDisposable
     }
 
     /// <summary>
-    /// Starts listening on a port, 0 for any free one (<see cref="Port"/> says which). On every address, IPv6 and IPv4
-    /// together where the machine can, IPv4 alone where it can't. A port somebody else has throws the SocketException.
+    /// Starts listening on a port, 0 for any free one (<see cref="Port"/> says which). The default listens on every
+    /// address, dual-stack where available. Local tests can bind only to IPv4 loopback.
     /// </summary>
-    public void Start(int port)
+    public void Start(int port, bool loopbackOnly = false)
     {
         lock (gate)
         {
             if (listener is not null)
                 return;
 
-            Socket socket = Bind(port);
+            Socket socket = Bind(port, loopbackOnly);
             socket.Listen(16);
             listener = socket;
             Port = ((IPEndPoint)socket.LocalEndPoint!).Port;
@@ -151,9 +161,9 @@ internal sealed partial class HexLinkTransport : IDisposable
         Changed?.Invoke();
     }
 
-    private static Socket Bind(int port)
+    private static Socket Bind(int port, bool loopbackOnly)
     {
-        if (Socket.OSSupportsIPv6)
+        if (!loopbackOnly && Socket.OSSupportsIPv6)
         {
             var dual = new Socket(AddressFamily.InterNetworkV6, SocketType.Stream, ProtocolType.Tcp);
             try
@@ -171,7 +181,7 @@ internal sealed partial class HexLinkTransport : IDisposable
         var four = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         try
         {
-            four.Bind(new IPEndPoint(IPAddress.Any, port));
+            four.Bind(new IPEndPoint(loopbackOnly ? IPAddress.Loopback : IPAddress.Any, port));
             return four;
         }
         catch
