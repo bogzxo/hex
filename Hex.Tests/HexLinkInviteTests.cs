@@ -78,6 +78,57 @@ public sealed class HexLinkInviteTests : IDisposable
         Assert.Empty(joiner.Trust.Known);
     }
 
+    [Fact]
+    public async Task Overasking_terms_are_masked_and_never_grant_rights_before_approval()
+    {
+        Assert.True(HexLinkInvite.TryTerms("terms 255 255 255", out HexLinkPairingTerms? decoded));
+        Assert.NotNull(decoded);
+        HexLinkRights supported = HexLinkRights.View | HexLinkRights.Steer | HexLinkRights.Edit;
+        Assert.Equal(new HexLinkPairingTerms(HexLinkPreset.Custom, supported, supported), decoded);
+        Assert.False(HexLinkInvite.TryTerms("terms 0 1 " + new string('0', 40), out _));
+        Assert.False(HexLinkInvite.TryTerms("terms 0 seven 2", out _));
+
+        host.Listen();
+        var proposals = new HexLinkPairingTerms((HexLinkPreset)255, (HexLinkRights)255, (HexLinkRights)255);
+        Assert.True(host.Transport.OpenInvite([IPAddress.Loopback], HexLinkTestMachine.WAIT,
+            _ => Task.FromResult<HexLinkRights?>(HexLinkRights.View), () => proposals));
+        var shown = new TaskCompletionSource<HexLinkPairing>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var decision = new TaskCompletionSource<HexLinkRights?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task<HexLinkPairResult> pairing = Pair(host.Transport.ActiveInvite!, asking =>
+        {
+            shown.TrySetResult(asking);
+            return decision.Task;
+        });
+
+        HexLinkPairing offer = await shown.Task.WaitAsync(HexLinkTestMachine.WAIT);
+        Assert.Equal(decoded, offer.Terms);
+        Assert.Empty(joiner.Trust.Known);
+        Assert.Empty(host.Trust.Known);
+        decision.SetResult(HexLinkRights.View);
+        HexLinkPairResult result = await pairing;
+        Assert.True(result.Paired, result.Reason);
+        Assert.Equal(HexLinkRights.View, result.Granted);
+        Assert.Equal(HexLinkRights.View, joiner.Trust.Find(host.Device.Id)!.Rights);
+    }
+
+    [Fact]
+    public async Task A_viewer_can_confirm_without_granting_the_host_rights()
+    {
+        host.Listen();
+        Assert.True(host.Transport.OpenInvite([IPAddress.Loopback], HexLinkTestMachine.WAIT,
+            _ => Task.FromResult<HexLinkRights?>(HexLinkRights.View),
+            () => new HexLinkPairingTerms(HexLinkPreset.Viewer, HexLinkRights.View, HexLinkRights.None)));
+        HexLinkPairResult result = await Pair(host.Transport.ActiveInvite!, asking =>
+        {
+            Assert.Equal(HexLinkPreset.Viewer, asking.Terms?.Preset);
+            Assert.Equal(HexLinkRights.None, asking.Terms?.HostRequests);
+            return Task.FromResult<HexLinkRights?>(HexLinkRights.None);
+        });
+        Assert.True(result.Paired, result.Reason);
+        Assert.Equal(HexLinkRights.None, joiner.Trust.Find(host.Device.Id)!.Rights);
+        Assert.Equal(HexLinkRights.View, host.Trust.Find(joiner.Device.Id)!.Rights);
+    }
+
     private async Task<HexLinkPairResult> Pair(HexLinkInvite invite, Func<HexLinkPairing, Task<HexLinkRights?>>? ask = null)
     {
         using var cancel = new CancellationTokenSource(HexLinkTestMachine.WAIT);

@@ -214,8 +214,8 @@ internal sealed partial class DawnScene
             if (LinkPort != 0)
                 menu.Add(Said("link.pair_button"), () =>
                 {
-                    ShowLinkDevicePage(LinkDevicePage.Invite);
                     LinkStartAddressPairing();
+                    ShowLinkDevicePage(LinkDevicePage.Invite);
                 }, icon: "plug");
             menu.Add(Said(linkActivityShown ? "link.devices_activity_hide" : "link.devices_activity_show"), () =>
             {
@@ -234,7 +234,8 @@ internal sealed partial class DawnScene
         linkThisDeviceName.Text = $"[b]{UIRichText.Literal(Said("link.devices_this_device", ("name", me?.Name ?? LinkNameWanted)))}[/b]";
         string state = Said(LinkOn ? "link.devices_on" : "link.devices_off_short");
         string fingerprint = me is null ? string.Empty : Said("link.devices_fingerprint", ("fingerprint", me.Fingerprint));
-        linkThisDeviceStatus.Text = UIRichText.Literal(fingerprint.Length > 0 ? $"{fingerprint} · {state}" : state);
+        string detail = UIRichText.Literal(fingerprint.Length > 0 ? $"{fingerprint} · {state}" : state);
+        linkThisDeviceStatus.Text = Skin is { } skin ? $"[color:{HexColour(skin.Palette.DimText)}]{detail}[/color]" : detail;
         linkThisDeviceSwitch.State = LinkOn;
         if (linkKeyFileBadge is not null)
             linkKeyFileBadge.Visible = LinkProtection == HexLinkProtection.File;

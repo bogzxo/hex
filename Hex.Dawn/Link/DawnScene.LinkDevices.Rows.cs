@@ -29,10 +29,12 @@ internal sealed partial class DawnScene
             Text = $"[color:{HexColour(tint)}]$(vm)[/color] [b]{UIRichText.Literal(OneLine(known.Shown, 18))}[/b]",
             TextScale = LINK_HEADING, Size = new Vector2(140, 24), Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left, Tooltip = known.Shown
         });
-        var badge = top.Add(new Badge { TextScale = 0.115f, Anchor = Origin.Left, Pivot = Origin.Left });
+        UIComponent stateSlot = peer is null
+            ? top.Add(new Panel { Size = new Vector2(117, 24), Anchor = Origin.Left, Pivot = Origin.Left })
+            : top;
+        var badge = stateSlot.Add(new Badge { TextScale = 0.115f, Anchor = Origin.Left, Pivot = Origin.Left });
         if (peer is null)
         {
-            badge.Size = new Vector2(117, 19);
             Label details = column.Add(LinkLine(string.Empty));
             linkOfflineRows.Add((badge, details, known));
             DrawLinkOfflineRow(badge, details, known);
@@ -78,7 +80,11 @@ internal sealed partial class DawnScene
         if (peer is not null)
             LinkRightChipsRow(column, Said("link.devices_rights_there"), peer.Granted);
         else
-            column.Add(LinkLine(Said("link.device_there_unknown")));
+        {
+            var there = LinkActionRow(column, 23);
+            there.Add(new Label { Text = Said("link.devices_rights_there"), TextScale = LINK_SMALL, Bold = true, Anchor = Origin.Left, Pivot = Origin.Left });
+            there.Add(new Label { Text = Said("link.device_there_unknown"), TextScale = LINK_SMALL, Dim = true, Anchor = Origin.Left, Pivot = Origin.Left });
+        }
 
         LinkConflictShown[] forDevice = [.. conflicts.Where(conflict => conflict.DeviceId.Equals(id, StringComparison.OrdinalIgnoreCase))];
         if (forDevice.Length > 0)
@@ -91,6 +97,8 @@ internal sealed partial class DawnScene
 
     private void AddLinkNetwork(StackPanel row, HexLinkKnown known, HexLinkPeer? peer)
     {
+        if (peer is null && GetLinkDeviceConnection(known.Device.Id)?.Connecting != true)
+            return;
         string address = peer?.Session.Connection.Address ?? known.Address;
         if (address.Length > 0)
         {
@@ -115,11 +123,11 @@ internal sealed partial class DawnScene
             new DialogChoice(Said("link.devices_save"), () => LinkSetRights(known.Device.Id, grants)),
             new DialogChoice(Said("link.pair_cancel")));
         dialog.Body.Size = new Vector2(Math.Clamp(chrome.Root.Bounds.Width - 80, 350, 460), 0);
-        LinkRightsPreset preset = (grants & ~HexLinkRights.Predict) switch
+        HexLinkPreset preset = (grants & ~HexLinkRights.Predict) switch
         {
-            HexLinkRights.View => LinkRightsPreset.Viewer,
-            HexLinkRights.View | HexLinkRights.Steer | HexLinkRights.Edit => LinkRightsPreset.Collaborator,
-            _ => LinkRightsPreset.Custom
+            HexLinkRights.View => HexLinkPreset.Viewer,
+            HexLinkRights.View | HexLinkRights.Steer | HexLinkRights.Edit => HexLinkPreset.Collaborator,
+            _ => HexLinkPreset.Custom
         };
         LinkGrantControls(dialog.Body, preset, grants, (_, changed) => grants = changed);
     }
@@ -192,7 +200,7 @@ internal sealed partial class DawnScene
         Button more = actions.Add(LinkButton(Said("link.devices_more"), string.Empty, () => { }));
         more.Tooltip = Said("link.devices_more_other", ("device", known.Shown));
         if (peer is not null && (offerShare ? share : get) is null)
-            column.Add(LinkLine(Said("link.devices_provision_pending")));
+            column.Add(LinkLine(Said("link.devices_provision_short")));
 
         more.OnPressed = () =>
         {

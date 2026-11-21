@@ -92,7 +92,7 @@ internal sealed partial class DawnScene
                 Engine.CaptureScreenshot(Path.Combine(shots, name));
         });
 
-        Vector2 Centre(UIComponent? component) => component?.Bounds.Center ?? Vector2.Zero;
+        Vector2 Centre(UIComponent? component) => component?.Module is { } module ? module.ToWorld(component.Bounds.Center) : Vector2.Zero;
         ContextMenu? OpenMenu() => chrome.Root.Children.OfType<ContextMenu>().FirstOrDefault(menu => menu.Showing is not null);
         Vector2 MenuItem(string label) => OpenMenu() is { Showing: { } menu } open && menu.Items.Any(item => item.Label == label)
             ? chrome.ToWorld(open.ItemBounds(label).Center) : Vector2.Zero;
@@ -109,9 +109,10 @@ internal sealed partial class DawnScene
             UIComponent? surface = (UIComponent?)linkOnboardingDialog ?? (UIComponent?)linkThisDeviceDialog ?? linkWindow;
             return surface is null ? null : Descendants(surface).OfType<Button>().FirstOrDefault(button => button.Label == label && button.IsShownInHierarchy);
         }
-        void ClickWindow(string key)
+        void ClickWindow(string key) => ClickWindowLabel(Said(key));
+
+        void ClickWindowLabel(string label)
         {
-            string label = Said(key);
             test.Run(() =>
             {
                 if (linkOnboardingDialog is null && linkThisDeviceDialog is null && WindowButton(label) is { } button)
@@ -254,8 +255,25 @@ internal sealed partial class DawnScene
 
         ClickWindow("link.devices_done");
 
+        const string ConflictName = "link-ui-conflict.txt";
+        Task? wroteRemote = null;
+        test.Run(() =>
+        {
+            File.WriteAllText(Path.Combine(localWorkspace, ConflictName), "this device\n");
+            wroteRemote = peer?.Write($"{LINK_PEER_FOLDER}/{ConflictName}", null, "the other device\n"u8.ToArray());
+        });
+        test.WaitFor(() => wroteRemote?.IsCompleted == true, 5);
         ClickWindow("link.sync_start");
         test.WaitFor(() => peerId is not null && LinkSyncs.Any(sync => sync.DeviceId == peerId && sync.State is HexLinkSyncState.Idle or HexLinkSyncState.PullOnly), 12);
+        test.WaitFor(() => LinkConflicts.Any(conflict => conflict.Path.EndsWith(ConflictName, StringComparison.Ordinal)), 6);
+        Shot("link_ui_conflict.png");
+        ClickWindowLabel(Said("link.devices_resolve", ("count", "1")));
+        test.WaitFor(() => chrome.Root.Children.OfType<UIDialog>().Any(dialog => dialog is { IsOpen: true, IsPalette: true }), 4);
+        test.Check("link-ui: Resolve opens a chooser with the conflicting file", () =>
+            chrome.Root.Children.OfType<UIDialog>().Where(dialog => dialog is { IsOpen: true, IsPalette: true })
+                .SelectMany(Descendants).OfType<ListBox>().Any(list => list.Items.Any(item => item.EndsWith(ConflictName, StringComparison.Ordinal))));
+        test.Run(() => chrome.Root.Children.OfType<UIDialog>().LastOrDefault(dialog => dialog is { IsOpen: true, IsPalette: true })?.Close());
+        test.Settle(0.25f);
         ClickMore("link.devices_stop_sharing");
         test.Settle(0.35f);
         test.Check("link-ui: Stop sharing asks before stopping a running sync", () =>
@@ -380,13 +398,23 @@ internal sealed partial class DawnScene
         test.Check("link-ui: choosing B from the open Runs on menu selects B and loads its agent systems", () =>
             peer is not null && LinkRunsOnPeer() == peer && linkRemoteSystems.TryGetValue(peer.Device.Id, out var systems)
             && systems.Any(system => system.Id == LINK_UI_AGENT && !system.Missing));
+        // Expose the interval between the device's answer arriving and the composer drawing again.
+        test.Run(() =>
+        {
+            if (peerId is null || !linkRemoteSystems.Remove(peerId, out List<LinkRemoteSystem>? loaded))
+                return;
+            agentsOptionsDrawn = string.Empty;
+            DrawAgentOptions();
+            linkRemoteSystems[peerId] = loaded;
+            agentsWait = 3.0f;
+        });
         Button? AgentSystemPicker() => Descendants(agentsOptions).OfType<Button>().FirstOrDefault(button =>
             button.Tooltip == Said("link.runs_on_agent_tip", ("device", LINK_PEER_NAME)));
         test.WaitFor(() => AgentSystemPicker() is { IsShownInHierarchy: true } button && !button.Bounds.IsEmpty, 3.0f);
         test.Settle(0.3f);
         test.Click(() => Centre(AgentSystemPicker()));
         test.WaitFor(() => OpenMenu()?.Showing?.Items.Any(item => item.Label == LINK_UI_AGENT_NAME) == true, 3.0f);
-        test.Check("link-ui: B's agent system menu lists the fixture as a pointer target", () =>
+        test.Check("link-ui: B's agent menu uses the latest systems before the composer redraws", () =>
         {
             if (OpenMenu() is not { Showing: { } choices } opened)
             {
@@ -578,8 +606,9 @@ internal sealed partial class DawnScene
         });
         clickWindow("link.devices_invite");
         clickWindow("link.devices_preset_worker");
-        test.Check("link-ui: worker preset grants View, Steer and Edit, with Autocomplete off", () =>
-            linkInvitePreset == LinkRightsPreset.Worker && linkInviteRights == (HexLinkRights.View | HexLinkRights.Steer | HexLinkRights.Edit));
+        test.Check("link-ui: worker preset grants View and Edit and requests Steer on the worker", () =>
+            linkInvitePreset == HexLinkPreset.Worker && linkInviteRights == (HexLinkRights.View | HexLinkRights.Edit) &&
+            LinkInvitationTerms().HostRequests == (HexLinkRights.View | HexLinkRights.Steer | HexLinkRights.Edit));
         shot("link_ui_invite_preset.png");
         test.WaitFor(() => LinkActiveInvite is not null && linkPairingCountdown?.Text.Length > 0, 4);
         test.Check("link-ui: Invite creates one scoped token and countdown", () => LinkActiveInvite is { } open &&
@@ -619,13 +648,13 @@ internal sealed partial class DawnScene
         {
             if (linkAddressBox is not null)
                 linkAddressBox.Text = text;
-            DrawLinkJoinStatus();
+            LinkSetJoinMessage(null);
         }
 
         test.Run(() => TypeJoin("hex-link:v1.bad"));
         clickWindow("link.devices_join_submit");
         test.Check("link-ui: a malformed invite gives recovery instructions in the join card", () =>
-            linkJoinStatus?.Text.Contains(Said("link.devices_bad_invite"), StringComparison.Ordinal) == true);
+            linkJoinStatus?.Text.Contains(Said("link.devices_bad_invite"), StringComparison.Ordinal) == true && linkJoinSubmit?.Enabled == false);
         shot("link_ui_join.png");
         test.Run(() => TypeJoin(token?.Encode() ?? string.Empty));
         clickWindow("link.devices_join_submit");

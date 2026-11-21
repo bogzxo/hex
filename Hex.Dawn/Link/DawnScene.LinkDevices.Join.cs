@@ -13,9 +13,9 @@ internal sealed partial class DawnScene
 {
     private enum LinkDevicePage { Overview, Invite, Join }
 
-    private sealed record LinkInviteOptions(LinkRightsPreset Preset, HexLinkRights Rights, bool Share);
-    private LinkInviteOptions linkInviteOptions = new(LinkRightsPreset.Collaborator, LinkPresetRights(LinkRightsPreset.Collaborator), true);
-    private LinkRightsPreset linkInvitePreset => linkInviteOptions.Preset;
+    private sealed record LinkInviteOptions(HexLinkPreset Preset, HexLinkRights Rights, bool Share);
+    private LinkInviteOptions linkInviteOptions = new(HexLinkPreset.Collaborator, LinkPresetRights(HexLinkPreset.Collaborator), true);
+    private HexLinkPreset linkInvitePreset => linkInviteOptions.Preset;
     private HexLinkRights linkInviteRights => linkInviteOptions.Rights;
 
     private LinkDevicePage linkDevicePage;
@@ -86,7 +86,7 @@ internal sealed partial class DawnScene
             LinkCanAutoShare(ref linkAutoShareAvailable);
             if (LinkOn && LinkPort != 0 && LinkPairingUntil is null)
             {
-                Volatile.Write(ref linkInviteOptions, new LinkInviteOptions(LinkRightsPreset.Collaborator, LinkPresetRights(LinkRightsPreset.Collaborator), true));
+                Volatile.Write(ref linkInviteOptions, new LinkInviteOptions(HexLinkPreset.Collaborator, LinkPresetRights(HexLinkPreset.Collaborator), true));
                 LinkCreateInvite();
             }
         }
@@ -167,11 +167,11 @@ internal sealed partial class DawnScene
             {
                 Volatile.Write(ref linkInviteOptions, linkInviteOptions with
                 {
-                    Preset = preset, Rights = rights, Share = preset == LinkRightsPreset.Worker || linkInviteOptions.Share
+                    Preset = preset, Rights = rights, Share = preset == HexLinkPreset.Worker || linkInviteOptions.Share
                 });
                 if (linkInviteShare is not null)
                     linkInviteShare.State = linkAutoShareAvailable && linkInviteOptions.Share;
-            });
+            }, showBoth: true);
             ToggleButton share = linkInviteShare = body.Add(new ToggleButton(Said("link.devices_auto_share"), linkAutoShareAvailable && linkInviteOptions.Share)
             {
                 Enabled = linkAutoShareAvailable, Anchor = Origin.Left, Pivot = Origin.Left, LabelScale = LINK_TEXT,
@@ -254,7 +254,7 @@ internal sealed partial class DawnScene
         if (linkAddressBox is null || linkJoinSubmit is null || linkJoinStatus is null)
             return;
         linkAddressBox.Enabled = LinkOn && !linkJoining;
-        linkJoinSubmit.Enabled = LinkOn && !linkJoining && linkAddressBox.Text.Trim().Length > 0;
+        linkJoinSubmit.Enabled = LinkOn && !linkJoining && !linkJoinError && linkAddressBox.Text.Trim().Length > 0;
         string said = UIRichText.Literal(linkJoinMessage ?? Said(LinkOn ? "link.devices_join_help" : "link.pair_off_text"));
         bool error = linkJoinError && linkJoinMessage is not null;
         Vector4 tint = error ? Skin?.Palette.Error ?? LinkWarning : Vector4.Zero;
@@ -266,7 +266,7 @@ internal sealed partial class DawnScene
 
     private void JoinTyped()
     {
-        if (!LinkOn || linkJoining || linkAddressBox is null)
+        if (!LinkOn || linkJoining || linkJoinError || linkAddressBox is null)
             return;
         string text = linkAddressBox.Text.Trim();
         linkJoinTyped = text;

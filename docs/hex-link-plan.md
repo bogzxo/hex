@@ -123,8 +123,9 @@ The new `invite` handshake mode exchanges fresh nonces, then role-specific HMAC-
 TLS pins and both nonces. The host keeps the invitation in memory for at most five minutes, removes it
 atomically after one valid proof, and invalidates it after five incorrect proofs. Wrong proofs are audited
 without recording the token or secret. Even a declined or interrupted confirmation consumes a valid invite.
-The proof replaces comparing the six-digit code. Both operators still approve their local grants, with
-Predict off by default. Entering an address or choosing Nearby still uses the original code comparison.
+After proving possession, the host sends the proposed preset and its suggested grants in each direction.
+The suggestions exclude Predict and grant no rights. The proof replaces comparing the six-digit code.
+Both operators still explicitly approve their local grants, with Predict off by default. Entering an address or choosing Nearby still uses the original code comparison.
 
 ### 3.4 Rights, least privilege
 What a device may do is the host's to say, per device, and is checked by the host on every request.

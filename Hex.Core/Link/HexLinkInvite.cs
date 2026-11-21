@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Buffers.Text;
+using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;
 
@@ -101,6 +102,33 @@ internal sealed class HexLinkInvite
 
     // IPv6 link-local zone IDs are scoped to the host's interfaces and cannot be passed to another machine.
     private static bool IsPortable(IPAddress address) => HexLinkAddresses.IsPrivate(address) && !address.IsIPv6LinkLocal;
+
+    private const HexLinkRights Proposed = HexLinkRights.View | HexLinkRights.Steer | HexLinkRights.Edit;
+
+    internal static string TermsLine(HexLinkPairingTerms? terms) => terms is null ? "terms -" :
+        FormattableString.Invariant($"terms {(int)terms.Preset} {(int)(terms.HostGrants & Proposed)} {(int)(terms.HostRequests & Proposed)}");
+
+    internal static bool TryTerms(string line, out HexLinkPairingTerms? terms)
+    {
+        terms = null;
+        if (line == "terms -")
+            return true;
+        if (line.Length > 32)
+            return false;
+        string[] words = line.Split(' ');
+        if (words.Length != 4 || words[0] != "terms"
+            || !byte.TryParse(words[1], NumberStyles.None, CultureInfo.InvariantCulture, out byte role)
+            || !byte.TryParse(words[2], NumberStyles.None, CultureInfo.InvariantCulture, out byte grants)
+            || !byte.TryParse(words[3], NumberStyles.None, CultureInfo.InvariantCulture, out byte asks))
+            return false;
+
+        HexLinkPreset preset = role <= (int)HexLinkPreset.Custom ? (HexLinkPreset)role : HexLinkPreset.Custom;
+        terms = new HexLinkPairingTerms(preset, Mask(grants), Mask(asks));
+        return true;
+
+        static HexLinkRights Mask(byte value) => ((HexLinkRights)value & HexLinkRights.View) == 0
+            ? HexLinkRights.None : (HexLinkRights)value & Proposed;
+    }
 
     internal byte[] Proof(bool host, string joinerPin, byte[] hostNonce, byte[] joinerNonce)
     {

@@ -74,14 +74,17 @@ internal sealed partial class DawnScene
 
     internal bool LinkOpenInvite()
     {
-        if (linkTransport is not { Listening: true } transport || !transport.OpenInvite(InviteAddresses(), LINK_PAIRING_WINDOW, pairing =>
-        {
-            LinkInviteOptions chosen = Volatile.Read(ref linkInviteOptions);
-            return LinkAskPerson(pairing, host: true, chosen.Preset, chosen.Rights, linkAutoShareAvailable && chosen.Share);
-        }))
+        if (linkTransport is not { Listening: true } transport || !transport.OpenInvite(InviteAddresses(), LINK_PAIRING_WINDOW,
+            pairing => LinkAskPerson(pairing, host: true), LinkInvitationTerms))
             return false;
         linkDirty = true;
         return true;
+    }
+
+    private HexLinkPairingTerms LinkInvitationTerms()
+    {
+        LinkInviteOptions chosen = Volatile.Read(ref linkInviteOptions);
+        return new HexLinkPairingTerms(chosen.Preset, chosen.Rights, LinkPresetRequest(chosen.Preset), linkAutoShareAvailable && chosen.Share);
     }
 
     /// <summary>Closes the pairing window, a pairing already under way going on to its end.</summary>
@@ -206,14 +209,17 @@ internal sealed partial class DawnScene
     /// A pairing to ask the person about, from the transport's thread: shown on the editor's, answered when they pick
     /// (or the pairing ends without them, which its Ended token says, and the dialog closes).
     /// </summary>
-    private Task<HexLinkRights?> LinkAskPerson(HexLinkPairing pairing, bool host, LinkRightsPreset? preset = null, HexLinkRights initial = HexLinkRights.None, bool share = false)
+    private Task<HexLinkRights?> LinkAskPerson(HexLinkPairing pairing, bool host)
     {
+        HexLinkPairingTerms? terms = pairing.Terms;
         var ask = new LinkPairingAsk(pairing.Other, pairing.Code, pairing.Address, host, pairing.Ended)
         {
             Invited = pairing.Invited,
-            Preset = preset ?? (pairing.Invited ? LinkRightsPreset.Collaborator : null),
-            InitialRights = preset is null && pairing.Invited ? LinkPresetRights(LinkRightsPreset.Collaborator) : initial,
-            ShareOnJoin = share
+            Terms = terms,
+            Preset = terms?.Preset ?? (pairing.Invited ? HexLinkPreset.Collaborator : null),
+            InitialRights = terms is not null ? host ? terms.HostGrants : terms.HostRequests
+                : pairing.Invited ? LINK_COLLABORATOR : HexLinkRights.None,
+            ShareOnJoin = host && terms?.ShareWorkspace == true
         };
         pairing.Ended.Register(() =>
         {
@@ -275,9 +281,12 @@ internal sealed class LinkPairingAsk(HexLinkDevice other, string code, string ad
     public bool Host { get; } = host;
 
     public bool Invited { get; init; }
-    public LinkRightsPreset? Preset { get; init; }
+    public HexLinkPreset? Preset { get; init; }
     public HexLinkRights InitialRights { get; init; }
     public bool ShareOnJoin { get; init; }
+    public HexLinkPairingTerms? Terms { get; init; }
+    public bool CanApproveNone => !Host && Invited && Terms is { HostRequests: HexLinkRights.None, HostGrants: not HexLinkRights.None };
+    public bool CanApprove(HexLinkRights rights) => CanApproveNone || DawnScene.LinkRightsAnything(rights);
 
     public CancellationToken Ended { get; } = ended;
 

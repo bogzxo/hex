@@ -126,7 +126,8 @@ internal sealed partial class HexLinkTransport
 
     /// <summary>The host's end of a pairing, from the joiner's <c>pair</c> line on. Whether the connection was kept as a link.</summary>
     private async Task<bool> HostPairing(SslStream ssl, Socket socket, HexLinkDevice device, string address, CancellationToken stop,
-        HexLinkBulkSupport bulk = HexLinkBulkSupport.None, Func<HexLinkPairing, Task<HexLinkRights?>>? invited = null)
+        HexLinkBulkSupport bulk = HexLinkBulkSupport.None, Func<HexLinkPairing, Task<HexLinkRights?>>? invited = null,
+        HexLinkPairingTerms? terms = null)
     {
         Func<HexLinkPairing, Task<HexLinkRights?>>? ask = invited ?? TakePairing();
         if (ask is null)
@@ -170,7 +171,7 @@ internal sealed partial class HexLinkTransport
                 code = HexLinkSas.CodeOf(identity.Id, device.Id, hostNonce, joinerNonce);
             }
 
-            (string verdict, HexLinkRights granted) = await Decide(ssl, ask, new HexLinkPairing(device, code, address, ended.Token, Invited: invited is not null), ended);
+            (string verdict, HexLinkRights granted) = await Decide(ssl, ask, new HexLinkPairing(device, code, address, ended.Token, Invited: invited is not null, Terms: terms), ended);
             if (verdict != "paired")
             {
                 result = HexLinkPairResult.Failed(verdict, device, code);
@@ -245,8 +246,9 @@ internal sealed partial class HexLinkTransport
                 return result = HexLinkPairResult.Failed(invite is null ? "failed" : "version");
             device = hello.Device;
 
+            HexLinkPairingTerms? terms = null;
             if (invite is not null)
-                await AuthenticateInvite(ssl, invite, ended.Token);
+                terms = await AuthenticateInvite(ssl, invite, ended.Token);
             else
             {
                 byte[] joinerNonce = RandomNumberGenerator.GetBytes(HexLinkSas.NONCE);
@@ -261,7 +263,7 @@ internal sealed partial class HexLinkTransport
                 code = HexLinkSas.CodeOf(pin, identity.Id, hostNonce, joinerNonce);
             }
 
-            (string verdict, HexLinkRights granted) = await Decide(ssl, ask, new HexLinkPairing(device, code, address, ended.Token, Invited: invite is not null), ended);
+            (string verdict, HexLinkRights granted) = await Decide(ssl, ask, new HexLinkPairing(device, code, address, ended.Token, Invited: invite is not null, Terms: terms), ended);
             if (verdict != "paired")
                 return result = HexLinkPairResult.Failed(verdict, device, code);
 

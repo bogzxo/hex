@@ -9,10 +9,11 @@ internal sealed partial class HexLinkTransport
 {
     private InviteWindow? invitation;
 
-    private sealed class InviteWindow(HexLinkInvite token, Func<HexLinkPairing, Task<HexLinkRights?>> ask)
+    private sealed class InviteWindow(HexLinkInvite token, Func<HexLinkPairing, Task<HexLinkRights?>> ask, Func<HexLinkPairingTerms>? terms)
     {
         public HexLinkInvite Token { get; } = token;
         public Func<HexLinkPairing, Task<HexLinkRights?>> Ask { get; } = ask;
+        public Func<HexLinkPairingTerms>? Terms { get; } = terms;
         public Timer? Timer { get; set; }
         public int WrongProofs { get; set; }
     }
@@ -26,13 +27,14 @@ internal sealed partial class HexLinkTransport
         }
     }
 
-    public bool OpenInvite(IEnumerable<IPAddress> addresses, TimeSpan lifetime, Func<HexLinkPairing, Task<HexLinkRights?>> ask)
+    public bool OpenInvite(IEnumerable<IPAddress> addresses, TimeSpan lifetime, Func<HexLinkPairing, Task<HexLinkRights?>> ask,
+        Func<HexLinkPairingTerms>? terms = null)
     {
         HexLinkInvite? token = HexLinkInvite.Create(identity.Id, Port, DateTimeOffset.UtcNow + lifetime, addresses);
         if (token is null)
             return false;
         ClosePairing();
-        var opened = new InviteWindow(token, ask);
+        var opened = new InviteWindow(token, ask, terms);
         lock (gate)
         {
             if (listener is null)
@@ -113,11 +115,13 @@ internal sealed partial class HexLinkTransport
         }
 
         await Say(ssl, "proof " + HexLinkSas.Hex(open.Token.Proof(true, device.Id, hostNonce, joinerNonce!)), handshake);
+        HexLinkPairingTerms? terms = open.Terms?.Invoke();
+        await Say(ssl, HexLinkInvite.TermsLine(terms), handshake);
         proved();
-        return await HostPairing(ssl, socket, device, address, stop, invited: open.Ask);
+        return await HostPairing(ssl, socket, device, address, stop, invited: open.Ask, terms: terms);
     }
 
-    private async Task AuthenticateInvite(SslStream ssl, HexLinkInvite invite, CancellationToken ended)
+    private async Task<HexLinkPairingTerms?> AuthenticateInvite(SslStream ssl, HexLinkInvite invite, CancellationToken ended)
     {
         byte[] joinerNonce = RandomNumberGenerator.GetBytes(HexLinkSas.NONCE);
         await Say(ssl, "nonce " + HexLinkSas.Hex(joinerNonce), ended);
@@ -129,6 +133,9 @@ internal sealed partial class HexLinkTransport
         byte[]? proof = HexLinkSas.BytesAfter(await Answer(ssl, ended), "proof");
         if (proof is null || !CryptographicOperations.FixedTimeEquals(proof, invite.Proof(true, identity.Id, hostNonce, joinerNonce)))
             throw new HexLinkRefused("invite_invalid", "the host did not authenticate the invitation");
+        if (!HexLinkInvite.TryTerms(await Answer(ssl, ended), out HexLinkPairingTerms? terms))
+            throw new HexLinkRefused("invite_invalid", "the host's invitation terms could not be read");
+        return terms;
     }
 
     private async Task<(SslStream Ssl, Socket Socket, string Pin, string Address)> ConnectInvite(HexLinkInvite invite, CancellationToken stop)

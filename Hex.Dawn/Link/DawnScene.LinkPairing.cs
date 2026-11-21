@@ -46,9 +46,9 @@ internal sealed partial class DawnScene
             new DialogChoice(Said("link.pair_go"), () =>
             {
                 HexLinkRights granted = LinkPairTicked;
-                if (ask.ShareOnJoin && LinkRightsAnything(granted))
+                if (ask.ShareOnJoin && (granted & HexLinkRights.View) != 0)
                     linkShareAfterPairing = ask.Other.Id;
-                ask.Decide(LinkRightsAnything(granted) ? granted : null);
+                ask.Decide(ask.CanApprove(granted) ? granted : null);
                 linkDirty = true;
             }),
             new DialogChoice(Said("link.pair_cancel"), () =>
@@ -80,14 +80,15 @@ internal sealed partial class DawnScene
         }
 
         body.Add(new Label { Text = $"[b]{UIRichText.Literal(Said("link.pair_grant", ("device", device)))}[/b]", Wrap = true, Size = new Vector2(wide, 0), Align = Origin.TopLeft, Anchor = Origin.Left });
-        ToggleButton[] toggles = LinkGrantControls(body, ask.Preset ?? LinkRightsPreset.Custom, ask.InitialRights,
-            (_, rights) => dialog.Buttons[0].Enabled = LinkRightsAnything(rights) && !ask.IsDecided);
+        ToggleButton[] toggles = LinkGrantControls(body, ask.Preset ?? HexLinkPreset.Custom, ask.InitialRights,
+            (_, rights) => dialog.Buttons[0].Enabled = ask.CanApprove(rights) && !ask.IsDecided,
+            showBoth: true, hostOffer: ask.Host ? null : ask.Terms?.HostGrants, allowNone: ask.CanApproveNone);
         linkPairView = toggles[0];
         linkPairSteer = toggles[1];
         linkPairEdit = toggles[2];
         linkPairPredict = toggles[3];
         linkPairEnded = body.Add(new Label { Text = string.Empty, Wrap = true, Size = new Vector2(wide, 0), Align = Origin.TopLeft, Anchor = Origin.Left, Visible = false });
-        dialog.Buttons[0].Enabled = LinkRightsAnything(ask.InitialRights);
+        dialog.Buttons[0].Enabled = ask.CanApprove(ask.InitialRights);
         dialog.Closed = () =>
         {
             // Closed however it was (Escape is Cancel), never left waiting. On the next tick: a button's Picked runs after

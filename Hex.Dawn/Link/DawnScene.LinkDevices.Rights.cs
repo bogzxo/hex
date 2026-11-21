@@ -6,53 +6,58 @@ using Horizon.UI.Components;
 
 namespace Hex.Dawn;
 
-internal enum LinkRightsPreset { Collaborator, Worker, Viewer, Custom }
-
 internal sealed partial class DawnScene
 {
-    private static string LinkPresetKey(LinkRightsPreset preset) => "link.devices_preset_" + preset switch
+    private static string LinkPresetKey(HexLinkPreset preset) => "link.devices_preset_" + preset switch
     {
-        LinkRightsPreset.Collaborator => "collaborator",
-        LinkRightsPreset.Worker => "worker",
-        LinkRightsPreset.Viewer => "viewer",
+        HexLinkPreset.Collaborator => "collaborator",
+        HexLinkPreset.Worker => "worker",
+        HexLinkPreset.Viewer => "viewer",
         _ => "custom"
     };
 
-    private static HexLinkRights LinkPresetRights(LinkRightsPreset preset) => preset switch
+    private const HexLinkRights LINK_COLLABORATOR = HexLinkRights.View | HexLinkRights.Steer | HexLinkRights.Edit;
+
+    private static HexLinkRights LinkPresetRights(HexLinkPreset preset, bool inviting = true) => preset switch
     {
-        LinkRightsPreset.Collaborator or LinkRightsPreset.Worker => HexLinkRights.View | HexLinkRights.Steer | HexLinkRights.Edit,
-        LinkRightsPreset.Viewer => HexLinkRights.View,
+        HexLinkPreset.Collaborator => LINK_COLLABORATOR,
+        HexLinkPreset.Worker => inviting ? HexLinkRights.View | HexLinkRights.Edit : LINK_COLLABORATOR,
+        HexLinkPreset.Viewer when inviting => HexLinkRights.View,
         _ => HexLinkRights.None
     };
 
-    private ToggleButton[] LinkGrantControls(StackPanel column, LinkRightsPreset preset, HexLinkRights rights,
-        Action<LinkRightsPreset, HexLinkRights> changed)
+    private static HexLinkRights LinkPresetRequest(HexLinkPreset preset) =>
+        preset is HexLinkPreset.Collaborator or HexLinkPreset.Worker ? LINK_COLLABORATOR : HexLinkRights.None;
+
+    private ToggleButton[] LinkGrantControls(StackPanel column, HexLinkPreset preset, HexLinkRights rights,
+        Action<HexLinkPreset, HexLinkRights> changed, bool showBoth = false, HexLinkRights? hostOffer = null, bool allowNone = false)
     {
         StackPanel presets = LinkActionRow(column);
         StackPanel secondary = column.Size.X is > 0 and < 420 ? LinkActionRow(column) : presets;
         StackPanel exact = LinkActionRow(column, 24);
-        Label choose = column.Add(LinkLine(Said("link.devices_grant_none")));
-        Label description = column.Add(LinkLine(string.Empty));
-        StackPanel custom = LinkActionRow(column);
-        StackPanel predict = LinkActionRow(column);
+        Label choose = column.Add(LinkLine(Said(allowNone ? "link.devices_grants_zero" : "link.devices_grant_none")));
         Label warning = column.Add(new Label
         {
             Text = $"[color:{HexColour(LinkWarning)}]$(warning) {UIRichText.Literal(Said("link.right_means_steer"))}[/color]",
             TextScale = LINK_SMALL, Wrap = true, Align = Origin.Left, Fill = UIFill.Horizontal
         });
+        StackPanel? there = showBoth ? LinkActionRow(column, 24) : null;
+        Label description = column.Add(LinkLine(string.Empty));
+        StackPanel custom = LinkActionRow(column);
+        StackPanel predict = LinkActionRow(column);
         ToggleButton[] toggles = new ToggleButton[4];
         HexLinkRights[] kinds = [HexLinkRights.View, HexLinkRights.Steer, HexLinkRights.Edit, HexLinkRights.Predict];
         Button[] buttons = new Button[4];
-        foreach (LinkRightsPreset choice in (ReadOnlySpan<LinkRightsPreset>)[LinkRightsPreset.Collaborator, LinkRightsPreset.Worker, LinkRightsPreset.Viewer, LinkRightsPreset.Custom])
+        foreach (HexLinkPreset choice in (ReadOnlySpan<HexLinkPreset>)[HexLinkPreset.Collaborator, HexLinkPreset.Worker, HexLinkPreset.Viewer, HexLinkPreset.Custom])
         {
             string key = LinkPresetKey(choice);
             Button button = LinkButton(Said(key), string.Empty, () =>
             {
-                HexLinkRights baseRights = choice is LinkRightsPreset.Custom ? rights & ~HexLinkRights.Predict : LinkPresetRights(choice);
+                HexLinkRights baseRights = choice is HexLinkPreset.Custom ? rights & ~HexLinkRights.Predict : LinkPresetRights(choice, inviting: hostOffer is null);
                 Refresh(choice, baseRights | (rights & HexLinkRights.Predict));
             });
             button.Tooltip = Said(key + "_tip");
-            buttons[(int)choice] = (choice is LinkRightsPreset.Viewer or LinkRightsPreset.Custom ? secondary : presets).Add(button);
+            buttons[(int)choice] = (choice is HexLinkPreset.Viewer or HexLinkPreset.Custom ? secondary : presets).Add(button);
         }
 
         for (int index = 0; index < kinds.Length; index++)
@@ -64,7 +69,7 @@ internal sealed partial class DawnScene
             {
                 Anchor = Origin.Left, Pivot = Origin.Left, LabelScale = LINK_TEXT, Tooltip = Said("link.right_means_" + name)
             });
-            toggle.OnPressed = () => Refresh(isPredict ? preset : LinkRightsPreset.Custom, LinkRightsToggled(rights, kind, toggle.State));
+            toggle.OnPressed = () => Refresh(isPredict ? preset : HexLinkPreset.Custom, LinkRightsToggled(rights, kind, toggle.State));
             toggles[index] = toggle;
         }
 
@@ -86,12 +91,25 @@ internal sealed partial class DawnScene
                 foreach (Badge chip in LinkRightsChips(rights))
                     exact.Add(chip);
             }
-            description.Text = UIRichText.Literal(Said(LinkPresetKey(preset) + "_tip"));
-            custom.Visible = preset == LinkRightsPreset.Custom;
+            if (there is not null)
+            {
+                ClearRows(there);
+                there.Add(new Label
+                {
+                    Text = Said(hostOffer is null ? "link.devices_request_there" : "link.devices_host_offers"),
+                    TextScale = LINK_SMALL, Dim = true, Anchor = Origin.Left, Pivot = Origin.Left
+                });
+                foreach (Badge chip in LinkRightsChips(hostOffer ?? LinkPresetRequest(preset)))
+                    there.Add(chip);
+            }
+
+            description.Text = UIRichText.Literal(Said(hostOffer is not null && preset == HexLinkPreset.Worker
+                ? "link.devices_worker_join_tip" : LinkPresetKey(preset) + "_tip"));
+            custom.Visible = preset == HexLinkPreset.Custom;
             warning.Visible = custom.Visible || (rights & HexLinkRights.Steer) != 0;
         }
 
-        void Refresh(LinkRightsPreset next, HexLinkRights grant)
+        void Refresh(HexLinkPreset next, HexLinkRights grant)
         {
             (preset, rights) = (next, grant);
             Apply();

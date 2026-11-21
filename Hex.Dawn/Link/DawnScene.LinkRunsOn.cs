@@ -225,6 +225,7 @@ internal sealed partial class DawnScene
                 linkSystemsAsking.Remove(deviceId);
                 linkRemoteSystems[deviceId] = systems;
                 agentsOptionsDrawn = string.Empty;
+                agentsWait = 0.0f;
             });
         });
     }
