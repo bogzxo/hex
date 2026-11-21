@@ -50,13 +50,16 @@ internal sealed partial class DawnScene
     /// Where the copy of a device's file goes here, the wire path through the same jail the other machine's requests go
     /// through, inside the device's copies. Throws a HexLinkException when the path isn't one.
     /// </summary>
-    internal string LinkRemoteCopyOf(string deviceId, string wire)
+    internal string LinkRemoteCopyOf(string deviceId, string wire) => LinkRemoteCopyIn(LinkRemoteRoot(deviceId), wire);
+
+    /// <summary>Where the copy of a file goes in a device's copies folder: a folder per workspace folder of the device's (by a safe name and a hash of it), the rest of the path through the jail.</summary>
+    internal static string LinkRemoteCopyIn(string deviceRoot, string wire)
     {
         int slash = wire.IndexOf('/');
         if (slash <= 0)
             throw new HexLinkException(HexLinkErrors.NOT_ALLOWED, $"{wire} isn't a file of a workspace folder.");
         string folder = wire[..slash];
-        string root = Path.Combine(LinkRemoteRoot(deviceId), HexLinkGit.Slug(folder) + "-" + HexLinkFiles.Hash(System.Text.Encoding.UTF8.GetBytes(folder))[..6]);
+        string root = Path.Combine(deviceRoot, HexLinkGit.Slug(folder) + "-" + HexLinkFiles.Hash(System.Text.Encoding.UTF8.GetBytes(folder))[..6]);
         Directory.CreateDirectory(root);
         return HexLinkFiles.Resolve([new HexLinkFolder(folder, root)], wire);
     }
@@ -488,7 +491,9 @@ internal sealed partial class DawnScene
     /// The files a device's hex_files answer names, as wire paths: a path that starts with one of its folders' names is
     /// one already, any other is taken as its first folder's.
     /// </summary>
-    internal static List<string> LinkFilesFound(HexLinkPeer peer, string said)
+    internal static List<string> LinkFilesFound(HexLinkPeer peer, string said) => LinkFilesFound([.. peer.Workspace.Folders.Select(folder => folder.Name)], said);
+
+    internal static List<string> LinkFilesFound(IReadOnlyList<string> folders, string said)
     {
         var wires = new List<string>();
         foreach (string line in said.Split('\n'))
@@ -498,10 +503,10 @@ internal sealed partial class DawnScene
                 continue;
             string path = file.Groups[1].Value.Replace('\\', '/');
             string first = path.Contains('/') ? path[..path.IndexOf('/')] : path;
-            if (peer.Workspace.Folders.Count > 1 && peer.Workspace.Folders.Any(folder => folder.Name == first))
+            if (folders.Count > 1 && folders.Contains(first))
                 wires.Add(path);
-            else if (peer.Workspace.Folders.Count > 0)
-                wires.Add($"{peer.Workspace.Folders[0].Name}/{path}");
+            else if (folders.Count > 0)
+                wires.Add($"{folders[0]}/{path}");
         }
 
         return wires;

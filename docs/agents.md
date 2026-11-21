@@ -203,6 +203,17 @@ starts with a line saying it's another machine's data, not instructions, and a r
 `hex_link_spawn(device, prompt, name?, agent?, model?)` starts an agent there and says how to follow it (`hex_link_call`
 with `hex_agent_wait`, `hex_agent_read` or `hex_agent_send`). With Link off they answer that it is.
 
+`hex_link_sync(device, action, folder?, path?, keep?, force?)` keeps a workspace folder the same here and on a device
+that has the same repository open (matched by its first commit), both ways: `start` turns it on and waits for the first
+comparison (`force` goes on when the two have different commits checked out), `flush` answers once everything saved
+here is there, `status` lists every sync with its counts, conflicts and the files that don't travel, `resolve` settles
+a file both sides changed (`keep: mine|theirs`; the other side's version waits beside it as `name.theirs-<device>.ext`
+until then), `stop` turns it off. What git ignores, `.git` and files over 8 MB never travel. The way to have another
+machine build or test what's changed here: edit here, `hex_link_sync flush`, then `hex_link_spawn` (or `hex_link_call`
+with `hex_agent_send`) there, `hex_link_call` with `hex_agent_wait` for its answer, and what it changes comes back by
+the sync. `hex_link_spawn` with `sync: true` does the start and flush first, and its answer says whether the folder the
+agent runs in there (that machine's first workspace folder) is synced with this one.
+
 What Claude Code and Codex are told in their system prompt (`HexAgentProfiles.HARNESS_RULES`, `hex.harness_rules` to
 an extension) says to find and read code through the harness before the shell, to run commands with
 `hex_terminal_run`, and how to coordinate. The shell stays theirs for anything the harness doesn't do. Claude Code's

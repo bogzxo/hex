@@ -231,10 +231,13 @@ internal sealed partial class DawnScene
     /* The choices kept */
 
     // The folders chosen to be synced with a device
-    private List<string> LinkSyncChosen(string deviceId)
+    private List<string> LinkSyncChosen(string deviceId) => LinkSyncChosenIn(LinkSyncChoices(), deviceId);
+
+    /// <summary>The folders a list of kept choices says are synced with a device.</summary>
+    internal static List<string> LinkSyncChosenIn(IEnumerable<JsonObject> choices, string deviceId)
     {
         var chosen = new List<string>();
-        foreach (JsonObject each in LinkSyncChoices())
+        foreach (JsonObject each in choices)
         {
             if (HexLinkData.String(each, "device", 200) == deviceId && HexLinkData.String(each, "folder", 200) is { Length: > 0 } folder)
                 chosen.Add(folder);
@@ -265,11 +268,7 @@ internal sealed partial class DawnScene
             return;
         lock (linkSyncGate)
         {
-            List<JsonObject> choices = LinkSyncChoices();
-            choices.RemoveAll(each => HexLinkData.String(each, "device", 200) == deviceId && PlatformPaths.Comparer.Equals(HexLinkData.String(each, "folder", 200) ?? string.Empty, folder));
-            if (on)
-                choices.Add(new JsonObject { ["device"] = deviceId, ["folder"] = folder });
-            var kept = new JsonObject { ["syncs"] = new JsonArray([.. choices.Select(each => (JsonNode)each)]) };
+            JsonObject kept = LinkSyncChoicesWith(LinkSyncChoices(), deviceId, folder, on);
             try
             {
                 Directory.CreateDirectory(linkKeys);
@@ -280,6 +279,15 @@ internal sealed partial class DawnScene
                 Console.WriteLine($"[Hex] Link couldn't keep which folders are synced, {e.Message}");
             }
         }
+    }
+
+    /// <summary>The kept choices with a device's folder turned on or off, once at most, as the file keeps them.</summary>
+    internal static JsonObject LinkSyncChoicesWith(List<JsonObject> choices, string deviceId, string folder, bool on)
+    {
+        choices.RemoveAll(each => HexLinkData.String(each, "device", 200) == deviceId && PlatformPaths.Comparer.Equals(HexLinkData.String(each, "folder", 200) ?? string.Empty, folder));
+        if (on)
+            choices.Add(new JsonObject { ["device"] = deviceId, ["folder"] = folder });
+        return new JsonObject { ["syncs"] = new JsonArray([.. choices.Select(each => (JsonNode)each)]) };
     }
 
     /* Writing here what came from there */
