@@ -105,6 +105,11 @@ internal sealed partial class HexAgentChat(int id, string agent)
 
     private readonly List<HexAgentEntry> entries = [];
 
+    // The tools of the turn going on by their ids, the rows after the last thing asked, the latest of an id. Every tool an
+    // agent starts, says is done or says a step of asks for its row by id, and looking back through the rows for it was
+    // a walk of the whole turn for each, a long one when a tool still going keeps the old rows from going to their file
+    private readonly Dictionary<string, HexAgentEntry> turnTools = new(StringComparer.Ordinal);
+
     /// <summary>What names its file of rows it no longer keeps, the same across Hex's restarts.</summary>
     public string Key { get; set; } = Guid.NewGuid().ToString("N");
 
@@ -344,6 +349,7 @@ internal sealed partial class HexAgentChat(int id, string agent)
             entries.Add(row);
         }
 
+        IndexTurnTools();
         Version++;
         Seen = Version;
     }
@@ -369,6 +375,10 @@ internal sealed partial class HexAgentChat(int id, string agent)
     private HexAgentEntry Add(HexAgentEntry entry)
     {
         entries.Add(entry);
+        if (entry.Kind == HexAgentEntryKind.User)
+            turnTools.Clear();
+        else if (entry.Kind == HexAgentEntryKind.Tool && entry.ToolId is { } toolId)
+            turnTools[toolId] = entry;
         if (entries.Count > MOST_ENTRIES + SPILL_BATCH)
         {
             // The oldest to its file, never one still queued, a tool still going or a question still waiting for its answer,
@@ -380,6 +390,12 @@ internal sealed partial class HexAgentChat(int id, string agent)
             {
                 HexAgentEntry[] old = [.. entries.GetRange(0, spill)];
                 entries.RemoveRange(0, spill);
+                foreach (HexAgentEntry gone in old)
+                {
+                    if (gone.Kind == HexAgentEntryKind.Tool && gone.ToolId is { } goneId && turnTools.GetValueOrDefault(goneId) == gone)
+                        turnTools.Remove(goneId);
+                }
+
                 Dropped += spill;
                 Spill?.Invoke(old);
             }
@@ -420,6 +436,8 @@ internal sealed partial class HexAgentChat(int id, string agent)
     {
         if (!entry.Queued || !entries.Remove(entry))
             return false;
+        // What was asked taken out, the turn the rows say goes back to the one asked before it
+        IndexTurnTools();
         Reshaped++;
         Version++;
         return true;
@@ -560,15 +578,20 @@ internal sealed partial class HexAgentChat(int id, string agent)
         ToolOfTurn(id) ?? Add(new HexAgentEntry(HexAgentEntryKind.Tool, name) { ToolId = id, ToolName = name, Input = input });
 
     // The tool of an id in the turn going on, after the last thing asked
-    private HexAgentEntry? ToolOfTurn(string id)
-    {
-        for (int i = entries.Count - 1; i >= 0 && entries[i].Kind != HexAgentEntryKind.User; i--)
-        {
-            if (entries[i].Kind == HexAgentEntryKind.Tool && entries[i].ToolId == id)
-                return entries[i];
-        }
+    private HexAgentEntry? ToolOfTurn(string id) => turnTools.GetValueOrDefault(id);
 
-        return null;
+    // The tools of the turn going on found again from the rows, after they were read back or one was taken out of the middle
+    private void IndexTurnTools()
+    {
+        turnTools.Clear();
+        int from = entries.Count;
+        while (from > 0 && entries[from - 1].Kind != HexAgentEntryKind.User)
+            from--;
+        for (int i = from; i < entries.Count; i++)
+        {
+            if (entries[i].Kind == HexAgentEntryKind.Tool && entries[i].ToolId is { } id)
+                turnTools[id] = entries[i];
+        }
     }
 
     /// <summary>
