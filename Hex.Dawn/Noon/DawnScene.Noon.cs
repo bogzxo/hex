@@ -175,7 +175,7 @@ internal sealed partial class DawnScene
         GripNoon();
 
         DressChrome();
-        commands.Add("Agents/open", Said("noon.command"), () => ShowFace(Face == HexFace.Noon ? HexFace.Dawn : HexFace.Noon), "Ctrl+Alt+Shift+N", "robot", UIKeyUse.BoundWhileTyping);
+        commands.Add("Agents/open", Said("noon.command"), () => SwitchFace(Face == HexFace.Noon ? HexFace.Dawn : HexFace.Noon), "Ctrl+Alt+Shift+N", "robot", UIKeyUse.BoundWhileTyping);
         AddNoonCommands();
     }
 
@@ -203,6 +203,7 @@ internal sealed partial class DawnScene
         }
 
         Face = face;
+        compositor.TraceTag = face;
         // The fleet opened over a narrow window is for one pick, Noon comes back with the chat
         noonFleetOpened = false;
         bool noon = face == HexFace.Noon;
@@ -217,6 +218,8 @@ internal sealed partial class DawnScene
             // The stage it was left on, the chat unless another was picked
             ApplyStage();
             noonStageDrawn = NOT_DRAWN;
+            // Its columns fitted and drawn on the first tick it's up, not up to a quarter of a second later
+            noonWait = 0.0f;
             // And the server off, what switching it on saves, once a session
             HintMcp();
         }
@@ -273,6 +276,7 @@ internal sealed partial class DawnScene
     private void UpdateNoon(float dt)
     {
         UpdateFamilyWindow();
+        WarmFaces();
         if (Face != HexFace.Noon)
             return;
 

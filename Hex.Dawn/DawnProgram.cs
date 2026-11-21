@@ -231,7 +231,7 @@ public static partial class DawnProgram
 
         // The terminal in the same window, Ctrl+Alt+Shift+D, when Hex.exe says how to make it. Not in a self test, which
         // is the one mode and nothing else, unless it asks for the suite that goes between the two
-        bool bothTested = selfTest && options.Suites?.Contains("dusk-noon", StringComparer.Ordinal) == true;
+        bool bothTested = selfTest && options.Suites?.Any(suite => suite is "dusk-noon" or "face-switch") == true;
         DawnScene MakeEditor(HexOptions with)
         {
             var editor = new DawnScene(with);

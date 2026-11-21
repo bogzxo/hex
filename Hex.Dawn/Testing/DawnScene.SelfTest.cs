@@ -178,6 +178,7 @@ internal sealed partial class DawnScene
         ("noon-mail-steer", "A message steered into a working agent takes the unread ones before it with it, is read only once written, and stays unread in its inbox when the write fails", TestNoonMailSteer),
         ("noon-panel", "The side bar's Agents view and Agentic showing the one chat, picked in either, a question answered in Agentic answered in the side bar", TestNoonPanel),
         ("dusk-noon", "Agentic and Dusk in the one window, the agents going on behind Dusk and Dusk's Noon button bringing Agentic back", TestDuskNoon),
+        ("face-switch", "Every way between Dawn, Agentic and Dusk timed in every look at 100, 150 and 200%, to its first frame and to standing still, no frame empty or in the other face's theme", TestFaceSwitch),
         ("noon-keys", "Agentic's keys round the fleet, up to the starter, to the next that wants looking at, back to Dawn, and none of them in Dawn", TestNoonKeys),
         ("noon-columns", "Agentic's fleet and Details dragged by their lines, held between their least and most, kept, put back by a double click, the fleet put away past its least", TestNoonColumns),
         ("noon-looks", "Agentic in every look Hex comes with at 100, 150 and 200%, its Noon theme on where the look has one and gone after", TestNoonLooks),
@@ -526,7 +527,7 @@ internal sealed partial class DawnScene
     {
         // OS input tests take the foreground briefly, so they only run when explicitly named, and so does dusk-noon, the
         // window having Dusk in it only when it's named
-        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts" or "repository" or "dusk-noon" or "webshots" or DawnProgram.NO_AI_SUITE)).Select(suite => suite.Name)];
+        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts" or "repository" or "dusk-noon" or "face-switch" or "webshots" or DawnProgram.NO_AI_SUITE)).Select(suite => suite.Name)];
         string[] unknown = [.. asked.Where(name => !SelfTestSuites.Any(suite => suite.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))];
         if (unknown.Length == 0)
             return true;
