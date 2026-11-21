@@ -43,7 +43,12 @@ internal sealed partial class DawnScene
         held.Chat.Touch(held.Entry);
     }
 
-    /// <summary>A held message written to its agent now, not when the agent next says something. False when it had gone.</summary>
+    /// <summary>
+    /// A held message written to its agent now, not when the agent next says something, and taken in now: a tool still
+    /// going (a build, a wait for its agents) is interrupted the way Stop interrupts a turn, its session kept, and the
+    /// message starts what it does next. Written while a tool ran, it sat unread until that tool was over, minutes on.
+    /// False when it had gone.
+    /// </summary>
     private bool SendHeldNow(HexAgentEntry entry)
     {
         int at = heldSteers.FindIndex(held => ReferenceEquals(held.Entry, entry));
@@ -51,8 +56,28 @@ internal sealed partial class DawnScene
             return false;
         var held = heldSteers[at];
         heldSteers.RemoveAt(at);
+
+        if (held.Chat.Running && SteeredRun(held.Chat) is { } run && ToolGoing(held.Chat) && StopLine(run) is { Length: > 0 } interrupt)
+        {
+            run.Process.Send(interrupt);
+            held.Chat.Note(Said("agents_panel.sent_through"));
+        }
         Write(held);
         return true;
+    }
+
+    // Whether a tool of the turn is still going, which a message waits behind
+    private static bool ToolGoing(HexAgentChat chat)
+    {
+        for (int i = chat.Entries.Count - 1; i >= 0; i--)
+        {
+            HexAgentEntry entry = chat.Entries[i];
+            if (entry.Kind == HexAgentEntryKind.User && !entry.Queued)
+                return false;
+            if (entry.Kind == HexAgentEntryKind.Tool && entry.State == HexAgentToolState.Running)
+                return true;
+        }
+        return false;
     }
 
     /// <summary>

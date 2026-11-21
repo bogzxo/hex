@@ -4156,6 +4156,7 @@ let strings = {
         file_reveal_system: "Reveal {name} in File Explorer",
         edit_queued: "Edit before it's sent",
         send_now: "Send now",
+        sent_through: "What it was running was interrupted so it takes your message now.",
         allow: "Allow",
         deny: "Deny",
         allowed: "Allowed",
