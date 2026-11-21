@@ -269,7 +269,7 @@ internal sealed partial class DawnScene
             // Those it started, the running ones, or all of them when they're all done already. A client that isn't a chat
             // of the panel didn't start any of its own as far as Hex knows, so it waits for every chat
             HexHubRow[] mine = [.. now.Values.Where(status => caller is null || status.Parent == caller)];
-            ids = [.. (mine.Any(status => status.State == "running") ? mine.Where(status => status.State == "running") : mine).Select(status => status.Id)];
+            ids = [.. (mine.Any(status => status.State.StartsWith("running", StringComparison.Ordinal)) ? mine.Where(status => status.State.StartsWith("running", StringComparison.Ordinal)) : mine).Select(status => status.Id)];
             if (ids.Length == 0)
                 return McpToolResult.Error(caller is null ? "There are no chats to wait for, hex_agent_spawn starts one." : "You haven't started any agents to wait for, hex_agent_spawn starts one.");
         }
@@ -284,7 +284,7 @@ internal sealed partial class DawnScene
             {
                 now = agentStatuses;
                 HexHubRow[] those = [.. ids.Select(id => now.GetValueOrDefault(id)).OfType<HexHubRow>()];
-                int done = those.Count(status => status.State != "running");
+                int done = those.Count(status => !status.State.StartsWith("running", StringComparison.Ordinal));
                 bool over = any ? done > 0 : done == those.Length;
                 bool late = System.Environment.TickCount64 >= deadline;
                 HexAgentMail[] mail = caller is { } me && wakes && now.GetValueOrDefault(me) is { } mine ? mine.Unread : [];
@@ -322,11 +322,11 @@ internal sealed partial class DawnScene
     {
         var said = new StringBuilder();
         if (late)
-            said.Append("Timed out, ").Append(those.Count(status => status.State == "running")).Append(" still running. hex_agent_wait again to go on waiting.\n\n");
-        foreach (HexHubRow status in those.OrderBy(status => status.State == "running"))
+            said.Append("Timed out, ").Append(those.Count(status => status.State.StartsWith("running", StringComparison.Ordinal))).Append(" still running. hex_agent_wait again to go on waiting.\n\n");
+        foreach (HexHubRow status in those.OrderBy(status => status.State.StartsWith("running", StringComparison.Ordinal)))
         {
             said.Append(StatusLine(status)).Append('\n');
-            if (status.State != "running")
+            if (!status.State.StartsWith("running", StringComparison.Ordinal))
                 said.Append(status.Reply.Length > 0 ? status.Reply : "(it said nothing)").Append("\n\n");
         }
 
