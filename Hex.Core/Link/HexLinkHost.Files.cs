@@ -44,7 +44,8 @@ internal sealed partial class HexLinkHost
 
         if (TakeHeldWrite(wire, full, bytes))
             return HeldWriteReply(wire, HexLinkFiles.Hash(bytes), parameters);
-        string? hash = await services.CompareAndReplace(full, wire, baseHash, bytes, cancel);
+        string? hash = await ApplyHeldSubmission(full, wire, baseHash, bytes, cancel,
+            HexLinkData.Bool(parameters, "held_submission") == true);
         return new JsonObject { ["path"] = wire, ["hash"] = hash };
     }
 
@@ -62,7 +63,8 @@ internal sealed partial class HexLinkHost
             return HeldWriteReply(wire, null, parameters);
         if (!File.Exists(full))
             throw HexLinkException.NotFound($"There's no file {wire}.");
-        await services.CompareAndReplace(full, wire, baseHash, null, cancel);
+        await ApplyHeldSubmission(full, wire, baseHash, null, cancel,
+            HexLinkData.Bool(parameters, "held_submission") == true);
         return new JsonObject { ["path"] = wire };
     }
 

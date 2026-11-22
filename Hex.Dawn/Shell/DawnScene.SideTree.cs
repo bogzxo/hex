@@ -182,7 +182,7 @@ internal sealed partial class DawnScene
         };
 
         item.Tag = new SideTag(
-            Menu: _ => explorer.ShowExplorerMenu(entry),
+            Menu: _ => LinkExplorerFileMenu(entry, includeClaims: false),
             Toggled: toggled =>
             {
                 toggled.Icon = toggled.Expanded ? "folder-opened" : "folder";

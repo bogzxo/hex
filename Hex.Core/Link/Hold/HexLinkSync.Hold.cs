@@ -5,11 +5,16 @@ namespace Hex.Core;
 internal sealed partial class HexLinkSync
 {
     public int Held => Holds?.Count ?? 0;
+    public IReadOnlyList<string> RemoteHeldPaths
+    {
+        get { lock (gate) return [.. remoteHeld.Order(PlatformPaths.Comparer)]; }
+    }
     private HashSet<string> holdPaths = new(PlatformPaths.Comparer);
     private readonly HashSet<string> remoteHeld = new(PlatformPaths.Comparer);
     private readonly Dictionary<string, string?> offeredWhileHeld = new(PlatformPaths.Comparer);
     private readonly Dictionary<string, string?> remoteSeenWhileHeld = new(PlatformPaths.Comparer);
     private readonly Dictionary<string, string?> releasedPeerOffers = new(PlatformPaths.Comparer);
+    private readonly Dictionary<string, string?> submittedHolds = new(PlatformPaths.Comparer);
 
     // Called under the sync gate.
     private void NoteRemoteHold(string wire, bool held, bool fromNotice = false)
@@ -141,13 +146,15 @@ internal sealed partial class HexLinkSync
             ? new(head, HexLinkHoldBaseSource.Git, Executable: agreed.Executable) : null;
     }
 
-    private void HoldsReleased(IReadOnlyList<HexLinkHold> released)
+    private void HoldsReleased(IReadOnlyList<HexLinkHold> released, IReadOnlyDictionary<string, string?>? submitted)
     {
         lock (gate)
         {
             foreach (HexLinkHold entry in released)
             {
                 string wire = entry.Path;
+                if (submitted?.TryGetValue(wire, out string? hashSubmitted) == true)
+                    submittedHolds[wire] = hashSubmitted;
                 if (remoteHeld.Contains(wire))
                     continue;
                 HexLinkTreeFile? theirs = remote.GetValueOrDefault(wire);
@@ -166,6 +173,19 @@ internal sealed partial class HexLinkSync
         }
     }
 
+    private bool IsSubmittedHold(string wire, string? current)
+    {
+        lock (gate)
+        {
+            if (!submittedHolds.TryGetValue(wire, out string? submitted))
+                return false;
+            if (submitted == current)
+                return true;
+            submittedHolds.Remove(wire);
+            return false;
+        }
+    }
+
     private void HoldsMoved()
     {
         if (Holds is null)
@@ -177,6 +197,8 @@ internal sealed partial class HexLinkSync
             released = [.. holdPaths.Except(current, PlatformPaths.Comparer)];
             foreach (string wire in released)
                 remoteSeenWhileHeld.Remove(wire);
+            foreach (string wire in current)
+                submittedHolds.Remove(wire);
             holdPaths = current;
         }
         foreach (string wire in released)

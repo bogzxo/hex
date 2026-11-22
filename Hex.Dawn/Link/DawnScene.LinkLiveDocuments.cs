@@ -21,6 +21,7 @@ internal sealed partial class DawnScene
         public HexLinkPeer? Connection;
         public int Version = tab.Editor.Document.Version;
         public bool Busy, Offline;
+        public Task ActiveStep = Task.CompletedTask;
         public bool SaveRequested;
         public HexDocSaved? Saved, DiskSave;
         public long DiskSaveRetryAt;
@@ -83,6 +84,8 @@ internal sealed partial class DawnScene
         try
         {
             HexLinkFolder folder = LiveFolder(wire) ?? throw HexLinkException.NotFound("The shared folder is no longer open.");
+            if (LinkHoldBlocksDocument(wire, tab.Path))
+                throw new HexLinkException(HexLinkErrors.DOCUMENT_HELD, "Shared editing is paused while this file is held.");
             if (!PlatformPaths.Same(HexLinkFiles.Resolve([folder], wire, services.Excludes), tab.Path))
                 return;
             HexLinkAuthority pin = services.FolderAuthorities.Of(folder) ?? new HexLinkAuthority(services.Device.Id, 1);
@@ -97,6 +100,7 @@ internal sealed partial class DawnScene
             var room = services.Documents.Rooms.Open(wire, tab.Editor.Text,
                 new HexDocFileBasis(tab.DiskText, tab.DiskEncoding, tab.SavedCrLf));
             var replica = new HexLinkDocumentReplica(room.Join(services.Device.Id, tab, services.Device));
+            linkDocumentRejoinAfterHold.Remove(wire);
             LinkLiveAttach(tab, wire, pin, replica, room, null);
             if (explicitly)
                 Say(Said("link.doc_hosted", ("path", wire)));
@@ -126,6 +130,8 @@ internal sealed partial class DawnScene
         string? openText = await OnEditorForLink(() =>
         {
             cancel.ThrowIfCancellationRequested();
+            if (LinkHoldBlocksDocument(wire, full))
+                throw new HexLinkException(HexLinkErrors.DOCUMENT_HELD, "Shared editing is paused while this file is held.");
             if (services != linkServices || linkLivePaused.Contains(wire) || LiveFolder(wire) is not { } folder
                 || link?.PeerOf(caller.Id) is not { } peer || !LinkLiveSynced(peer, folder.Name))
                 throw HexLinkException.NotFound("The caller has no linked sync for this document.");
@@ -185,15 +191,30 @@ internal sealed partial class DawnScene
 
     private async void LinkLiveJoin(HexLinkPeer peer, string wire, HexLinkAuthority pin, HexDocument? tab, bool explicitly)
     {
+        if (LinkHoldBlocksDocument(wire, tab?.Path))
+        {
+            if (explicitly)
+                Say("Shared editing is paused while this file is held.", error: true);
+            return;
+        }
         if (!HexLinkAllowed.Has(peer.Granted, HexLinkRights.View) || tab is not null && linkLiveDocuments.ContainsKey(tab)
             || !linkLiveJoining.Add(wire))
             return;
 
+        bool afterHold = tab is not null && linkDocumentRejoinAfterHold.Contains(wire);
         try
         {
             var cancel = linkCancel?.Token ?? default;
             string data = linkData;
             string? relay = LinkLiveRelay(pin, peer);
+            HexLinkFile? published = afterHold ? await peer.Read(wire, cancel).ConfigureAwait(false) : null;
+            if (published is not null && !await OnEditorForLink(() => tab?.DiskText is { } disk &&
+                published.Text is { } shared && HexDocSaved.NormalText(disk) == HexDocSaved.NormalText(shared)).ConfigureAwait(false))
+            {
+                PostLink(() => linkLiveJoining.Remove(wire));
+                return;
+            }
+
             HexDocExchange opened = await peer.OpenDocument(wire, cancel: cancel, automatic: !explicitly, relayTo: relay).ConfigureAwait(false);
             var replica = new HexLinkDocumentReplica(opened);
             while (replica.Revision < replica.Head)
@@ -201,6 +222,7 @@ internal sealed partial class DawnScene
                 var next = await peer.ExchangeDocument(wire, replica.Epoch, replica.Revision, [], cancel: cancel, relayTo: relay).ConfigureAwait(false);
                 replica.Receive(next);
             }
+
             string? copy = null;
             if (tab is null)
             {
@@ -213,8 +235,13 @@ internal sealed partial class DawnScene
             PostLink(() =>
             {
                 linkLiveJoining.Remove(wire);
-                if (link?.PeerOf(peer.Device.Id) != peer || linkLivePaused.Contains(wire))
+                if (linkDocumentStaleJoins.Remove(wire) || link?.PeerOf(peer.Device.Id) != peer || linkLivePaused.Contains(wire)
+                    || LinkHoldBlocksDocument(wire, tab?.Path) || published is not null && (tab?.DiskText is not { } disk ||
+                        published.Text is not { } remote || HexDocSaved.NormalText(disk) != HexDocSaved.NormalText(remote)))
+                {
+                    _ = LinkLiveLeave(peer, wire, relay);
                     return;
+                }
                 if (tab is null)
                 {
                     if (!OpenText(copy!, replica.View.Text))
@@ -231,6 +258,7 @@ internal sealed partial class DawnScene
                     _ = LinkLiveLeave(peer, wire, relay);
                     return;
                 }
+                linkDocumentRejoinAfterHold.Remove(wire);
                 LinkLiveAttach(tab, wire, pin, replica, null, peer);
                 if (explicitly)
                     Say(Said("link.doc_joined", ("path", wire), ("device", peer.Device.Name)));
@@ -241,6 +269,9 @@ internal sealed partial class DawnScene
             PostLink(() =>
             {
                 linkLiveJoining.Remove(wire);
+                linkDocumentStaleJoins.Remove(wire);
+                if (error is HexLinkException { Code: HexLinkErrors.DOCUMENT_HELD })
+                    linkDocumentRejoinAfterHold.Add(wire);
                 if (explicitly)
                     Say(error.Message, error: true);
             });
@@ -354,6 +385,8 @@ internal sealed partial class DawnScene
         linkLivePaused.Clear();
         linkLiveJoining.Clear();
         linkLiveRetry.Clear();
+        linkDocumentRejoinAfterHold.Clear();
+        linkDocumentStaleJoins.Clear();
     }
 
     private void UpdateLinkLiveDocuments(float dt)
@@ -443,7 +476,7 @@ internal sealed partial class DawnScene
         if (!useReplay)
             shared.MaintenanceAt = now + (peer is not null && peer == shared.RevisionWaitUnsupported ? 50 : 250);
         shared.Busy = true;
-        LinkLiveStep(shared, peer, changed ? buffer.Text : shared.Shown.Text, buffer.Version, cursor,
+        shared.ActiveStep = LinkLiveStep(shared, peer, changed ? buffer.Text : shared.Shown.Text, buffer.Version, cursor,
             !shared.Tab.Editor.ReadOnly, updatePresence, useReplay ? wake : null, linkCancel?.Token ?? default);
     }
 
@@ -508,7 +541,8 @@ internal sealed partial class DawnScene
     {
         if (tab is not { IsText: true, Path: { } path, DiffOf: null } || linkRemote.ContainsKey(path)
             || linkLiveDocuments.ContainsKey(tab) || linkDocument?.Tab == tab || LinkWireOf(path) is not { } wire
-            || linkLivePaused.Contains(wire) || linkLiveJoining.Contains(wire) || LiveFolder(wire) is not { } folder)
+            || linkLivePaused.Contains(wire) || linkLiveJoining.Contains(wire) || LiveFolder(wire) is not { } folder
+            || LinkHoldBlocksDocument(wire, path))
             return;
 
         var pin = services.FolderAuthorities.Of(folder);
@@ -548,7 +582,7 @@ internal sealed partial class DawnScene
                 || peer.ChosenSyncFolders.Contains(name, PlatformPaths.Comparer);
     }
 
-    private async void LinkLiveStep(LinkLiveDocument shared, HexLinkPeer? peer, string local, int version,
+    private async Task LinkLiveStep(LinkLiveDocument shared, HexLinkPeer? peer, string local, int version,
         (UITextPosition Caret, UITextPosition Anchor, UITextPosition? Pointer)? cursor, bool editable, bool updatePresence,
         LinkLiveRevision? replay, CancellationToken cancel)
     {
@@ -646,6 +680,7 @@ internal sealed partial class DawnScene
                             : await peer!.SaveDocument(shared.Wire, replica.Epoch, replica.Revision, cancel,
                                 relayTo: LinkLiveRelay(shared.Authority, peer)).ConfigureAwait(false);
                     }
+                    catch (HexLinkException e) when (e.Code == HexLinkErrors.DOCUMENT_HELD) { throw; }
                     catch (Exception e) when (e is IOException or HexLinkException or UnauthorizedAccessException)
                     {
                         saveError = e.Message;
@@ -698,6 +733,17 @@ internal sealed partial class DawnScene
             {
                 shared.AgentEdits.Dequeue();
                 agent.Done.TrySetResult(agentError);
+            }
+            if (error is HexLinkException { Code: HexLinkErrors.DOCUMENT_HELD } held)
+            {
+                bool saveLocal = shared.SaveRequested && document == shared.Tab && shared.Tab.Path is { } file
+                    && LinkLocalOf(shared.Wire) is { } localFile && PlatformPaths.Same(file, localFile);
+                linkDocumentRejoinAfterHold.Add(shared.Wire);
+                LinkLiveDocumentClose(shared, false);
+                Say(held.Message);
+                if (saveLocal)
+                    SaveTo(shared.Tab.Path!);
+                return;
             }
             if (error is InvalidOperationException or ArgumentException
                 || error is HexLinkException { Code: HexLinkErrors.NOT_ALLOWED or HexLinkErrors.CONFLICT or HexLinkErrors.INVALID_REQUEST })

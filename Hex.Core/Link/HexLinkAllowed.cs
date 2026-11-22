@@ -15,6 +15,8 @@ internal static class HexLinkAllowed
     /// <summary>The argument a tool call is told its calling chat by, which a peer is never let say.</summary>
     public const string CALLER = "_hex_caller";
 
+    internal sealed record HeldRead(string Note, string? Text, bool Absent);
+    internal static readonly AsyncLocal<Func<string, HeldRead?>?> RemoteHeldRead = new();
     internal static readonly AsyncLocal<Func<string, bool>?> RemoteFileAllowed = new();
     internal static readonly AsyncLocal<HexLinkDevice?> RelayOrigin = new();
     private static readonly ConditionalWeakTable<JsonObject, HexLinkAgentCall> agentCalls = new();

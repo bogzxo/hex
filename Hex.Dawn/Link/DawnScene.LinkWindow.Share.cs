@@ -128,6 +128,7 @@ internal sealed partial class DawnScene
         string said = pausedOn ?? follow ?? sync?.Why ?? string.Empty;
         if (said.Length > 0)
             holder.Add(new Label { Text = UIRichText.Literal(said), TextScale = LINK_SMALL, Dim = true, Wrap = true, Align = Origin.Left, Fill = UIFill.Horizontal, Padding = new UIEdges(18, 0, 0, 0) });
+        DrawLinkFolderHolds(holder, peer, folder);
         DrawLinkFolderAuthority(holder, peer, folder);
         LinkMissingRepositoryRow(holder, peer, folder, state);
         DrawLinkPrivateWorktreePresence(holder, peer, folder);

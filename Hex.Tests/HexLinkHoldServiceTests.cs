@@ -128,7 +128,7 @@ public sealed class HexLinkHoldServiceTests : IDisposable
         Assert.Equal("first mine\n", Get(B));
         Assert.Equal(3, store.Count);
         int events = 0;
-        store.Released += files =>
+        store.Released += (files, _) =>
         {
             Assert.Equal(3, files.Count);
             events++;
@@ -183,6 +183,34 @@ public sealed class HexLinkHoldServiceTests : IDisposable
         Assert.Equal(2, store.Count);
         Assert.Equal(Mine, Get(A));
         Assert.Equal("base\n", Get(B));
+    }
+
+    [Fact]
+    public async Task Submit_anyway_reuses_every_exact_resolution_after_the_gate_failed()
+    {
+        PutHeld(A, Basis, Mine, Theirs);
+        PutHeld(B, "base\n", "local first\n", "incoming first\n");
+        PutHeld(C, "base\n", "local last\n", "incoming last\n");
+        var pending = await CheckedService("cat b.txt; cat c.txt; exit 19").Submit();
+        var first = pending.NeedsMerge.Single(file => file.Path == B).Session!;
+        var last = pending.NeedsMerge.Single(file => file.Path == C).Session!;
+        await first.Complete(Bytes("typed first\r\n"));
+        byte[] typed = Bytes("typed last without a newline");
+        MergeCheckFailed failed = await Assert.ThrowsAsync<MergeCheckFailed>(() => last.Complete(typed));
+
+        Assert.Contains("typed first", failed.Message);
+        Assert.Contains("typed last without a newline", failed.Message);
+        Assert.Equal(3, store.Count);
+        Assert.Equal(Mine, Get(A));
+        Assert.Equal("local first\n", Get(B));
+        Assert.Equal("local last\n", Get(C));
+
+        await failed.OverrideCheck();
+
+        Assert.Empty(store.List());
+        Assert.Equal(Combined, Get(A));
+        Assert.Equal(Bytes("typed first\r\n"), File.ReadAllBytes(Full(B)));
+        Assert.Equal(typed, File.ReadAllBytes(Full(C)));
     }
 
     [Fact]

@@ -16,7 +16,7 @@ internal static class HexLinkFilePack
     // Allow for UTF-8 JSON escapes, the SHA-256 and the length prefix before constructing the headers.
     public static int WireCost(string path, int bytes) => checked(256 + 6 * path.Length + bytes);
 
-    internal sealed record Entry(string Path, byte[] Bytes, string? Base = null, bool? Executable = null);
+    internal sealed record Entry(string Path, byte[] Bytes, string? Base = null, bool? Executable = null, bool HeldSubmission = false);
 
     internal sealed record Outcome(string Path, string? Hash, HexLinkException? Error = null, bool Held = false)
     {
@@ -54,6 +54,8 @@ internal static class HexLinkFilePack
         {
             Entry entry = entries[i];
             var json = new JsonObject { ["path"] = entry.Path, ["length"] = entry.Bytes.Length, ["base"] = entry.Base, ["executable"] = entry.Executable };
+            if (entry.HeldSubmission)
+                json["held_submission"] = true;
             byte[] header = Encoding.UTF8.GetBytes(json.ToJsonString());
             if (header.Length > MaximumHeader || entry.Bytes.Length > maximum)
                 throw new HexLinkException(HexLinkErrors.TOO_BIG, "An entry is too large for a Link file pack.");
@@ -134,7 +136,8 @@ internal static class HexLinkFilePack
             string? expected = HexLinkData.String(header, "base", 65);
             if (header["base"] is not null && (expected is not { Length: 64 } || !expected.All(char.IsAsciiHexDigit)))
                 throw HexLinkException.Invalid("Invalid Link file pack base hash.");
-            entries.Add(new Entry(path, body[..bytes].ToArray(), expected, HexLinkData.Bool(header, "executable")));
+            entries.Add(new Entry(path, body[..bytes].ToArray(), expected, HexLinkData.Bool(header, "executable"),
+                HexLinkData.Bool(header, "held_submission") == true));
             body = body[bytes..];
         }
 
@@ -219,11 +222,12 @@ internal sealed partial class HexLinkSync
         return await Asked(() => peer.Read(path, cancel), cancel);
     }
 
-    private async Task<string> PushPacked(string path, string? baseHash, byte[] bytes, bool? executable, CancellationToken cancel)
+    private async Task<string> PushPacked(string path, string? baseHash, byte[] bytes, bool? executable, CancellationToken cancel,
+        bool heldSubmission = false)
     {
         if (packedWrites is not null && !noPackWrites)
         {
-            var entry = new HexLinkFilePack.Entry(path, bytes, baseHash, executable);
+            var entry = new HexLinkFilePack.Entry(path, bytes, baseHash, executable, heldSubmission);
             try
             {
                 if (bytes.Length <= HexLinkFilePack.MaximumFile)
@@ -246,7 +250,7 @@ internal sealed partial class HexLinkSync
                 noPackWrites = true;
             }
         }
-        return await Asked(() => peer.Write(path, baseHash, bytes, cancel), cancel);
+        return await Asked(() => peer.Write(path, baseHash, bytes, cancel, heldSubmission), cancel);
     }
 
     private async Task ReadPacked(PendingRead[] batch)

@@ -153,7 +153,8 @@ internal sealed class HexLinkHoldService(HexLinkFolder folder, HexLinkHoldStore 
     public Task<HexLinkHoldOperation> CompleteMerge(string path, byte[]? bytes, CancellationToken cancel = default) =>
         Complete(path, sessionId: null, bytes, cancel);
 
-    private async Task<HexLinkHoldOperation> Complete(string path, Guid? sessionId, byte[]? bytes, CancellationToken cancel)
+    private async Task<HexLinkHoldOperation> Complete(string path, Guid? sessionId, byte[]? bytes, CancellationToken cancel,
+        bool? checkOverride = null)
     {
         await operations.WaitAsync(cancel);
         try
@@ -177,9 +178,16 @@ internal sealed class HexLinkHoldService(HexLinkFolder folder, HexLinkHoldStore 
                 HexLinkHoldPlanEntry[] ready = [.. batch.Plan.Select(entry => entry.RequiresResolution
                     ? entry with { Result = batch.Results[entry.Path], Session = null }
                     : entry)];
-                return await Install(ready, batch.Update, batch.Check, cancel);
+                HexLinkHoldOperation result = await Install(ready, batch.Update, checkOverride ?? batch.Check, cancel);
+                if (result.Passed)
+                    Forget(batch);
+                return result;
             }
-            finally { Forget(batch); }
+            catch
+            {
+                Forget(batch);
+                throw;
+            }
         }
         finally { operations.Release(); }
     }
@@ -221,7 +229,8 @@ internal sealed class HexLinkHoldService(HexLinkFolder folder, HexLinkHoldStore 
                 EnsureCurrent(entry, entry.Result);
             committed = update
                 ? Rebase(plan.Single())
-                : store.Release([.. plan.Select(entry => entry.Snapshot.Hold)]);
+                : store.Release([.. plan.Select(entry => entry.Snapshot.Hold)],
+                    plan.ToDictionary(entry => entry.Path, entry => Hash(entry.Result), PlatformPaths.Comparer));
             if (!committed)
                 throw ChangedDuringOperation(plan[0].Path);
             return new([.. plan.Select(entry => entry.Path)], [], gate);
@@ -301,7 +310,10 @@ internal sealed class HexLinkHoldService(HexLinkFolder folder, HexLinkHoldStore 
                 {
                     HexLinkHoldOperation completed = await Complete(entry.Path, sessionId, result, CancellationToken.None);
                     if (completed.Gate is { Passed: false } failed)
-                        throw new IOException(failed.Output);
+                        throw new MergeCheckFailed(failed.Output, async () =>
+                        {
+                            await Complete(entry.Path, sessionId, result, CancellationToken.None, checkOverride: false);
+                        });
                 }
                 var session = new MergeSession(title, "Mine", "Theirs", "Base", model, bytes => Finish(bytes),
                     () => Cancel(entry.Path, sessionId), full)

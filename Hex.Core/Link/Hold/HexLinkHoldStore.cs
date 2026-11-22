@@ -35,7 +35,7 @@ internal sealed class HexLinkHoldStore
     internal long Revision => Volatile.Read(ref revision);
     internal string BaseFile(HexLinkHold entry) => Path.Combine(BlobDirectory, entry.BaseHash);
     public event Action? Changed;
-    internal event Action<IReadOnlyList<HexLinkHold>>? Released;
+    internal event Action<IReadOnlyList<HexLinkHold>, IReadOnlyDictionary<string, string?>?>? Released;
 
     public HexLinkHold Hold(string path, byte[] baseBytes, HexLinkHoldBaseSource baseSource, bool baseDeleted = false, bool? baseExecutable = null)
     {
@@ -156,9 +156,20 @@ internal sealed class HexLinkHoldStore
         }
     }
 
+    public bool MarkAgedNoticeShown(string path, DateTimeOffset now)
+    {
+        lock (gate)
+        {
+            if (Get(path) is not { AgedNoticeShown: false } entry || now - entry.HeldAt < TimeSpan.FromHours(24))
+                return false;
+            Commit(entry.Path, entry with { AgedNoticeShown = true });
+            return true;
+        }
+    }
+
     public bool Release(string path) => Get(path) is { } held && Release([held]);
 
-    internal bool Release(IReadOnlyList<HexLinkHold> holds)
+    internal bool Release(IReadOnlyList<HexLinkHold> holds, IReadOnlyDictionary<string, string?>? submitted = null)
     {
         if (holds.Count == 0)
             return true;
@@ -176,7 +187,7 @@ internal sealed class HexLinkHoldStore
                 Retire(held.IncomingHash, next);
             }
         }
-        Released?.Invoke(holds);
+        Released?.Invoke(holds, submitted);
         Changed?.Invoke();
         return true;
     }
@@ -184,7 +195,7 @@ internal sealed class HexLinkHoldStore
     internal bool Matches(HexLinkHold hold) => Get(hold.Path) is { } current && SameVersion(current, hold);
 
     private static bool SameVersion(HexLinkHold left, HexLinkHold right) =>
-        left with { NoticeShown = right.NoticeShown } == right;
+        left with { NoticeShown = right.NoticeShown, AgedNoticeShown = right.AgedNoticeShown } == right;
 
     // Must be called under gate. Persist the new index before retiring any blobs it no longer references.
     private void Commit(string path, HexLinkHold? entry, string? hash = null, byte[]? blob = null, string? staged = null)
@@ -300,6 +311,7 @@ internal sealed class HexLinkHoldStore
         ["incomingFrom"] = entry.IncomingFrom,
         ["incomingAt"] = entry.IncomingAt is { } at ? JsonValue.Create(at) : null,
         ["noticeShown"] = entry.NoticeShown,
+        ["agedNoticeShown"] = entry.AgedNoticeShown,
     };
 
     private HexLinkHold ReadEntry(JsonObject row)
@@ -322,7 +334,7 @@ internal sealed class HexLinkHoldStore
         return new(path, heldAt.GetValue<DateTimeOffset>(), hash.ToLowerInvariant(), source, incoming?.ToLowerInvariant(), deleted,
             row["incomingFrom"]?.GetValue<string>(), row["incomingAt"]?.GetValue<DateTimeOffset>(),
             row["noticeShown"]?.GetValue<bool>() == true, row["baseDeleted"]?.GetValue<bool>() == true,
-            row["baseExecutable"]?.GetValue<bool>());
+            row["baseExecutable"]?.GetValue<bool>(), row["agedNoticeShown"]?.GetValue<bool>() == true);
     }
 
     private string Wire(string path)
