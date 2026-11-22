@@ -1,3 +1,5 @@
+using System.Text.Json.Nodes;
+
 namespace Hex.Dawn;
 
 internal sealed partial class DawnScene
@@ -17,6 +19,8 @@ internal sealed partial class DawnScene
         const string Merged = "private first\nsecond\nthird\nremote fourth\n";
         HexLinkPeer? peer = null;
         HexLinkPrivateWorktree? draft = null;
+        HexAgentChat? agent = null;
+        Task<McpToolResult>? draftStatus = null;
         Task? step = null;
         Task<HexLinkDraftPublication>? result = null;
         bool cut = false;
@@ -25,7 +29,7 @@ internal sealed partial class DawnScene
         string? device = null;
         CancellationToken cancel = CancellationToken.None;
 
-        async Task OpenDraft()
+        async Task OpenDraft(HexAgentChat chat)
         {
             var folder = linkServices!.Workspace.Folders.Single(folder => folder.Name == LINK_SYNC_FOLDER);
             string owner = linkServices.Device.Id;
@@ -38,9 +42,11 @@ internal sealed partial class DawnScene
                     return Task.CompletedTask;
                 },
                 (_, _, _, _) => Task.CompletedTask, (_, _, _) => Task.CompletedTask, (_, _, _) => { }, cancel);
-            var route = LinkPrivatePublishRoute(folder)!;
-            draft = await HexLinkPrivateWorktree.Open(LinkPrivateStorage, Guid.NewGuid(), folder,
-                await route.Snapshot(cancel), () => linkServices.Excludes, cancel);
+            if (await LinkCreateAgentDraft(chat, folder.Name, cancel) is { } failure)
+                throw new IOException(failure);
+            if (chat.LinkDraft is not { } id)
+                throw new IOException("The agent has no private worktree.");
+            draft = await LinkOpenStoredDraft(id, cancel);
         }
 
         Task<HexLinkDraftPublication> Publish(string command) =>
@@ -75,20 +81,27 @@ internal sealed partial class DawnScene
                 return;
             device = peer.Device.Id;
             LinkSyncStop(device, LINK_SYNC_FOLDER);
-            step = OpenDraft();
+            agent = new HexAgentChat(++agentChatsMade, "link_worktree_fixture") { Name = "Private worktree test" };
+            agentChats.Add(agent);
+            step = OpenDraft(agent);
         });
         test.WaitFor(() => step?.IsCompleted == true, 30.0f);
         test.Run(() => { if (step?.Exception is { } error) Console.WriteLine("[Hex self-test] link-worktree: " + error.GetBaseException().Message); });
-        test.Check("link-worktree: a detached draft opened on the authority", () => step is { IsCompletedSuccessfully: true } && draft is not null);
+        test.Check("link-worktree: a detached draft opened on the authority", () => step is { IsCompletedSuccessfully: true } && draft is not null && agent is not null && LinkAgentFolder(agent) == draft.Root);
         test.Run(() =>
         {
             if (draft is null)
                 return;
             File.WriteAllText(Path.Combine(draft.Root, "src", "shared.txt"), "private first\nsecond\nthird\nfourth\n");
             File.WriteAllText(Path.Combine(draft.Root, "only-draft.txt"), "private");
+            draftStatus = LinkPublishAgentTool(new JsonObject { [HexMcpCaller.CALLER] = agent!.Id, ["action"] = "status" }, cancel);
             result = Publish("exit 7");
         });
         test.WaitFor(() => draft is null || result?.IsCompleted == true, 40.0f);
+        test.WaitFor(() => draft is null || draftStatus?.IsCompleted == true, 20.0f);
+        test.Check("link-worktree: hex_link_publish status reports private files for this agent", () =>
+            draftStatus is { IsCompletedSuccessfully: true, Result.IsError: false } &&
+            draftStatus.Result.AllText().Contains("2 unpublished files", StringComparison.Ordinal));
         test.Check("link-worktree: the failed gate leaves both editors at the shared version", () =>
             result is { IsCompletedSuccessfully: true, Result: { Gate.ExitCode: 7, Receipt: null } } &&
             ReadLinkTestFile(target) == Seed && ReadLinkTestFile(remote) == Seed &&
@@ -144,7 +157,13 @@ internal sealed partial class DawnScene
                 LinkForget(device);
         });
         test.WaitFor(() => linkTestPeer is null or { HasExited: true }, 40.0f);
-        test.Run(() => { TidyLinkTest(); linkTestExtraFolders = []; });
+        test.Run(() =>
+        {
+            if (agent is not null)
+                agentChats.Remove(agent);
+            TidyLinkTest();
+            linkTestExtraFolders = [];
+        });
     }
 
     private void TestLinkWorktreePeer(HexPointerScript test, string? workspace)
