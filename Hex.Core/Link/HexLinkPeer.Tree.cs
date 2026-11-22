@@ -36,10 +36,13 @@ internal sealed partial class HexLinkPeer
         }
     }
 
-    private async Task<HexLinkManifest> ReadManifest(string method, string folder, CancellationToken cancel)
+    internal Task<HexLinkManifest> ProvisionManifest(string folder, CancellationToken cancel) =>
+        ReadManifest("sync/manifest", folder, cancel, provision: true);
+
+    private async Task<HexLinkManifest> ReadManifest(string method, string folder, CancellationToken cancel, bool provision = false)
     {
         var patience = TimeSpan.FromMinutes(5);
-        JsonObject said = await AskObject(method, new JsonObject { ["folder"] = folder, ["paged"] = true }, cancel, patience);
+        JsonObject said = await AskObject(method, new JsonObject { ["folder"] = folder, ["paged"] = true, ["provision"] = provision }, cancel, patience);
         HexLinkManifest first = HexLinkTree.Of(said);
         if (first.Folder != folder)
             throw HexLinkException.Invalid("The peer sent a manifest for a different folder.");

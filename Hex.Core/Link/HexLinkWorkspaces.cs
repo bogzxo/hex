@@ -43,8 +43,10 @@ internal static class HexLinkWorkspaces
         return new HexLinkWorkspace(named, described, repositories);
     }
 
+    private sealed record ProvisionFacts(string Head, string? Branch, string? Origin, Dictionary<string, string> Modules);
+
     /// <summary>Builds a checkout plan for the actual repositories inside the folders a peer may see.</summary>
-    internal static HexLinkHostedProvision Provision(HexLinkWorkspace workspace, string? only, CancellationToken cancel, string? onlyRepository = null)
+    internal static HexLinkHostedProvision Provision(HexLinkWorkspace workspace, string? only, CancellationToken cancel, string? onlyRepository = null, bool deferWorktree = false)
     {
         if (HexLinkGit.Why() is { } why)
             throw new InvalidOperationException(why);
@@ -90,8 +92,28 @@ internal static class HexLinkWorkspaces
         {
             string rootPath = real[root.Name];
             string prefix = roots.Length == 1 ? string.Empty : root.Name;
-            foreach (string relative in HexLinkTree.FindNestedRepositories(rootPath, cancel).OrderBy(path => path.Length))
+            string[] found = [.. HexLinkTree.FindNestedRepositories(rootPath, cancel, partial
+                ? (path, reason) => skipped.Add(new(prefix.Length == 0 ? path : prefix + "/" + path, reason)) : null).OrderBy(path => path.Length)];
+            var facts = new ProvisionFacts?[found.Length];
+            var errors = new Exception?[found.Length];
+            if (deferWorktree)
             {
+                Parallel.For(0, found.Length, new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = cancel }, index =>
+                {
+                    string path = root.Name + "/" + found[index];
+                    try
+                    {
+                        facts[index] = ReadFacts(path, HexLinkFiles.Resolve(selected, path));
+                    }
+                    catch (Exception e) when (MaySkip(e))
+                    {
+                        errors[index] = e;
+                    }
+                });
+            }
+            for (int index = 0; index < found.Length; index++)
+            {
+                string relative = found[index];
                 cancel.ThrowIfCancellationRequested();
                 string path = prefix.Length == 0 ? relative : prefix + "/" + relative;
                 if (HexLinkProvisionPlan.Skips(skipped, path))
@@ -99,9 +121,11 @@ internal static class HexLinkWorkspaces
                 string wire = root.Name + "/" + relative;
                 try
                 {
-                    Describe(wire, HexLinkFiles.Resolve(selected, wire), path);
+                    if (errors[index] is { } error)
+                        throw error;
+                    Describe(wire, HexLinkFiles.Resolve(selected, wire), path, facts[index]);
                 }
-                catch (Exception e) when (partial && e is (HexLinkException or InvalidOperationException or IOException or UnauthorizedAccessException))
+                catch (Exception e) when (MaySkip(e))
                 {
                     skipped.Add(new(path, e.Message));
                 }
@@ -121,9 +145,24 @@ internal static class HexLinkWorkspaces
                 throw new InvalidOperationException($"Submodule {path} is uninitialized on the host.");
             skipped.Add(new(path, "Submodule is uninitialized on the host."));
         }
-        return new HexLinkHostedProvision(new HexLinkProvisionPlan(folders, repos, deleted, largeChanges, onlyRepository, skipped), wirePaths);
+        return new HexLinkHostedProvision(new HexLinkProvisionPlan(folders, repos, deleted, largeChanges, onlyRepository, skipped, deferWorktree), wirePaths);
 
-        void Describe(string wire, string directory, string path)
+        bool MaySkip(Exception error) => partial && !HexLinkProvision.DiskFull(error)
+            && error is (HexLinkException or InvalidOperationException or IOException or UnauthorizedAccessException or ArgumentException);
+
+        ProvisionFacts ReadFacts(string wire, string directory)
+        {
+            if (HexLinkProvision.Run(directory, ["rev-parse", "--show-prefix"], cancel).Trim().Length > 0)
+                throw new InvalidOperationException($"{wire} does not identify its own Git checkout.");
+            string head = HexLinkProvision.ReadHead(directory, cancel) ?? throw new InvalidOperationException($"Repository {wire} has no commit.");
+            var origin = GitProcess.Run(directory, ["config", "--local", "--get", "remote.origin.url"], cancel: cancel);
+            if (!origin.Ok && origin.Exit != 1)
+                throw new InvalidOperationException($"Couldn't read the origin of {wire}: {HexLinkGit.ErrorOf(origin)}");
+            return new(head, HexLinkProvision.ReadBranch(directory, cancel), origin.Ok ? origin.Output.TrimEnd('\r', '\n') : null,
+                Submodules(directory, cancel));
+        }
+
+        void Describe(string wire, string directory, string path, ProvisionFacts? prepared = null)
         {
             if (!physical.Add(directory))
                 return;
@@ -133,9 +172,8 @@ internal static class HexLinkWorkspaces
             if (onlyRepository is not null && !inScope && !HexLinkProvisionPlan.Inside(onlyRepository, path))
                 return;
 
-            if (HexLinkProvision.Run(directory, ["rev-parse", "--show-prefix"], cancel).Trim().Length > 0)
-                throw new InvalidOperationException($"{wire} does not identify its own Git checkout.");
-            string head = HexLinkProvision.ReadHead(directory, cancel) ?? throw new InvalidOperationException($"Repository {wire} has no commit.");
+            ProvisionFacts facts = prepared ?? ReadFacts(wire, directory);
+            string head = facts.Head;
             string? parent = null;
             if (gitlinks.TryGetValue(path, out var link))
             {
@@ -143,21 +181,16 @@ internal static class HexLinkWorkspaces
                 if (head != link.Head)
                     throw new InvalidOperationException($"Submodule {wire} is at {head}. Its parent records {link.Head}.");
             }
-            var origin = GitProcess.Run(directory, ["config", "--local", "--get", "remote.origin.url"], cancel: cancel);
-            if (!origin.Ok && origin.Exit != 1)
-                throw new InvalidOperationException($"Couldn't read the origin of {wire}: {HexLinkGit.ErrorOf(origin)}");
-
             string id = $"{HexLinkProvisionPlan.BUNDLE_PREFIX}{lease}-{repos.Count}";
-            string? branch = parent is null ? HexLinkProvision.ReadBranch(directory, cancel) : null;
-            var modules = Submodules(directory, cancel);
-            if (only is null || inScope)
+            string? branch = parent is null ? facts.Branch : null;
+            if (!deferWorktree && (only is null || inScope))
                 ProvisionChanges(directory, path, deleted, largeChanges, cancel);
 
-            repos.Add(new HexLinkProvisionRepository(id, path, head, branch, origin.Ok ? origin.Output.TrimEnd('\r', '\n') : null, parent));
+            repos.Add(new HexLinkProvisionRepository(id, path, head, branch, facts.Origin, parent));
             wirePaths.Add(id, wire);
             if (inScope)
                 repoScope.Add(path);
-            foreach (var (module, commit) in modules)
+            foreach (var (module, commit) in facts.Modules)
                 gitlinks.Add(path.Length == 0 ? module : path + "/" + module, (path, commit));
         }
     }

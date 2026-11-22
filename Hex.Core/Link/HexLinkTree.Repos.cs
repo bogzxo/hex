@@ -23,7 +23,7 @@ internal sealed partial class HexLinkTree
     }
 
     // Look for .git markers even in ignored directories. A workspace repository often ignores its nested checkouts.
-    internal static List<string> FindNestedRepositories(string root, CancellationToken cancel = default)
+    internal static List<string> FindNestedRepositories(string root, CancellationToken cancel = default, Action<string, string>? unavailable = null)
     {
         var repositories = new List<string>();
         var pending = new Stack<string>();
@@ -33,7 +33,17 @@ internal sealed partial class HexLinkTree
         while (pending.TryPop(out string? parent))
         {
             cancel.ThrowIfCancellationRequested();
-            foreach (string directory in Directory.EnumerateDirectories(parent, "*", options))
+            string[] directories;
+            try
+            {
+                directories = Directory.GetDirectories(parent, "*", options);
+            }
+            catch (Exception error) when (unavailable is not null && parent != root && error is IOException or UnauthorizedAccessException)
+            {
+                unavailable(Path.GetRelativePath(root, parent).Replace(Path.DirectorySeparatorChar, '/'), error.Message);
+                continue;
+            }
+            foreach (string directory in directories)
             {
                 string name = Path.GetFileName(directory);
                 if (SKIPPED.Contains(name) || name is ".vs" or ".venv")
@@ -61,11 +71,13 @@ internal sealed partial class HexLinkTree
         if (HexLinkGit.Why() is not null)
             return null;
 
-        string[] repositories = [.. FindNestedRepositories(Root).Where(path => !Hidden(path, folder: true)).OrderByDescending(path => path.Length)];
+        string[] repositories = [.. FindNestedRepositories(Root, unavailable: (path, why) =>
+            issues[path] = new HexLinkGitIssue(OneLine(why), Unavailable: true))
+            .Where(path => !Hidden(path, folder: true)).OrderByDescending(path => path.Length)];
         if (repositories.Length == 0)
         {
             nestedRepositories = [];
-            unavailableRepositories = [];
+            unavailableRepositories = [.. issues.Where(each => each.Value.Unavailable).Select(each => each.Key)];
             return null;
         }
 

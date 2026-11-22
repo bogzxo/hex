@@ -116,7 +116,7 @@ internal static partial class HexLinkFiles
     }
 
     // A name along a wire path, refused when it isn't a plain one
-    private static void Check(string wire, string part)
+    internal static void Check(string wire, string part)
     {
         if (part.Length == 0 || part == "." || part == "..")
             throw Refused(wire, "it has an empty, . or .. part");

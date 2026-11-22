@@ -35,11 +35,14 @@ internal sealed partial class HexLinkHost
                 string? folder = HexLinkData.String(parameters, "folder", 200);
                 string? repositoryPath = HexLinkData.String(parameters, "repository_path", HexLinkFiles.MOST_PATH + 1);
                 HexLinkWorkspace workspace = services.Workspace;
-                HexLinkHostedProvision hosted = await Task.Run(() => HexLinkWorkspaces.Provision(workspace, folder, transfer.Token, repositoryPath), transfer.Token);
+                bool defer = folder is null && HexLinkData.Bool(parameters, "defer_worktree") == true;
+                HexLinkHostedProvision hosted = await Task.Run(() => HexLinkWorkspaces.Provision(workspace, folder, transfer.Token, repositoryPath, defer), transfer.Token);
                 hostedProvision = hosted;
                 return hosted.Plan.ToJson();
             }
 
+            if (operation == "deleted")
+                return await ProvisionDeleted(parameters, transfer.Token);
             string name = HexLinkData.Need(parameters, "repository", 200);
             string repository;
             HexLinkProvisionRepository? planned = null;

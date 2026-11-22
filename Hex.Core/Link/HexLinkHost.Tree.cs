@@ -141,7 +141,8 @@ internal sealed partial class HexLinkHost
         }
         if (HexLinkData.String(parameters, "snapshot", 64) is { } id)
             return ContinueManifest(tree, parameters, id, watch: false);
-        return FirstPage(parameters, await Task.Run(tree.Manifest, cancel), watch: false);
+        bool provision = HexLinkData.Bool(parameters, "provision") == true;
+        return FirstPage(parameters, await Task.Run(() => provision ? tree.ProvisionManifest() : tree.Manifest(), cancel), watch: false);
     }
 
     // The tree as it is now and what changes of it from now on, sent as sync/changed
