@@ -481,7 +481,7 @@ internal sealed partial class HexLinkSync
             Notify();
     }
 
-    private void Again(string wire, string? why = null)
+    private void Again(string wire, string? why = null, bool reportAsSkipped = true)
     {
         int count;
         CancellationToken stop;
@@ -494,7 +494,7 @@ internal sealed partial class HexLinkSync
             Volatile.Write(ref retryDetail, why ?? wire);
         }
 
-        if (why is not null || count > 6)
+        if (reportAsSkipped && (why is not null || count > 6))
             Skip(wire, why ?? "The file kept changing during sync. Link will retry.");
         _ = Retry(wire, Math.Min(MAX_RETRY_DELAY, 50 * count * count), stop);
     }
@@ -612,6 +612,11 @@ internal sealed partial class HexLinkSync
         }
         catch (HexLinkException e) when (e.Code == HexLinkErrors.CLOSED)
         {
+        }
+        catch (HexLinkException e) when (e.Code == HexLinkErrors.BUSY)
+        {
+            using var timing = HexLinkSyncTiming.Measure("retry.bulk-capacity");
+            Again(wire, e.Message, reportAsSkipped: false);
         }
         catch (HexLinkException e) when (e.Code is HexLinkErrors.CONFLICT or HexLinkErrors.TIMED_OUT or HexLinkErrors.INTERNAL_ERROR or HexLinkErrors.NOT_FOUND)
         {
