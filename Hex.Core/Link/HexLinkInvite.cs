@@ -3,23 +3,29 @@ using System.Buffers.Text;
 using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;
+using System.Text;
 
 namespace Hex.Core;
 
-/// <summary>A private, single-use invitation. The text and secret must never be written to the audit log.</summary>
+/// <summary>A single-use invitation. The text and secret must never be written to the audit log.</summary>
 internal sealed class HexLinkInvite
 {
     internal const string Prefix = "hex-link:v1.";
+    private const string PublicPrefix = "hex-link:v2.";
     internal const int MaxEndpoints = 8;
     private const int HeaderSize = 75;
+    private const int PrivateSize = HeaderSize + MaxEndpoints * 17;
+    private const int PublicSize = PrivateSize + 3 + HexLinkInviteRoute.MaxHostLength;
+    internal const int MaxTokenLength = 12 + (PublicSize * 4 + 2) / 3;
 
-    private HexLinkInvite(string pin, byte[] secret, int port, DateTimeOffset until, IPAddress[] addresses)
+    private HexLinkInvite(string pin, byte[] secret, int port, DateTimeOffset until, IPAddress[] addresses, HexLinkInviteRoute? publicRoute)
     {
         Pin = pin;
         Secret = secret;
         Port = port;
         Until = until;
         Addresses = addresses;
+        PublicRoute = publicRoute;
     }
 
     public string Pin { get; }
@@ -27,6 +33,7 @@ internal sealed class HexLinkInvite
     public int Port { get; }
     public DateTimeOffset Until { get; }
     public IReadOnlyList<IPAddress> Addresses { get; }
+    public HexLinkInviteRoute? PublicRoute { get; }
 
     // Tailscale uses a CGNAT IPv4 range and a dedicated IPv6 ULA prefix.
     internal static bool IsVpn(IPAddress address)
@@ -39,16 +46,17 @@ internal sealed class HexLinkInvite
             : bytes[..length].StartsWith((ReadOnlySpan<byte>)[0xfd, 0x7a, 0x11, 0x5c, 0xa1, 0xe0]);
     }
 
-    public static HexLinkInvite? Create(string pin, int port, DateTimeOffset until, IEnumerable<IPAddress> addresses)
+    public static HexLinkInvite? Create(string pin, int port, DateTimeOffset until, IEnumerable<IPAddress> addresses,
+        HexLinkInviteRoute? publicRoute = null)
     {
         IPAddress[] endpoints = [.. HexLinkAddresses.Preferred(addresses).Where(IsPortable).Take(MaxEndpoints)];
-        return endpoints.Length == 0 || port is <= 0 or > 65535 ? null
-            : new HexLinkInvite(pin, RandomNumberGenerator.GetBytes(32), port, until, endpoints);
+        return (endpoints.Length == 0 && publicRoute is null) || port is <= 0 or > 65535 ? null
+            : new HexLinkInvite(pin, RandomNumberGenerator.GetBytes(32), port, until, endpoints, publicRoute);
     }
 
     public string Encode()
     {
-        Span<byte> bytes = stackalloc byte[HeaderSize + MaxEndpoints * 17];
+        Span<byte> bytes = stackalloc byte[PublicSize];
         BinaryPrimitives.WriteUInt16BigEndian(bytes, (ushort)Port);
         BinaryPrimitives.WriteInt64BigEndian(bytes[2..], Until.ToUnixTimeSeconds());
         Convert.FromHexString(Pin).CopyTo(bytes[10..]);
@@ -62,16 +70,24 @@ internal sealed class HexLinkInvite
             offset += length + 1;
         }
 
-        return Prefix + Base64Url.EncodeToString(bytes[..offset]);
+        if (PublicRoute is null)
+            return Prefix + Base64Url.EncodeToString(bytes[..offset]);
+
+        BinaryPrimitives.WriteUInt16BigEndian(bytes[offset..], (ushort)PublicRoute.Port);
+        bytes[offset + 2] = (byte)PublicRoute.Host.Length;
+        offset += 3 + Encoding.ASCII.GetBytes(PublicRoute.Host, bytes[(offset + 3)..]);
+        return PublicPrefix + Base64Url.EncodeToString(bytes[..offset]);
     }
 
     public static bool TryParse(string text, out HexLinkInvite? invite)
     {
         invite = null;
-        if (!text.StartsWith(Prefix, StringComparison.Ordinal) || text.Length > Prefix.Length + 282)
+        bool hasPublic = text.StartsWith(PublicPrefix, StringComparison.Ordinal);
+        int maxLength = hasPublic ? MaxTokenLength : Prefix.Length + 282;
+        if (text.Length > maxLength || (!hasPublic && !text.StartsWith(Prefix, StringComparison.Ordinal)))
             return false;
 
-        Span<byte> bytes = stackalloc byte[HeaderSize + MaxEndpoints * 17];
+        Span<byte> bytes = stackalloc byte[PublicSize];
         int written;
         try
         {
@@ -85,7 +101,7 @@ internal sealed class HexLinkInvite
         int port = BinaryPrimitives.ReadUInt16BigEndian(bytes);
         long seconds = BinaryPrimitives.ReadInt64BigEndian(bytes[2..]);
         int count = bytes[74];
-        if (port == 0 || seconds is < 0 or > 253402300799 || count is < 1 or > MaxEndpoints)
+        if (port == 0 || seconds is < 0 or > 253402300799 || count > MaxEndpoints || (count == 0 && !hasPublic))
             return false;
 
         var addresses = new IPAddress[count];
@@ -104,10 +120,24 @@ internal sealed class HexLinkInvite
             offset += length;
         }
 
+        HexLinkInviteRoute? publicRoute = null;
+        if (hasPublic)
+        {
+            if (written - offset < 3)
+                return false;
+            int publicPort = BinaryPrimitives.ReadUInt16BigEndian(bytes[offset..]);
+            int length = bytes[offset + 2];
+            offset += 3;
+            if (length == 0 || written - offset != length ||
+                !HexLinkInviteRoute.TryCreate(Encoding.ASCII.GetString(bytes.Slice(offset, length)), publicPort, out publicRoute))
+                return false;
+            offset += length;
+        }
+
         if (offset != written)
             return false;
         invite = new HexLinkInvite(Convert.ToHexString(bytes.Slice(10, 32)), bytes.Slice(42, 32).ToArray(),
-            port, DateTimeOffset.FromUnixTimeSeconds(seconds), addresses);
+            port, DateTimeOffset.FromUnixTimeSeconds(seconds), addresses, publicRoute);
         return true;
     }
 

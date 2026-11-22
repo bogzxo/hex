@@ -225,7 +225,8 @@ internal sealed partial class HexLinkTransport
     /// how it ended; when paired, each side has stored the other and the connection carries on as a link (Connection),
     /// unless there was one up already. Only <paramref name="cancel"/> throws.
     /// </summary>
-    public async Task<HexLinkPairResult> Pair(string host, int port, Func<HexLinkPairing, Task<HexLinkRights?>> ask, CancellationToken cancel, HexLinkInvite? invite = null)
+    public async Task<HexLinkPairResult> Pair(string host, int port, Func<HexLinkPairing, Task<HexLinkRights?>> ask,
+        CancellationToken cancel, HexLinkInvite? invite = null, HexLinkInviteRoute? overrideRoute = null)
     {
         using var ended = CancellationTokenSource.CreateLinkedTokenSource(cancel);
         ended.CancelAfter(PAIRING_MS);
@@ -236,9 +237,13 @@ internal sealed partial class HexLinkTransport
         bool kept = false;
         try
         {
-            (ssl, Socket socket, string pin, address) = invite is null
-                ? await Connect(host, port, ended.Token)
-                : await ConnectInvite(invite, ended.Token);
+            Socket socket;
+            string pin;
+            string? savedHost = null;
+            if (invite is null)
+                (ssl, socket, pin, address) = await Connect(host, port, ended.Token);
+            else
+                (ssl, socket, pin, address, port, savedHost) = await ConnectInvite(invite, overrideRoute, ended.Token);
             string mode = invite is null ? "pair" : "invite";
             await Say(ssl, HelloLine(mode), ended.Token);
             Hello? hello = ParseHello(await Answer(ssl, ended.Token), pin);
@@ -267,14 +272,14 @@ internal sealed partial class HexLinkTransport
             if (verdict != "paired")
                 return result = HexLinkPairResult.Failed(verdict, device, code);
 
-            port = invite?.Port ?? port;
-            trust.Add(device, granted, address, port);
+            trust.Add(device, granted, savedHost ?? address, port);
             result = new HexLinkPairResult(true, "paired", device, code, granted, null);
             try
             {
                 if (await Answer(ssl, ended.Token) == "link")
                 {
-                    HexLinkConnection connection = await DiallerSettles(ssl, socket, device, address, port, ended.Token, NegotiateBulk(hello.Bulk));
+                    HexLinkConnection connection = await DiallerSettles(ssl, socket, device, address, port, ended.Token,
+                        NegotiateBulk(hello.Bulk), savedHost);
                     kept = true;
                     result = result with { Connection = connection };
                 }

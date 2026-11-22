@@ -58,7 +58,9 @@ internal sealed partial class HexLinkTransport
                 throw new HexLinkRefused("refused", $"{address} said something that isn't Link's answer");
 
             RequireSelectedRoute(pin, address, port);
-            HexLinkConnection connection = await DiallerSettles(ssl, socket, hello.Device, address, port, timeout.Token, NegotiateBulk(hello.Bulk));
+            string? savedHost = trust.Find(pin)?.Address == host && !IPAddress.TryParse(host, out _) ? host : null;
+            HexLinkConnection connection = await DiallerSettles(ssl, socket, hello.Device, address, port, timeout.Token,
+                NegotiateBulk(hello.Bulk), savedHost);
             kept = true;
             return connection;
         }
@@ -78,7 +80,7 @@ internal sealed partial class HexLinkTransport
     /// there's a link already or a winning one coming in.
     /// </summary>
     private async Task<HexLinkConnection> DiallerSettles(SslStream ssl, Socket socket, HexLinkDevice device, string address, int port, CancellationToken cancel,
-        HexLinkBulkSupport bulk = HexLinkBulkSupport.None)
+        HexLinkBulkSupport bulk = HexLinkBulkSupport.None, string? savedHost = null)
     {
         Slot? slot = Claim(device.Id, socket, dialledByMe: true, out string refusal);
         if (slot is null)
@@ -99,7 +101,7 @@ internal sealed partial class HexLinkTransport
             throw;
         }
 
-        return Up(slot, ssl, device, address, port, dialled: true, bulk);
+        return Up(slot, ssl, device, address, port, dialled: true, bulk, savedHost);
     }
 
     internal IPAddress[] DialAddresses(IPAddress[] resolved)

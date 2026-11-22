@@ -28,9 +28,11 @@ internal sealed partial class HexLinkTransport
     }
 
     public bool OpenInvite(IEnumerable<IPAddress> addresses, TimeSpan lifetime, Func<HexLinkPairing, Task<HexLinkRights?>> ask,
-        Func<HexLinkPairingTerms>? terms = null)
+        Func<HexLinkPairingTerms>? terms = null, HexLinkInviteRoute? publicRoute = null)
     {
-        HexLinkInvite? token = HexLinkInvite.Create(identity.Id, Port, DateTimeOffset.UtcNow + lifetime, addresses);
+        if (publicRoute is not null && !AllowPublic)
+            return false;
+        HexLinkInvite? token = HexLinkInvite.Create(identity.Id, Port, DateTimeOffset.UtcNow + lifetime, addresses, publicRoute);
         if (token is null)
             return false;
         ClosePairing();
@@ -138,7 +140,8 @@ internal sealed partial class HexLinkTransport
         return terms;
     }
 
-    private async Task<(SslStream Ssl, Socket Socket, string Pin, string Address)> ConnectInvite(HexLinkInvite invite, CancellationToken stop)
+    private async Task<(SslStream Ssl, Socket Socket, string Pin, string Address, int Port, string? SavedHost)> ConnectInvite(
+        HexLinkInvite invite, HexLinkInviteRoute? overrideRoute, CancellationToken stop)
     {
         TimeSpan remaining = invite.Until - DateTimeOffset.UtcNow;
         if (remaining <= TimeSpan.Zero)
@@ -146,9 +149,29 @@ internal sealed partial class HexLinkTransport
 
         using var race = CancellationTokenSource.CreateLinkedTokenSource(stop);
         race.CancelAfter(TimeSpan.FromMilliseconds(Math.Min(HANDSHAKE_MS, remaining.TotalMilliseconds)));
-        var pending = invite.Addresses.ToDictionary(address =>
-            Connect(address.ToString(), invite.Port, race.Token, pin => string.Equals(pin, invite.Pin, StringComparison.OrdinalIgnoreCase)),
-            HexLinkInvite.IsVpn);
+        var pending = new Dictionary<Task<(SslStream Ssl, Socket Socket, string Pin, string Address)>,
+            (int Port, string? SavedHost, bool IsLan)>();
+        if (overrideRoute is not null)
+            AddRoute(overrideRoute.Host, overrideRoute.Port, isLan: false);
+        else
+        {
+            foreach (IPAddress address in invite.Addresses)
+                AddRoute(address.ToString(), invite.Port, isLan: !HexLinkInvite.IsVpn(address));
+            if (invite.PublicRoute is { } publicRoute)
+            {
+                if (AllowPublic)
+                    AddRoute(publicRoute.Host, publicRoute.Port, isLan: false);
+                else if (pending.Count == 0)
+                    throw new HexLinkRefused("public_disabled", "Public connections can be enabled in Devices.");
+            }
+        }
+
+        void AddRoute(string host, int port, bool isLan)
+        {
+            var dial = Connect(host, port, race.Token, pin => string.Equals(pin, invite.Pin, StringComparison.OrdinalIgnoreCase));
+            pending.Add(dial, (port, IPAddress.TryParse(host, out _) ? null : host, isLan));
+        }
+
         HexLinkRefused? failed = null;
         try
         {
@@ -157,14 +180,16 @@ internal sealed partial class HexLinkTransport
                 var ready = await Task.WhenAny(pending.Keys);
                 if (ready.IsCompletedSuccessfully)
                 {
-                    if (pending[ready])
-                        ready = await FindInviteLan(pending.Where(route => !route.Value).Select(route => route.Key),
+                    if (!pending[ready].IsLan)
+                        ready = await FindInviteLan(pending.Where(route => route.Value.IsLan).Select(route => route.Key),
                             Task.Delay(TimeSpan.FromMilliseconds(300), race.Token)) ?? ready;
                     stop.ThrowIfCancellationRequested();
                     if (DateTimeOffset.UtcNow >= invite.Until)
                         throw new HexLinkRefused("invite_expired", "the invitation expired");
+                    var selected = pending[ready];
                     pending.Remove(ready);
-                    return await ready;
+                    var (ssl, socket, pin, address) = await ready;
+                    return (ssl, socket, pin, address, selected.Port, selected.SavedHost);
                 }
 
                 pending.Remove(ready);

@@ -480,10 +480,11 @@ internal sealed partial class HexLinkTransport : IDisposable
     }
 
     // The connection for a place that's up, which gives its place back when it's disposed
-    private HexLinkConnection Up(Slot slot, SslStream ssl, HexLinkDevice said, string address, int port, bool dialled, HexLinkBulkSupport bulk)
+    private HexLinkConnection Up(Slot slot, SslStream ssl, HexLinkDevice said, string address, int port, bool dialled,
+        HexLinkBulkSupport bulk, string? savedHost = null)
     {
         string id = said.Id;
-        try { trust.Seen(id, said, address, port); }
+        try { trust.Seen(id, said, savedHost ?? address, port); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
             Audit?.Write("link metadata", id, $"Can't save the address for {said.Name}: {error.Message}");
