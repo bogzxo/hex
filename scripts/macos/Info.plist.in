@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key><string>en</string>
+    <key>CFBundleExecutable</key><string>Hex</string>
+    <key>CFBundleIconFile</key><string>Hex</string>
+    <key>CFBundleIdentifier</key><string>@BUNDLE_ID@</string>
+    <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+    <key>CFBundleName</key><string>Hex</string>
+    <key>CFBundleDisplayName</key><string>Hex</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleShortVersionString</key><string>@VERSION@</string>
+    <key>CFBundleVersion</key><string>@BUILD@</string>
+    <key>LSMinimumSystemVersion</key><string>@MIN_MACOS@</string>
+    <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
+    <key>NSHighResolutionCapable</key><true/>
+    <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
+    <key>NSPrincipalClass</key><string>NSApplication</string>
+    <key>NSHumanReadableCopyright</key><string>Hex, by bogz</string>
+
+    <!-- Hex Link finds the other machines on the local network (Bonjour) and talks to them -->
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Hex Link finds your other computers on the local network so their editors can work together.</string>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_hex-link._tcp</string>
+    </array>
+
+    <!-- What the terminal and the agents' programs may ask the person for, the system names the program that asks -->
+    <key>NSDesktopFolderUsageDescription</key><string>Hex opens and edits the files of the projects you keep on the Desktop.</string>
+    <key>NSDocumentsFolderUsageDescription</key><string>Hex opens and edits the files of the projects you keep in Documents.</string>
+    <key>NSDownloadsFolderUsageDescription</key><string>Hex opens and edits the files you keep in Downloads.</string>
+
+    <!-- Files and folders opened with Hex from the Finder, the Dock, or open -a Hex -->
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key><string>Folder</string>
+            <key>CFBundleTypeRole</key><string>Editor</string>
+            <key>LSHandlerRank</key><string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array><string>public.folder</string></array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key><string>Text and source code</string>
+            <key>CFBundleTypeRole</key><string>Editor</string>
+            <key>LSHandlerRank</key><string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.text</string>
+                <string>public.source-code</string>
+                <string>public.data</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>

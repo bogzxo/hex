@@ -10,7 +10,7 @@ namespace Hex.Core;
 public static class HexHost
 {
     /// <summary>The folder Hex's own files are in (Assets, shaders, the built in extensions), the exe's on a desktop.</summary>
-    public static string ProgramFolder { get; set; } = AppContext.BaseDirectory;
+    public static string ProgramFolder { get; set; } = HexBundle.Resources ?? AppContext.BaseDirectory;
 
     /// <summary>What the place Hex runs on is called where a person reads it, "Android" on a tablet.</summary>
     public static string Name { get; set; } = "desktop";

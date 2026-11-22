@@ -27,7 +27,8 @@ internal static partial class Program
 
         // Everything Hex keeps (settings, backups, compiled shaders, the driver's pipeline cache) goes next to the exe,
         // before anything asks where. A copy carried about on a stick has it all with it
-        Horizon.Core.Platform.PlatformPaths.BesideProgram = true;
+        // (not a Hex in a macOS .app, whose signature breaks if anything inside it is written: its files are in the user's Library)
+        Horizon.Core.Platform.PlatformPaths.BesideProgram = !Hex.Core.HexBundle.Inside;
 
         // The guard an agent system runs before each of its own tools, which keeps the agent on Hex's harness. First of
         // all, since it's started for every shell command an agent runs and has to answer at once
@@ -67,7 +68,7 @@ internal static partial class Program
         if (Hex.Core.McpBridge.IsBridgeMode(args))
             return Hex.Core.McpBridge.Run(args, Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "Hex.exe"));
 
-        HexLog.Initialize(AppContext.BaseDirectory);
+        HexLog.Initialize(Hex.Core.HexBundle.Inside ? Hex.Core.HexBundle.LogFolder : AppContext.BaseDirectory);
         // Trace only after selecting Hex's logger. Tracing earlier creates the default logger,
         // which holds debug.log open and prevents Hex's single-file logger from writing it.
         Horizon.Core.Diagnostics.StartupTrace.Mark("main");
