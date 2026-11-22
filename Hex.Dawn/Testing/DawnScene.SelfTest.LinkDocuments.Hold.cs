@@ -18,10 +18,31 @@ internal sealed partial class DawnScene
         Task<HexLinkHoldOperation>? submitting = null;
         Task? completing = null;
 
-        void Check(string message, Func<bool> ready)
+        static string Snapshot(string path)
         {
-            test.WaitFor(ready, 20);
-            test.Check("link-documents: " + message, ready);
+            try { return ReadLinkTestFile(path); }
+            catch (IOException e) { return e.Message; }
+        }
+
+        void Check(string message, Func<bool> ready, bool traceParticipant = false)
+        {
+            // A peer may still own an exclusive handle between the existence check and opening its file.
+            bool Sample()
+            {
+                try { return ready(); }
+                catch (FileNotFoundException) { return false; }
+                catch (IOException e) when ((e.HResult & 0xffff) is 32 or 33) { return false; }
+            }
+            test.WaitFor(Sample, 20);
+            test.Check("link-documents: " + message, () =>
+            {
+                bool passed = Sample();
+                if (!passed && traceParticipant)
+                    Console.WriteLine($"[Hex self-test] {message}: editor={document.Editor.Text}, disk={Snapshot(file)}, " +
+                        $"peer disk={Snapshot(peerFile)}, saved={File.Exists(Path.Combine(peerWork, "participant-saved"))}, " +
+                        $"rejoined={File.Exists(Path.Combine(peerWork, "participant-rejoined"))}");
+                return passed;
+            });
         }
 
         test.Run(() =>
@@ -58,7 +79,7 @@ internal sealed partial class DawnScene
         test.Run(() => File.WriteAllText(Path.Combine(peerWork, "hold-as-participant"), ""));
         Check("a participant can hold and save private text without editing the authority's buffer or file", () =>
             File.Exists(Path.Combine(peerWork, "participant-saved")) && document.Editor.Text == HeldDraftSample &&
-            ReadLinkTestFile(file) == HeldDraftSample && ReadLinkTestFile(peerFile) == HeldPeerSample);
+            ReadLinkTestFile(file) == HeldDraftSample && ReadLinkTestFile(peerFile) == HeldPeerSample, traceParticipant: true);
         test.Run(() =>
         {
             Rewrite(document, "authority edit");
@@ -66,7 +87,7 @@ internal sealed partial class DawnScene
         });
         Check("the participant can discard its held edit, receive the authority save and join again", () =>
             File.Exists(Path.Combine(peerWork, "participant-rejoined")) && ReadLinkTestFile(peerFile) == "authority edit" &&
-            ReadLinkTestFile(file) == "authority edit");
+            ReadLinkTestFile(file) == "authority edit", traceParticipant: true);
 
         Task<string?>? receiverWrite = null;
         LinkLiveDocument? receivingRoom = null;
@@ -129,10 +150,16 @@ internal sealed partial class DawnScene
             linkDocPeerHolding = LinkHoldDocument(linkDocPeerHoldService, LINK_DOC_WIRE);
             linkDocTestStage++;
         }
+        if (linkDocTestStage == 10 && linkDocPeerHolding is { IsFaulted: true })
+        {
+            Console.WriteLine($"[Hex self-test] participant hold failed: {linkDocPeerHolding.Exception?.GetBaseException().Message}");
+            linkDocTestStage = -1;
+        }
         if (linkDocTestStage == 10 && linkDocPeerHolding is { IsCompletedSuccessfully: true } && LinkLiveOf(document) is null)
         {
             Rewrite(document, HeldPeerSample);
             SaveTo(document.Path!);
+            Console.WriteLine($"[Hex self-test] participant saved: held={linkDocPeerStore!.IsHeld(LINK_DOC_WIRE)}, editor={document.Editor.Text}, disk={ReadLinkTestFile(document.Path!)}");
             File.WriteAllText(Path.Combine(work, "participant-saved"), "");
             linkDocTestStage++;
         }
