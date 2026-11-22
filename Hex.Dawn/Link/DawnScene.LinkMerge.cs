@@ -5,6 +5,25 @@ internal sealed partial class DawnScene
     private sealed record LinkMergeDraft(HexLinkSync Sync, string Wire, HexLinkMergePreview Preview);
     private readonly Dictionary<HexDocument, LinkMergeDraft> linkMergeDrafts = [];
 
+    private void LinkOpenConflictMerge(string deviceId, string path)
+    {
+        if (LinkSyncOfPath(deviceId, path) is not { } sync)
+            return;
+        CancellationToken cancel = linkCancel?.Token ?? default;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                if (await sync.ConflictMergeSession(path, cancel) is { } merge)
+                    PostLink(() => OpenMergeEditor(merge));
+            }
+            catch (Exception error) when (error is HexLinkException or IOException or UnauthorizedAccessException)
+            {
+                PostLink(() => Say(error.Message, error: true));
+            }
+        }, cancel);
+    }
+
     private bool LinkOpenMergePreview(string deviceId, string path)
     {
         if (LinkSyncOfPath(deviceId, path) is not { } sync || sync.MergePreview(path) is not { } preview

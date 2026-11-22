@@ -284,6 +284,8 @@ internal sealed partial class DawnScene
         var buttons = column.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 8.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, LINK_ROW) });
         buttons.Add(LinkButton(Said("link.conflict_mine"), "arrow-up", () => LinkResolveGo(conflict, HexLinkSyncKeep.Mine))).Tooltip = Said("link.tip_keep_mine");
         buttons.Add(LinkButton(Said("link.conflict_theirs"), "arrow-down", () => LinkResolveGo(conflict, HexLinkSyncKeep.Theirs))).Tooltip = Said("link.tip_take_theirs");
+        buttons.Add(LinkButton("Open merge editor", "diff", () => LinkOpenConflictMerge(conflict.DeviceId, conflict.Path))).Tooltip =
+            "Resolve this conflict in the merge editor.";
         buttons.Add(LinkButton(Said("link.conflict_difference"), "diff", () => LinkOpenConflictDifference(conflict.DeviceId, conflict.Path))).Tooltip = Said("link.tip_difference");
         return card;
     }

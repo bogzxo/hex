@@ -516,7 +516,8 @@ internal sealed partial class DawnScene
         UINotification? card = null;
         var buttons = new List<(string Label, Action Pressed)>();
         if (conflict.Copy is not null)
-            buttons.Add((Said("link.sync_open_difference"), () => LinkOpenConflictDifference(id, path)));
+            buttons.Add(("Open merge editor", () => LinkOpenConflictMerge(id, path)));
+        buttons.Add((Said("link.sync_open_difference"), () => LinkOpenConflictDifference(id, path)));
         buttons.Add((Said("link.sync_keep_mine"), () =>
         {
             card?.Close();

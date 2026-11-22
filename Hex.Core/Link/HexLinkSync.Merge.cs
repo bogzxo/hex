@@ -1,5 +1,6 @@
 using System.Text;
 using Hex.Core.Git;
+using Hex.Core.Merge;
 
 namespace Hex.Core;
 
@@ -131,6 +132,63 @@ internal sealed partial class HexLinkSync
         Interlocked.Increment(ref sent);
         lock (gate)
             SetBase(wire, AgreedOf(localBytes, remoteBytes));
+    }
+
+    internal async Task<MergeSession?> ConflictMergeSession(string wire, CancellationToken cancel)
+    {
+        HexLinkSyncConflict? conflict;
+        HexLinkMergePreview? preview;
+        lock (gate)
+        {
+            if (!conflicts.TryGetValue(wire, out conflict))
+                return null;
+            preview = mergePreviews.GetValueOrDefault(wire);
+        }
+
+        string full = Jailed(wire);
+        MergeModel model;
+        if (preview is not null && HexLinkFiles.Decode(preview.Markers) is { } draft)
+            model = MergeModel.FromMarkers(draft.Text, draft.Encoding);
+        else
+        {
+            byte[]? mine = await ReadLocal(full, cancel);
+            byte[]? theirs = conflict.Copy is { } copy
+                ? await HexLinkFiles.ReadSharedAsync(HexLinkFiles.Resolve([folder], copy), cancel) : null;
+            if (mine is null || theirs is null)
+                model = MergeModel.Binary([], mine ?? [], theirs ?? []);
+            else
+                model = MergeModel.FromTwo(mine, theirs);
+            if (model.IsBinary)
+            {
+                return new MergeSession(Path.GetFileName(full), "Mine", "Theirs", "Base", model,
+                    _ => Task.CompletedTask, static () => { }, full)
+                {
+                    SideChoices = new(mine is null, theirs is null, async side =>
+                    {
+                        if (await Resolve(wire, side == MergeSide.Mine ? HexLinkSyncKeep.Mine : HexLinkSyncKeep.Theirs, cancel) is { } why)
+                            throw new IOException(why);
+                    }),
+                    MineModified = mine is null ? null : new DateTimeOffset(File.GetLastWriteTimeUtc(full)),
+                };
+            }
+
+            if (mine is null || theirs is null)
+                return null;
+            preview = new(HexLinkFiles.Hash(mine), HexLinkFiles.Hash(theirs), model.ToBytes());
+            lock (gate)
+            {
+                if (conflicts.GetValueOrDefault(wire) != conflict)
+                    return null;
+                mergePreviews[wire] = preview;
+            }
+        }
+
+        return new(Path.GetFileName(full), "Mine", "Theirs", "Base", model, async bytes =>
+        {
+            string resolved = HexLinkFiles.Decode(bytes)?.Text ?? throw new IOException("The merge result is not text.");
+            if (await PublishMerge(wire, preview!, resolved, cancel) is { } why)
+                throw new IOException(why);
+        }, static () => { }, full);
     }
 
     public async Task<string?> PublishMerge(string wire, HexLinkMergePreview preview, string resolved, CancellationToken cancel = default)

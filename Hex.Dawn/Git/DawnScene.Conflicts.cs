@@ -73,7 +73,7 @@ internal sealed partial class DawnScene
 
         // Most files have none, which costs a look at the start of each line and nothing put together (the whole text as one
         // string every key was what made typing in a big file slow before)
-        if (!document.IsText || document.DiffOf is not null || document.Picture is not null || !HasConflictMarker())
+        if (!document.IsText || document.Merge is not null || document.DiffOf is not null || document.Picture is not null || !HasConflictMarker())
         {
             conflicts = [];
             if (had)
@@ -105,7 +105,7 @@ internal sealed partial class DawnScene
 
         var lit = new List<UICodeLineHighlight>();
         var lenses = new List<UICodeLens>();
-        string[] actions = [Said("conflicts.lens_current"), Said("conflicts.lens_incoming"), Said("conflicts.lens_both")];
+        string[] actions = [Said("conflicts.lens_current"), Said("conflicts.lens_incoming"), Said("conflicts.lens_both"), "Open merge editor"];
         foreach (GitConflict conflict in conflicts)
         {
             lit.Add(new UICodeLineHighlight(conflict.Start, 1, marker));
@@ -134,6 +134,11 @@ internal sealed partial class DawnScene
     /// <summary>A lens of a conflict pressed, the caret put in its block and the block settled the way the lens says.</summary>
     private void PressConflictLens(UICodeLens lens, int action)
     {
+        if (action == 3)
+        {
+            OpenMarkedMergeEditor();
+            return;
+        }
         code.Document.CollapseCarets();
         code.Document.MoveTo(new UITextPosition(lens.Line, 0));
         SettleConflict(action switch

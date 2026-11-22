@@ -537,6 +537,7 @@ internal sealed partial class DawnScene
         ("link-documents", "three linked editors share unsaved text, edit ownership, carets and saves", TestLinkDocuments),
         ("link-editor-notices", "claim marks, shared document notices and Follow in the editor", TestLinkEditorNotices),
         ("link-claims", "two linked editors coordinate claims, then merge disjoint edits and settle overlaps", TestLinkClaims),
+        ("merge-editor", "three-way conflict resolution, manual edits, undo, cancellation, and binary choices", TestMergeEditor),
         ("link-peer", "the other end of the link part, or a Hex to link to from another machine (HEX_LINK_TEST_DIAL or HEX_LINK_TEST_LISTEN)", TestLinkPeer),
         ("link-cross", "Hex Link across two machines, one command a side (HEX_LINK_TEST_LISTEN on one, HEX_LINK_TEST_DIAL on the other): each pairs, watches and steers the other, writes into its workspace, has its rights dropped, and the listener forgets the dialler", TestLinkCross),
         ("link-nearby", "Hex Link's discovery on the real LAN, run on two machines at once: Link up with link_discoverable on, passing once another Hex is heard", TestLinkNearby),

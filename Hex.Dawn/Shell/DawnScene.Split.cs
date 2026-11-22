@@ -26,6 +26,8 @@ internal sealed partial class DawnScene
     /// <summary>Ctrl+\, the file on screen put on the right of the one shown before it, or back to one side.</summary>
     private void ToggleSplit()
     {
+        if (document.Merge is not null)
+            return;
         if (Split)
         {
             Unsplit();
@@ -49,7 +51,7 @@ internal sealed partial class DawnScene
     /// <summary>A file opened in the side that isn't on screen, the middle split for it first if it wasn't.</summary>
     private void OpenToSide(HexDocument opened)
     {
-        if (!opened.IsText || opened == document)
+        if (!opened.IsText || opened == document || opened.Merge is not null || document.Merge is not null)
             return;
 
         HexDocument here = document;
@@ -85,7 +87,7 @@ internal sealed partial class DawnScene
         if (!Split || shown == splitLeft || shown == splitRight)
             return;
 
-        if (!shown.IsText || !documents.Contains(splitLeft!) || !documents.Contains(splitRight!))
+        if (!shown.IsText || shown.Merge is not null || !documents.Contains(splitLeft!) || !documents.Contains(splitRight!))
         {
             splitLeft = splitRight = null;
             return;
@@ -105,6 +107,10 @@ internal sealed partial class DawnScene
             if (child is CodeEditor)
                 codeScroll.Remove(child);
         }
+
+        ShowMergePanel();
+        if (document.Merge is not null)
+            return;
 
         if (!Split)
         {
