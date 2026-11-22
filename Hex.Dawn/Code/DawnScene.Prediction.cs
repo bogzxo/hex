@@ -12,7 +12,13 @@ namespace Hex.Dawn;
 // for the text and the caret as they are. On the editor's thread nothing is made for a keystroke: two fields and a call.
 internal sealed partial class DawnScene
 {
-    private PredictionEngine predictions = null!;
+    private sealed class PredictionSession(PredictionEngine engine)
+    {
+        internal PredictionEngine Engine { get; } = engine;
+    }
+
+    private PredictionSession? predictionSession;
+    private PredictionEngine predictions => predictionSession!.Engine;
 
     // The options last made and what they were made from, so the engine's question every tick of the debounce makes none
     private PredictionOptions? predictionOptions;
@@ -51,14 +57,13 @@ internal sealed partial class DawnScene
     // For the self test: predictions shown and taken
     private int predictionsShown, predictionsTaken;
 
-    [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(predictions))]
     private void StartPredictions()
     {
-        predictions = new PredictionEngine(TimeProvider.System)
+        predictionSession = new(new PredictionEngine(TimeProvider.System)
         {
             Options = PredictionOptionsNow,
             Snapshot = PredictionSnapshotOf
-        };
+        });
         AddActivePredictionCommands();
         predictionRecent = new (HexDocument?, int)[3];
         documentClosed += PredictionClosed;
@@ -80,7 +85,7 @@ internal sealed partial class DawnScene
             open.Editor.OnPredictionTypedThrough = null;
             open.Editor.ClearPrediction();
         }
-        predictions = null!;
+        predictionSession = null;
         predictionRecent = [];
         predictionAccepting = null;
         predictionAcceptedIn = predictionAsked = predictionAllowedFor = null;
@@ -112,7 +117,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private void PredictionEdited(HexDocument changed)
     {
-        if (predictions is null || changed != document || !PredictionSettings.On(settings))
+        if (predictionSession is null || changed != document || !PredictionSettings.On(settings))
             return;
 
         // An edit the prediction is still showing after was its own, typed through or a word of it taken (Ctrl+Right):
@@ -134,11 +139,11 @@ internal sealed partial class DawnScene
     {
         if (!settings.EditPredictions || HexAi.Off)
         {
-            if (predictions is not null)
+            if (predictionSession is not null)
                 StopPredictions();
             return;
         }
-        if (predictions is null)
+        if (predictionSession is null)
             StartPredictions();
 
         SayPredictionsOnce();

@@ -28,7 +28,7 @@ internal sealed partial class DawnScene
         if (settings.EditPredictionsProvider != PredictionProviders.LINK)
             return;
 
-        predictions?.LinkSourceChanged();
+        predictionSession?.Engine.LinkSourceChanged();
         predictionItemWritten = false;
         if (predictionShownIn is { } shown)
         {

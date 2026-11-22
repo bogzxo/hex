@@ -22,7 +22,8 @@ internal sealed partial class DawnScene
     private const string LINK_REMOTE_FOLDER = "remote";
 
     // The open remote tabs by the full path of their copy
-    private Dictionary<string, LinkRemoteTab> linkRemote { get => LazyInitializer.EnsureInitialized(ref field, static () => new(PlatformPaths.Comparer)); }
+    private Dictionary<string, LinkRemoteTab>? remoteTabs;
+    private Dictionary<string, LinkRemoteTab> linkRemote => LazyInitializer.EnsureInitialized(ref remoteTabs, static () => new(PlatformPaths.Comparer));
     private bool linkRemoteHooked;
 
     /// <summary>A tab of another machine's file: whose, its wire path, the hash it had there when it was last read or written, and whether it may be saved back.</summary>
@@ -185,18 +186,18 @@ internal sealed partial class DawnScene
 
     /// <summary>The title of a tab that's another machine's file, its name and whose it is; null for any other tab.</summary>
     internal string? LinkRemoteTitle(HexDocument shown) =>
-        shown.Path is { } path && linkRemote.TryGetValue(path, out LinkRemoteTab? tab) ? $"{Path.GetFileName(path)} ({tab.DeviceName})" : null;
+        shown.Path is { } path && remoteTabs?.TryGetValue(path, out LinkRemoteTab? tab) == true ? $"{Path.GetFileName(path)} ({tab.DeviceName})" : null;
 
     /// <summary>The tooltip of a remote tab, where the file is on which machine; null for any other tab.</summary>
     internal string? LinkRemoteTooltip(HexDocument shown) =>
-        shown.Path is { } path && linkRemote.TryGetValue(path, out LinkRemoteTab? tab)
+        shown.Path is { } path && remoteTabs?.TryGetValue(path, out LinkRemoteTab? tab) == true
             ? Said(tab.CanEdit ? "link.remote_tip" : "link.remote_tip_read_only", ("path", tab.Wire), ("device", tab.DeviceName))
             : null;
 
     // A remote tab saved: the copy sent back with the hash it had there
     private void LinkRemoteSaved(HexDocument saved)
     {
-        if (saved.Path is not { } path || !linkRemote.TryGetValue(path, out LinkRemoteTab? tab))
+        if (saved.Path is not { } path || remoteTabs?.TryGetValue(path, out LinkRemoteTab? tab) != true)
             return;
         if (!tab.CanEdit)
         {
@@ -397,7 +398,7 @@ internal sealed partial class DawnScene
     // A remote tab closed: no longer watched there, its copy left for next time
     private void LinkRemoteClosed(HexDocument closed)
     {
-        if (closed.Path is not { } path || !linkRemote.Remove(path, out LinkRemoteTab? tab))
+        if (closed.Path is not { } path || remoteTabs?.Remove(path, out LinkRemoteTab? tab) != true)
             return;
         tab.Card?.Close();
         if (link?.PeerOf(tab.DeviceId) is { } peer && !linkRemote.Values.Any(each => each.DeviceId == tab.DeviceId && each.Wire == tab.Wire))

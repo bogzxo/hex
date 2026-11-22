@@ -49,7 +49,8 @@ internal sealed partial class DawnScene
     private sealed record ScopedDocumentDraft(string SharedText, string Reason);
     private sealed record LinkLiveAgentWork(string Agent, string Name, string Before, string After, TaskCompletionSource<string?> Done);
 
-    private Dictionary<HexDocument, LinkLiveDocument> linkLiveDocuments { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
+    private Dictionary<HexDocument, LinkLiveDocument>? liveDocumentSessions;
+    private Dictionary<HexDocument, LinkLiveDocument> linkLiveDocuments => LazyInitializer.EnsureInitialized(ref liveDocumentSessions, static () => []);
     private HashSet<string> linkLiveJoining { get => LazyInitializer.EnsureInitialized(ref field, static () => new(PlatformPaths.Comparer)); }
     private HashSet<string> linkLivePaused { get => LazyInitializer.EnsureInitialized(ref field, static () => new(PlatformPaths.Comparer)); }
     private Dictionary<string, long> linkLiveRetry { get => LazyInitializer.EnsureInitialized(ref field, static () => new(PlatformPaths.Comparer)); }
@@ -69,7 +70,7 @@ internal sealed partial class DawnScene
             return;
         }
 
-        if (document is { IsText: true, Path: { } path, DiffOf: null } && !linkRemote.ContainsKey(path) && LinkWireOf(path) is { } wire)
+        if (document is { IsText: true, Path: { } path, DiffOf: null } && !(remoteTabs?.ContainsKey(path) == true) && LinkWireOf(path) is { } wire)
             commands.Add((Said("link.doc_host", ("path", wire)), () => LinkLiveDocumentHost(document, wire, explicitly: true)));
         foreach (HexLinkPeer peer in LinkPeers.Where(p => HexLinkAllowed.Has(p.Granted, HexLinkRights.View)))
             commands.Add((Said("link.doc_join", ("device", peer.Device.Name)), () =>
@@ -539,7 +540,7 @@ internal sealed partial class DawnScene
 
     private void LinkLiveAutoOpen(LinkServices services, HexDocument tab)
     {
-        if (tab is not { IsText: true, Path: { } path, DiffOf: null } || linkRemote.ContainsKey(path)
+        if (tab is not { IsText: true, Path: { } path, DiffOf: null } || (remoteTabs?.ContainsKey(path) == true)
             || linkLiveDocuments.ContainsKey(tab) || linkDocument?.Tab == tab || LinkWireOf(path) is not { } wire
             || linkLivePaused.Contains(wire) || linkLiveJoining.Contains(wire) || LiveFolder(wire) is not { } folder
             || LinkHoldBlocksDocument(wire, path))
@@ -840,7 +841,7 @@ internal sealed partial class DawnScene
     }
 
     private LinkLiveDocument? LinkLiveOf(HexDocument? tab) =>
-        tab is not null ? linkLiveDocuments.GetValueOrDefault(tab) : null;
+        tab is not null ? liveDocumentSessions?.GetValueOrDefault(tab) : null;
 
     private IEnumerable<McpToolResult?> LinkLiveAgentWrite(JsonObject args, LinkLiveDocument shared,
         string before, string after, string said)
@@ -875,7 +876,7 @@ internal sealed partial class DawnScene
 
     private bool LinkLiveTrySave(HexDocument tab, string path)
     {
-        if (!linkLiveDocuments.TryGetValue(tab, out var shared) || tab.Path is null || !PlatformPaths.Same(tab.Path, path))
+        if (liveDocumentSessions?.TryGetValue(tab, out var shared) != true || tab.Path is null || !PlatformPaths.Same(tab.Path, path))
             return false;
         if (shared.Draft is not null)
         {
@@ -898,13 +899,13 @@ internal sealed partial class DawnScene
     }
 
     private IReadOnlyList<System.Numerics.Vector4> LinkLiveTabColors(HexDocument tab) =>
-        linkLiveDocuments.TryGetValue(tab, out var shared) && !shared.Offline && shared.Draft is null
+        liveDocumentSessions?.TryGetValue(tab, out var shared) == true && !shared.Offline && shared.Draft is null
             ? [.. shared.Participants.Where(p => p.Author != shared.Replica.Author).Select(p => LinkDeviceTint(p.Device, Skin))]
             : [];
 
     private string? LinkLiveTooltip(HexDocument tab)
     {
-        if (!linkLiveDocuments.TryGetValue(tab, out var shared))
+        if (liveDocumentSessions?.TryGetValue(tab, out var shared) != true)
             return null;
         if (shared.Draft is { } draft)
             return Said("link.doc_draft") + " " + draft.Reason;

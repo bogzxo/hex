@@ -111,7 +111,7 @@ internal sealed partial class DawnScene
         });
         test.Settle(0.5f);
         test.Check("prediction: a disabled editor has no prediction engine, editor callbacks or status item", () =>
-            predictions is null && code.OnPredictionEnded is null && (predictionItem is null || predictionItem.IsVisible?.Invoke() == false));
+            predictionSession is null && code.OnPredictionEnded is null && (predictionItem is null || predictionItem.IsVisible?.Invoke() == false));
 
         test.Run(TogglePredictions);
         test.Wait();

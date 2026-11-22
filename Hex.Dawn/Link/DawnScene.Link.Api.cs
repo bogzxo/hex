@@ -13,7 +13,7 @@ internal sealed partial class DawnScene
     internal int LinkVersion { get; private set; }
 
     /// <summary>Whether Link is up.</summary>
-    internal bool LinkOn => linkTransport is not null;
+    internal bool LinkOn { get; private set; }
 
     /// <summary>The port it listens on, 0 while it's off or doesn't listen (a tablet).</summary>
     internal int LinkPort => linkTransport?.Port ?? 0;

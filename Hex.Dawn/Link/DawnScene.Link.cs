@@ -242,6 +242,7 @@ internal sealed partial class DawnScene
             }
             ApplyLinkMapping();
             linkOwner = this;
+            LinkOn = true;
             if (linkItem is null)
             {
                 linkItem = statusBar.Add("$(link)", right: true, pressed: ShowLinkWindow, tooltip: Said("link.status_tip_none"));
@@ -306,6 +307,7 @@ internal sealed partial class DawnScene
             linkTrust.Changed -= LinkTrustChanged;
         linkTransport?.Dispose();
         linkTransport = null;
+        LinkOn = false;
         mcpTools?.Refresh();
         linkIdentity?.Dispose();
         linkIdentity = null;
@@ -380,8 +382,12 @@ internal sealed partial class DawnScene
     /// </summary>
     private void UpdateLink(float dt)
     {
-        if (linkTransport is null && linkWindow is null && !linkDirty && pendingLinkPosts is not { IsEmpty: false })
-            return;
+        if (LinkOn || linkWindow is not null || linkDirty || pendingLinkPosts is { IsEmpty: false })
+            PumpLink(dt);
+    }
+
+    private void PumpLink(float dt)
+    {
         UpdateLinkUi();
 
         while (pendingLinkPosts?.TryDequeue(out Action? posted) == true)
