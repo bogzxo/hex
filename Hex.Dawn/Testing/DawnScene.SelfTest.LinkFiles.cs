@@ -216,6 +216,20 @@ internal sealed partial class DawnScene
         test.Settle(0.2f);
         test.Check("link-files: moving the caret here lets go of following", () => LinkFollowing is null);
 
+        // Spy jumps once: B's file opened and the caret on B's, then nothing followed
+        test.Run(() =>
+        {
+            if (Context.Documents.Find(readme) is { } open)
+                CloseDocument(open);
+            if (peerId is not null)
+                LinkSpy(peerId);
+        });
+        bool SpiedOnB() => document.Path is { } spied && PlatformPaths.Same(spied, readme) && document.Editor.Document.Caret == new UITextPosition(0, 2);
+        test.WaitFor(SpiedOnB, 10.0f);
+        test.Check("link-files: Spy opens B's file here with the caret on B's and follows nothing after", () => SpiedOnB() && LinkFollowing is null);
+        test.Check("link-files: the palette offers Spy > B", () =>
+            LinkSharePaletteCommands().Any(command => command.Text == Said("link.command_spy", ("device", LINK_PEER_NAME))));
+
         // A's rights on B down to View: the sync goes pull-only, what changes here stays here, what changes there comes
         string pulled = Path.Combine(mine, "src", "pulled.txt"), pulledThere = Path.Combine(theirs, "src", "pulled.txt");
         test.Run(() => _ = peer?.Write($"{LINK_PEER_FOLDER}/{LINK_FLAG_VIEW}", null, [1]));
