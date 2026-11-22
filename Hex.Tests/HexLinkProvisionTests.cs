@@ -162,7 +162,7 @@ public sealed class HexLinkProvisionTests
 
     private static string Git(string folder, params string[] args)
     {
-        GitResult git = GitProcess.Run(folder, args);
+        GitResult git = GitProcess.Run(folder, args, patience: TimeSpan.FromMinutes(2));
         Assert.True(git.Ok, $"git {string.Join(' ', args)} in {folder}: {git.Error}");
         return git.Output.Trim();
     }
