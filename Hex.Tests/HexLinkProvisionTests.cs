@@ -82,6 +82,13 @@ public sealed class HexLinkProvisionTests
         MakeRepo(host, "/nested/\nout/\n");
         MakeRepo(nested);
         MakeRepo(moduleSource);
+        string uninitialized = "missing-child";
+        string uninitializedHead = Head(moduleSource);
+        File.WriteAllText(Path.Combine(moduleSource, ".gitmodules"),
+            $"[submodule \"{uninitialized}\"]\n\tpath = {uninitialized}\n\turl = https://invalid.example/uninitialized.git\n");
+        Git(moduleSource, "update-index", "--add", "--cacheinfo", $"160000,{uninitializedHead},{uninitialized}");
+        Git(moduleSource, "add", ".gitmodules");
+        Git(moduleSource, "commit", "-qm", "Record a submodule to leave uninitialized");
         Git(host, "remote", "add", "origin", "https://invalid.example/workspace.git");
         Git(nested, "remote", "add", "origin", "https://invalid.example/nested.git");
         Git(nested, "-c", "protocol.file.allow=always", "submodule", "add", "-q", moduleSource, "modules/sub");
@@ -102,12 +109,19 @@ public sealed class HexLinkProvisionTests
             .WaitAsync(TimeSpan.FromMinutes(3)));
         Assert.True(File.Exists(journal));
 
-        IReadOnlyList<HexLinkFolder> folders = await HexLinkProvision.Get(pair.PeerA, destination, journal, null, CancellationToken.None)
+        HexLinkProvisionResult got = await HexLinkProvision.Get(pair.PeerA, destination, journal, null, CancellationToken.None)
             .WaitAsync(TimeSpan.FromMinutes(3));
-        var local = Assert.Single(folders);
+        var local = Assert.Single(got.Folders);
+        var skipped = Assert.Single(got.Skipped);
+        Assert.Equal("nested/modules/sub/" + uninitialized, skipped.Path);
+        Assert.Contains("uninitialized", skipped.Reason);
         Assert.Equal("work", local.Name);
         Assert.Equal(Path.GetFullPath(destination), local.Path);
         string localNested = Path.Combine(destination, "nested"), localModule = Path.Combine(localNested, "modules", "sub");
+        Assert.False(HexLinkProvision.HasRepository(Path.Combine(localModule, uninitialized)));
+        Assert.Contains(uninitializedHead, Git(localModule, "ls-tree", "HEAD", uninitialized));
+        Assert.Equal("https://invalid.example/uninitialized.git",
+            Git(localModule, "config", "-f", ".gitmodules", "--get", "submodule." + uninitialized + ".url"));
         Assert.Equal(Head(host), Head(destination));
         Assert.Equal(Head(nested), Head(localNested));
         Assert.Equal(Head(module), Head(localModule));
@@ -248,6 +262,46 @@ public sealed class HexLinkProvisionTests
         Assert.True(missing.Blocks("nested"));
         Assert.False(missing.Blocks("nested/main.txt"));
         Assert.StartsWith("nested is at ", HexLinkTree.CommitsDiffer(here, there, missing));
+    }
+
+    [Fact]
+    public async Task Get_skips_a_nested_bundle_failure_but_a_failed_root_is_fatal()
+    {
+        if (HexLinkGit.Why() is not null)
+            return;
+        using var pair = await LinkedPair.Up(HexLinkRights.View);
+        string host = pair.A.Work;
+        MakeRepo(host, "/ok/\n/skipped/\n");
+        MakeRepo(Path.Combine(host, "ok"));
+        MakeRepo(Path.Combine(host, "skipped"));
+        File.WriteAllText(Path.Combine(host, "skipped", "private.txt"), "This subtree must stay put.");
+        File.WriteAllText(Path.Combine(host, "ok", "new.txt"), "Get the other repository.");
+
+        string journal = Path.Combine(pair.B.Root, "partial.json");
+        string refused = Path.Combine(pair.B.Root, "root-failed");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(4));
+        await Assert.ThrowsAsync<IOException>(() => HexLinkProvision.Get(pair.PeerA, refused, journal,
+            null, timeout.Token, new RefuseBundle(pair.PeerA, "-0")));
+        Assert.False(Directory.Exists(refused));
+
+        string destination = Path.Combine(pair.B.Root, "nested-failed");
+        HexLinkProvisionResult got = await HexLinkProvision.Get(pair.PeerA, destination, journal,
+            null, timeout.Token, new RefuseBundle(pair.PeerA, "-2"));
+        Assert.Equal(new HexLinkProvisionSkip("skipped", "Git could not make this bundle."), Assert.Single(got.Skipped));
+        Assert.Equal(Head(host), Head(destination));
+        Assert.Equal(Head(Path.Combine(host, "ok")), Head(Path.Combine(destination, "ok")));
+        Assert.True(File.Exists(Path.Combine(destination, "ok", "new.txt")));
+        Assert.False(Directory.Exists(Path.Combine(destination, "skipped")));
+        Assert.True(File.Exists(Path.Combine(host, "skipped", "private.txt")));
+    }
+
+    private sealed class RefuseBundle(IHexLinkBundleSource next, string suffix) : IHexLinkBundleSource
+    {
+        public Task<string?> TransferBundle(string repository, IReadOnlyList<string> have, Action<long, long> progress,
+            string? verifyIn, CancellationToken cancel) =>
+            repository.EndsWith(suffix, StringComparison.Ordinal)
+                ? Task.FromException<string?>(new IOException("Git could not make this bundle."))
+                : next.TransferBundle(repository, have, progress, verifyIn, cancel);
     }
 
     private static string Head(string folder) => Git(folder, "rev-parse", "HEAD");

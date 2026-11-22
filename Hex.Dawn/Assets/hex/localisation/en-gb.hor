@@ -4807,7 +4807,8 @@ let strings = {
             repositories_missing_there: "Repositories missing on {device}: {paths}",
             no_missing_repositories: "No repositories are missing here.",
             repository_unsaved: "Save the open changes in {path} before getting this repository.",
-            repository_ready: "Downloaded {path}."
+            repository_ready: "Downloaded {path}.",
+            skipped_repository: "Skipped {path}. {why}"
         },
         patch_kept: "{device} offered changes, \"{title}\", kept as {file}"
     },

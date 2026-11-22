@@ -71,59 +71,39 @@ internal static class HexLinkWorkspaces
         var repos = new List<HexLinkProvisionRepository>();
         var wirePaths = new Dictionary<string, string>(StringComparer.Ordinal);
         var gitlinks = new Dictionary<string, (string Parent, string Head)>(StringComparer.Ordinal);
+        var skipped = new List<HexLinkProvisionSkip>();
         var physical = new HashSet<string>(PlatformPaths.Comparer);
         var deleted = new List<string>();
         var largeChanges = new List<string>();
         string lease = Guid.NewGuid().ToString("N");
+        bool partial = only is null;
+
+        // Check every root before walking its nested checkouts. A bad root cannot produce a workspace.
+        foreach (HexLinkFolder root in roots)
+        {
+            string rootPath = real[root.Name];
+            if (HexLinkProvision.HasRepository(rootPath))
+                Describe(root.Name, rootPath, roots.Length == 1 ? string.Empty : root.Name);
+        }
+
         foreach (HexLinkFolder root in roots)
         {
             string rootPath = real[root.Name];
             string prefix = roots.Length == 1 ? string.Empty : root.Name;
-            List<string> paths = HexLinkTree.FindNestedRepositories(rootPath, cancel);
-            if (HexLinkProvision.HasRepository(rootPath))
-                paths.Add(string.Empty);
-
-            foreach (string relative in paths.OrderBy(path => path.Length))
+            foreach (string relative in HexLinkTree.FindNestedRepositories(rootPath, cancel).OrderBy(path => path.Length))
             {
                 cancel.ThrowIfCancellationRequested();
-                string wire = relative.Length == 0 ? root.Name : root.Name + "/" + relative;
-                string directory = HexLinkFiles.Resolve(selected, wire);
-                if (!physical.Add(directory))
+                string path = prefix.Length == 0 ? relative : prefix + "/" + relative;
+                if (HexLinkProvisionPlan.Skips(skipped, path))
                     continue;
-                if (repos.Count == HexLinkTree.MOST_REPOS)
-                    throw HexLinkException.Invalid("The workspace has too many repositories to provision.");
-                string path = Under(prefix, rootPath, directory);
-                bool inScope = path == onlyRepository || gitlinks.TryGetValue(path, out var moduleLink) && repoScope.Contains(moduleLink.Parent);
-                if (onlyRepository is not null && !inScope && !HexLinkProvisionPlan.Inside(onlyRepository, path))
-                    continue;
-                if (inScope)
-                    repoScope.Add(path);
-                if (HexLinkProvision.Run(directory, ["rev-parse", "--show-prefix"], cancel).Trim().Length > 0)
-                    throw new InvalidOperationException($"The Git metadata in {path} does not identify its own checkout.");
-                string head = HexLinkProvision.ReadHead(directory, cancel)
-                    ?? throw new InvalidOperationException($"The repository {wire} has no commit to provision.");
-                string? parent = null;
-                if (gitlinks.TryGetValue(path, out var link))
+                string wire = root.Name + "/" + relative;
+                try
                 {
-                    parent = link.Parent;
-                    if (head != link.Head)
-                        throw new InvalidOperationException($"Submodule {wire} is at {head} on the host. Its parent records {link.Head}. Check out the recorded commit on the host before sharing this workspace.");
+                    Describe(wire, HexLinkFiles.Resolve(selected, wire), path);
                 }
-
-                var origin = GitProcess.Run(directory, ["config", "--local", "--get", "remote.origin.url"], cancel: cancel);
-                if (!origin.Ok && origin.Exit != 1)
-                    throw new InvalidOperationException($"Couldn't read the origin of {wire}: {HexLinkGit.ErrorOf(origin)}");
-
-                string id = $"{HexLinkProvisionPlan.BUNDLE_PREFIX}{lease}-{repos.Count}";
-                repos.Add(new HexLinkProvisionRepository(id, path, head, parent is null ? HexLinkProvision.ReadBranch(directory, cancel) : null,
-                    origin.Ok ? origin.Output.TrimEnd('\r', '\n') : null, parent));
-                wirePaths.Add(id, wire);
-                if (only is null || inScope)
-                    ProvisionChanges(directory, path, deleted, largeChanges, cancel);
-                foreach (var (module, commit) in Submodules(directory, cancel))
+                catch (Exception e) when (partial && e is (HexLinkException or InvalidOperationException or IOException or UnauthorizedAccessException))
                 {
-                    string modulePath = path.Length > 0 ? path + "/" + module : module;
-                    gitlinks.Add(modulePath, (path, commit));
+                    skipped.Add(new(path, e.Message));
                 }
             }
         }
@@ -134,10 +114,52 @@ internal static class HexLinkWorkspaces
 
         foreach (var (path, link) in gitlinks)
         {
-            if ((onlyRepository is null || repoScope.Contains(link.Parent)) && !repoPaths.Contains(path))
-                throw new InvalidOperationException($"Submodule {path} is uninitialized on the host. Initialize it there before sharing this workspace.");
+            if (repoPaths.Contains(path) || HexLinkProvisionPlan.Skips(skipped, path)
+                || onlyRepository is not null && !repoScope.Contains(link.Parent))
+                continue;
+            if (!partial)
+                throw new InvalidOperationException($"Submodule {path} is uninitialized on the host.");
+            skipped.Add(new(path, "Submodule is uninitialized on the host."));
         }
-        return new HexLinkHostedProvision(new HexLinkProvisionPlan(folders, repos, deleted, largeChanges, onlyRepository), wirePaths);
+        return new HexLinkHostedProvision(new HexLinkProvisionPlan(folders, repos, deleted, largeChanges, onlyRepository, skipped), wirePaths);
+
+        void Describe(string wire, string directory, string path)
+        {
+            if (!physical.Add(directory))
+                return;
+            if (repos.Count == HexLinkTree.MOST_REPOS)
+                throw HexLinkException.Invalid("The workspace has too many repositories to provision.");
+            bool inScope = path == onlyRepository || gitlinks.TryGetValue(path, out var moduleLink) && repoScope.Contains(moduleLink.Parent);
+            if (onlyRepository is not null && !inScope && !HexLinkProvisionPlan.Inside(onlyRepository, path))
+                return;
+
+            if (HexLinkProvision.Run(directory, ["rev-parse", "--show-prefix"], cancel).Trim().Length > 0)
+                throw new InvalidOperationException($"{wire} does not identify its own Git checkout.");
+            string head = HexLinkProvision.ReadHead(directory, cancel) ?? throw new InvalidOperationException($"Repository {wire} has no commit.");
+            string? parent = null;
+            if (gitlinks.TryGetValue(path, out var link))
+            {
+                parent = link.Parent;
+                if (head != link.Head)
+                    throw new InvalidOperationException($"Submodule {wire} is at {head}. Its parent records {link.Head}.");
+            }
+            var origin = GitProcess.Run(directory, ["config", "--local", "--get", "remote.origin.url"], cancel: cancel);
+            if (!origin.Ok && origin.Exit != 1)
+                throw new InvalidOperationException($"Couldn't read the origin of {wire}: {HexLinkGit.ErrorOf(origin)}");
+
+            string id = $"{HexLinkProvisionPlan.BUNDLE_PREFIX}{lease}-{repos.Count}";
+            string? branch = parent is null ? HexLinkProvision.ReadBranch(directory, cancel) : null;
+            var modules = Submodules(directory, cancel);
+            if (only is null || inScope)
+                ProvisionChanges(directory, path, deleted, largeChanges, cancel);
+
+            repos.Add(new HexLinkProvisionRepository(id, path, head, branch, origin.Ok ? origin.Output.TrimEnd('\r', '\n') : null, parent));
+            wirePaths.Add(id, wire);
+            if (inScope)
+                repoScope.Add(path);
+            foreach (var (module, commit) in modules)
+                gitlinks.Add(path.Length == 0 ? module : path + "/" + module, (path, commit));
+        }
     }
 
     private static void ProvisionChanges(string directory, string repositoryPath, List<string> deleted, List<string> largeChanges, CancellationToken cancel)

@@ -13,15 +13,19 @@ internal enum HexLinkProvisionPhase
 }
 
 internal sealed record HexLinkProvisionProgress(HexLinkProvisionPhase Phase, int RepositoryIndex, int RepositoryCount,
-    long BytesDone = 0, long BytesTotal = 0, int FilesDone = 0, int FilesTotal = 0);
+    long BytesDone = 0, long BytesTotal = 0, int FilesDone = 0, int FilesTotal = 0, IReadOnlyList<HexLinkProvisionSkip>? Skipped = null);
 
 internal sealed record HexLinkProvisionFolder(string Name, string Path);
+
+internal sealed record HexLinkProvisionSkip(string Path, string Reason);
+
+internal sealed record HexLinkProvisionResult(IReadOnlyList<HexLinkFolder> Folders, IReadOnlyList<HexLinkProvisionSkip> Skipped);
 
 internal sealed record HexLinkProvisionRepository(string Id, string Path, string Head, string? Branch, string? Origin,
     string? ParentRepository = null);
 
 internal sealed record HexLinkProvisionPlan(IReadOnlyList<HexLinkProvisionFolder> Folders, IReadOnlyList<HexLinkProvisionRepository> Repositories,
-    IReadOnlyList<string>? Deleted = null, IReadOnlyList<string>? LargeChanges = null, string? RepositoryPath = null)
+    IReadOnlyList<string>? Deleted = null, IReadOnlyList<string>? LargeChanges = null, string? RepositoryPath = null, IReadOnlyList<HexLinkProvisionSkip>? Skipped = null)
 {
     internal const string BUNDLE_PREFIX = "provision-";
 
@@ -39,7 +43,11 @@ internal sealed record HexLinkProvisionPlan(IReadOnlyList<HexLinkProvisionFolder
         })]),
         ["deleted"] = new JsonArray([.. (Deleted ?? []).Select(path => (JsonNode)path)]),
         ["largeChanges"] = new JsonArray([.. (LargeChanges ?? []).Select(path => (JsonNode)path)]),
-        ["repository_path"] = RepositoryPath
+        ["repository_path"] = RepositoryPath,
+        ["skipped"] = new JsonArray([.. (Skipped ?? []).Select(entry => (JsonNode)new JsonObject
+        {
+            ["path"] = entry.Path, ["reason"] = entry.Reason.Length <= 1024 ? entry.Reason : entry.Reason[..1024]
+        })])
     };
 
     public static HexLinkProvisionPlan FromJson(JsonObject json)
@@ -83,7 +91,25 @@ internal sealed record HexLinkProvisionPlan(IReadOnlyList<HexLinkProvisionFolder
                 throw HexLinkException.Invalid("A repository in the plan is outside its folder or its submodule parent.");
         }
 
-        return new HexLinkProvisionPlan(folders, repositories, Paths("deleted"), Paths("largeChanges"), HexLinkData.String(json, "repository_path", HexLinkFiles.MOST_PATH + 1));
+        var skipped = new List<HexLinkProvisionSkip>();
+        if (json["skipped"] is not null)
+        {
+            if (json["skipped"] is not JsonArray { Count: <= HexLinkTree.MOST_REPOS } entries)
+                throw HexLinkException.Invalid("The workspace plan has an invalid list of skipped repositories.");
+            foreach (JsonNode? entry in entries)
+            {
+                if (entry is not JsonObject skip)
+                    throw HexLinkException.Invalid("The workspace plan has an invalid skipped repository.");
+                string path = HexLinkData.Need(skip, "path", HexLinkFiles.MOST_PATH + 1);
+                string reason = HexLinkData.Need(skip, "reason", 1025);
+                if (path.Length == 0 || reason.Length == 0 || RootOf(folders, path) || !folders.Any(folder => Inside(path, folder.Path)))
+                    throw HexLinkException.Invalid("A skipped repository must be inside a workspace folder.");
+                skipped.Add(new(path, reason));
+            }
+        }
+
+        return new HexLinkProvisionPlan(folders, repositories, Paths("deleted"), Paths("largeChanges"),
+            HexLinkData.String(json, "repository_path", HexLinkFiles.MOST_PATH + 1), skipped);
 
         List<string>? Paths(string field)
         {
@@ -97,6 +123,12 @@ internal sealed record HexLinkProvisionPlan(IReadOnlyList<HexLinkProvisionFolder
             return result;
         }
     }
+
+    internal static bool RootOf(IReadOnlyList<HexLinkProvisionFolder> folders, string path) =>
+        folders.Any(folder => folder.Path == path) && !folders.Any(folder => folder.Path != path && Inside(path, folder.Path));
+
+    internal static bool Skips(IEnumerable<HexLinkProvisionSkip> skipped, string path) =>
+        skipped.Any(entry => Inside(path, entry.Path));
 
     internal static bool Inside(string path, string within) =>
         within.Length == 0 || path.Equals(within, StringComparison.Ordinal) || path.StartsWith(within + "/", StringComparison.Ordinal);
@@ -151,27 +183,38 @@ internal static partial class HexLinkProvision
 
     private sealed record FileTransfer(string Relative, string? Before, HexLinkTreeFile? Remote);
 
-    public static async Task<IReadOnlyList<HexLinkFolder>> Get(HexLinkPeer peer, string destination, string journal,
-        IProgress<HexLinkProvisionProgress>? progress, CancellationToken cancel)
+    public static async Task<HexLinkProvisionResult> Get(HexLinkPeer peer, string destination, string journal,
+        IProgress<HexLinkProvisionProgress>? progress, CancellationToken cancel, IHexLinkBundleSource? bundles = null)
     {
         progress?.Report(new HexLinkProvisionProgress(HexLinkProvisionPhase.Planning, 0, 0));
         ValidateDestination(destination, cancel);
         HexLinkProvisionPlan plan = await peer.GetProvisionPlan(null, cancel);
         if (plan.Deleted is null || plan.LargeChanges is null)
             throw new InvalidOperationException("The host needs a Hex version that can send a complete workspace.");
-        if (plan.LargeChanges.FirstOrDefault() is { } large)
+        var skipped = new List<HexLinkProvisionSkip>(plan.Skipped ?? []);
+        foreach (HexLinkProvisionSkip entry in skipped)
+            Resolve(destination, entry.Path);
+        plan = WithoutSkipped(plan, skipped);
+        if (plan.LargeChanges?.FirstOrDefault(path => !HexLinkProvisionPlan.Skips(skipped, path)) is { } large)
             throw new InvalidOperationException($"{large} has uncommitted content larger than this link can transfer.");
+        progress?.Report(new(HexLinkProvisionPhase.Planning, 0, plan.Repositories.Count, Skipped: skipped.ToArray()));
 
-        Directory.CreateDirectory(destination);
-        foreach (HexLinkProvisionFolder folder in plan.Folders)
-            Resolve(destination, folder.Path);
-        await ApplyRepositories(peer, plan, destination, align: false, progress, cancel);
+        await ApplyRepositories(bundles ?? peer, plan, destination, align: false, progress, cancel, skipped);
+        plan = WithoutSkipped(plan, skipped);
         HexLinkFolder[] local = [.. plan.Folders.Select(folder => new HexLinkFolder(folder.Name, Resolve(destination, folder.Path)))];
         foreach (HexLinkFolder folder in local)
             Directory.CreateDirectory(folder.Path);
         await CopyWorkingTrees(peer, plan, local, destination, journal, progress, cancel);
-        return local;
+        return new(local, skipped.OrderBy(entry => entry.Path, StringComparer.Ordinal).ToArray());
     }
+
+    private static HexLinkProvisionPlan WithoutSkipped(HexLinkProvisionPlan plan, IReadOnlyList<HexLinkProvisionSkip> skipped) =>
+        skipped.Count == 0 ? plan : plan with
+        {
+            Folders = [.. plan.Folders.Where(folder => !HexLinkProvisionPlan.Skips(skipped, folder.Path))],
+            Repositories = [.. plan.Repositories.Where(repo => !HexLinkProvisionPlan.Skips(skipped, repo.Path))],
+            Skipped = skipped
+        };
 
     private static void ValidateDestination(string destination, CancellationToken cancel)
     {
@@ -213,17 +256,24 @@ internal static partial class HexLinkProvision
             if (remote.Folder != folder.Name)
                 throw HexLinkException.Invalid("A manifest names the wrong workspace folder.");
             HexLinkManifest local = new HexLinkTree(folder).Manifest();
-            if ((repos is null ? HexLinkTree.CommitsDiffer(local, remote) : CheckRepositoryHeads(plan, local, remote)) is { } why)
+            string prefix = plan.Folders[i].Path;
+            HexLinkMissingRepositories? omitted = plan.Skipped is { Count: > 0 } skip
+                ? new([.. skip.Where(entry => HexLinkProvisionPlan.Inside(entry.Path, prefix))
+                    .Select(entry => prefix.Length == 0 ? entry.Path : entry.Path[(prefix.Length + 1)..])], [])
+                : null;
+            if ((repos is null ? HexLinkTree.CommitsDiffer(local, remote, omitted) : CheckRepositoryHeads(plan, local, remote)) is { } why)
                 throw new InvalidOperationException($"The host changed while the workspace was being transferred. {why}. Retry with a new plan.");
 
-            string prefix = plan.Folders[i].Path;
+            bool CopyPath(string within, HexLinkManifest manifest) =>
+                omitted?.Blocks(within) != true && InRepositoryScope(within, manifest.NestedHeads, repos);
+
             var remotePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var localFiles = local.Files.Where(file => InRepositoryScope(UnderFolder(file.Path, folder), local.NestedHeads, repos))
+            var localFiles = local.Files.Where(file => CopyPath(UnderFolder(file.Path, folder), local))
                 .ToDictionary(file => UnderFolder(file.Path, folder), StringComparer.Ordinal);
             foreach (HexLinkTreeFile file in remote.Files)
             {
                 string within = UnderFolder(file.Path, folder);
-                if (!InRepositoryScope(within, remote.NestedHeads, repos))
+                if (!CopyPath(within, remote))
                     continue;
                 string relative = Relative(prefix, within);
                 Resolve(destination, relative);
@@ -342,7 +392,7 @@ internal static partial class HexLinkProvision
     }
 
     internal static async Task ApplyRepositories(IHexLinkBundleSource source, HexLinkProvisionPlan plan, string destination,
-        bool align, IProgress<HexLinkProvisionProgress>? progress, CancellationToken cancel)
+        bool align, IProgress<HexLinkProvisionProgress>? progress, CancellationToken cancel, List<HexLinkProvisionSkip>? skipped = null)
     {
         if (HexLinkGit.Why() is { } why)
             throw new InvalidOperationException(why);
@@ -380,18 +430,37 @@ internal static partial class HexLinkProvision
                         return;
                     }
                     Report(0, -1);
-                    checkout.Bundle = await source.TransferBundle(checkout.Remote.Id, checkout.Have, Report,
-                        checkout.Existing ? checkout.Directory : null, token);
-                    long total = checkout.Bundle is { } bundle ? new FileInfo(bundle).Length : 0;
-                    Report(total, total);
+                    try
+                    {
+                        checkout.Bundle = await source.TransferBundle(checkout.Remote.Id, checkout.Have, Report,
+                            checkout.Existing ? checkout.Directory : null, token);
+                        if (checkout.Bundle is null && !checkout.Existing)
+                            throw new IOException("The host returned no bundle for a new checkout.");
+                        long total = checkout.Bundle is { } bundle ? new FileInfo(bundle).Length : 0;
+                        Report(total, total);
+                    }
+                    catch (Exception e) when (skipped is not null && !HexLinkProvisionPlan.RootOf(plan.Folders, checkout.Remote.Path)
+                        && (e is HexLinkException failure
+                            ? failure.Code is not HexLinkErrors.CLOSED and not HexLinkErrors.NOT_ALLOWED
+                            : e is IOException or InvalidOperationException or UnauthorizedAccessException))
+                    {
+                        lock (reporting)
+                        {
+                            skipped.Add(new(checkout.Remote.Path, e.Message));
+                            progress?.Report(new(HexLinkProvisionPhase.Repositories, index + 1, checkouts.Length, Skipped: skipped.ToArray()));
+                        }
+                        Report(got[index], got[index]);
+                    }
                 });
 
+            Checkout[] available = skipped is null ? checkouts
+                : [.. checkouts.Where(checkout => !HexLinkProvisionPlan.Skips(skipped, checkout.Remote.Path))];
             // Import first. Reject divergent or dirty checkouts before moving any working tree.
-            foreach (Checkout checkout in checkouts)
+            foreach (Checkout checkout in available)
                 Import(checkout, cancel);
-            foreach (Checkout checkout in checkouts)
+            foreach (Checkout checkout in available)
                 CheckFastForward(plan, checkout, align, cancel);
-            foreach (Checkout checkout in checkouts)
+            foreach (Checkout checkout in available)
             {
                 cancel.ThrowIfCancellationRequested();
                 if (checkout.Head != checkout.Remote.Head || checkout.Branch != checkout.Remote.Branch)
@@ -400,7 +469,7 @@ internal static partial class HexLinkProvision
                     SetOrigin(checkout, cancel);
             }
 
-            foreach (Checkout checkout in checkouts.Where(item => item.Remote.ParentRepository is not null).Reverse())
+            foreach (Checkout checkout in available.Where(item => item.Remote.ParentRepository is not null).Reverse())
             {
                 string parent = Resolve(destination, checkout.Remote.ParentRepository!);
                 string module = Path.GetRelativePath(parent, checkout.Directory).Replace(Path.DirectorySeparatorChar, '/');

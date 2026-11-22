@@ -70,8 +70,9 @@ internal sealed partial class DawnScene
                 ? McpToolResult.Error(shareError) : McpToolResult.Text($"Workspace offered to {peer.Device.Name}.");
 
         string destination = args.String("destination") is { Length: > 0 } selected ? selected : LinkDefaultProvisionDestination(peer);
-        return await LinkGetWorkspace(peer.Device.Id, destination, cancel: cancel) is { } error
-            ? McpToolResult.Error(error) : McpToolResult.Text($"Workspace from {peer.Device.Name} downloaded to {destination} and sync started.");
+        string notes = string.Empty;
+        return await LinkGetWorkspace(peer.Device.Id, destination, cancel: cancel, notes: said => notes = "\n" + said) is { } error
+            ? McpToolResult.Error(error + notes) : McpToolResult.Text($"Workspace from {peer.Device.Name} downloaded to {destination} and sync started.{notes}");
     }
 
     // What a tool says while Link is off

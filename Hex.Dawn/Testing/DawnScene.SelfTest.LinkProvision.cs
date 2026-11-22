@@ -8,6 +8,7 @@ internal sealed partial class DawnScene
 {
     private const string LINK_PROVISION_TEST_DESTINATION = "HEX_LINK_PROVISION_TEST_DESTINATION";
     private const string LINK_PROVISION_TEST_SOURCE = "provision-source";
+    private const string PROVISION_TEST_UNINITIALIZED = "missing-child";
     private const string PROVISION_TEST_AFTER = "Host edit after getting the workspace.\n";
     private const string PROVISION_TEST_BACK = "Joiner edit after getting the workspace.\n";
     private const HexLinkRights PROVISION_TEST_EDIT = HexLinkRights.View | HexLinkRights.Edit;
@@ -38,6 +39,12 @@ internal sealed partial class DawnScene
                 MakeProvisionTestRepo(nested);
                 string moduleSource = Path.Combine(home, "module-source");
                 MakeProvisionTestRepo(moduleSource);
+                string missingCommit = ProvisionTestGit(moduleSource, "rev-parse", "HEAD");
+                File.WriteAllText(Path.Combine(moduleSource, ".gitmodules"),
+                    $"[submodule \"{PROVISION_TEST_UNINITIALIZED}\"]\n\tpath = {PROVISION_TEST_UNINITIALIZED}\n\turl = https://invalid.example/uninitialized.git\n");
+                ProvisionTestGit(moduleSource, "update-index", "--add", "--cacheinfo", $"160000,{missingCommit},{PROVISION_TEST_UNINITIALIZED}");
+                ProvisionTestGit(moduleSource, "add", ".gitmodules");
+                ProvisionTestGit(moduleSource, "commit", "-qm", "Record the uninitialized child submodule");
                 ProvisionTestGit(root, "remote", "add", "origin", "https://invalid.example/root.git");
                 ProvisionTestGit(nested, "remote", "add", "origin", "https://invalid.example/nested.git");
                 ProvisionTestGit(nested, "-c", "protocol.file.allow=always", "submodule", "add", "-q", moduleSource, "module");
@@ -88,6 +95,12 @@ internal sealed partial class DawnScene
             Directory.Exists(joinedModule) && File.Exists(Path.Combine(joinedModule, ".git"))
             && ProvisionTestGit(submodule, "rev-parse", "HEAD") == ProvisionTestGit(joinedModule, "rev-parse", "HEAD")
             && ProvisionTestGit(joinedModule, "remote", "get-url", "origin") == "https://invalid.example/module.git");
+        test.Check("link-provision: the nested uninitialized submodule kept its gitlink and URL", () =>
+            Directory.Exists(joinedModule) && !HexLinkProvision.HasRepository(Path.Combine(joinedModule, PROVISION_TEST_UNINITIALIZED))
+            && ProvisionTestGit(submodule, "ls-tree", "HEAD", PROVISION_TEST_UNINITIALIZED)
+                == ProvisionTestGit(joinedModule, "ls-tree", "HEAD", PROVISION_TEST_UNINITIALIZED)
+            && ProvisionTestGit(joinedModule, "config", "-f", ".gitmodules", "--get", $"submodule.{PROVISION_TEST_UNINITIALIZED}.url")
+                == "https://invalid.example/uninitialized.git");
         test.Check("link-provision: uncommitted and untracked content arrived, ignored build output stayed on the host", () =>
             ReadProvisionTestFile(Path.Combine(joiner, "committed.txt")) == "Uncommitted root edit.\n"
             && ReadProvisionTestFile(Path.Combine(joinedNested, "untracked.txt")) == "Untracked nested file.\n"
@@ -161,6 +174,9 @@ internal sealed partial class DawnScene
                 File.WriteAllText(ready, "ready");
         });
         test.Check("link-provision: one MCP action got the workspace with View", () => ReadProvisionTestFile(ready) == "ready");
+        test.Check("link-provision: MCP listed the skipped submodule and its reason", () =>
+            getting is { IsCompletedSuccessfully: true, Result.IsError: false }
+            && getting.Result.AllText().Contains($"Skipped nested/module/{PROVISION_TEST_UNINITIALIZED}. Submodule is uninitialized", StringComparison.Ordinal));
 
         string changed = Path.Combine(destination, "nested", "module", "committed.txt");
         test.WaitFor(() => ReadProvisionTestFile(changed) == PROVISION_TEST_AFTER
@@ -200,7 +216,7 @@ internal sealed partial class DawnScene
 
     private static string ProvisionTestGit(string folder, params string[] args)
     {
-        GitResult git = GitProcess.Run(folder, args, unattended: true);
+        GitResult git = GitProcess.Run(folder, args, patience: TimeSpan.FromMinutes(2), unattended: true);
         return git.Ok ? git.Output.Trim() : throw new InvalidOperationException($"git {args[0]} in {folder}: {git.Error}");
     }
 

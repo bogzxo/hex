@@ -175,6 +175,8 @@ internal sealed partial class DawnScene
             ("bytes_total", progress.BytesTotal >= 0 ? LinkSize(progress.BytesTotal) : "?"),
             ("files", progress.FilesDone.ToString(CultureInfo.InvariantCulture)),
             ("files_total", progress.FilesTotal.ToString(CultureInfo.InvariantCulture)));
+        if (progress.Skipped is { Count: > 0 } skipped)
+            said += "\n" + ProvisionSkipped(skipped);
         if (progress is { Phase: HexLinkProvisionPhase.Repositories, BytesTotal: > 0 })
             work.Report((float)((double)progress.BytesDone / progress.BytesTotal), said);
         else if (progress is { Phase: HexLinkProvisionPhase.Files, FilesTotal: > 0 })
