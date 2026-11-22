@@ -27,6 +27,7 @@ internal sealed partial class DawnScene
     private const string LINK_UI_AGENT = "link_ui_fixture", LINK_UI_AGENT_NAME = "Link fixture agent";
     private const string LINK_UI_START = "Start from the Runs on picker", LINK_UI_FOLLOW = "Follow up on the same chat";
     private const string LINK_UI_DENIED = "This follow-up must be refused", LINK_UI_OUTPUT = "link-ui-fixture-ran";
+    private const string LINK_UI_APPROVAL_CHILD = "Link approval child", LINK_UI_APPROVAL_TASK = "Review fixture output";
 
     // This fixture's process emits a fixed line and exits. The prompt is never passed to the shell.
     private HexExtension StartLinkUiAgent(string root)
@@ -57,6 +58,19 @@ internal sealed partial class DawnScene
     /// <summary>B's side: the Steer requests its audit has since the last said, each said on a line of its own.</summary>
     private void LinkTestSaySteered(ref DateTime seen)
     {
+        HexAgentChat? approvalChild = agentChats.FirstOrDefault(chat => chat.Name == LINK_UI_APPROVAL_CHILD &&
+            chat.LinkStarter is not null && !chat.Running && !AgentRunBusy(chat) &&
+            chat.Entries.All(entry => entry.Kind != HexAgentEntryKind.Approval));
+        if (approvalChild is not null)
+        {
+            approvalChild.Ask("Ask before using the fixture output.");
+            approvalChild.Approval(LINK_UI_APPROVAL_TASK, "fixture output", allow =>
+            {
+                Console.WriteLine($"[Hex self-test] link-peer: starter approval {(allow ? "allowed" : "denied")}");
+                approvalChild.Done();
+            });
+        }
+
         // And what the other end calls itself, each time it changes
         if (LinkPeers.FirstOrDefault() is { } other && other.Device.Name != linkTestOtherName)
         {
@@ -377,7 +391,22 @@ internal sealed partial class DawnScene
         test.Check("link-ui: the fleet has a section of B's with its chat as a card", () => RemoteCard(noonFleetRows) is not null
             && Descendants(noonFleetRows).OfType<Label>().Any(label => label.Text.Contains(LINK_PEER_NAME, StringComparison.Ordinal)));
         test.Check("link-ui: B's card carries B's badge", () => RemoteCard(noonFleetRows)?.Parent is { } card && Descendants(card).OfType<Badge>().Any(badge => badge.Text == LINK_PEER_NAME));
+        test.Check("link-ui: the remote fleet identifies the pending approval and its request number", () =>
+            peer?.Fleet.Any(row => row.Id == peerChat && row.Approvals.Any(approval => approval.Number == 1 && approval.Title == "Run the tests")) == true &&
+            RemoteCard(noonFleetRows)?.Parent is { } approvalCard && Descendants(approvalCard).OfType<Badge>()
+                .Any(badge => badge.Text == Said("agents_panel.waiting_approval_short")));
         Shot("link_ui_fleet.png");
+
+        Task<McpToolResult>? waitingOnApproval = null;
+        test.Run(() => waitingOnApproval = McpTools.Call("hex_link_call", new JsonObject
+        {
+            ["device"] = LINK_PEER_NAME, ["tool"] = "hex_agent_wait",
+            ["arguments"] = new JsonObject { ["ids"] = new JsonArray(JsonValue.Create(peerChat)), ["timeout"] = 60 }
+        }, CancellationToken.None));
+        test.WaitFor(() => waitingOnApproval?.IsCompleted == true, 8);
+        test.Check("link-ui: waiting over Link returns immediately when B asks leave", () =>
+            waitingOnApproval is { IsCompletedSuccessfully: true } reply && !reply.Result.IsError &&
+            reply.Result.AllText().Contains("asks leave: Run the tests (request 1)", StringComparison.Ordinal));
 
         // Picking it shows B's chat, its rows, under the banner saying where it runs
         test.Click(() => Centre(RemoteCard(noonFleetRows)));
@@ -388,6 +417,51 @@ internal sealed partial class DawnScene
         test.Check("link-ui: the banner over the box says the chat runs on B", () =>
             linkBanner is { Visible: true } banner && Descendants(banner).OfType<Label>().Any(label => label.Tooltip.Contains(Said("link.chat_runs_on", ("device", LINK_PEER_NAME)), StringComparison.Ordinal)));
         Shot("link_ui_remote_chat.png");
+        Button? RemoteApprovalButton(string icon) => agentsWaitStrip is { Visible: true } strip
+            ? Descendants(strip).OfType<Button>().FirstOrDefault(button => button.Icon == icon && button.Enabled) : null;
+        test.WaitFor(() => RemoteApprovalButton("check") is not null, 6);
+        test.Check("link-ui: a Steer mirror shows Allow and Deny for the pending approval", () =>
+            RemoteApprovalButton("check") is not null && RemoteApprovalButton("close") is not null);
+        test.Click(() => Centre(RemoteApprovalButton("check")));
+        test.WaitFor(() => LinkTestPeerSaid("approval allowed"), 8);
+        test.Check("link-ui: Allow from the remote approval card reaches the hosting chat", () => LinkTestPeerSaid("approval allowed"));
+
+        HexAgentChat? approvalStarter = null;
+        Task<McpToolResult>? approvalSpawn = null, approvalReply = null;
+        test.Run(() =>
+        {
+            approvalStarter = new HexAgentChat(++agentChatsMade, "link_approval_starter");
+            agentChats.Add(approvalStarter);
+            approvalSpawn = new HexMcpCaller(McpTools, approvalStarter.Id).Call("hex_link_spawn", new JsonObject
+            {
+                ["device"] = LINK_PEER_NAME, ["agent"] = LINK_UI_AGENT, ["name"] = LINK_UI_APPROVAL_CHILD,
+                ["prompt"] = "Review the fixture.", ["options"] = new JsonObject { ["effort"] = "low" },
+                ["permissions"] = new JsonObject { ["deny"] = new JsonArray(JsonValue.Create("Bash")) }
+            }, CancellationToken.None);
+        });
+        bool StarterHasQuestion() => approvalStarter?.UnreadMail().Any(mail => mail.Kind == "question" &&
+            mail.Text.Contains($"asks leave: {LINK_UI_APPROVAL_TASK} (request 1)", StringComparison.Ordinal)) == true;
+        test.WaitFor(StarterHasQuestion, 16);
+        test.Check("link-ui: hex_link_spawn routes a request to its exact starter as a question", () =>
+            approvalSpawn is { IsCompletedSuccessfully: true } spawn && !spawn.Result.IsError && StarterHasQuestion());
+        test.Run(() =>
+        {
+            if (approvalStarter?.LinkChildren.FirstOrDefault() is { } child)
+                approvalReply = new HexMcpCaller(McpTools, approvalStarter.Id).Call("hex_link_call", new JsonObject
+                {
+                    ["device"] = LINK_PEER_NAME, ["tool"] = "hex_agent_approve",
+                    ["arguments"] = new JsonObject { ["id"] = child.Address.Chat, ["request"] = 1, ["allow"] = true }
+                }, CancellationToken.None);
+        });
+        test.WaitFor(() => LinkTestPeerSaid("starter approval allowed"), 8);
+        test.Check("link-ui: the starter can answer its numbered remote request through hex_link_call", () =>
+            approvalReply is { IsCompletedSuccessfully: true } answer && !answer.Result.IsError && LinkTestPeerSaid("starter approval allowed"));
+        test.Run(() =>
+        {
+            if (approvalStarter is not null)
+                agentChats.Remove(approvalStarter);
+        });
+
         test.Check("link-ui: a running mirror may show typing before its first entry arrives", () =>
         {
             var empty = new HexAgentChat(-1, LINK_UI_AGENT);

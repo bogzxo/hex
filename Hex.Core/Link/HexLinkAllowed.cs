@@ -17,6 +17,10 @@ internal static class HexLinkAllowed
 
     internal static readonly AsyncLocal<Func<string, bool>?> RemoteFileAllowed = new();
     internal static readonly AsyncLocal<HexLinkDevice?> RelayOrigin = new();
+    private static readonly ConditionalWeakTable<JsonObject, HexLinkAgentCall> agentCalls = new();
+
+    internal static HexLinkAgentCall? AgentCall(JsonObject arguments) => agentCalls.TryGetValue(arguments, out var call) ? call : null;
+    internal static void SetAgentCall(JsonObject arguments, HexLinkAgentCall call) => agentCalls.Add(arguments, call);
     private static readonly ConditionalWeakTable<JsonObject, Func<string, bool>> editorFileRules = new();
 
     internal static void SetEditorFileRule(JsonObject arguments, Func<string, bool> allowed) => editorFileRules.Add(arguments, allowed);

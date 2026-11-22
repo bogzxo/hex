@@ -104,6 +104,8 @@ internal sealed class HexAgentEntry(HexAgentEntryKind kind, string text)
 /// </summary>
 internal sealed partial class HexAgentChat(int id, string agent)
 {
+    internal HexLinkAgentStarter? LinkStarter { get; set; }
+    internal List<HexLinkAgentChild> LinkChildren { get; } = [];
     // The rows a chat keeps in memory, and how many more it lets come before the oldest go to its file a batch at a time.
     // A batch rather than a row each, the panel draws the chat again from the start when rows leave its top
     public const int MOST_ENTRIES = 200, SPILL_BATCH = 50;

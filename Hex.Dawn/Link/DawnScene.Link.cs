@@ -414,6 +414,7 @@ internal sealed partial class DawnScene
     private void LinkRedraw()
     {
         IReadOnlyList<HexLinkPeer> peers = LinkPeers;
+        RouteLinkAgentApprovals(peers);
         if (linkItem is not null)
         {
             // Breathing while a device steers something here, so it's seen from across the room

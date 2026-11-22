@@ -29,7 +29,7 @@ internal sealed partial class DawnScene
                 ("device", McpSchema.String("The device, its name or the start of its id as hex_link_devices says them.")),
                 ("tool", McpSchema.String("The tool there, hex_read, hex_agent_list...")),
                 ("arguments", new JsonObject { ["type"] = "object", ["description"] = "Its arguments, as the tool takes them." })], "device", "tool")),
-            null, RunAway: LinkCallTool, NeedsEditor: false),
+            null, RunAway: LinkCallTool, NeedsEditor: false, TakesCaller: true),
         new(new McpTool("hex_link_spawn", "Start an agent on another machine",
             "Start an agent on another machine linked to this one (it has to let this machine steer), to build, test or change what only that machine can. It runs there, with that machine's tools and files. Returns its chat id there; follow it with hex_link_call and hex_agent_wait, hex_agent_read or hex_agent_send on the same device.",
             McpSchema.Object([
@@ -40,8 +40,11 @@ internal sealed partial class DawnScene
                 ("model", McpSchema.String("The model, that agent system's setting there by default.")),
                 ("worktree", McpSchema.OneOf("Live workspace or a private worktree.", "live", "private")),
                 ("folder", McpSchema.String("Shared folder for a private worktree.")),
+                ("options", new JsonObject { ["type"] = "object", ["description"] = "Agent options as hex_agent_spawn accepts, within the target's pre-approval policy." }),
+                ("permissions", new JsonObject { ["type"] = "object", ["description"] = "Allow and deny rule lists as hex_agent_spawn accepts, within the target's pre-approval policy." }),
+                ("approvals", McpSchema.OneOf("Who answers further requests. Default you; person keeps them on the target's card.", "you", "person")),
                 ("sync", McpSchema.Flag("Sync the folder it runs in first (hex_link_sync start, then flush), so it works on the code as it is here."))], "device", "prompt")),
-            null, RunAway: LinkSpawnTool, NeedsEditor: false),
+            null, RunAway: LinkSpawnTool, NeedsEditor: false, TakesCaller: true),
         new(new McpTool("hex_link_sync", "Keep a folder the same on another machine",
             "Keep a workspace folder the same here and on another linked machine that has the same folder (the same repository) open, both ways, a file saved on one written on the other within a moment. start turns it on (and waits for the first comparison), flush returns once everything saved here is there, so you can then tell an agent there to build or test (hex_link_spawn, or hex_link_call with hex_agent_send) and what it changes comes back the same way. status lists every sync, its counts, its conflicts and the files that don't travel; resolve settles a file both sides changed (keep mine or theirs); stop turns it off. Git metadata and ignored files stay local. Bulk peers sync files up to 4 GiB. The JSON path has an 8 MiB limit.",
             McpSchema.Object([
@@ -143,7 +146,7 @@ internal sealed partial class DawnScene
         if (tool.Length == 0)
             return McpToolResult.Error("Say the tool to call there.");
         JsonObject arguments = args["arguments"] is JsonObject given ? (JsonObject)given.DeepClone() : [];
-        return await LinkCall(peer, tool, arguments, cancel);
+        return await LinkCall(peer, tool, arguments, cancel, CallerOf(args));
     }
 
     private async Task<McpToolResult> LinkSpawnTool(JsonObject args, CancellationToken cancel)
@@ -153,10 +156,16 @@ internal sealed partial class DawnScene
         if (LinkPeerOf(links!.Peers, args.String("device") ?? string.Empty, out string? wrong) is not { } peer)
             return McpToolResult.Error(wrong!);
         var arguments = new JsonObject { ["prompt"] = args.String("prompt") ?? string.Empty };
-        foreach (string optional in (string[])["name", "agent", "model", "worktree", "folder"])
+        foreach (string optional in (string[])["name", "agent", "model", "worktree", "folder", "approvals"])
         {
             if (args.String(optional) is { Length: > 0 } value)
                 arguments[optional] = value;
+        }
+
+        foreach (string key in (string[])["options", "permissions"])
+        {
+            if (args[key] is { } given)
+                arguments[key] = given.DeepClone();
         }
 
         // Where it'll run there is that machine's first workspace folder, the one hex_agent_spawn starts agents in
@@ -175,7 +184,7 @@ internal sealed partial class DawnScene
             synced = LinkSyncSaid(peer, runsIn);
         }
 
-        McpToolResult started = await LinkCall(peer, "hex_agent_spawn", arguments, cancel);
+        McpToolResult started = await LinkCall(peer, "hex_agent_spawn", arguments, cancel, CallerOf(args));
         if (started.IsError)
             return started;
         Match id = Regex.Match(started.AllText(), @"Started #(\d+)");
@@ -327,14 +336,17 @@ internal sealed partial class DawnScene
     /// One of a linked device's tools called, its answer marked as the other machine's, a refusal saying which right
     /// it takes. Never throws but for the call being cancelled here.
     /// </summary>
-    private static async Task<McpToolResult> LinkCall(HexLinkPeer peer, string tool, JsonObject arguments, CancellationToken cancel)
+    private async Task<McpToolResult> LinkCall(HexLinkPeer peer, string tool, JsonObject arguments, CancellationToken cancel, int? caller)
     {
         if (HexLinkAllowed.RelayOrigin.Value is not null && HexLinkAllowed.IsRelayTool(tool))
             return McpToolResult.Error("Link permits one relay hop. Call a tool on the destination device.");
         McpToolResult answered;
         try
         {
-            answered = await peer.Call(tool, arguments, cancel, LINK_CALL_PATIENCE);
+            string? receipt = caller is not null && tool == "hex_agent_spawn" ? Guid.NewGuid().ToString("N") : null;
+            answered = await peer.Call(tool, arguments, cancel, LINK_CALL_PATIENCE, caller, receipt);
+            if (!answered.IsError && receipt is not null)
+                RememberLinkAgentChild(caller!.Value, peer, receipt, answered);
         }
         catch (HexLinkException e) when (e.Code == HexLinkErrors.NOT_ALLOWED)
         {

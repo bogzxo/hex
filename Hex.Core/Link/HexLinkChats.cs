@@ -35,7 +35,7 @@ internal static class HexLinkChats
     /// <summary>A chat's head as the link sends it: the store's, and whether it's running and how long its turn took.</summary>
     public static JsonObject Head(HexAgentChat chat)
     {
-        JsonObject head = HexAgentChatStore.Head(chat);
+        JsonObject head = HexAgentChatStore.Head(chat, includeLinkOwnership: false);
         head["running"] = chat.Running;
         head["turn_seconds"] = chat.TurnSeconds;
         head["state"] = HexAgentHub.StateWord(chat);
@@ -67,10 +67,7 @@ internal static class HexLinkChats
         if (entry.Kind == HexAgentEntryKind.Approval)
         {
             // Its number as hex_agent_approve counts it, the approvals among the rows kept up to it
-            int number = 0;
-            for (int i = 0; i <= index && i < chat.Entries.Count; i++)
-                number += chat.Entries[i].Kind == HexAgentEntryKind.Approval ? 1 : 0;
-            row["request"] = number;
+            row["request"] = HexAgentHub.RequestNumber(chat, entry);
         }
 
         return row;

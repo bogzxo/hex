@@ -136,6 +136,7 @@ internal sealed partial class DawnScene
         + (status.Seconds > 0 ? $" {status.Seconds.ToString("0.#", CultureInfo.InvariantCulture)}s" : string.Empty)
         + (status.Cost > 0 ? $" ${status.Cost.ToString("0.000", CultureInfo.InvariantCulture)}" : string.Empty)
         + (status.Parent is { } parent ? $" (started by #{parent})" : string.Empty)
+        + (status.Approvals.Count > 0 ? $" · {string.Join(" · ", status.Approvals.Select(approval => approval.Summary))}" : string.Empty)
         + (status.Unread.Length is > 0 and var unread ? $", {unread} unread message{(unread == 1 ? string.Empty : "s")}" : string.Empty);
 
     private static readonly (string Id, string Name, string Program)[] CatalogAgents =
@@ -217,7 +218,7 @@ internal sealed partial class DawnScene
             yield break;
         }
 
-        int going = agentChats.Count(chat => chat.Running && chat.Parent is not null);
+        int going = agentChats.Count(chat => chat.Running && (chat.Parent is not null || chat.LinkStarter is not null));
         if (going >= AGENTS_AT_ONCE)
         {
             yield return McpToolResult.Error($"{going} agents started by agents are running already, the most there can be. hex_agent_wait for some first.");
@@ -267,8 +268,21 @@ internal sealed partial class DawnScene
             yield break;
         }
 
+        HexLinkAgentCall? remoteCall = HexLinkAllowed.AgentCall(args);
+        if (remoteCall is not null)
+        {
+            HexLinkPreApproval policy = linkTrust?.Find(remoteCall.Device.Id)?.RemotePreApproval ?? HexLinkPreApproval.Nothing;
+            if (HexLinkSpawnPolicy.Apply(args, agent, policy) is { } reason)
+            {
+                yield return McpToolResult.Error(reason);
+                yield break;
+            }
+        }
+
         string? name = args.String("name") is { Length: > 0 } named ? (named.Length > 40 ? named[..39] + "…" : named) : null;
         var chat = new HexAgentChat(++agentChatsMade, agent) { Parent = parent?.Id, Depth = depth, Name = name };
+        if (remoteCall is { Chat: { } starter, Receipt: { } receipt } remote)
+            chat.LinkStarter = new HexLinkAgentStarter(remote.Device.Id, starter, receipt);
         if (args.String("model") is { Length: > 0 } model)
             chat.Options["model"] = model;
         if (args["options"] is JsonObject options)
@@ -302,6 +316,8 @@ internal sealed partial class DawnScene
             + "and its instructions, answers and what the other agents it started have found reach you as you work or in hex_agent_inbox, look between steps. hex_agent_list shows who else is working with you.]\n\n"
             + prompt;
         StartAgent(chat, run.Extension, run.Run, told, prompt);
+        if (remoteCall is not null)
+            PublishAgentStatuses();
 
         // A model the agent system doesn't list goes as it was given, a whole name it may know, said so in case it's a typo
         string unlisted = chat.Options.TryGetValue("model", out string? picked) && OptionsOf(agent).FirstOrDefault(option => option.Key == "model") is { } models
@@ -337,7 +353,9 @@ internal sealed partial class DawnScene
         {
             // Those it started, the running ones, or all of them when they're all done already. A client that isn't a chat
             // of the panel didn't start any of its own as far as Hex knows, so it waits for every chat
-            HexHubRow[] mine = [.. now.Values.Where(status => caller is null || status.Parent == caller)];
+            HexLinkAgentCall? remote = HexLinkAllowed.AgentCall(args);
+            HexHubRow[] mine = [.. now.Values.Where(status => caller is not null ? status.Parent == caller
+                : remote is { Chat: not null } ? status.LinkStarter?.Matches(remote) == true : true)];
             ids = [.. (mine.Any(status => status.State.StartsWith("running", StringComparison.Ordinal)) ? mine.Where(status => status.State.StartsWith("running", StringComparison.Ordinal)) : mine).Select(status => status.Id)];
             if (ids.Length == 0)
                 return McpToolResult.Error(caller is null ? "There are no chats to wait for, hex_agent_spawn starts one." : "You haven't started any agents to wait for, hex_agent_spawn starts one.");
@@ -356,14 +374,15 @@ internal sealed partial class DawnScene
                 HexHubRow[] those = [.. ids.Select(id => now.GetValueOrDefault(id)).OfType<HexHubRow>()];
                 int done = those.Count(status => !status.State.StartsWith("running", StringComparison.Ordinal));
                 bool over = any ? done > 0 : done == those.Length;
+                bool needsApproval = those.Any(status => status.Approvals.Count > 0);
                 long remaining = deadline - System.Environment.TickCount64;
                 bool late = remaining <= 0;
                 HexHubRow? receiver = caller is { } me ? now.GetValueOrDefault(me) : null;
                 HexAgentMail[] mail = receiver?.UnreadForWait(wakes, over || late) ?? [];
-                if (over || late || mail.Length > 0)
+                if (over || needsApproval || late || mail.Length > 0)
                 {
                     // What came for it is read with the report, the waiting one steering the others on it
-                    string report = WaitReport(those, late && !over);
+                    string report = WaitReport(those, late && !over && !needsApproval);
                     if (mail.Length == 0)
                         return McpToolResult.Text(report);
 
@@ -402,7 +421,13 @@ internal sealed partial class DawnScene
         foreach (HexHubRow status in those.OrderBy(status => status.State.StartsWith("running", StringComparison.Ordinal)))
         {
             said.Append(StatusLine(status)).Append('\n');
-            if (!status.State.StartsWith("running", StringComparison.Ordinal))
+            if (status.Approvals.Count > 0)
+            {
+                foreach (HexAgentApprovalStatus approval in status.Approvals)
+                    if (approval.Detail.Length > 0)
+                        said.Append(approval.Detail).Append('\n');
+            }
+            else if (!status.State.StartsWith("running", StringComparison.Ordinal))
                 said.Append(status.Reply.Length > 0 ? status.Reply : "(it said nothing)").Append("\n\n");
         }
 
@@ -419,9 +444,16 @@ internal sealed partial class DawnScene
         }
 
         PublishAgentStatuses();
-        string head = StatusLine(agentStatuses[chat.Id]);
+        HexHubRow status = agentStatuses[chat.Id];
+        string head = StatusLine(status);
         if (!args.Flag("full"))
         {
+            if (status.Approvals.Count > 0)
+            {
+                string details = string.Join("\n", status.Approvals.Select(approval => approval.Detail).Where(detail => detail.Length > 0));
+                yield return McpToolResult.Text(details.Length > 0 ? head + "\n" + details[..Math.Min(most, details.Length)] : head);
+                yield break;
+            }
             string reply = chat.LastReply(most);
             yield return McpToolResult.Text($"{head}\n{(reply.Length > 0 ? reply : chat.Running ? "(working, nothing said yet)" : "(it said nothing)")}");
             yield break;

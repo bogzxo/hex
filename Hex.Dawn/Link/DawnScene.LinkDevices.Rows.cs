@@ -81,6 +81,8 @@ internal sealed partial class DawnScene
 
         StackPanel here = LinkRightChipsRow(column, Said("link.devices_rights_here"), known.Rights);
         here.Add(LinkButton(Said("link.devices_change_rights"), "edit", () => LinkChangeDeviceRights(known)));
+        if (HexLinkAllowed.Has(known.Rights, HexLinkRights.Steer))
+            column.Add(LinkLine(LinkPreApprovalLabel(known.RemotePreApproval)));
         if (peer is not null)
             LinkRightChipsRow(column, Said("link.devices_rights_there"), peer.Granted);
         else
@@ -128,8 +130,14 @@ internal sealed partial class DawnScene
     private void LinkChangeDeviceRights(HexLinkKnown known)
     {
         HexLinkRights grants = known.Rights;
+        HexLinkPreApproval preApproval = known.RemotePreApproval;
         UIDialog dialog = UIDialog.Show(chrome, UIRichText.Literal(Said("link.pair_grant", ("device", known.Shown))), string.Empty,
-            new DialogChoice(Said("link.devices_save"), () => LinkSetRights(known.Device.Id, grants)),
+            new DialogChoice(Said("link.devices_save"), () =>
+            {
+                if (preApproval != known.RemotePreApproval)
+                    linkTrust?.SetRemotePreApproval(known.Device.Id, preApproval);
+                LinkSetRights(known.Device.Id, grants);
+            }),
             new DialogChoice(Said("link.pair_cancel")));
         dialog.Body.Size = new Vector2(Math.Clamp(chrome.Root.Bounds.Width - 80, 350, 460), 0);
         HexLinkPreset preset = (grants & ~HexLinkRights.Predict) switch
@@ -139,7 +147,28 @@ internal sealed partial class DawnScene
             _ => HexLinkPreset.Custom
         };
         LinkGrantControls(dialog.Body, preset, grants, (_, changed) => grants = changed);
+        Button picker = LinkActionRow(dialog.Body).Add(LinkButton(LinkPreApprovalLabel(preApproval), "shield", () => { }));
+        picker.Tooltip = Said("link.devices_preapproval_help");
+        picker.OnPressed = () =>
+        {
+            var menu = new Menu("remote starters");
+            foreach (HexLinkPreApproval policy in Enum.GetValues<HexLinkPreApproval>())
+                menu.Add(LinkPreApprovalName(policy), () =>
+                {
+                    preApproval = policy;
+                    Button measured = LinkButton(LinkPreApprovalLabel(preApproval), "shield", () => { });
+                    picker.Label = measured.Label;
+                    picker.Size = measured.Size;
+                }).IsChecked = () => preApproval == policy;
+            ContextMenu.Show(chrome, picker.Bounds.PointAt(Origin.TopLeft), menu);
+        };
     }
+
+    private static string LinkPreApprovalName(HexLinkPreApproval policy) =>
+        Said("link.devices_preapproval_" + HexLinkSpawnPolicy.Word(policy));
+
+    private static string LinkPreApprovalLabel(HexLinkPreApproval policy) =>
+        Said("link.devices_preapproval", ("policy", LinkPreApprovalName(policy)));
 
     private StackPanel LinkRightChipsRow(StackPanel column, string caption, HexLinkRights rights)
     {
