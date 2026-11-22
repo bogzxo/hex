@@ -38,10 +38,17 @@ internal sealed partial class DawnScene
             if (string.IsNullOrWhiteSpace(path))
                 return McpToolResult.Error("Supply a private worktree-relative repository or file path.");
             var draft = await LinkOpenStoredDraft(id, cancel);
-            string relative = LinkPrivateRelativePath(path, draft.SharedFolder);
+            // The folder itself, by its name or "." (the worktree's root is the shared folder), is the root repository, not a
+            // subfolder of that name
+            string asked = path.Trim().Replace('\\', '/').TrimEnd('/');
+            bool whole = asked is "" or "." || PlatformPaths.Comparer.Equals(asked, draft.SharedFolder.Name);
+            string relative = whole ? string.Empty : LinkPrivateRelativePath(path, draft.SharedFolder);
             string full = HexLinkFiles.Resolve([new HexLinkFolder("work", draft.Root)], "work/" + relative);
-            await LinkMaterializePrivatePath(draft, Path.GetRelativePath(draft.Root, full).Replace('\\', '/'), cancel);
-            return McpToolResult.Text($"Private repository ready for {path}.");
+            string inside = whole ? string.Empty : Path.GetRelativePath(draft.Root, full).Replace('\\', '/');
+            await LinkMaterializePrivatePath(draft, inside, cancel);
+            string repository = HexLinkWorktreeScope.Nearest(draft.RepositoryPaths, inside);
+            return McpToolResult.Text($"Private repository ready: {(repository.Length == 0 ? $"the root of {draft.SharedFolder.Name}" : repository)}, "
+                + $"which holds {(inside.Length == 0 ? "the whole folder" : inside)}. Its files are in {draft.Root}.");
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or HexLinkException)
         {

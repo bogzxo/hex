@@ -271,6 +271,9 @@ internal sealed partial class DawnScene
             long giveUp = System.Environment.TickCount64 + 15_000;
             while (System.Environment.TickCount64 < giveUp && tab?.FocusedView?.Process is not { IsRunning: true })
                 yield return null;
+            // The tab is the agent's own: a command left running in it can be read, sent to and interrupted by name
+            if (tab is not null && CallerOf(arguments) is { } owner)
+                LinkRememberPrivateTab(owner, tab.Title);
         }
         if (arguments.String("tab") is { Length: > 0 } named && tab is null)
         {

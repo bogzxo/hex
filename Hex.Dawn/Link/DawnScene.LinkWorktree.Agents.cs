@@ -277,6 +277,12 @@ internal sealed partial class DawnScene
         }
     }
 
+    // The titles of the terminal tabs a private worktree agent's commands run in, by chat, for the tools that read or stop one
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<int, System.Collections.Concurrent.ConcurrentBag<string>> privateTerminalTabs = new();
+
+    private void LinkRememberPrivateTab(int chat, string title) =>
+        privateTerminalTabs.GetOrAdd(chat, _ => []).Add(title);
+
     internal string? LinkScopePrivateAgentCall(int caller, string tool, JsonObject arguments)
     {
         if (!privateAgentRoots.TryGetValue(caller, out var scope))
@@ -336,6 +342,12 @@ internal sealed partial class DawnScene
             })
                 if (arguments.String(key) is { } paths)
                     arguments[key] = string.Join(',', paths.Split(',').Select(path => LinkPrivateRelativePath(path.Trim(), scope.Shared)));
+        }
+        else if (tool is "hex_terminal" or "hex_terminal_read" or "hex_terminal_send" && arguments.String("tab") is { Length: > 0 } named &&
+                 privateTerminalTabs.TryGetValue(caller, out var tabs) && tabs.Contains(named, StringComparer.OrdinalIgnoreCase))
+        {
+            // A tab this agent's own command left running, in its private root, not the shared editor's
+            return null;
         }
         else if (tool is "hex_edit_symbol" or "hex_rename" or "hex_fix" or "hex_save" or "hex_type" or "hex_key" or "hex_click" or "hex_workspace" or "hex_run_command" ||
                  (tool != "hex_terminal_run" && tool.StartsWith("hex_terminal", StringComparison.Ordinal)) || tool.StartsWith("hex_git", StringComparison.Ordinal) ||
