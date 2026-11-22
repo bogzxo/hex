@@ -20,6 +20,9 @@ internal sealed partial class DawnScene
         public HexLinkPeer? Connection;
         public int Version = tab.Editor.Document.Version;
         public bool Busy, Offline;
+        public bool SaveRequested;
+        public HexDocSaved? Saved;
+        public readonly Queue<HexDocSaved> ConfirmedWrites = new();
         public bool OriginalReadOnly = tab.Editor.ReadOnly;
         public float Wait;
     }
@@ -72,7 +75,8 @@ internal sealed partial class DawnScene
             if (explicitly)
                 pin = services.FolderAuthorities.Bind(folder, pin);
             linkLivePaused.Remove(wire);
-            var room = services.Documents.Rooms.Open(wire, tab.Editor.Text);
+            var room = services.Documents.Rooms.Open(wire, tab.Editor.Text,
+                new HexDocFileBasis(tab.DiskText, tab.DiskEncoding, tab.SavedCrLf));
             var replica = new HexLinkDocumentReplica(room.Join(services.Device.Id, tab, services.Device));
             LinkLiveAttach(tab, wire, pin, replica, room, null);
             if (explicitly)
@@ -124,10 +128,10 @@ internal sealed partial class DawnScene
             JsonObject read = await Task.Run(() => HexLinkFiles.Read(full, wire), cancel).ConfigureAwait(false);
             if (read["text"] is not JsonValue value || !value.TryGetValue(out openText))
                 throw HexLinkException.NotFound("Only text documents can be shared.");
-            openText = openText.ReplaceLineEndings("\n");
+            return services.Documents.Rooms.Open(wire, openText.ReplaceLineEndings("\n"), HexDocFileBasis.FromRead(read, openText));
         }
 
-        return services.Documents.Rooms.Open(wire, openText);
+        return services.Documents.Rooms.Find(wire);
     }
 
     private void LinkDocumentJoin(HexLinkPeer peer, string wire)
@@ -384,6 +388,9 @@ internal sealed partial class DawnScene
         Guid epoch = shared.Replica.Epoch;
         Exception? error = null;
         IReadOnlyList<UICodeRemoteCaret>? carets = null;
+        HexDocSaved? save = null;
+        bool saveRequested = shared.SaveRequested;
+        string? localPath = shared.Tab.Path;
         try
         {
             await Task.Run(async () =>
@@ -420,6 +427,11 @@ internal sealed partial class DawnScene
                         relayTo: LinkLiveRelay(shared.Authority, peer)).ConfigureAwait(false);
 
                 replica.Receive(response);
+                if (saveRequested && editable && replica.CanEdit && !replica.HasPending && replica.Revision == replica.Head)
+                    save = shared.Room is { } owned
+                        ? await owned.Save(shared.Authority.DeviceId, shared.Tab, localPath!, replica.Epoch, replica.Revision, cancel).ConfigureAwait(false)
+                        : await peer!.SaveDocument(shared.Wire, replica.Epoch, replica.Revision, cancel,
+                            relayTo: LinkLiveRelay(shared.Authority, peer)).ConfigureAwait(false);
                 carets = LiveCarets(replica.View, replica.Participants, replica.Author);
             }, cancel).ConfigureAwait(false);
         }
@@ -452,6 +464,12 @@ internal sealed partial class DawnScene
 
             if (shared.Room is null && peer is null)
                 return;
+            if (save is not null)
+            {
+                shared.SaveRequested = false;
+                Say(Said("documents.saved", ("path", shared.Wire)));
+            }
+            LinkLiveRememberSaved(shared, save ?? shared.Replica.Saved);
             if (shared.Offline || !LiveSamePeople(shared.Participants, shared.Replica.Participants))
                 tabsDirty = true;
             shared.Offline = false;
@@ -465,6 +483,7 @@ internal sealed partial class DawnScene
                 return;
             }
             LinkLiveApply(shared, shared.Replica.View, epoch == shared.Replica.Epoch ? captured : null);
+            LinkLiveMarkSaved(shared);
             if (carets is not null && !shared.Tab.Editor.RemoteCarets.SequenceEqual(carets))
                 shared.Tab.Editor.RemoteCarets = carets;
         });
@@ -483,6 +502,62 @@ internal sealed partial class DawnScene
             linkFollowCaret = buffer.Caret;
             linkFollowVersion = buffer.Version;
         }
+    }
+
+    private bool LinkLiveTrySave(HexDocument tab, string path)
+    {
+        if (!linkLiveDocuments.TryGetValue(tab, out var shared) || tab.Path is null || !PlatformPaths.Same(tab.Path, path))
+            return false;
+        if (shared.Draft is not null)
+        {
+            Say(Said("link.doc_draft"), error: true);
+            return true;
+        }
+        shared.SaveRequested = true;
+        shared.Wait = 0;
+        return true;
+    }
+
+    private static void LinkLiveRememberSaved(LinkLiveDocument shared, HexDocSaved? saved)
+    {
+        if (saved is null || shared.Saved == saved)
+            return;
+        shared.Saved = saved;
+        shared.ConfirmedWrites.Enqueue(saved);
+        if (shared.ConfirmedWrites.Count > 8)
+            shared.ConfirmedWrites.Dequeue();
+    }
+
+    private void LinkLiveMarkSaved(LinkLiveDocument shared)
+    {
+        var replica = shared.Replica;
+        if (shared.Saved is not { } saved || saved.Epoch != replica.Epoch || saved.Revision != replica.Revision || replica.HasPending)
+            return;
+        var tab = shared.Tab;
+        if (tab.SavedCode == shared.Shown.Text)
+            return;
+        if (shared.Room is not null)
+            tab.DiskText = DocumentFile.WithLineEndings(shared.Shown.Text, tab.DiskText, tab.SavedCrLf, tab.SavedCrLf);
+        tab.SavedCode = shared.Shown.Text;
+        tab.Modified = false;
+        tabsDirty = true;
+    }
+
+    private async Task<bool> LinkLiveKnownSyncSave(HexDocument? tab, string hash, CancellationToken cancel)
+    {
+        if (tab is null)
+            return false;
+        for (int wait = 0; wait < 16; wait++)
+        {
+            bool? matched = await OnEditorForLink<bool?>(() =>
+                linkLiveDocuments.TryGetValue(tab, out var shared) && shared.Draft is null
+                    ? shared.ConfirmedWrites.Any(save => string.Equals(save.Hash, hash, StringComparison.OrdinalIgnoreCase)) : null)
+                .WaitAsync(cancel).ConfigureAwait(false);
+            if (matched is null || matched.Value)
+                return matched == true;
+            await Task.Delay(50, cancel).ConfigureAwait(false);
+        }
+        return false;
     }
 
     private static bool LiveSamePeople(IReadOnlyList<HexDocParticipant> before, IReadOnlyList<HexDocParticipant> after)

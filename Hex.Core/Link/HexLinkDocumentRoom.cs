@@ -4,10 +4,11 @@ namespace Hex.Core;
 
 internal sealed record HexDocParticipant(int Author, string Device, string Name, HexDocPoint? Caret = null,
     HexDocPoint? Anchor = null, HexDocPoint? Pointer = null);
-internal sealed record HexDocExchange(int Author, HexDocReplay Replay, IReadOnlyList<HexDocParticipant> Participants, bool CanEdit = true);
+internal sealed record HexDocExchange(int Author, HexDocReplay Replay, IReadOnlyList<HexDocParticipant> Participants,
+    bool CanEdit = true, HexDocSaved? Saved = null);
 
 /// <summary>One document and the authenticated members who may exchange operations with its authority.</summary>
-internal sealed class HexLinkDocumentRoom(string path, string text)
+internal sealed partial class HexLinkDocumentRoom(string path, string text, HexDocFileBasis? initialFile = null)
 {
     private const int MaxParticipants = 65;
     private readonly Lock gate = new();
@@ -16,6 +17,7 @@ internal sealed class HexLinkDocumentRoom(string path, string text)
     private readonly Dictionary<string, object> online = new(StringComparer.Ordinal);
     private IReadOnlyList<HexDocParticipant>? roster;
     private int lastAuthor;
+    private HexDocFileBasis? fileBasis = initialFile;
     public string Path { get; } = path;
 
     public HexDocView View() => authority.View();
@@ -47,7 +49,7 @@ internal sealed class HexLinkDocumentRoom(string path, string text)
         lock (gate)
         {
             if (online.GetValueOrDefault(scope) != connection || !members.TryGetValue(scope, out var participant))
-                throw new InvalidOperationException("Join the shared document first.");
+                throw HexLinkException.NotFound("Join the shared document first.");
 
             if (epoch == authority.Checkpoint.Epoch)
             {
@@ -69,8 +71,10 @@ internal sealed class HexLinkDocumentRoom(string path, string text)
                 }
                 if (checkpointReady && revision - authority.Checkpoint.Revision >= 2048
                     && authority.View().Text.Length <= HexLinkDocumentWire.MaxText
-                    && authority.Compact() is not null)
+                    && authority.Compact() is { } checkpoint)
                 {
+                    if (saved is { } receipt && receipt.Revision == checkpoint.Revision)
+                        saved = receipt with { Epoch = checkpoint.Epoch };
                     foreach (string member in members.Keys.ToArray())
                         members[member] = members[member] with { Caret = null, Anchor = null, Pointer = null };
                     roster = null;
@@ -119,9 +123,11 @@ internal sealed class HexLinkDocumentRoom(string path, string text)
         }
     }
 
-    private HexDocExchange State(int author, Guid? epoch, long revision) =>
-        new(author, authority.Replay(epoch, revision, budget: HexLinkDocumentWire.Budget),
-            roster ??= [.. online.Keys.Select(scope => members[scope]).OrderBy(each => each.Author)]);
+    private HexDocExchange State(int author, Guid? epoch, long revision)
+    {
+        return new(author, authority.Replay(epoch, revision, budget: HexLinkDocumentWire.Budget),
+            roster ??= [.. online.Keys.Select(scope => members[scope]).OrderBy(each => each.Author)], Saved: saved);
+    }
 }
 
 internal sealed class HexLinkDocumentRooms
@@ -130,7 +136,7 @@ internal sealed class HexLinkDocumentRooms
     private readonly Lock gate = new();
     private readonly Dictionary<string, HexLinkDocumentRoom> rooms = new(PlatformPaths.Comparer);
 
-    public HexLinkDocumentRoom Open(string path, string seed)
+    public HexLinkDocumentRoom Open(string path, string seed, HexDocFileBasis? file = null)
     {
         if (seed.Length > HexLinkDocumentWire.MaxText)
             throw new HexLinkException(HexLinkErrors.TOO_BIG, "The shared document exceeds its size limit.");
@@ -140,7 +146,7 @@ internal sealed class HexLinkDocumentRooms
                 return existing;
             if (rooms.Count >= MaxRooms)
                 throw new InvalidOperationException("Too many shared documents are open.");
-            var room = new HexLinkDocumentRoom(path, seed);
+            var room = new HexLinkDocumentRoom(path, seed, file);
             rooms.Add(path, room);
             return room;
         }
@@ -199,7 +205,8 @@ internal static class HexLinkDocumentWire
             ["author"] = reply.Author, ["epoch"] = replay.Epoch.ToString("N"), ["revision"] = replay.Since,
             ["head"] = replay.Head, ["checkpoint"] = replay.Checkpoint?.Text,
             ["ops"] = new JsonArray([.. replay.Operations.Select(EncodeOperation)]),
-            ["participants"] = new JsonArray([.. reply.Participants.Select(EncodeParticipant)]), ["editable"] = reply.CanEdit
+            ["participants"] = new JsonArray([.. reply.Participants.Select(EncodeParticipant)]), ["editable"] = reply.CanEdit,
+            ["saved"] = reply.Saved?.Encode()
         };
     }
 
@@ -218,7 +225,8 @@ internal static class HexLinkDocumentWire
         HexDocParticipant[] participants = [.. BoundedArray(message, "participants", MaxPeople)
             .Select(node => DecodeParticipant(node as JsonObject ?? throw HexLinkException.Invalid("Invalid document participant.")))];
         return new HexDocExchange(author, new HexDocReplay(epoch, since, head, checkpoint, ops), participants,
-            HexLinkData.Bool(message, "editable") == true);
+            HexLinkData.Bool(message, "editable") == true,
+            HexLinkData.Object(message, "saved") is { } saved ? HexDocSaved.Decode(saved) : null);
     }
 
     internal static Guid? Epoch(JsonObject message)

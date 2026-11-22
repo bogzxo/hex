@@ -101,7 +101,27 @@ internal sealed partial class DawnScene
     internal async Task<string?> LinkCompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes,
         CancellationToken cancel, bool? executable = null)
     {
-        LinkTabStamp before = await OnEditorForLink(() => LinkTabBeforeWrite(full)).WaitAsync(cancel);
+        var (before, inRoom) = await OnEditorForLink(() =>
+        {
+            LinkTabStamp stamp = LinkTabBeforeWrite(full);
+            return (stamp, stamp.Document is { } tab && linkLiveDocuments.ContainsKey(tab));
+        }).WaitAsync(cancel);
+        if (inRoom)
+        {
+            if (bytes is not null && HexLinkFiles.Decode(bytes) is { } incoming &&
+                await LinkLiveKnownSyncSave(before.Document, HexLinkFiles.Hash(bytes), cancel).ConfigureAwait(false))
+            {
+                string? saved = await HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel, executable).ConfigureAwait(false);
+                PostLink(() =>
+                {
+                    if (before.Document is { } tab && Context.Documents.Find(full) == tab && tab.DiskText == before.DiskText)
+                        tab.DiskText = incoming.Text;
+                });
+                return saved;
+            }
+            throw new HexLinkException(HexLinkErrors.CONFLICT, $"{wire} is open in a shared document.",
+                new JsonObject { ["hash"] = HexLinkFiles.HashOf(full), ["editor_dirty"] = true });
+        }
         if (before.Dirty)
             throw new HexLinkException(HexLinkErrors.CONFLICT, $"{wire} has unsaved changes in the editor.",
                 new JsonObject { ["hash"] = HexLinkFiles.HashOf(full), ["editor_dirty"] = true });

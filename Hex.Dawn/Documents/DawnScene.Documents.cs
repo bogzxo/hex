@@ -435,6 +435,7 @@ internal sealed partial class DawnScene
     private void SaveTo(string path)
     {
         if (document.Editor.ReadOnly) return;
+        if (LinkLiveTrySave(document, path)) return;
         // Saving the editor over itself with something broken would be the end of it, that is only ever saved as a copy
         if (SameDirectory(path, EDITOR_LAYOUT))
             path = Path.Combine(Path.GetFullPath(options.Workspace), document.Name + "_edited.hor");

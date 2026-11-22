@@ -35,6 +35,7 @@ internal sealed class HexLinkDocumentReplica
     public Guid Epoch { get; private set; }
     public int Author { get; private set; }
     public bool CanEdit { get; private set; }
+    public HexDocSaved? Saved { get; private set; }
     public long Revision { get; private set; }
     public long Head { get; private set; }
     public IReadOnlyList<HexDocParticipant> Participants { get; private set; } = [];
@@ -97,6 +98,7 @@ internal sealed class HexLinkDocumentReplica
         Head = replay.Head;
         Participants = response.Participants;
         CanEdit = response.CanEdit;
+        Saved = response.Saved;
     }
 
     private void Queue(HexDocOperation operation)

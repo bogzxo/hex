@@ -67,12 +67,19 @@ internal sealed partial class HexLinkHost
             long revision = HexLinkDocumentWire.Revision(parameters);
             if (method == "doc2/open")
                 return HexLinkDocumentWire.Encode(room.Join(scope, this, author, epoch, revision) with { CanEdit = canEdit });
+            if (epoch is null)
+                throw HexLinkException.Invalid("The shared document operation needs an epoch.");
+            if (method == "doc2/save")
+            {
+                Need(HexLinkRights.Edit, method);
+                var saved = await room.Save(scope, this, full, epoch.Value, revision, cancel).ConfigureAwait(false);
+                services.Audit("edit", Device, $"saved shared document {path} at revision {saved.Revision}");
+                return saved.Encode();
+            }
 
             HexDocOperation[] operations = HexLinkDocumentWire.DecodeOperations(parameters);
             if (operations.Length > 0)
                 Need(HexLinkRights.Edit, method);
-            if (epoch is null)
-                throw HexLinkException.Invalid("The shared document operation needs an epoch.");
             return HexLinkDocumentWire.Encode(room.Exchange(scope, this, epoch.Value, revision, operations,
                 HexLinkDocumentWire.DecodePoint(parameters["caret"]), HexLinkDocumentWire.DecodePoint(parameters["anchor"]),
                 HexLinkDocumentWire.DecodePoint(parameters["pointer"]), HexLinkData.Bool(parameters, "ready") == true) with { CanEdit = canEdit });
@@ -94,7 +101,7 @@ internal sealed partial class HexLinkHost
             throw HexLinkException.NotAllowed("one document relay hop");
         string target = HexLinkDocumentProtocol.Field(parameters, "target", 64);
         string method = HexLinkDocumentProtocol.Field(parameters, "method", 16);
-        if (method is not ("doc2/open" or "doc2/exchange" or "doc2/leave") || target == Device.Id)
+        if (method is not ("doc2/open" or "doc2/exchange" or "doc2/leave" or "doc2/save") || target == Device.Id)
             throw HexLinkException.Invalid("Invalid document relay destination or method.");
         if (services.SharedDocumentPeer(target) is not { IsClosed: false } peer)
             throw HexLinkException.NotFound("The shared document's owner is offline.");
@@ -103,7 +110,7 @@ internal sealed partial class HexLinkHost
             throw HexLinkException.NotAllowed("one document relay hop");
 
         bool canEdit = HexLinkAllowed.Has(Rights, HexLinkRights.Edit);
-        if (method == "doc2/exchange" && request["ops"] is JsonArray { Count: > 0 })
+        if (method == "doc2/save" || method == "doc2/exchange" && request["ops"] is JsonArray { Count: > 0 })
             Need(HexLinkRights.Edit, "relay document edits");
         if (method != "doc2/exchange" || request["ops"] is JsonArray { Count: > 0 })
             services.Audit("relay", Device, $"{method} from {Device.Name} ({Device.Id}) to {peer.Device.Id}");
@@ -113,8 +120,9 @@ internal sealed partial class HexLinkHost
         try
         {
             origin.Value = Device;
-            JsonObject reply = await peer.ForwardDocument(method, request, cancel);
-            if (!canEdit && method != "doc2/leave")
+            JsonObject relayed = await peer.ForwardDocument(method, (JsonObject)request.DeepClone(), cancel);
+            var reply = (JsonObject)relayed.DeepClone();
+            if (!canEdit && method is "doc2/open" or "doc2/exchange")
                 reply["editable"] = false;
             return reply;
         }
@@ -159,6 +167,10 @@ internal sealed partial class HexLinkPeer
         CancellationToken cancel = default, string? relayTo = null) =>
         HexLinkDocumentWire.Decode(await ForwardDocument("doc2/exchange",
             HexLinkDocumentWire.Exchange(path, epoch, revision, operations, caret, anchor, pointer, checkpointReady), cancel, relayTo));
+
+    public async Task<HexDocSaved> SaveDocument(string path, Guid epoch, long revision, CancellationToken cancel = default,
+        string? relayTo = null) => HexDocSaved.Decode(await ForwardDocument("doc2/save",
+            HexLinkDocumentWire.Open(path, epoch, revision), cancel, relayTo));
 
     public Task LeaveDocument(string path, CancellationToken cancel = default, string? relayTo = null) =>
         ForwardDocument("doc2/leave", new JsonObject { ["path"] = path }, cancel, relayTo);

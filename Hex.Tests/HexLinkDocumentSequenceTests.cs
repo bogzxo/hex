@@ -139,6 +139,38 @@ public sealed class HexLinkDocumentSequenceTests
     }
 
     [Fact]
+    public async Task A_shared_save_is_idempotent_preserves_encoding_and_refuses_a_new_disk_version()
+    {
+        const string wire = "work/note.txt";
+        using var pair = await LinkedPair.Up(HexLinkRights.View);
+        string local = Path.Combine(pair.A.Work, "note.txt");
+        var disk = new HexDocFileBasis("old\r\n", new UTF8Encoding(true, true), true);
+        await File.WriteAllBytesAsync(local, disk.Bytes(disk.Text!));
+        HexLinkDocumentRoom room = pair.A.Documents.Rooms.Open(wire, "seed\n", disk);
+        var owner = new object();
+        room.Join(DeviceA.Id, owner, DeviceA);
+        var remote = new HexLinkDocumentReplica(await pair.PeerA.OpenDocument(wire));
+        Assert.Equal(HexLinkErrors.NOT_ALLOWED, await CodeOf(pair.PeerA.SaveDocument(wire, remote.Epoch, remote.Revision)));
+        pair.BOnA |= HexLinkRights.Edit;
+        remote.Capture(remote.View, "shared\n");
+        remote.Receive(await pair.PeerA.ExchangeDocument(wire, remote.Epoch, remote.Revision, remote.Batch()));
+        HexDocSaved[] receipts = await Task.WhenAll(
+            room.Save(DeviceA.Id, owner, local, remote.Epoch, remote.Revision, default),
+            pair.PeerA.SaveDocument(wire, remote.Epoch, remote.Revision));
+        Assert.Equal(receipts[0], receipts[1]);
+        Assert.Equal(disk.Bytes("shared\r\n"), await File.ReadAllBytesAsync(local));
+        remote.Receive(await pair.PeerA.ExchangeDocument(wire, remote.Epoch, remote.Revision, []));
+        Assert.Equal(receipts[0], remote.Saved);
+
+        await File.WriteAllTextAsync(local, "outside");
+        remote.Capture(remote.View, "yet newer\n");
+        remote.Receive(await pair.PeerA.ExchangeDocument(wire, remote.Epoch, remote.Revision, remote.Batch()));
+        Assert.Equal(HexLinkErrors.CONFLICT, await CodeOf(pair.PeerA.SaveDocument(wire, remote.Epoch, remote.Revision)));
+        Assert.Equal("outside", await File.ReadAllTextAsync(local));
+        Assert.Equal("yet newer\n", room.View().Text);
+    }
+
+    [Fact]
     public async Task A_third_device_can_relay_through_one_link_with_rights_checked_at_each_hop()
     {
         const string wire = "work/note.txt";
