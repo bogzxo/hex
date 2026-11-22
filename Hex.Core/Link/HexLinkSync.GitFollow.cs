@@ -12,6 +12,8 @@ internal sealed partial class HexLinkSync
     {
         public int Active;
         public TaskCompletionSource? Paused;
+        // This side's tip as the last full check left it, what the quick local poll compares with
+        public volatile HexLinkHeadTip? Seen;
     }
 
     private sealed class FollowRun(HexLinkSync sync, FollowRepository repo, bool pause) : IDisposable
@@ -54,14 +56,26 @@ internal sealed partial class HexLinkSync
         return !followUnsupported;
     }
 
+    // A local HEAD move is seen from its files within this, the other side's by its hint or the full check
+    private static readonly TimeSpan LocalTipPoll = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>How often both sides' tips are compared without a hint or a local move, 2 seconds.</summary>
+    internal TimeSpan GitFollowFullCheck { get; init; } = TimeSpan.FromSeconds(2);
+
     private async Task PollGitFollow(CancellationToken cancel)
     {
         peer.GitFollowHint += WakeGitFollow;
         try
         {
+            long every = (long)GitFollowFullCheck.TotalMilliseconds;
+            long fullAt = Environment.TickCount64 + every;
             while (!followUnsupported)
             {
-                await followHint.WaitAsync(TimeSpan.FromSeconds(2), cancel);
+                bool hinted = await followHint.WaitAsync(LocalTipPoll, cancel);
+                // The full check asks the other side for its tips. Between them only this side's files are read.
+                if (!hinted && Environment.TickCount64 < fullAt && !LocalTipMoved(cancel))
+                    continue;
+                fullAt = Environment.TickCount64 + every;
                 try { await CheckGitFollow(cancel); }
                 catch (Exception error) when (GitFollowRecoverable(error))
                 {
@@ -72,6 +86,29 @@ internal sealed partial class HexLinkSync
         }
         catch (OperationCanceledException) when (cancel.IsCancellationRequested) { }
         finally { peer.GitFollowHint -= WakeGitFollow; }
+    }
+
+    // A followed repository's HEAD here moved since it was last seen, read from HEAD and its loose ref alone. Each move
+    // is taken once: a pair left apart (diverged, view only, a failed move) goes back to the full check's pace rather
+    // than a check every poll pausing the repository's file sync.
+    private bool LocalTipMoved(CancellationToken cancel)
+    {
+        bool moved = false;
+        foreach (FollowRepository repo in followRepositories)
+        {
+            try
+            {
+                if (repo.Scan.Read(cancel) is not { } local || local == repo.Seen)
+                    continue;
+                moved |= repo.Seen is not null;
+                repo.Seen = local;
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                // The full check reports an unreadable repository.
+            }
+        }
+        return moved;
     }
 
     private void WakeGitFollow()
@@ -133,7 +170,10 @@ internal sealed partial class HexLinkSync
                         continue;
                     var observed = new FollowAgreement(local, remote);
                     if (agreements.TryGetValue(repo.Path, out FollowAgreement? agreed) && agreed == observed && local == remote)
+                    {
+                        repo.Seen = local;
                         continue;
+                    }
 
                     using var pause = await PauseGitFollow(repo, cancel);
                     if (await Task.Run(() => repo.Scan.Read(cancel), cancel) != local)
@@ -160,6 +200,7 @@ internal sealed partial class HexLinkSync
                     if (same && common != observed.Local)
                         state.Agree(repo.Path, observed.Local);
                     agreements[repo.Path] = observed;
+                    repo.Seen = observed.Local;
                     if (repo.Path.Length == 0)
                     {
                         LocalHead = observed.Local.Head;

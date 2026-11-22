@@ -262,6 +262,30 @@ public sealed class HexLinkGitFollowTests
     }
 
     [Fact]
+    public async Task A_local_commit_follows_without_waiting_for_the_full_check()
+    {
+        if (HexLinkGit.Why() is not null)
+            return;
+        using var pair = await LinkedPair.Up(Edit, Edit);
+        Setup(pair.A.Work);
+        Git(pair.B.Root, "clone", "--quiet", "--no-local", pair.A.Work, pair.B.Work);
+        Configure(pair.B.Work);
+        pair.A.FollowGit = pair.B.FollowGit = true;
+        // The full check, which asks the other side for its tips, never comes during the test: only this side's HEAD
+        // read from its files can notice the commit
+        using var sync = new HexLinkSync(pair.PeerB, pair.A.Workspace.Folders[0], Path.Combine(pair.A.Root, "sync"))
+        {
+            GitFollowEnabled = static () => true, GitFollowData = pair.A.GitFollowData,
+            Quiet = TimeSpan.FromMilliseconds(70), Rescan = TimeSpan.FromSeconds(2), GitFollowFullCheck = TimeSpan.FromHours(1)
+        };
+        await sync.Start().WaitAsync(TimeSpan.FromMinutes(2));
+        Assert.Equal(HexLinkSyncState.Idle, sync.State);
+
+        HexLinkHeadTip tip = Commit(pair.A.Work, "made here");
+        await WaitFor(() => At(pair.B.Work, tip) && File.ReadAllText(Path.Combine(pair.B.Work, "main.txt")) == "made here", sync);
+    }
+
+    [Fact]
     public async Task A_commit_made_on_one_worker_follows_through_the_pinned_authority_to_a_second_worker()
     {
         if (HexLinkGit.Why() is not null)
