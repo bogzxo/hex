@@ -48,44 +48,120 @@ internal sealed partial class DawnScene
         Engine.WindowManager.RequestFrames();
     }
 
+    private readonly Dictionary<string, (LinkChatDevice Device, string Address, HexLinkEndpoint? Preferred)> linkChatsLast = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, DateTime> linkChatsSeenAt = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<(string Device, int Id), string> linkRowStates = [];
+    private readonly HashSet<(string Device, int Id)> linkFailedUnseen = [];
+    private List<LinkChatDevice>? linkChatFakes = null;
+
     private static bool ShowsLinkChats(HexLinkPeer peer) =>
         !peer.IsClosed && HexLinkAllowed.Has(peer.Granted, HexLinkRights.View) && peer.Fleet.Count > 0;
+
+    private static HexLinkPeer? FindLinkChatPeer(IReadOnlyList<HexLinkPeer> peers, string id)
+    {
+        for (int i = 0; i < peers.Count; i++)
+        {
+            HexLinkPeer peer = peers[i];
+            if (!peer.IsClosed && peer.Device.Id.Equals(id, StringComparison.OrdinalIgnoreCase))
+                return peer;
+        }
+        return null;
+    }
 
     private bool LinkFleetShown
     {
         get
         {
+            if (linkChatFakes is { Count: > 0 })
+                return true;
             IReadOnlyList<HexLinkPeer> peers = LinkPeers;
             for (int i = 0; i < peers.Count; i++)
             {
                 if (ShowsLinkChats(peers[i]))
                     return true;
             }
+            foreach (string id in linkChatsLast.Keys)
+            {
+                if (linkTrust?.Find(id) is not null && FindLinkChatPeer(peers, id) is null)
+                    return true;
+            }
             return false;
         }
     }
 
-    private List<LinkChatDevice> LinkChatDevices()
+    // Keep the last fleet even when neither chat list is visible.
+    private void CaptureLinkChatDevices(IReadOnlyList<HexLinkPeer> peers)
     {
-        var devices = new List<LinkChatDevice>();
-        foreach (HexLinkPeer peer in LinkPeers)
+        foreach (string id in linkChatsLast.Keys.ToArray())
         {
+            HexLinkPeer? peer = FindLinkChatPeer(peers, id);
+            if (linkTrust?.Find(id) is not null && (peer is null || HexLinkAllowed.Has(peer.Granted, HexLinkRights.View)
+                && (peer.Fleet.Count > 0 || peer.FleetVersion == 0)))
+                continue;
+            linkChatsLast.Remove(id);
+            linkChatsSeenAt.Remove(id);
+            foreach (var key in linkRowStates.Keys.Where(key => key.Device == id).ToArray())
+            {
+                linkRowStates.Remove(key);
+                linkFailedUnseen.Remove(key);
+            }
+        }
+
+        for (int i = 0; i < peers.Count; i++)
+        {
+            HexLinkPeer peer = peers[i];
             if (!ShowsLinkChats(peer))
                 continue;
             string id = peer.Device.Id;
+            IReadOnlyList<HexLinkRow> rows = peer.Fleet;
+            long version = peer.FleetVersion;
+            string name = LinkNameOf(id, peer.Device.Name);
             string address = peer.Session.Connection.Address;
+            HexLinkEndpoint? preferred = linkTrust?.Find(id)?.PreferredRoute;
+            linkChatsSeenAt[id] = DateTime.UtcNow;
+            if (linkChatsLast.TryGetValue(id, out var last) && ReferenceEquals(last.Device.Rows, rows)
+                && last.Device.Version == version && last.Device.Name == name && last.Device.Granted == peer.Granted
+                && last.Address == address && last.Preferred == preferred)
+                continue;
+
             string route = string.Empty, routeTip = string.Empty;
             if (address.Length > 0)
             {
                 bool knownIp = IPAddress.TryParse(address, out IPAddress? ip);
                 bool vpn = ip is not null && LinkIsVpn(ip);
                 route = Said(!knownIp ? "link.devices_route_network" : vpn ? "link.devices_route_vpn" : "link.devices_route_lan");
-                string choice = LinkKnown.FirstOrDefault(known => known.Device.Id == id)?.PreferredRoute is { } preferred
-                    ? LinkRouteAddress(preferred) : Said("link.devices_route_auto");
+                string choice = preferred is { } chosen ? LinkRouteAddress(chosen) : Said("link.devices_route_auto");
                 routeTip = Said(!knownIp ? "link.tip_route_network" : vpn ? "link.tip_route_vpn" : "link.tip_route") + " " +
                     Said("link.devices_route_tip", ("address", address), ("choice", choice));
             }
-            devices.Add(new LinkChatDevice(id, LinkNameOf(id, peer.Device.Name), true, peer.Granted, peer.Fleet, peer.FleetVersion, default, route, routeTip));
+            var device = new LinkChatDevice(id, name, true, peer.Granted, rows, version, default, route, routeTip);
+            linkChatsLast[id] = (device, address, preferred);
+            TrackLinkFailures(device);
+        }
+    }
+
+    private List<LinkChatDevice> LinkChatDevices()
+    {
+        IReadOnlyList<HexLinkPeer> peers = LinkPeers;
+        CaptureLinkChatDevices(peers);
+        var devices = new List<LinkChatDevice>();
+        foreach (var (id, last) in linkChatsLast)
+        {
+            if (FindLinkChatPeer(peers, id) is { } peer)
+            {
+                if (ShowsLinkChats(peer))
+                    devices.Add(last.Device);
+            }
+            else if (linkTrust?.Find(id) is { } known)
+                devices.Add(last.Device with { Name = known.Shown, Online = false, SeenUtc = linkChatsSeenAt.GetValueOrDefault(id, known.Seen) });
+        }
+        if (linkChatFakes is not null)
+        {
+            foreach (LinkChatDevice fake in linkChatFakes)
+            {
+                TrackLinkFailures(fake);
+                devices.Add(fake);
+            }
         }
         devices.Sort((a, b) =>
         {
@@ -95,13 +171,44 @@ internal sealed partial class DawnScene
         return devices;
     }
 
+    private LinkChatDevice? LinkChatFake(string id)
+    {
+        if (linkChatFakes is not { } fakes)
+            return null;
+        for (int i = 0; i < fakes.Count; i++)
+        {
+            if (fakes[i].Id == id)
+                return fakes[i];
+        }
+        return null;
+    }
+
+    private bool LinkChatOnline(string id) => LinkChatFake(id)?.Online ?? (LinkPeerOf(id) is not null);
+
+    private string LinkChatOfflineReason(string name) => Said("link.chats_offline_reason", ("device", name));
+
+    private void TrackLinkFailures(LinkChatDevice device)
+    {
+        foreach (HexLinkRow row in device.Rows)
+        {
+            var key = (device.Id, row.Id);
+            bool wasKnown = linkRowStates.TryGetValue(key, out string? before);
+            if (row.State != "failed")
+                linkFailedUnseen.Remove(key);
+            else if (wasKnown && before != "failed" && (linkRemoteOpen?.DeviceId != device.Id || linkRemoteOpen.Id != row.Id))
+                linkFailedUnseen.Add(key);
+            linkRowStates[key] = row.State;
+        }
+    }
+
     /// <summary>Adds the linked devices after the local chats and returns the height they occupy.</summary>
     private float LinkFleetSections(StackPanel rows, List<Action<float>> refreshes, float inset = 10.0f)
     {
         float tall = 0.0f;
         foreach (LinkChatDevice device in LinkChatDevices())
         {
-            HexLinkChatCounts counts = HexLinkChatGroups.Count(device.Rows);
+            bool FailedUnseen(HexLinkRow row) => linkFailedUnseen.Contains((device.Id, row.Id));
+            HexLinkChatCounts counts = HexLinkChatGroups.Count(device.Rows, FailedUnseen);
             string key = HexLinkChatGroups.DeviceKey(device.Id);
             bool open = LinkChatOpen(key, HexLinkChatGroups.DeviceUsuallyOpen(counts));
             var (head, refresh) = LinkSectionHead(device, counts, inset, key, open);
@@ -129,8 +236,8 @@ internal sealed partial class DawnScene
                 {
                     HexAgentChat standIn = LinkStandIn(device.Id, device.Name, device.Version, row);
                     var remote = new LinkRemoteCard(device.Id, device.Name, row.Id);
-                    AgentCard card = AgentCardOf(standIn, step, closable: false, quiet: section == HexLinkChatSection.Finished,
-                        rail: HexLinkChatGroups.Waiting(row), remote: remote, approval: row.Approvals.FirstOrDefault());
+                    AgentCard card = AgentCardOf(standIn, step, closable: false, quiet: !device.Online || section == HexLinkChatSection.Finished,
+                        rail: HexLinkChatGroups.NeedsYou(row, FailedUnseen), remote: remote, approval: row.Approvals.FirstOrDefault());
                     rows.Add(card.Root);
                     refreshes.Add(card.Refresh);
                     tall += AGENT_CARD + rows.Spacing;
@@ -147,13 +254,16 @@ internal sealed partial class DawnScene
         head.Add(new ChatListHeadButton(this, key, open, shown => SetLinkChatOpen(key, shown)) { Tooltip = tip });
         var name = head.Add(new Label
         {
-            Bold = true, TextScale = 0.13f, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft,
+            Bold = true, Dim = !device.Online, TextScale = 0.13f, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft,
             Position = new Vector2(inset, -3), Align = Origin.Left, Tooltip = tip
         });
-        var status = LinkChatChip(Said("link.device_connected"), UIBadgeTone.Success);
-        status.Dot = true;
+        var status = device.Online ? LinkChatChip(Said("link.device_connected"), UIBadgeTone.Success)
+            : LinkChatChip(Said("link.chats_offline"));
+        status.Dot = device.Online;
+        if (!device.Online)
+            status.Tooltip = LinkChatOfflineReason(device.Name);
         var upper = new List<Badge> { status };
-        if (device.Route.Length > 0)
+        if (device.Online && device.Route.Length > 0)
         {
             Badge route = LinkChatChip(device.Route);
             route.Tooltip = device.RouteTip;
@@ -161,6 +271,8 @@ internal sealed partial class DawnScene
         }
 
         string summary = HexLinkChatGroups.CountsSaid(counts, Said("link.chats_running"), Said("link.chats_finished"), string.Empty);
+        if (!device.Online)
+            summary = Said("link.chats_offline_seen", ("time", device.SeenUtc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture))) + " · " + summary;
         var totals = head.Add(new Label
         {
             TextScale = 0.11f, Dim = true, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft,

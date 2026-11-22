@@ -47,6 +47,13 @@ internal sealed partial class DawnScene
     /// <summary>A remote chat put on screen: its stand-in at once, its mirror as soon as the device sends it.</summary>
     private void OpenRemoteChat(LinkRemoteCard remote)
     {
+        if (!LinkChatOnline(remote.DeviceId))
+        {
+            Say(LinkChatOfflineReason(remote.DeviceName), error: true);
+            return;
+        }
+
+        linkFailedUnseen.Remove((remote.DeviceId, remote.Id));
         FleetPicked();
         if (linkRemoteOpen == remote && LinkRemoteOf(agentChat) == remote)
             return;

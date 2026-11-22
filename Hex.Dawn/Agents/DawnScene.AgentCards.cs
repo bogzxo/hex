@@ -67,7 +67,9 @@ internal sealed partial class DawnScene
         var pick = root.Add(new AgentCardButton(this, chat)
         {
             Style = "button_flat", Fill = UIFill.Both, Label = string.Empty, Animated = false, Selected = remote is null ? chat == agentChat : linkRemoteOpen == remote,
-            Tooltip = $"#{chat.Id} {chat.Shown}"
+            Tooltip = remote is not null && !LinkChatOnline(remote.DeviceId)
+                ? $"#{chat.Id} {chat.Shown}\n{LinkChatOfflineReason(remote.DeviceName)}"
+                : $"#{chat.Id} {chat.Shown}"
         });
         pick.OnPressed = () =>
         {

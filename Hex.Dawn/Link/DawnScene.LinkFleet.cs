@@ -30,26 +30,49 @@ internal sealed partial class DawnScene
 
     /// <summary>Whether the cards carry the badge of the machine they run on, while any device is linked.</summary>
     private bool LinkBadgesShown => link is not null && LinkPeers.Count > 0;
-
     /// <summary>Tracks the linked fleets and the open remote chat without building a list of devices.</summary>
     private long LinkFleetKey()
     {
         IReadOnlyList<HexLinkPeer> peers = LinkPeers;
-        if (peers.Count == 0)
+        if (peers.Count == 0 && linkChatsLast.Count == 0 && linkChatFakes is not { Count: > 0 })
             return 0;
         long key = 23 + (linkRemoteOpen is { } open ? string.GetHashCode(open.DeviceId, StringComparison.Ordinal) * 31L + open.Id : 0);
         for (int i = 0; i < peers.Count; i++)
         {
             HexLinkPeer peer = peers[i];
-            key = key * 31 + string.GetHashCode(peer.Device.Id, StringComparison.Ordinal);
-            key = key * 31 + string.GetHashCode(LinkNameOf(peer.Device.Id, peer.Device.Name), StringComparison.Ordinal);
+            string id = peer.Device.Id;
+            key = key * 31 + string.GetHashCode(id, StringComparison.Ordinal);
+            key = key * 31 + string.GetHashCode(LinkNameOf(id, peer.Device.Name), StringComparison.Ordinal);
             key = key * 31 + (int)peer.Granted;
             key = key * 31 + (peer.IsClosed ? 1 : 0);
             key = key * 31 + peer.FleetVersion;
             key = key * 31 + peer.Fleet.Count;
             key = key * 31 + string.GetHashCode(peer.Session.Connection.Address, StringComparison.Ordinal);
+            key = key * 31 + (linkTrust?.Find(id)?.PreferredRoute?.GetHashCode() ?? 0);
+            if (ShowsLinkChats(peer))
+                linkChatsSeenAt[id] = DateTime.UtcNow;
         }
-
+        foreach (string id in linkChatsLast.Keys)
+        {
+            if (FindLinkChatPeer(peers, id) is null && linkTrust?.Find(id) is { } known)
+            {
+                key = key * 31 + string.GetHashCode(id, StringComparison.Ordinal);
+                key = key * 31 + string.GetHashCode(known.Shown, StringComparison.Ordinal);
+            }
+        }
+        if (linkChatFakes is { } fakes)
+        {
+            foreach (LinkChatDevice fake in fakes)
+            {
+                key = key * 31 + string.GetHashCode(fake.Id, StringComparison.Ordinal);
+                key = key * 31 + string.GetHashCode(fake.Name, StringComparison.Ordinal);
+                key = key * 31 + fake.Version;
+                key = key * 31 + fake.Rows.Count;
+                key = key * 31 + (int)fake.Granted;
+                key = key * 31 + (fake.Online ? 1 : 0);
+            }
+        }
+        key = key * 31 + linkFailedUnseen.Count;
         return key * 31 + linkChatFoldsVersion;
     }
 
@@ -188,7 +211,10 @@ internal sealed partial class DawnScene
     private Menu LinkRemoteMenu(LinkRemoteCard remote)
     {
         var menu = new Menu("remote chat");
-        menu.Add(Said("agents_panel.chat_open"), () => OpenRemoteChat(remote), icon: "comment");
+        bool Online() => LinkChatOnline(remote.DeviceId);
+        if (!Online())
+            menu.Add(new MenuItem { Label = LinkChatOfflineReason(remote.DeviceName), Icon = "info", IsEnabled = () => false });
+        menu.Add(Said("agents_panel.chat_open"), () => OpenRemoteChat(remote), icon: "comment").IsEnabled = Online;
         bool steer = LinkPeerOf(remote.DeviceId) is { } peer && HexLinkAllowed.Has(peer.Granted, HexLinkRights.Steer);
         menu.Add(Said("link.chat_stop"), () => LinkRemoteStop(remote), icon: "debug-stop").IsEnabled = () => steer;
         menu.Add(Said("link.chat_restart"), () => LinkRemoteRestart(remote), icon: "debug-restart").IsEnabled = () => steer;

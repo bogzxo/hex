@@ -409,6 +409,7 @@ internal sealed partial class DawnScene
         if (linkDirty)
         {
             linkDirty = false;
+            CaptureLinkChatDevices(LinkPeers);
             LinkPredictLookSource();
             LinkRedraw();
         }
