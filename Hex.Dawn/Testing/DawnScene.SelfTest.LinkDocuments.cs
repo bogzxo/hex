@@ -8,9 +8,11 @@ namespace Hex.Dawn;
 internal sealed partial class DawnScene
 {
     private const string LINK_DOC_TEST = "HEX_LINK_DOCUMENT_TEST";
+    private const string LINK_DOC_OWNER = "HEX_LINK_DOCUMENT_TEST_OWNER";
     private const string LINK_DOC_WIRE = "shared/note.txt";
     private const int LINK_DOC_SAMPLES = 24;
     private int linkDocTestStage, linkDocLatencySample;
+    private bool linkDocAuthorityReady;
     private readonly long[] linkDocWire = new long[LINK_DOC_SAMPLES], linkDocGuestWorker = new long[LINK_DOC_SAMPLES],
         linkDocReceived = new long[LINK_DOC_SAMPLES], linkDocApplied = new long[LINK_DOC_SAMPLES];
 
@@ -25,13 +27,19 @@ internal sealed partial class DawnScene
     private void LinkDocumentTestPeer(string work)
     {
         string? role = System.Environment.GetEnvironmentVariable(LINK_DOC_TEST);
-        if (role is not ("editor" or "reader") || LinkPeers.FirstOrDefault() is null)
-            return;
-        string? folder = System.Environment.GetEnvironmentVariable(LINK_TEST_FOLDER);
-        if (folder is null)
+        if (role is not ("editor" or "reader") || linkServices is not { } services
+            || LinkPeers.FirstOrDefault() is not { } host
+            || host.Device.Id != System.Environment.GetEnvironmentVariable(LINK_DOC_OWNER)
+            || System.Environment.GetEnvironmentVariable(LINK_TEST_FOLDER) is not { } folder)
             return;
         bool Flag(string name) => File.Exists(Path.Combine(work, name));
         void Signal(string name, string contents = "") => File.WriteAllText(Path.Combine(work, name), contents);
+        if (!linkDocAuthorityReady)
+        {
+            services.FolderAuthorities.Bind(new HexLinkFolder("shared", folder), new HexLinkAuthority(host.Device.Id, 1));
+            Signal("authority-ready");
+            linkDocAuthorityReady = true;
+        }
         if (linkDocTestStage == 0 && Flag("open"))
         {
             if (Open(Path.Combine(folder, "note.txt")))
@@ -133,8 +141,11 @@ internal sealed partial class DawnScene
         {
             string? why = await LinkSyncStart(peer.Device.Id, "shared", remember: false);
             // The automatic check may have started first, then declined this plain folder.
-            return why is null && LinkSyncOf(peer.Device.Id, "shared")?.State == HexLinkSyncState.Off
-                ? await LinkSyncStart(peer.Device.Id, "shared", remember: false) : why;
+            if (why is null && LinkSyncOf(peer.Device.Id, "shared")?.State == HexLinkSyncState.Off)
+                why = await LinkSyncStart(peer.Device.Id, "shared", remember: false);
+            if (why is not null)
+                Console.WriteLine($"[Hex self-test] link-documents: sync start failed for {peer.Device.Name}: {why}");
+            return why;
         }
         bool Flag(string work, string name) => File.Exists(Path.Combine(work, name));
         void Signal(string work, string name) => File.WriteAllText(Path.Combine(work, name), "");
@@ -146,7 +157,8 @@ internal sealed partial class DawnScene
         void Child(string profile, string workspace, string role, bool additional = false) =>
             LinkStartPeer(profile, $"127.0.0.1:{LinkPort}", new Dictionary<string, string>
             {
-                [LINK_DOC_TEST] = role, [LINK_TEST_FOLDER] = workspace, [LINK_TEST_SECONDS] = "420"
+                [LINK_DOC_TEST] = role, [LINK_DOC_OWNER] = linkServices!.Device.Id,
+                [LINK_TEST_FOLDER] = workspace, [LINK_TEST_SECONDS] = "420"
             }, additional: additional);
 
         test.Run(() =>
@@ -168,6 +180,7 @@ internal sealed partial class DawnScene
         test.WaitFor(() => LinkPairingPending is { IsDecided: false }, 90);
         test.Run(() => LinkPairingPending?.Decide(HexLinkRights.View | HexLinkRights.Edit));
         Await("two devices paired on isolated loopback", () => LinkTestBoundOnlyToLoopback && LinkPeers.Count == 1);
+        test.WaitFor(() => Flag(peerWork, "authority-ready"), 30);
         test.Run(() =>
         {
             if (LinkPeers.SingleOrDefault() is { } editor)
@@ -263,6 +276,7 @@ internal sealed partial class DawnScene
         test.WaitFor(() => LinkPairingPending is { IsDecided: false }, 90);
         test.Run(() => LinkPairingPending?.Decide(HexLinkRights.View));
         Await("a third device joined the link as a reader", () => LinkPeers.Count == 2);
+        test.WaitFor(() => Flag(readerWork, "authority-ready"), 30);
         test.Run(() =>
         {
             if (LinkPeers.FirstOrDefault(peer => !HexLinkAllowed.Has(peer.Session.Connection.Rights, HexLinkRights.Edit)) is { } reader)
