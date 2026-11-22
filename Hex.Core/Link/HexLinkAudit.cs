@@ -42,7 +42,7 @@ internal sealed class HexLinkAudit
                     Directory.CreateDirectory(folder);
                 File.AppendAllText(Path, line);
                 if (new FileInfo(Path).Length > most)
-                    Cut();
+                    Cut(Encoding.UTF8.GetByteCount(line));
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
@@ -81,15 +81,25 @@ internal sealed class HexLinkAudit
     }
 
     // Keeps the newer half of the file, from the first whole line after its middle. Under the gate
-    private void Cut()
+    private void Cut(int latestBytes)
     {
-        byte[] all = File.ReadAllBytes(Path);
-        int from = all.Length / 2;
-        while (from < all.Length && all[from - 1] != (byte)'\n')
-            from++;
-
         string next = Path + ".new";
-        File.WriteAllBytes(next, all.AsSpan(from).ToArray());
+        using (var source = File.OpenRead(Path))
+        using (var target = File.Create(next))
+        {
+            if (latestBytes <= most)
+            {
+                // Keep the entire latest event when the midpoint falls inside it.
+                long latestStart = source.Length - latestBytes;
+                long from = Math.Max(source.Length - most, Math.Min(source.Length / 2, latestStart));
+                source.Position = from - 1;
+                while (source.ReadByte() is not (-1 or (byte)'\n'))
+                {
+                    // Skip the partial line.
+                }
+                source.CopyTo(target);
+            }
+        }
         File.Move(next, Path, overwrite: true);
     }
 
