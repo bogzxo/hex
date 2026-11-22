@@ -40,9 +40,35 @@ public sealed class ProjectTemplatesTests
     [Fact]
     public void DotnetKindsAreTheSdksTemplatesWithASolution()
     {
-        var commands = ProjectTemplates.Commands(ProjectTemplates.Find("csharp-console")!, "Tool", optional: false);
-        Assert.Equal(new[] { "dotnet", "new", "console", "--name", "Tool", "--output", "." }, commands[0]);
-        Assert.Equal(new[] { "dotnet", "sln", "add", "Tool.csproj" }, commands[^1]);
+        ProjectTemplate console = ProjectTemplates.Find("csharp-console")!;
+        var commands = ProjectTemplates.Commands(console, "Tool", optional: false);
+        Assert.Equal(new[] { "dotnet", "new", "console", "--name", "Tool", "--output", "." }, Assert.Single(commands));
+
+        // The solution is a file with the project in it, never left to a command that can add nothing
+        var files = ProjectTemplates.Files(console, "Tool").ToDictionary(file => file.Path, file => file.Text);
+        Assert.Contains("<Project Path=\"Tool.csproj\" />", files["Tool.slnx"]);
+    }
+
+    [Fact]
+    public void ASolutionWithNoProjectIsPassedOverForTheProjectBesideIt()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "hex-empty-solution-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            string project = Path.Combine(folder, "Game.csproj");
+            File.WriteAllText(project, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup></Project>");
+            string solution = Path.Combine(folder, Path.GetFileName(folder) + ".slnx");
+            File.WriteAllText(solution, "<Solution>\n</Solution>\n");
+            Assert.Equal(project, DotnetSolutions.BuildTargetIn(folder));
+
+            File.WriteAllText(solution, "<Solution>\n  <Project Path=\"Game.csproj\" />\n</Solution>\n");
+            Assert.Equal(solution, DotnetSolutions.BuildTargetIn(folder));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
     }
 
     [Fact]
@@ -178,7 +204,8 @@ public sealed class ProjectTemplatesTests
         // The engine cloned beside it only when there's no checkout to point at
         var commands = ProjectTemplates.Commands(game, "Sun-Game", optional: false);
         Assert.Equal(ProjectTemplates.HorizonEngine() is null, commands.Any(command => command is ["git", "clone", ..]));
-        Assert.Contains(commands, command => command is ["dotnet", "sln", "add", "Sun-Game.csproj"]);
+        Assert.DoesNotContain(commands, command => command is ["dotnet", ..]);
+        Assert.Contains("<Project Path=\"Sun-Game.csproj\" />", files["Sun-Game.slnx"]);
     }
 
     [Theory]

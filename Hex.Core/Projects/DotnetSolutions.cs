@@ -52,14 +52,15 @@ internal static partial class DotnetSolutions
 
     /// <summary>
     /// What a folder builds, its solution (.slnx before .sln, the one named like the folder before others) or else its one
-    /// project, null for neither. Projects a level or two down count when the folder itself has none.
+    /// project, null for neither. Projects a level or two down count when the folder itself has none. A solution with
+    /// no project of its own that's there builds nothing, so it's passed over for the project beside it.
     /// </summary>
     public static string? BuildTargetIn(string folder)
     {
         string name = Path.GetFileName(Path.GetFullPath(folder).TrimEnd('\\', '/'));
         foreach (string pattern in (string[])["*.slnx", "*.sln"])
         {
-            string[] solutions = Files(folder, pattern);
+            string[] solutions = [.. Files(folder, pattern).Where(solution => ProjectsIn(solution).Count > 0)];
             if (solutions.Length > 0)
                 return solutions.FirstOrDefault(solution => Path.GetFileNameWithoutExtension(solution).Equals(name, StringComparison.OrdinalIgnoreCase)) ?? solutions[0];
         }
