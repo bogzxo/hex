@@ -7,7 +7,7 @@ internal sealed partial class DawnScene
 {
     private readonly ConcurrentDictionary<int, string> privateAgentRoots = new();
 
-    private string LinkPrivateStorage => Path.Combine(linkData.Length > 0 ? linkData : Path.Combine(HexData.Root, LINK_FOLDER), "private-worktrees");
+    private string LinkPrivateStorage => Path.Combine(linkData.Length > 0 ? linkData : Path.Combine(HexData.Root, LINK_FOLDER), "wt");
 
     private string? LinkAgentFolder(HexAgentChat chat)
     {

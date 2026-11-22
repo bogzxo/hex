@@ -39,7 +39,8 @@ public sealed class HexLinkPublicationTests
                     acked++;
                     return Task.CompletedTask;
                 },
-                (_, _, _) => throw new InvalidOperationException());
+                (_, _, _) => throw new InvalidOperationException(),
+                draftPresence: (_, _) => Task.FromResult(new HexLinkDraftPresence(1, ["work/held.txt"])));
             var replica = new HexLinkWorktreePublication(b, Path.Combine(storage, "b"), _ => [],
                 (_, _, _, _) => throw new InvalidOperationException(), (_, _, _, _) => throw new InvalidOperationException(),
                 (_, set, _) =>
@@ -58,6 +59,9 @@ public sealed class HexLinkPublicationTests
             var connectingA = linksB.Add(new HexLinkConnection(endB, DeviceA, "memory", false, () => edit, bulk: HexLinkBulkSupport.Raw));
             HexLinkPeer peerB = await connectingB.WaitAsync(stop.Token);
             HexLinkPeer peerA = await connectingA.WaitAsync(stop.Token);
+            var visible = await peerA.DraftPresence("work", 3, stop.Token);
+            Assert.Equal("work/held.txt", Assert.Single(visible.Paths));
+            Assert.Equal(1, visible.Count);
             var route = replica.Route(b.Workspace.Folders[0], peerA);
             Assert.NotNull(route);
 

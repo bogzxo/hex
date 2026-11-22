@@ -1,0 +1,175 @@
+namespace Hex.Dawn;
+
+internal sealed partial class DawnScene
+{
+    private const string LINK_TEST_PUBLICATION_OWNER = "HEX_LINK_TEST_PUBLICATION_OWNER";
+
+    private void TestLinkWorktree(HexPointerScript test)
+    {
+        string home = LinkTestFolder("wa-", test);
+        string peerHome = LinkTestFolder("wb-", test);
+        string mine = Path.Combine(LinkTestFolder("wr-", test), LINK_SYNC_FOLDER);
+        string theirs = Path.Combine(peerHome, LINK_SYNC_FOLDER);
+        string target = Path.Combine(mine, "src", "shared.txt");
+        string remote = Path.Combine(theirs, "src", "shared.txt");
+        const string Seed = "first\nsecond\nthird\nfourth\n";
+        const string ChangedThere = "first\nsecond\nthird\nremote fourth\n";
+        const string Merged = "private first\nsecond\nthird\nremote fourth\n";
+        HexLinkPeer? peer = null;
+        HexLinkPrivateWorktree? draft = null;
+        Task? step = null;
+        Task<HexLinkDraftPublication>? result = null;
+        bool cut = false;
+        int cuts = 0;
+        string? why = null;
+        string? device = null;
+        CancellationToken cancel = CancellationToken.None;
+
+        async Task OpenDraft()
+        {
+            var folder = linkServices!.Workspace.Folders.Single(folder => folder.Name == LINK_SYNC_FOLDER);
+            string owner = linkServices.Device.Id;
+            linkServices.FolderAuthorities.Bind(folder, new HexLinkAuthority(owner, 1));
+            await LinkActivateWorktreePublication(_ => [device!],
+                (_, _, _, _) =>
+                {
+                    if (cut && Interlocked.Increment(ref cuts) == 1)
+                        link?.PeerOf(device!)?.Session.Close("self-test lost the publication connection");
+                    return Task.CompletedTask;
+                },
+                (_, _, _, _) => Task.CompletedTask, (_, _, _) => Task.CompletedTask, (_, _, _) => { }, cancel);
+            var route = LinkPrivatePublishRoute(folder)!;
+            draft = await HexLinkPrivateWorktree.Open(LinkPrivateStorage, Guid.NewGuid(), folder,
+                await route.Snapshot(cancel), () => linkServices.Excludes, cancel);
+        }
+
+        Task<HexLinkDraftPublication> Publish(string command) =>
+            draft!.Publish(LinkPrivatePublishRoute(draft.SharedFolder)!, new HexLinkWorktreeGateOptions(Build: command), false, cancel);
+
+        test.Run(() =>
+        {
+            why = LinkTestRepository(mine, theirs);
+            if (why is not null)
+                return;
+            File.WriteAllText(target, Seed);
+            File.WriteAllText(remote, Seed);
+            StopLink();
+            linkTestExtraFolders = [mine];
+            if (!StartLink(port: 0, home: home, loopbackOnly: true))
+                return;
+            linkByTest = true;
+            LinkOpenPairing(TimeSpan.FromMinutes(3));
+            LinkStartPeer(peerHome, $"127.0.0.1:{LinkPort}", new Dictionary<string, string>
+            {
+                [LINK_TEST_FOLDER] = theirs, [LINK_TEST_SECONDS] = "420", [LINK_TEST_PUBLICATION_OWNER] = linkServices!.Device.Id
+            });
+        });
+        test.Check("link-worktree: both repositories and the replica app started", () => why is null && linkTestPeer is not null);
+        test.WaitFor(() => LinkPairingPending is not null || linkTestPeer is { HasExited: true }, 90.0f);
+        test.Run(() => LinkPairingPending?.Decide(HexLinkRights.View | HexLinkRights.Steer | HexLinkRights.Edit));
+        test.WaitFor(() => LinkPeers.Count == 1 && linkTestPeerSaid.Any(line => line.Contains("link-worktree: replica ready", StringComparison.Ordinal)), 60.0f);
+        test.Run(() =>
+        {
+            peer = LinkPeers.FirstOrDefault();
+            if (peer is null)
+                return;
+            device = peer.Device.Id;
+            LinkSyncStop(device, LINK_SYNC_FOLDER);
+            step = OpenDraft();
+        });
+        test.WaitFor(() => step?.IsCompleted == true, 30.0f);
+        test.Run(() => { if (step?.Exception is { } error) Console.WriteLine("[Hex self-test] link-worktree: " + error.GetBaseException().Message); });
+        test.Check("link-worktree: a detached draft opened on the authority", () => step is { IsCompletedSuccessfully: true } && draft is not null);
+        test.Run(() =>
+        {
+            if (draft is null)
+                return;
+            File.WriteAllText(Path.Combine(draft.Root, "src", "shared.txt"), "private first\nsecond\nthird\nfourth\n");
+            File.WriteAllText(Path.Combine(draft.Root, "only-draft.txt"), "private");
+            result = Publish("exit 7");
+        });
+        test.WaitFor(() => draft is null || result?.IsCompleted == true, 40.0f);
+        test.Check("link-worktree: the failed gate leaves both editors at the shared version", () =>
+            result is { IsCompletedSuccessfully: true, Result: { Gate.ExitCode: 7, Receipt: null } } &&
+            ReadLinkTestFile(target) == Seed && ReadLinkTestFile(remote) == Seed &&
+            !File.Exists(Path.Combine(theirs, "only-draft.txt")));
+
+        test.Run(() =>
+        {
+            if (draft is null)
+                return;
+            // Model a previously synced incoming save. The draft retains the original editing base.
+            File.WriteAllText(target, ChangedThere);
+            File.WriteAllText(remote, ChangedThere);
+            result = Publish("exit 0");
+        });
+        test.WaitFor(() => draft is null || result?.IsCompleted == true && ReadLinkTestFile(remote) == Merged, 70.0f);
+        test.Check("link-worktree: a clean merge passes its gate and both files arrive in one published set", () =>
+            result is { IsCompletedSuccessfully: true, Result.Receipt.Files: 2 } &&
+            ReadLinkTestFile(target) == Merged && ReadLinkTestFile(remote) == Merged &&
+            ReadLinkTestFile(Path.Combine(theirs, "only-draft.txt")) == "private");
+
+        test.Run(() =>
+        {
+            if (draft is null)
+                return;
+            File.WriteAllText(Path.Combine(draft.Root, "src", "shared.txt"), Merged.Replace("private first", "draft conflict", StringComparison.Ordinal));
+            string shared = Merged.Replace("private first", "authority conflict", StringComparison.Ordinal);
+            File.WriteAllText(target, shared);
+            File.WriteAllText(remote, shared);
+            result = Publish("exit 0");
+        });
+        test.WaitFor(() => draft is null || result?.IsCompleted == true, 40.0f);
+        test.Check("link-worktree: overlapping edits wait for a person and preserve both versions", () =>
+            result is { IsCompletedSuccessfully: true, Result: { Receipt: null, Conflicts.Count: 1 } } &&
+            ReadLinkTestFile(remote).StartsWith("authority conflict", StringComparison.Ordinal));
+
+        test.Run(() =>
+        {
+            if (draft is null)
+                return;
+            File.WriteAllText(Path.Combine(draft.Root, "src", "shared.txt"), ReadLinkTestFile(target));
+            File.WriteAllText(Path.Combine(draft.Root, "after-cut.txt"), "after reconnect");
+            cut = true;
+            result = Publish("exit 0");
+        });
+        test.WaitFor(() => draft is null || result?.IsCompleted == true && ReadLinkTestFile(Path.Combine(theirs, "after-cut.txt")) == "after reconnect", 90.0f);
+        test.Check("link-worktree: a committed publication reaches the replica after reconnect", () =>
+            result is { IsCompletedSuccessfully: true, Result.Receipt.Files: 1 } && cuts == 1 &&
+            ReadLinkTestFile(Path.Combine(theirs, "after-cut.txt")) == "after reconnect");
+
+        test.Run(() =>
+        {
+            if (device is not null)
+                LinkForget(device);
+        });
+        test.WaitFor(() => linkTestPeer is null or { HasExited: true }, 40.0f);
+        test.Run(() => { TidyLinkTest(); linkTestExtraFolders = []; });
+    }
+
+    private void TestLinkWorktreePeer(HexPointerScript test, string? workspace)
+    {
+        if (workspace is null || System.Environment.GetEnvironmentVariable(LINK_TEST_PUBLICATION_OWNER) is not { Length: 64 } owner ||
+            !owner.All(char.IsAsciiHexDigit))
+            return;
+        Task? restoring = null;
+        test.Run(() =>
+        {
+            if (linkServices is not { } services || LinkPeers.FirstOrDefault() is not { } peer || peer.Device.Id != owner)
+                return;
+            var folder = services.Workspace.Folders.Single(each => each.Name == Path.GetFileName(workspace));
+            services.FolderAuthorities.Bind(folder, new HexLinkAuthority(owner, 1));
+            LinkSyncStop(owner, folder.Name);
+            restoring = LinkActivateWorktreePublication(_ => [],
+                (_, _, _, _) => Task.CompletedTask, (_, _, _, _) => Task.CompletedTask,
+                (_, _, _) => Task.CompletedTask, (_, _, _) => { }, linkCancel?.Token ?? CancellationToken.None);
+        });
+        test.WaitFor(() => restoring?.IsCompleted == true, 30.0f);
+        test.Check("link-worktree: publication receiver is active", () => restoring?.IsCompletedSuccessfully == true);
+        test.Run(() =>
+        {
+            if (restoring?.IsCompletedSuccessfully == true)
+                Console.WriteLine("[Hex self-test] link-worktree: replica ready");
+        });
+    }
+}

@@ -78,6 +78,7 @@ internal sealed partial class HexLinkHost : IDisposable
         "fs/delete" => FsDeleteChecked(parameters, cancel),
         "authority/transfer" => AuthorityTransfer(parameters, cancel),
         "publish/status" => PublicationStatus(parameters, cancel),
+        "publish/presence" => PublicationPresence(parameters, cancel),
         "sync/manifest" => SyncManifest(parameters, cancel),
         "sync/watch" => SyncWatch(parameters, cancel),
         "sync/unwatch" => Task.FromResult<JsonNode?>(SyncUnwatch(parameters)),

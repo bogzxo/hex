@@ -12,6 +12,7 @@ internal sealed class HexLinkWorktreePublication : IHexLinkPublicationService
     private readonly HexLinkCommittedSets receipts;
     private readonly HexLinkPublicationReplica replica;
     private readonly Action<HexLinkFolder>? queued;
+    private readonly Func<HexLinkFolder, CancellationToken, Task<HexLinkDraftPresence>>? draftPresence;
     private readonly Action<HexLinkFolder, HexLinkCommittedSet, string>? releaseLive;
     private readonly Func<string, IReadOnlyList<string>> recipients;
     private readonly Func<HexLinkFolder, HexLinkCommittedSet, IReadOnlyList<string>, CancellationToken, Task> deferLive;
@@ -21,7 +22,8 @@ internal sealed class HexLinkWorktreePublication : IHexLinkPublicationService
     public HexLinkWorktreePublication(IHexLinkServices services, string storage, Func<string, IReadOnlyList<string>> recipients,
         Func<HexLinkFolder, HexLinkCommittedSet, IReadOnlyList<string>, CancellationToken, Task> deferLive,
         Func<HexLinkFolder, HexLinkCommittedSet, string, CancellationToken, Task> acknowledgeLive,
-        Func<HexLinkFolder, HexLinkCommittedSet, CancellationToken, Task> installReplicaBaseline, Action<HexLinkFolder>? queued = null, Action<HexLinkFolder, HexLinkCommittedSet, string>? releaseLive = null)
+        Func<HexLinkFolder, HexLinkCommittedSet, CancellationToken, Task> installReplicaBaseline, Action<HexLinkFolder>? queued = null, Action<HexLinkFolder, HexLinkCommittedSet, string>? releaseLive = null,
+        Func<HexLinkFolder, CancellationToken, Task<HexLinkDraftPresence>>? draftPresence = null)
     {
         this.services = services;
         this.storage = Path.GetFullPath(storage);
@@ -29,6 +31,7 @@ internal sealed class HexLinkWorktreePublication : IHexLinkPublicationService
         this.deferLive = deferLive;
         this.acknowledgeLive = acknowledgeLive;
         this.queued = queued;
+        this.draftPresence = draftPresence;
         this.releaseLive = releaseLive;
         receipts = new HexLinkCommittedSets(Path.Combine(this.storage, "sets"));
         replica = new HexLinkPublicationReplica(receipts, _ => services.Excludes, services.CompareAndReplace, installReplicaBaseline);
@@ -48,6 +51,13 @@ internal sealed class HexLinkWorktreePublication : IHexLinkPublicationService
             if (await owner.PendingProjection(cancel) is { } id)
                 Fence(folder).HoldRecovery(id, HexLinkFenceKind.Publication);
         }
+    }
+
+    public Task<HexLinkDraftPresence> DraftPresence(string name, long epoch, CancellationToken cancel)
+    {
+        HexLinkFolder folder = Folder(name);
+        RequireEpoch(folder, epoch);
+        return draftPresence?.Invoke(folder, cancel) ?? Task.FromResult(new HexLinkDraftPresence(0, []));
     }
 
     public void CheckPublication(HexLinkDevice device, HexLinkPublicationRequest request)

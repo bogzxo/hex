@@ -26,6 +26,7 @@ internal readonly record struct HexLinkPublicationRequest(Guid Id, string Folder
 internal interface IHexLinkPublicationService
 {
     string PublicationSpool { get; }
+    Task<HexLinkDraftPresence> DraftPresence(string folder, long epoch, CancellationToken cancel);
     void CheckPublication(HexLinkDevice device, HexLinkPublicationRequest request);
     Task ReceivePublication(HexLinkDevice device, HexLinkPublicationRequest request, HexLinkCommittedSet set,
         IReadOnlyList<HexLinkPublishEdit> edits, CancellationToken cancel);
@@ -64,6 +65,15 @@ internal sealed partial class HexLinkHost
         return await service.PublicationReceipt(Device, request, cancel) ?? new JsonObject { ["present"] = false };
     }
 
+    private async Task<JsonNode?> PublicationPresence(JsonObject parameters, CancellationToken cancel)
+    {
+        Need(HexLinkRights.View, "publish/presence");
+        if (parameters.ContainsKey("relay") || HexLinkData.String(parameters, "folder", 201) is not { Length: > 0 and <= 200 }
+            folder || HexLinkData.Long(parameters, "epoch") is not long epoch || epoch < 1)
+            throw HexLinkException.Invalid("Private worktree presence needs a directly shared folder.");
+        return (await RequirePublication().DraftPresence(folder, epoch, cancel)).ToJson();
+    }
+
     private IHexLinkPublicationService RequirePublication() => services.Publication ??
         throw new HexLinkException(HexLinkErrors.METHOD_NOT_FOUND, "This device has not enabled checked publication.");
 
@@ -88,6 +98,10 @@ internal sealed partial class HexLinkHost
 
 internal sealed partial class HexLinkPeer
 {
+    public async Task<HexLinkDraftPresence> DraftPresence(string folder, long epoch, CancellationToken cancel) =>
+        HexLinkDraftPresence.Read(folder, await session.Ask("publish/presence",
+            new JsonObject { ["folder"] = folder, ["epoch"] = epoch }, cancel) as JsonObject);
+
     public Task SendPublication(HexLinkCommittedSet set, IReadOnlyList<HexLinkPublishEdit> edits,
         bool replica, bool bypass, CancellationToken cancel) =>
         HexLinkPublicationPack.Send(session, set, edits, replica, bypass, cancel);

@@ -17,9 +17,9 @@ internal sealed partial class DawnScene
         Action<HexLinkFolder, HexLinkCommittedSet, string> releaseLive, CancellationToken cancel)
     {
         var services = linkServices ?? throw new InvalidOperationException("Link is off.");
-        var publication = new HexLinkWorktreePublication(services, Path.Combine(LinkPrivateStorage, "publish"),
+        var publication = new HexLinkWorktreePublication(services, Path.Combine(LinkPrivateStorage, "pub"),
             recipients, deferLive, acknowledgeLive, installReplicaBaseline,
-            _ => CurrentLinkPublication?.Pump.Poke(), releaseLive);
+            _ => CurrentLinkPublication?.Pump.Poke(), releaseLive, ReadPrivateWorktreePresence);
         await publication.Restore(cancel);
         if (!ReferenceEquals(services, linkServices))
             return;
