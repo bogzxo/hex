@@ -8,6 +8,7 @@ internal static class HexLog
 {
     internal static void Initialize(string folder)
     {
+        Directory.CreateDirectory(folder);
         foreach (string path in Directory.EnumerateFiles(folder, "debug-*.log"))
         {
             string suffix = Path.GetFileNameWithoutExtension(path)[6..];
