@@ -79,7 +79,7 @@ internal static partial class HexLinkFiles
         {
             if (part.Equals(".git", StringComparison.OrdinalIgnoreCase))
                 throw Refused(wire, "git's own folder is never shared");
-            if (HexLinkTree.CacheArtifact(part))
+            if (HexLinkTree.CacheArtifact(part) || HexLinkHoldStore.StorageArtifact(part))
                 throw Refused(wire, "Link's cache and staging files are never shared");
         }
 

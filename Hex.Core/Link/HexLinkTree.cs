@@ -346,7 +346,7 @@ internal sealed partial class HexLinkTree
     internal static bool SyncArtifact(string relative)
     {
         ReadOnlySpan<char> name = relative.AsSpan(relative.LastIndexOf('/') + 1);
-        return CacheArtifact(name) || name.Contains(HexLinkSync.THEIRS, StringComparison.OrdinalIgnoreCase) ||
+        return CacheArtifact(name) || HexLinkHoldStore.StoragePath(relative) || name.Contains(HexLinkSync.THEIRS, StringComparison.OrdinalIgnoreCase) ||
             (!name.IsEmpty && name[0] == '.' && name.EndsWith(".hexlink", StringComparison.OrdinalIgnoreCase)) ||
             (name.Length == 46 && name.StartsWith(".hex-save-", StringComparison.Ordinal) && name.EndsWith(".tmp", StringComparison.Ordinal));
     }
@@ -533,7 +533,8 @@ internal sealed partial class HexLinkTree
                 string relative = Path.GetRelativePath(Root, child).Replace(Path.DirectorySeparatorChar, '/');
                 if (ExcludesSystemPath(relative))
                     omitted?.Invoke(relative);
-                else if (!SKIPPED.Contains(Path.GetFileName(child)) && !Hidden(relative, folder: true))
+                else if (!SKIPPED.Contains(Path.GetFileName(child)) && !HexLinkHoldStore.StorageArtifact(Path.GetFileName(child))
+                    && !Hidden(relative, folder: true))
                     folders.Push(child);
             }
         }

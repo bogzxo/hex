@@ -202,6 +202,7 @@ internal sealed partial class DawnScene
                 entry.Sync?.Dispose();
                 var sync = new HexLinkSync(peer, local with { Authority = pairedAuthority ? authority : null }, Path.Combine(linkData, LINK_SYNC_STATES))
                 {
+                    Holds = services.Holds(local),
                     ApplyLocal = LinkCompareAndReplace,
                     ApplyStream = LinkCompareAndReplaceStream,
                     RenameLocal = LinkRenameCase,

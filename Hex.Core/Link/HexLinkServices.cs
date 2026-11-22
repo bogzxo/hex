@@ -49,6 +49,7 @@ internal interface IHexLinkServices
     HexLinkAuthorityStore? FolderAuthorities => null;
     IHexLinkPublicationService? Publication => null;
     HexLinkWorktreeGatePolicy? WorktreeGate(HexLinkFolder folder) => null;
+    HexLinkHoldStore? Holds(HexLinkFolder folder) => null;
 
     /// <summary>The workspace's current files.exclude patterns.</summary>
     HexExcludes Excludes => HexExcludes.Usual;

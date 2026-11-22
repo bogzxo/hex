@@ -141,6 +141,8 @@ internal sealed partial class HexLinkSync : IDisposable
 
     internal HexLinkFolder LocalFolder => folder;
 
+    internal HexLinkHoldStore? Holds { get; init; }
+
     /// <summary>Where the state (the bases and the open conflicts) is kept.</summary>
     public string StateFile { get; }
 
