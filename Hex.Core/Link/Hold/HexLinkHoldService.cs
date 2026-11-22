@@ -153,6 +153,47 @@ internal sealed class HexLinkHoldService(HexLinkFolder folder, HexLinkHoldStore 
     public Task<HexLinkHoldOperation> CompleteMerge(string path, byte[]? bytes, CancellationToken cancel = default) =>
         Complete(path, sessionId: null, bytes, cancel);
 
+    /// <summary>The files an update or submit left waiting for a decision, each with its merge, for an agent that has no merge editor to read.</summary>
+    public IReadOnlyList<HexLinkHoldPlanEntry> PendingConflicts(IReadOnlyList<string>? paths = null)
+    {
+        lock (pendingGate)
+            return [.. pending.Where(pair => (paths is null || paths.Contains(pair.Key, PlatformPaths.Comparer))
+                    && !pair.Value.Results.ContainsKey(pair.Key))
+                .Select(pair => pair.Value.Plan.FirstOrDefault(entry => entry.RequiresResolution && PlatformPaths.Same(entry.Path, pair.Key)))
+                .OfType<HexLinkHoldPlanEntry>().OrderBy(entry => entry.Path, PlatformPaths.Comparer)];
+    }
+
+    /// <summary>
+    /// A waiting conflict settled the way an editor's choices would: mine, theirs (a side that was deleted deletes the file) or the
+    /// whole merged text supplied. What's left to settle comes back in NeedsMerge, the files written in Paths.
+    /// </summary>
+    public Task<HexLinkHoldOperation> ResolveMerge(string path, string resolution, string? text, CancellationToken cancel = default)
+    {
+        HexLinkHoldPlanEntry entry = PendingConflicts([path]).FirstOrDefault()
+            ?? throw HexLinkException.NotFound($"There's no pending merge for {path}, update or submit first.");
+        byte[]? bytes;
+        switch (resolution)
+        {
+            case "mine":
+                bytes = entry.Mine;
+                break;
+            case "theirs":
+                bytes = entry.Snapshot.Hold.IncomingDeleted ? null : entry.Snapshot.IncomingBytes;
+                break;
+            case "merged":
+                if (text is null)
+                    throw HexLinkException.Invalid("Say the merged text of the whole file.");
+                if (entry.Session?.Model is not { IsBinary: false } model)
+                    throw HexLinkException.Invalid("This file can't be merged as text, keep mine or theirs.");
+                bytes = model.EncodeResult(text);
+                break;
+            default:
+                throw HexLinkException.Invalid("The resolution is mine, theirs or merged.");
+        }
+
+        return CompleteMerge(entry.Path, bytes, cancel);
+    }
+
     private async Task<HexLinkHoldOperation> Complete(string path, Guid? sessionId, byte[]? bytes, CancellationToken cancel,
         bool? checkOverride = null)
     {

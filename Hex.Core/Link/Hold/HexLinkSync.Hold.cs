@@ -208,18 +208,21 @@ internal sealed partial class HexLinkSync
     {
         if (Holds is null)
             return;
-        string[] released;
+        string[] released, taken;
         lock (gate)
         {
             var current = new HashSet<string>(Holds.List().Select(entry => entry.Path), PlatformPaths.Comparer);
             released = [.. holdPaths.Except(current, PlatformPaths.Comparer)];
+            taken = [.. current.Except(holdPaths, PlatformPaths.Comparer)];
             foreach (string wire in released)
                 remoteSeenWhileHeld.Remove(wire);
             foreach (string wire in current)
                 submittedHolds.Remove(wire);
             holdPaths = current;
         }
-        foreach (string wire in released)
+        // A file just held is compared with the other side's at once, so a version that came meanwhile is flagged as incoming
+        // now and not written over the hold, instead of when it next changes
+        foreach (string wire in released.Concat(taken))
             Dirty(wire);
         WakeGitFollow();
         Notify();
