@@ -46,10 +46,13 @@ public sealed class HexLinkPeerTests
     {
         var room = HexLinkHost.PresenceJson(new("work/a.cs", 4, 2, 4, 9, 8, 13, SharedDocument: true));
         Assert.Equal(2, room.Count);
-        Assert.Equal(new HexLinkPresence("work/a.cs", 0, 0, SharedDocument: true), HexLinkHost.PresenceOf(room));
+        Assert.Equal(new HexLinkPresence("work/a.cs", 0, 0, SharedDocument: true), HexLinkHost.PresenceOf(Wire(room)));
 
         var plain = new HexLinkPresence("work/a.cs", 4, 2, 4, 9, 8, 13);
-        Assert.Equal(plain, HexLinkHost.PresenceOf(HexLinkHost.PresenceJson(plain)));
+        Assert.Equal(plain, HexLinkHost.PresenceOf(Wire(HexLinkHost.PresenceJson(plain))));
+
+        // Link receives parsed JSON numbers, not the typed values added to the outgoing object.
+        static JsonObject Wire(JsonObject message) => JsonNode.Parse(message.ToJsonString())!.AsObject();
     }
 
     [Fact]
