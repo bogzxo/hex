@@ -14,6 +14,10 @@
 #   --notary-profile NAME        submit the zip or dmg to Apple's notary service with the stored credentials
 #                                `xcrun notarytool store-credentials NAME` made, wait, and staple the ticket. Only with
 #                                a Developer ID --identity. Nothing is sent anywhere without this.
+#   --notary-key FILE --notary-key-id ID --notary-issuer ID
+#                                the same with an App Store Connect API key (the .p8 file) instead of a stored profile,
+#                                what a build on a machine nobody logs into uses. The app is notarized and stapled
+#                                before the zip and the dmg are made from it, the dmg is notarized and stapled too.
 #   --skip-publish               use the publish output of an earlier run in the out folder.
 #   --bundle-id ID               the CFBundleIdentifier, com.bogzxo.hex by default.
 #   --channel dev                the nightly's channel (dotnet publish -p:HexChannel=dev, with its own icon).
@@ -36,7 +40,7 @@ arch=""
 out="$repo/artifacts/macos"
 identity="-"
 zip=0; dmg=0; skip=0
-notary=""
+notary=""; notary_key=""; notary_key_id=""; notary_issuer=""
 bundle_id="com.bogzxo.hex"
 channel=""
 extra=()
@@ -49,6 +53,9 @@ while [ $# -gt 0 ]; do
         --zip) zip=1; shift ;;
         --dmg) dmg=1; shift ;;
         --notary-profile) notary="$2"; shift 2 ;;
+        --notary-key) notary_key="$2"; shift 2 ;;
+        --notary-key-id) notary_key_id="$2"; shift 2 ;;
+        --notary-issuer) notary_issuer="$2"; shift 2 ;;
         --skip-publish) skip=1; shift ;;
         --bundle-id) bundle_id="$2"; shift 2 ;;
         --channel) channel="$2"; shift 2 ;;
@@ -62,8 +69,12 @@ if [ "$(uname -s)" != "Darwin" ]; then
     echo "make-app.sh makes a macOS app, run it on a Mac" >&2
     exit 1
 fi
-if [ -n "$notary" ] && [ "$identity" = "-" ]; then
+if { [ -n "$notary" ] || [ -n "$notary_key" ]; } && [ "$identity" = "-" ]; then
     echo "make-app.sh: notarizing needs a Developer ID --identity, not an ad hoc signature" >&2
+    exit 2
+fi
+if [ -n "$notary_key" ] && { [ -z "$notary_key_id" ] || [ -z "$notary_issuer" ]; }; then
+    echo "make-app.sh: --notary-key needs --notary-key-id and --notary-issuer" >&2
     exit 2
 fi
 
@@ -176,9 +187,31 @@ sign "$app/Contents/MacOS/Hex"
 sign "$app"
 codesign --verify --deep --strict --verbose=2 "$app"
 
+# Apple's notary service: the app goes first, in a zip, and its ticket is stapled into it, so the zip and the dmg made
+# from it afterwards have the ticket with them (a zip made before would not)
+notarizing=0
+{ [ -n "$notary" ] || [ -n "$notary_key" ]; } && notarizing=1
+notarize() {
+    local what="$1" log="$work/notary.log"
+    echo "== notarizing $what (Apple's notary service)"
+    if [ -n "$notary" ]; then
+        xcrun notarytool submit "$what" --keychain-profile "$notary" --wait | tee "$log"
+    else
+        xcrun notarytool submit "$what" --key "$notary_key" --key-id "$notary_key_id" --issuer "$notary_issuer" --wait | tee "$log"
+    fi
+    # notarytool says how it went, and can exit 0 on a package Apple turned down
+    grep -q "status: Accepted" "$log" || { echo "make-app.sh: Apple did not accept $what" >&2; exit 1; }
+}
+if [ "$notarizing" = 1 ]; then
+    ditto -c -k --sequesterRsrc --keepParent "$app" "$work/notarize.zip"
+    notarize "$work/notarize.zip"
+    xcrun stapler staple "$app"
+    xcrun stapler validate "$app"
+fi
+
 name="Hex-$version-macos-$arch"
 package=""
-if [ "$zip" = 1 ] || { [ -n "$notary" ] && [ "$dmg" = 0 ]; }; then
+if [ "$zip" = 1 ]; then
     package="$out/$name.zip"
     rm -f "$package"
     ditto -c -k --sequesterRsrc --keepParent "$app" "$package"
@@ -194,17 +227,9 @@ if [ "$dmg" = 1 ]; then
     hdiutil create -quiet -volname "Hex $version" -srcfolder "$dmgroot" -fs HFS+ -format UDZO "$package"
     [ "$identity" != "-" ] && codesign --force --sign "$identity" --timestamp "$package"
     echo "== $package"
-fi
-
-if [ -n "$notary" ]; then
-    echo "== notarizing $package (the notary service of Apple, with the credentials of $notary)"
-    xcrun notarytool submit "$package" --keychain-profile "$notary" --wait
-    if [ "$package" = "$out/$name.dmg" ]; then
+    if [ "$notarizing" = 1 ]; then
+        notarize "$package"
         xcrun stapler staple "$package"
-    else
-        xcrun stapler staple "$app"
-        rm -f "$package"
-        ditto -c -k --sequesterRsrc --keepParent "$app" "$package"
     fi
 fi
 

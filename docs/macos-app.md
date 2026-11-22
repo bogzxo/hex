@@ -90,6 +90,34 @@ credentials. Without them the script makes an ad hoc signature (`--identity -`),
 `codesign --verify --deep --strict` on any Mac and runs where it was built, but `spctl --assess` says *rejected* for it and a
 copy downloaded to another Mac is quarantined and has to be opened by hand (above).
 
+## GitHub release (CI)
+
+`.github/workflows/build.yml` has a `macos-app` job (runner `macos-15`, Apple silicon). It checks out the same commits as the
+other jobs (hex with its submodules, and the engine on development in `horizon/`), installs .NET 11 and runs
+`scripts/macos/make-app.sh --arch arm64 --zip --dmg`. The packages are `Hex-<version>-macos-arm64.dmg` and `.zip`, uploaded as
+the workflow artifact `Hex-macos-arm64-app` and attached to the GitHub release by the `release` job with the others, and
+to the nightly releases (`nightly.yml`). The older `Hex-osx-arm64.zip` of the `build` job (what Hex Setup and the update check
+download) is unchanged. The job summary says whether the app was signed with a Developer ID or only ad hoc.
+
+Without the secrets below the job still runs and the app is ad hoc signed. With them it imports the certificate into a keychain
+of its own, signs every library, the program and the bundle with the hardened runtime, has Apple's notary service check the
+app (and the dmg) with an API key, staples the tickets, and the job fails if Apple turns the app down.
+
+Secrets to add in the repository's Settings, Secrets and variables, Actions:
+
+| Secret | What |
+| --- | --- |
+| `MACOS_CERT_P12_BASE64` | the Developer ID Application certificate with its private key exported from Keychain Access as .p12, then `base64 -i cert.p12` |
+| `MACOS_CERT_PASSWORD` | the password the .p12 was exported with |
+| `MACOS_TEAM_ID` | the ten character Team ID (developer.apple.com, Membership) |
+| `MACOS_NOTARY_KEY_BASE64` | an App Store Connect API key (.p8, role Developer) as `base64 -i AuthKey_XXXX.p8` |
+| `MACOS_NOTARY_KEY_ID` | that key's Key ID |
+| `MACOS_NOTARY_ISSUER` | the Issuer ID of App Store Connect, Users and Access, Integrations |
+
+The certificate secrets alone give a signed but not notarized app; all six give a notarized one. An Intel or universal job is left
+as a marked TODO in the workflow: it has not been run. The same signing and notarizing by hand:
+`scripts/macos/make-app.sh --identity "<name or hash>" --notary-key AuthKey.p8 --notary-key-id ID --notary-issuer ISSUER --zip --dmg`.
+
 ## Updates
 
 The Windows installer and updater (Hex.Installation) don't apply here: a new Hex.app replaces the old one in

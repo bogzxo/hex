@@ -90,7 +90,7 @@ jobs:
           run="${TAG#nightly-}"
           short="${SHA:0:7}"
           notes="The development branch at $SHA, built $(date -u '+%d %B %Y'). A nightly build, for trying what's coming. Install it with Hex Setup's Nightly choice, beside the stable release as Hex Dev."
-          gh release create "$TAG" dist/*.zip dist/*.exe --repo "$GITHUB_REPOSITORY" --target "$SHA" --prerelease \
+          gh release create "$TAG" dist/*.zip dist/*.exe dist/*.dmg --repo "$GITHUB_REPOSITORY" --target "$SHA" --prerelease \
             --title "Hex $version nightly $run ($short)" --notes "$notes"
 
       - name: Keep the last few
