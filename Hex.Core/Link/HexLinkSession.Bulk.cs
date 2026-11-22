@@ -113,18 +113,27 @@ internal sealed partial class HexLinkSession
         bool ordinary = bulkReceivers.TryGetValue(purpose, out BulkReceiver receiver);
         long id = HexLinkData.Long(parameters, "stream")!.Value;
         long length = HexLinkData.Long(parameters, "length")!.Value;
-        BulkResponse? response = ordinary ? null : FindBulkResponse(purpose, length, HexLinkData.Object(parameters, "metadata"));
+        JsonObject? metadata = HexLinkData.Object(parameters, "metadata");
+        if (!ordinary && metadata?.ContainsKey("request") != true)
+            throw HexLinkException.NotFound("There is no receiver for this Link bulk purpose.");
+        BulkResponse? response = ordinary ? null : FindBulkResponse(purpose, length, metadata);
         if (ordinary)
             RequireBulkRights(receiver.Rights);
         if (!downloadSlots.Wait(0))
             throw new HexLinkException(HexLinkErrors.BUSY, "Too many Link bulk downloads are already open.");
-        if (response is not null && (!response.Allowed || !response.Claim()))
+        IncomingBulk download;
+        try
+        {
+            if (response is not null && (!response.Allowed || !response.Claim()))
+                throw RefuseBulkResponse("The Link bulk response expired or was already opened.");
+            download = new IncomingBulk(this, id, length, receiver, response);
+        }
+        catch
         {
             downloadSlots.Release();
-            throw RefuseBulkResponse("The Link bulk response expired or was already opened.");
+            throw;
         }
 
-        var download = new IncomingBulk(this, id, length, receiver, response);
         if (!downloads.TryAdd(id, download))
         {
             download.DisposeReservation();

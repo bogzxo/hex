@@ -7,7 +7,8 @@ internal sealed partial class HexLinkSession
 {
     private readonly ConcurrentDictionary<(string Purpose, string Id), BulkResponse> bulkResponses = new();
 
-    // A response is the only upload allowed without a reverse grant. Its caller already accepted this exact offer.
+    // A response is the only upload allowed without a reverse grant. Its caller accepted this exact offer.
+    // The permission callback runs on the session threads before each frame. It must be cheap, thread-safe and nonthrowing.
     internal IDisposable ExpectBulkResponse(string purpose, string id, long length, string hash, TimeSpan lease,
         Func<bool> canReceive, Func<IHexLinkBulkSink> open)
     {

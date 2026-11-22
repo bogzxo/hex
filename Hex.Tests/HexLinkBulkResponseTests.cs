@@ -24,6 +24,7 @@ public sealed class HexLinkBulkResponseTests
         string id = Guid.NewGuid().ToString("N");
         string hash = Hash(payload);
         var sink = new Staging();
+        Assert.Equal(HexLinkErrors.NOT_FOUND, await CodeOf(a.OpenBulkAsync("ordinary/future", payload.Length, cancel: cancel)));
         Assert.Equal(HexLinkErrors.NOT_ALLOWED, await CodeOf(a.OpenBulkAsync(PURPOSE, payload.Length, Offer(id, hash), cancel)));
         using var expected = b.ExpectBulkResponse(PURPOSE, id, payload.Length, hash, TimeSpan.FromMinutes(1), static () => true, () => sink);
         Assert.Equal(HexLinkErrors.NOT_ALLOWED, await CodeOf(otherA.OpenBulkAsync(PURPOSE, payload.Length, Offer(id, hash), cancel)));
