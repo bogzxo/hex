@@ -7,13 +7,22 @@ internal sealed partial class DawnScene
 {
     private readonly ConcurrentDictionary<int, string> privateAgentRoots = new();
 
-    private string LinkPrivateStorage => Path.Combine(linkData.Length > 0 ? linkData : Path.Combine(HexData.Root, LINK_FOLDER), "wt");
+    private const string LINK_PRIVATE_STORAGE_UNAVAILABLE = "No private Link storage is available outside the shared folders.";
+
+    private string? LinkPrivateStoragePath => HexLinkPrivateStorage.Choose(
+        linkData.Length > 0 ? linkData : Path.Combine(HexData.Root, LINK_FOLDER),
+        options.SelfTest ? Path.Combine(Path.GetTempPath(), "hex-link-selftest-data") : PlatformPaths.DataRoot,
+        linkServices?.Workspace.Folders ?? []);
+
+    private string LinkPrivateStorage => LinkPrivateStoragePath ?? throw new IOException(LINK_PRIVATE_STORAGE_UNAVAILABLE);
 
     private string? LinkAgentFolder(HexAgentChat chat)
     {
         if (chat.LinkDraft is not { } id)
             return explorer.workspace.Folders.FirstOrDefault() ?? Directory.GetCurrentDirectory();
-        string root = Path.Combine(LinkPrivateStorage, "drafts", id.ToString("N"), "tree");
+        if (LinkPrivateStoragePath is not { } storage)
+            return null;
+        string root = Path.Combine(storage, "drafts", id.ToString("N"), "tree");
         if (!File.Exists(Path.Combine(root, ".git")))
             return null;
         privateAgentRoots[chat.Id] = root;
@@ -27,8 +36,13 @@ internal sealed partial class DawnScene
         if (mode != "private" && (mode == "live" || parentDraft is null))
             yield break;
 
+        if (LinkPrivateStoragePath is not { } storage)
+        {
+            yield return McpToolResult.Error(LINK_PRIVATE_STORAGE_UNAVAILABLE);
+            yield break;
+        }
         string? folder = args.String("folder") ?? (parentDraft is { } inherited
-            ? HexLinkPrivateWorktree.RecordedFolder(LinkPrivateStorage, inherited)?.Name : null);
+            ? HexLinkPrivateWorktree.RecordedFolder(storage, inherited)?.Name : null);
         Task<string?> setup = LinkCreateAgentDraft(chat, folder, linkCancel?.Token ?? CancellationToken.None);
         while (!setup.IsCompleted)
             yield return null;

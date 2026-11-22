@@ -2,12 +2,13 @@ namespace Hex.Dawn;
 
 internal sealed partial class DawnScene
 {
-    private sealed record LinkPublicationRuntime(LinkServices Services, HexLinkWorktreePublication Publication, HexLinkCoalesce Pump);
+    private sealed record LinkPublicationRuntime(LinkServices Services, string Storage, HexLinkWorktreePublication Publication, HexLinkCoalesce Pump);
     private LinkPublicationRuntime? linkPublicationRuntime;
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, HexLinkCoalesce> privateFollow = new(PlatformPaths.Comparer);
 
     private LinkPublicationRuntime? CurrentLinkPublication =>
-        Volatile.Read(ref linkPublicationRuntime) is { } active && ReferenceEquals(active.Services, linkServices) ? active : null;
+        Volatile.Read(ref linkPublicationRuntime) is { } active && ReferenceEquals(active.Services, linkServices) &&
+        LinkPrivateStoragePath is { } storage && PlatformPaths.Same(active.Storage, storage) ? active : null;
 
     private readonly SemaphoreSlim publicationStarting = new(1, 1);
 
@@ -16,9 +17,7 @@ internal sealed partial class DawnScene
         if (linkByTest || CurrentLinkPublication is not null || linkServices is not { } services)
             return;
 
-        string storage = Path.GetFullPath(LinkPrivateStorage);
-        IReadOnlyList<HexLinkFolder> folders = services.Workspace.Folders;
-        if (folders.Count == 0 || folders.Any(folder => PlatformPaths.IsUnder(storage, folder.Path)))
+        if (services.Workspace.Folders.Count == 0 || LinkPrivateStoragePath is null)
             return;
 
         CancellationToken stop = linkCancel?.Token ?? CancellationToken.None;
@@ -76,7 +75,8 @@ internal sealed partial class DawnScene
         Action<HexLinkFolder, HexLinkCommittedSet, string> releaseLive, CancellationToken cancel)
     {
         var services = linkServices ?? throw new InvalidOperationException("Link is off.");
-        var publication = new HexLinkWorktreePublication(services, Path.Combine(LinkPrivateStorage, "pub"),
+        string storage = LinkPrivateStorage;
+        var publication = new HexLinkWorktreePublication(services, Path.Combine(storage, "pub"),
             recipients, deferLive, acknowledgeLive, installReplicaBaseline,
             folder =>
             {
@@ -104,7 +104,7 @@ internal sealed partial class DawnScene
                 }
             }
         });
-        LinkPublicationRuntime? old = Interlocked.Exchange(ref linkPublicationRuntime, new(services, publication, pump));
+        LinkPublicationRuntime? old = Interlocked.Exchange(ref linkPublicationRuntime, new(services, storage, publication, pump));
         old?.Pump.Dispose();
         pump.Poke();
         PostLink(() => { linkDirty = true; LinkMoved(); });

@@ -63,14 +63,15 @@ internal sealed partial class DawnScene
 
     private async Task<HexLinkPrivateWorktree> LinkOpenStoredDraft(Guid id, CancellationToken cancel)
     {
-        if (linkPrivateDrafts.TryGetValue(id, out HexLinkPrivateWorktree? existing))
-            return existing;
         string storage = LinkPrivateStorage;
+        if (linkPrivateDrafts.TryGetValue(id, out HexLinkPrivateWorktree? existing) && PlatformPaths.IsUnder(existing.Root, storage))
+            return existing;
         HexLinkFolder source = HexLinkPrivateWorktree.RecordedFolder(storage, id)
             ?? throw new IOException("The private worktree is unavailable.");
         HexLinkPrivateWorktree loaded = await HexLinkPrivateWorktree.Open(storage, id, source, null,
             () => linkServices?.Excludes ?? HexExcludes.Usual, cancel);
-        return linkPrivateDrafts.GetOrAdd(id, loaded);
+        return linkPrivateDrafts.AddOrUpdate(id, loaded, (_, cached) =>
+            PlatformPaths.IsUnder(cached.Root, storage) ? cached : loaded);
     }
 
     private HexLinkWorktreeGateOptions LinkWorktreeGateOf(HexLinkPrivateWorktree draft, string? tests)

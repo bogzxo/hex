@@ -18,11 +18,16 @@ internal sealed partial class DawnScene
              services.Workspace.Folders.FirstOrDefault(item => PlatformPaths.Comparer.Equals(item.Name, folder))) is not { } shared)
             return;
 
+        if (LinkPrivateStoragePath is not { } storage)
+        {
+            holder.Add(LinkLine(LINK_PRIVATE_STORAGE_UNAVAILABLE));
+            return;
+        }
         string path = Path.GetFullPath(shared.Path);
         if (PlatformPaths.Comparison != StringComparison.Ordinal)
             path = path.ToUpperInvariant();
         var id = new Guid(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes("device\n" + path)).AsSpan(0, 16));
-        string saved = Path.Combine(LinkPrivateStorage, "drafts", id.ToString("N"), "state.json");
+        string saved = Path.Combine(storage, "drafts", id.ToString("N"), "state.json");
         if (!File.Exists(saved))
         {
             holder.Add(LinkButton("Start private worktree", "git-branch", () => RunPrivateDeviceAction(id, async stop =>
