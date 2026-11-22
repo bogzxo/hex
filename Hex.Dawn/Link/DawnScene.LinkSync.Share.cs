@@ -27,15 +27,28 @@ internal sealed partial class DawnScene
         return canPush != otherCanPush ? canPush : !dialled;
     }
 
+    // A null result leaves the pair's election in force. A bound pair needs the same pinned epoch on both ends.
+    internal static bool? LinkBoundSyncOwner(string self, HexLinkAuthority? local, HexLinkAuthority? remote)
+    {
+        if (local is null && remote is null)
+            return null;
+
+        return local is not null && remote is not null && local.Epoch == remote.Epoch
+            && local.DeviceId.Equals(remote.DeviceId, StringComparison.OrdinalIgnoreCase)
+            && local.DeviceId.Equals(self, StringComparison.OrdinalIgnoreCase);
+    }
+
     // A matching workspace folder starts on connect unless the person turned it off. The sync still checks Git identity.
     private void LinkSyncStartSharedFolders(HexLinkPeer peer)
     {
         if (linkServices is not { } services)
             return;
 
+        bool elected = LinkAutoSyncOwner(peer.Session.Connection.Dialled, peer.Session.Connection.Rights, peer.Granted);
         string[] common = [.. services.Workspace.Folders
-            .Where(local => !peer.ChosenSyncFolders.Contains(local.Name, PlatformPaths.Comparer)
-                && peer.Workspace.Folders.Any(remote => PlatformPaths.Comparer.Equals(local.Name, remote.Name)))
+            .Where(local => peer.Workspace.Folders.Any(remote => PlatformPaths.Comparer.Equals(local.Name, remote.Name)
+                && (LinkBoundSyncOwner(services.Device.Id, local.Authority, remote.Authority)
+                    ?? (elected && !peer.ChosenSyncFolders.Contains(local.Name, PlatformPaths.Comparer)))))
             .Select(local => local.Name)];
         if (common.Length == 0)
             return;
