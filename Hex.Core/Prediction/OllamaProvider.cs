@@ -41,6 +41,44 @@ internal sealed class OllamaProvider(HttpClient http, Uri api, string model) : I
     }
 
     /// <summary>
+    /// Asks the server to load the model now, a request with no prompt, so the load (13 s for Zeta 2 here) isn't paid on
+    /// the first keystroke, and keep it for half an hour. Null when it's loaded or when nothing is worth saying, else
+    /// what is wrong with the server or the model.
+    /// </summary>
+    public async Task<PredictionException?> Preload(CancellationToken cancel)
+    {
+        try
+        {
+            using var message = new HttpRequestMessage(HttpMethod.Post, api)
+            {
+                Content = PredictionHttp.Json(writer =>
+                {
+                    writer.WriteStartObject();
+                    writer.WriteString("model", model);
+                    writer.WriteString("keep_alive", "30m");
+                    writer.WriteEndObject();
+                }),
+            };
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+            deadline.CancelAfter(Loading);
+            using HttpResponseMessage response = await PredictionHttp.Send(http, message, deadline, cancel, api, null).ConfigureAwait(false);
+            return null;
+        }
+        catch (PredictionException e) when (e.Status == PredictionStatus.NoSuchModel)
+        {
+            return await Explained(e, cancel).ConfigureAwait(false);
+        }
+        catch (PredictionException e) when (e.Status == PredictionStatus.Unreachable)
+        {
+            return e;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// A "no such model" with what the user needs to put it right: the model and the server by name, what the server does
     /// have (asked of /api/tags, a few seconds at most) and where Ollama reads its models from.
     /// </summary>

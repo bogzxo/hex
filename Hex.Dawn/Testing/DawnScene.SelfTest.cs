@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 
 using Horizon.HIDL.Runtime;
 using Horizon.UI;
@@ -214,6 +214,7 @@ internal sealed partial class DawnScene
         ("tree-looks", "the explorer and a file's Properties in every look Hex comes with at 100, 150 and 200%, several picked, a folder and no workspace", TestTreeLooks),
         ("problems", "search, severity groups, colours and navigation in the problems panel", TestProblems),
         ("prediction", "edit prediction against a fake model server: ghost text, Tab, typing through, cancelling, a diff, the status item, secrets never sent, errors said, frame time", TestPrediction),
+        ("prediction-live", "edit prediction against a real model, only when HEX_LIVE_PREDICT names the server: the load while frames are timed, ghost text, Tab, Escape, typing through and on", TestPredictionLive),
         ("updates", "update close-prompt cancellation and failed handoff preserve the editor", TestUpdateHandoff),
         ("save-integrity", "encoding, Save As and failed-write preservation", TestDocumentSave),
         ("lossless", "every .hor of the engine's Assets and Hex's own saved unchanged byte for byte, a hand written layout edited in place", TestLossless),

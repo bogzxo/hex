@@ -206,6 +206,35 @@ internal sealed class PredictionEngine(TimeProvider time)
         pending = false;
     }
 
+    /// <summary>
+    /// Asked when predictions are about to be wanted (switched on, a code file on screen): an Ollama server is told to load
+    /// the model, once per set of options, so the first keystroke doesn't wait for the load. A server or model that isn't
+    /// there is the status at once, not only after the first request.
+    /// </summary>
+    public void Warm()
+    {
+        PredictionOptions? options = Options();
+        if (options is not { On: true } || options == warmedFor)
+            return;
+        warmedFor = options;
+        if ((ProviderOverride ?? Provider(options)) is not OllamaProvider ollama)
+            return;
+
+        _ = Task.Run(async () =>
+        {
+            PredictionException? problem = await ollama.Preload(default).ConfigureAwait(false);
+            lock (gate)
+            {
+                if (warmedFor != options || Status is PredictionStatus.Waiting)
+                    return;
+                if (problem is not null)
+                    SetStatus(problem.Status, problem.Message);
+                else if (Status is PredictionStatus.Unreachable or PredictionStatus.NoSuchModel)
+                    SetStatus(PredictionStatus.Ok, "");
+            }
+        });
+    }
+
     // Cancels the request in flight, which closes its connection
     private void Stop(bool counted)
     {
@@ -218,6 +247,8 @@ internal sealed class PredictionEngine(TimeProvider time)
         // Mark the request cancelled now, but run provider callbacks off the editor's thread.
         _ = cancel.CancelAsync();
     }
+
+    private PredictionOptions? warmedFor;
 
     private IPredictionProvider? Provider(PredictionOptions options)
     {

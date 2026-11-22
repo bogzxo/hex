@@ -41,6 +41,9 @@ internal sealed partial class DawnScene
     // How many times the first-time notice was given this run, for the self test
     private int predictionNotices;
 
+    // Called every tick, for a self test to time the editor's updates; null otherwise
+    private Action? predictionTickProbe;
+
     // The server, model and failure the notice about a missing model or server was last given for
     private string? predictionFailureNoticed;
 
@@ -171,6 +174,7 @@ internal sealed partial class DawnScene
     /// <summary>Every tick, what the item says, written only when it changes. Nothing is made while it doesn't.</summary>
     private void UpdatePredictionItem()
     {
+        predictionTickProbe?.Invoke();
         bool code = !LayoutTools && IsPredictedCode(document);
         PredictionStatus status = predictions.Status;
         if (status == PredictionStatus.Waiting)
@@ -198,6 +202,9 @@ internal sealed partial class DawnScene
         predictionItemStatusText = predictions.StatusText;
         if (state == PredictionItemState.Hidden)
             return;
+
+        if (state == PredictionItemState.On)
+            predictions.Warm();
 
         // A server or model that isn't there is said once in a notice, not only in the item's tooltip; again only when
         // the server, the model or the way it failed changes

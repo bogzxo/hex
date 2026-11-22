@@ -142,6 +142,29 @@ public sealed class PredictionProviderTests
         Assert.Contains("OLLAMA_MODELS", failure.Message);
     }
 
+    [Fact]
+    public async Task Preloading_sends_the_model_and_a_keep_alive_and_no_prompt()
+    {
+        var server = FakeServer.Answering(HttpStatusCode.OK, "{\"done\":true}");
+        var provider = Ollama(server);
+
+        Assert.Null(await provider.Preload(default));
+
+        string body = Assert.Single(server.Sent).Body;
+        Assert.Contains("\"keep_alive\":\"30m\"", body);
+        Assert.DoesNotContain("prompt", body);
+    }
+
+    [Fact]
+    public async Task Preloading_a_model_the_server_hasnt_got_says_so()
+    {
+        var provider = Ollama(FakeServer.Answering(HttpStatusCode.NotFound, "{\"error\":\"model 'zeta' not found\"}"));
+
+        PredictionException? problem = await provider.Preload(default);
+
+        Assert.Equal(PredictionStatus.NoSuchModel, problem?.Status);
+        Assert.Contains("OLLAMA_MODELS", problem?.Message);
+    }
     [Theory]
     [InlineData(HttpStatusCode.Unauthorized)]
     [InlineData(HttpStatusCode.Forbidden)]
