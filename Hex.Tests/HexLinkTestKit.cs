@@ -140,11 +140,12 @@ internal static class HexLinkTestKit
 internal sealed class LinkTools : IMcpTools
 {
     public ConcurrentQueue<(string Name, JsonObject Arguments)> Called { get; } = new();
+    public HexCodeIndex? ReadIndex { get; set; }
 
     public IReadOnlyList<McpTool> Tools { get; } =
     [
         .. HexLinkAllowed.Names.Select(name => new McpTool(name, name, $"The stand in for {name}.",
-            name == "hex_read" ? McpSchema.Object([("path", McpSchema.String("The file."))], "path")
+            name == "hex_read" ? McpSchema.Object([("path", McpSchema.String("The file.")), ("symbol", McpSchema.String("The symbol."))], "path")
             : McpSchema.Object([("id", McpSchema.Integer("A chat.")), ("text", McpSchema.String("Text.")), ("allow", McpSchema.Flag("Allow.")), ("request", McpSchema.Integer("Which.")),
                 ("path", McpSchema.String("A path.")), ("name", McpSchema.String("A name.")), ("clear", McpSchema.Flag("Clear.")), ("confirm", McpSchema.Flag("Confirm."))]))),
         new McpTool("hex_terminal_run", "Terminal", "Runs a command.", McpSchema.Object([("command", McpSchema.String("What."))], "command")),
@@ -154,6 +155,11 @@ internal sealed class LinkTools : IMcpTools
     public Task<McpToolResult> Call(string name, JsonObject arguments, CancellationToken cancel)
     {
         Called.Enqueue((name, arguments));
+        if (name == "hex_read" && ReadIndex is { } index)
+        {
+            HexAnswer answer = index.Read(arguments.String("path"), arguments.String("symbol"), null, null, false, 3000);
+            return Task.FromResult(answer.Failed ? McpToolResult.Error(answer.Text) : McpToolResult.Text(answer.Text));
+        }
         return Task.FromResult(McpToolResult.Text($"{name} {arguments.ToJsonString()}"));
     }
 }

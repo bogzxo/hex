@@ -41,6 +41,11 @@ internal sealed partial class HexLinkHost
         Need(HexLinkRights.View, method);
         string path = HexLinkDocumentProtocol.Field(parameters, "path", HexLinkFiles.MOST_PATH);
         string full = ResolveFile(path);
+        // A room can read the working file on open and write it on save. Serialize both with taking a hold.
+        await using var fileLease = method is "doc2/open" or "doc2/save"
+            ? await HexLinkPublicationFence.ForRoot(full).EnterLive(cancel).ConfigureAwait(false) : null;
+        if (HoldOf(path, full) is not null)
+            throw new HexLinkException(HexLinkErrors.DOCUMENT_HELD, $"Shared editing is paused while {path} is held on {services.Device.Name}.");
         if (!services.OwnsSharedDocument(path))
             throw HexLinkException.NotFound("This device no longer owns the shared folder.");
         var rooms = services.Documents?.Rooms ?? throw HexLinkException.NotFound("No documents are shared.");

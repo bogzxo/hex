@@ -23,6 +23,9 @@ internal static class HexLinkErrors
     // A prediction this machine's model couldn't make, or doesn't share (data.status says how, in a word)
     public const int PREDICTION_FAILED = -32006;
 
+    // The authority paused shared editing for a file it holds. Peers can still edit their local file.
+    public const int DOCUMENT_HELD = -32007;
+
     // What a link's own end says when the link went before an answer came, never on the wire
     public const int CLOSED = -32099, TIMED_OUT = -32098;
 }

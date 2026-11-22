@@ -36,6 +36,7 @@ internal sealed partial class HexLinkDocumentRoom
     {
         lock (gate)
         {
+            RequireCurrentRoom();
             if (online.GetValueOrDefault(scope) != connection || !members.TryGetValue(scope, out var caller))
                 throw HexLinkException.NotFound("Join the shared document before editing it as an agent.");
             var basis = authority.View();

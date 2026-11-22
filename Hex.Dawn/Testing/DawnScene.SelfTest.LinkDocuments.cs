@@ -55,6 +55,8 @@ internal sealed partial class DawnScene
             return;
         }
 
+        if (role == "editor")
+            LinkDocumentHoldTestPeer(work);
         if (LinkLiveOf(document) is not { } shared || shared.Draft is not null)
             return;
 
@@ -336,6 +338,7 @@ internal sealed partial class DawnScene
         });
         Await("a save by B wrote the authority buffer and synced the same bytes", () =>
             files.All(file => ReadLinkTestFile(file) == "named"));
+        TestLinkDocumentHold(test, folder, peerWork, peerFolder);
         TestLinkDocumentSave(test, folder, peerWork, readerWork, relayHome);
         test.Run(() =>
         {

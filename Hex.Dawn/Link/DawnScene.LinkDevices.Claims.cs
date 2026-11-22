@@ -42,10 +42,13 @@ internal sealed partial class DawnScene
         }
     }
 
-    private void LinkExplorerFileMenu(ExplorerEntry entry)
+    private void LinkExplorerFileMenu(ExplorerEntry entry, bool includeClaims = true)
     {
         Menu menu = explorer.ExplorerMenu(entry);
-        AddLinkClaimMenu(menu, entry.Path);
+        if (includeClaims)
+            AddLinkClaimMenu(menu, entry.Path);
+        if (!entry.IsFolder)
+            AddLinkHoldMenu(menu, entry.Path);
         Context.Windows.Menu(menu);
     }
 

@@ -34,7 +34,8 @@ internal sealed partial class DawnScene
                         conflicts.Count, skipped.Count, sync.PullOnly, sync.FilesDone, sync.FilesTotal, sync.BytesDone, sync.BytesTotal,
                         sync.Queued, sync.GitFollowIssue ?? sync.Detail,
                         [.. conflicts.Take(HexLinkSyncReport.MAX_SAMPLES).Select(row => new HexLinkSyncSkipped(row.Path, row.Kind))],
-                        [.. skipped.Take(HexLinkSyncReport.MAX_SAMPLES)], sync.Held);
+                        [.. skipped.OrderByDescending(row => row.Why.StartsWith(HELD_REASON, StringComparison.Ordinal))
+                            .Take(HexLinkSyncReport.MAX_SAMPLES)], sync.Held);
                 })];
         }
     }

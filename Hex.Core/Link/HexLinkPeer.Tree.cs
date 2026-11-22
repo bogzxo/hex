@@ -156,12 +156,15 @@ internal sealed partial class HexLinkPeer
     }
 
     /// <summary>A file of the other machine's deleted if it's still what was read (its hash), conflict otherwise, not found when it's gone.</summary>
-    public async Task Delete(string path, string baseHash, CancellationToken cancel = default)
+    public async Task Delete(string path, string baseHash, CancellationToken cancel = default, bool heldSubmission = false)
     {
-        JsonNode? answer = await AskWithRelay("fs/delete", new JsonObject
+        var request = new JsonObject
         {
             ["path"] = path, ["base"] = baseHash, ["accept_held"] = true,
-        }, cancel);
+        };
+        if (heldSubmission)
+            request["held_submission"] = true;
+        JsonNode? answer = await AskWithRelay("fs/delete", request, cancel);
         if (answer is JsonObject said)
             HexLinkHoldReply.Check(said, Device);
     }

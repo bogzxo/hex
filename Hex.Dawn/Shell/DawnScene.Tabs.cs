@@ -102,6 +102,7 @@ internal sealed partial class DawnScene
             tab.TitleColor = TabGitColor(shown);
             tab.Tag = shown;
             LinkClaimTab(shown, tab);
+            LinkHoldTabMark(shown, tab);
         }
 
         docTabs.Selected = documents.IndexOf(document);
@@ -153,6 +154,7 @@ internal sealed partial class DawnScene
         shown.Add(Said("tabs.copy_relative_path"), () => UIClipboard.Copy(tab.Path is { } path ? Relative(path) : tab.Name), icon: "file-symlink-file").IsEnabled = () => tab.Path is not null;
         shown.Add(Said("tabs.reveal_in_explorer"), () => RevealInExplorer(tab), icon: "files").IsEnabled = () => tab.Path is not null;
         AddLinkClaimMenu(shown, tab.Path);
+        AddLinkHoldMenu(shown, tab.Path);
         shown.AddSeparator();
         shown.Add(Said("file_properties.menu"), () => ShowPropertiesOf(tab.Path is { } path ? [path] : null), "Alt+Enter", "info");
         ContextMenu.ShowAt(chrome, compositor.Pointer.Position, shown);
