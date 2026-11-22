@@ -298,7 +298,24 @@ internal sealed partial class DawnScene
         test.Check("link-ui: Change opens the rights editor after pairing", () =>
             chrome.Root.Children.OfType<UIDialog>().Any(dialog => dialog.IsOpen &&
                 Descendants(dialog).OfType<Button>().Any(button => button.Label == Said("link.devices_preset_worker"))));
-        test.Run(() => chrome.Root.Children.OfType<UIDialog>().LastOrDefault(dialog => dialog.IsOpen)?.Close());
+        UIDialog? RightsDialog() => chrome.Root.Children.OfType<UIDialog>().LastOrDefault(dialog => dialog.IsOpen);
+        Button? ApprovalChoice(HexLinkPreApproval policy) => RightsDialog() is { } dialog
+            ? Descendants(dialog).OfType<Button>().FirstOrDefault(button => button.Label == LinkPreApprovalName(policy))
+            : null;
+        bool HasApprovalWarning() => RightsDialog() is { } dialog && Descendants(dialog).OfType<Label>().Any(label =>
+            label.Visible && label.Text == Said("link.devices_preapproval_warning"));
+        test.WaitFor(() => ApprovalChoice(HexLinkPreApproval.Edits) is { Primary: true, IsShownInHierarchy: true }, 4);
+        test.Settle(0.4f);
+        test.Click(() => Centre(ApprovalChoice(HexLinkPreApproval.Everything)));
+        test.WaitFor(HasApprovalWarning, 4);
+        test.Run(() =>
+        {
+            if (!HasApprovalWarning())
+                Console.WriteLine($"[Hex self-test] link-ui: Everything choice at {Centre(ApprovalChoice(HexLinkPreApproval.Everything))}, selected {ApprovalChoice(HexLinkPreApproval.Everything)?.Primary}.");
+        });
+        test.Check("link-ui: choosing Everything shows the unrestricted permissions warning", () =>
+            HasApprovalWarning() && LinkKnown.FirstOrDefault()?.RemotePreApproval == HexLinkPreApproval.Edits);
+        test.Run(() => RightsDialog()?.Close());
         ClickMore("link.devices_identity_details", local: true);
         test.Settle(0.3f);
 
@@ -775,6 +792,16 @@ internal sealed partial class DawnScene
             ShowLinkWindowForTest();
             linkInviteCopyForTest = copied => clipboard = copied;
         });
+        test.Run(() =>
+        {
+            var otherDevice = new HexLinkDevice(new string('A', 64), Device);
+            _ = LinkAskPerson(new HexLinkPairing(otherDevice, "123456", "127.0.0.1", CancellationToken.None), host: false);
+        });
+        test.WaitFor(() => linkPairingDialog is { IsOpen: true }, 5);
+        test.Check("link-ui: a code join without terms defaults to Collaborator", () =>
+            LinkPairingPending is { Host: false, Preset: HexLinkPreset.Collaborator } && LinkPairTicked == LINK_COLLABORATOR);
+        test.Run(() => CloseLinkPairingDialog());
+
         clickWindow("link.devices_invite");
         clickWindow("link.devices_preset_worker");
         test.Check("link-ui: worker preset grants View and Edit and requests Steer on the worker", () =>
