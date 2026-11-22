@@ -23,6 +23,12 @@ internal readonly record struct HexDocSplice(int Start, int Length, string Inser
     }
 }
 
+internal sealed class HexDocEpochConflict(string sharedText) :
+    InvalidOperationException("The shared document changed its checkpoint. Local edits remain in a draft.")
+{
+    public string SharedText { get; } = sharedText;
+}
+
 /// <summary>
 /// An optimistic participant. Deliberately keeps the authority's ordered frontier separate from unsent edits.
 /// A sent operation stays pending until it arrives in an ordered replay, even when the response was lost.
@@ -95,7 +101,13 @@ internal sealed class HexLinkDocumentReplica
             (sequence is null || Epoch != replay.Epoch || Author != response.Author || Revision != replay.Since))
         {
             if (HasPending)
-                throw new InvalidOperationException("The shared document changed its checkpoint. Local edits remain in a draft.");
+            {
+                var changed = new HexLinkDocumentSequence(checkpoint.Text);
+                foreach (HexDocOperation operation in replay.Operations)
+                    if (changed.Apply(operation) == HexDocApply.MissingDependency)
+                        break;
+                throw new HexDocEpochConflict(changed.View().Text);
+            }
             undo.Clear();
             redo.Clear();
             Epoch = checkpoint.Epoch;

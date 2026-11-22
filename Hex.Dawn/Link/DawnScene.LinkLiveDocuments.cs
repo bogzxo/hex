@@ -269,9 +269,9 @@ internal sealed partial class DawnScene
             shared.Tab.Editor.ReadOnly = shared.OriginalReadOnly || !shared.Replica.CanEdit || !HexLinkAllowed.Has(peer.Granted, HexLinkRights.Edit);
     }
 
-    private void LinkLiveDraft(LinkLiveDocument shared, string reason)
+    private void LinkLiveDraft(LinkLiveDocument shared, string reason, string? authorityText = null)
     {
-        shared.Draft = new(shared.Replica.View.Text, reason);
+        shared.Draft = new(authorityText ?? shared.Replica.View.Text, reason);
         while (shared.AgentEdits.TryDequeue(out var request))
             request.Done.TrySetResult(reason);
         shared.Tab.Editor.Document.SharedUndo = null;
@@ -540,7 +540,7 @@ internal sealed partial class DawnScene
             if (error is InvalidOperationException or ArgumentException
                 || error is HexLinkException { Code: HexLinkErrors.NOT_ALLOWED or HexLinkErrors.CONFLICT or HexLinkErrors.INVALID_REQUEST })
             {
-                LinkLiveDraft(shared, error.Message);
+                LinkLiveDraft(shared, error.Message, (error as HexDocEpochConflict)?.SharedText);
                 return;
             }
             if (error is not null)

@@ -299,6 +299,21 @@ public sealed class HexLinkDocumentSequenceTests
     }
 
     [Fact]
+    public void An_epoch_change_preserves_unsent_text_and_gives_the_draft_the_new_shared_version()
+    {
+        var room = new HexLinkDocumentRoom("work/note.txt", "seed");
+        var connection = new object();
+        var editor = new HexLinkDocumentReplica(room.Join(DeviceA.Id, connection, DeviceA));
+        editor.Capture(editor.View, "unsent");
+        var replacement = new HexLinkDocumentRoom(room.Path, "authority");
+        var changed = replacement.Join(DeviceA.Id, connection, DeviceA, editor.Epoch, editor.Revision);
+        var conflict = Assert.Throws<HexDocEpochConflict>(() => editor.Receive(changed));
+        Assert.Equal("authority", conflict.SharedText);
+        Assert.Equal("unsent", editor.View.Text);
+        Assert.True(editor.HasPending);
+    }
+
+    [Fact]
     public void Sixteen_editors_converge_after_random_overlaps_reorder_and_partitions()
     {
         string? overrideCount = Environment.GetEnvironmentVariable("HEX_LINK_CRDT_SEEDS");
