@@ -21,6 +21,8 @@ internal sealed partial class DawnScene
             throw new HexLinkException(HexLinkErrors.CONFLICT, $"{wire} is open in the editor. Close its tab before replacing it over Link.",
                 new JsonObject { ["editor_dirty"] = true });
 
-        return await HexLinkFiles.CompareAndReplace(full, wire, baseHash, source, length, expectedHash, cancel, executable);
+        string? hash = await HexLinkFiles.CompareAndReplace(full, wire, baseHash, source, length, expectedHash, cancel, executable);
+        QueuePrivateFollowForPath(full);
+        return hash;
     }
 }

@@ -9,7 +9,7 @@ internal sealed partial class DawnScene
     private void LinkShareJoined(HexLinkPeer peer)
     {
         if (HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))
-            _ = LinkPrepareSharedWorkspace(peer);
+            _ = LinkPreparePublicationAndShare(peer);
         LinkFilesJoined(peer);
         CurrentLinkPublication?.Pump.Poke();
         LinkPresenceJoined(peer);

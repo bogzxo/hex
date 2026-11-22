@@ -253,8 +253,12 @@ internal sealed partial class HexLinkSync
     // What the other side has of a path now, noted (under the gate)
     private void There(HexLinkTreeChange change)
     {
+        ObserveDuringPublication(change.Path);
         if (change.PreviousPath is { } previous && remoteCertified)
+        {
+            ObserveDuringPublication(previous);
             RemoveRemote(previous);
+        }
         if (change.Deleted)
             RemoveRemote(change.Path);
         else
@@ -693,7 +697,7 @@ internal sealed partial class HexLinkSync
             return;
         }
 
-        if (await ReconcileCase(wire, stop))
+        if (DefersPublication(wire) || await ReconcileCase(wire, stop))
             return;
 
         // This side's file hashed from what's on the disk now, never a hash cached by its length and time written, which
@@ -706,6 +710,8 @@ internal sealed partial class HexLinkSync
         bool firstComparison;
         await using (await HexLinkPublicationFence.ForRoot(full).EnterLive(stop))
         {
+            if (DefersPublication(wire))
+                return;
             if (!PlatformPaths.Comparer.Equals(full, Jailed(wire)))
                 throw new HexLinkException(HexLinkErrors.CONFLICT, "The file path changed before it was compared.");
             if (HexLinkTree.RegularFile(full, tree.Root) is { } info)

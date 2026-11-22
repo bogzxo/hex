@@ -56,6 +56,7 @@ internal sealed partial class DawnScene
                 return true;
             });
 
+            await LinkEnsureWorktreePublication();
             progress?.Report(new HexLinkProvisionProgress(HexLinkProvisionPhase.Sync, 0, 0, Skipped: got.Skipped));
             foreach (HexLinkFolder folder in folders)
                 LinkSyncRemember(deviceId, folder.Name, on: true);
@@ -94,6 +95,7 @@ internal sealed partial class DawnScene
 
         try
         {
+            await LinkEnsureWorktreePublication();
             await peer.ShareProvision(workspace.Name, cancel);
             return null;
         }

@@ -34,14 +34,26 @@ internal sealed partial class DawnScene
             var folder = linkServices!.Workspace.Folders.Single(folder => folder.Name == LINK_SYNC_FOLDER);
             string owner = linkServices.Device.Id;
             linkServices.FolderAuthorities.Bind(folder, new HexLinkAuthority(owner, 1));
-            await LinkActivateWorktreePublication(_ => [device!],
-                (_, _, _, _) =>
+            await LinkActivateWorktreePublication(PublicationRecipients,
+                (bound, set, peers, _) =>
                 {
+                    foreach (string recipient in peers)
+                        PublicationPair(bound, recipient)?.DeferPublication(set);
                     if (cut && Interlocked.Increment(ref cuts) == 1)
                         link?.PeerOf(device!)?.Session.Close("self-test lost the publication connection");
                     return Task.CompletedTask;
                 },
-                (_, _, _, _) => Task.CompletedTask, (_, _, _) => Task.CompletedTask, (_, _, _) => { }, cancel);
+                (bound, set, recipient, _) =>
+                {
+                    (PublicationPair(bound, recipient) ?? throw new HexLinkException(HexLinkErrors.BUSY, "waiting for the authority sync pair")).InstallPublicationBaseline(set);
+                    return Task.CompletedTask;
+                }, (_, _, _) => Task.CompletedTask,
+                (bound, set, recipient) => PublicationPair(bound, recipient)?.ReleasePublication(set), cancel);
+            if (await LinkSyncStart(device!, folder.Name, remember: false, automatic: true) is { } why)
+                throw new IOException(why);
+            if (PublicationPair(folder, device!) is not { PublicationPairReady: true } sync)
+                throw new IOException("The authority did not start its live sync pair.");
+            await sync.Flush();
             if (await LinkCreateAgentDraft(chat, folder.Name, cancel) is { } failure)
                 throw new IOException(failure);
             if (chat.LinkDraft is not { } id)
@@ -49,8 +61,12 @@ internal sealed partial class DawnScene
             draft = await LinkOpenStoredDraft(id, cancel);
         }
 
-        Task<HexLinkDraftPublication> Publish(string command) =>
-            draft!.Publish(LinkPrivatePublishRoute(draft.SharedFolder)!, new HexLinkWorktreeGateOptions(Build: command), false, cancel);
+        async Task<HexLinkDraftPublication> Publish(string command)
+        {
+            if (PublicationPair(draft!.SharedFolder, device!) is { PublicationPairReady: true } sync)
+                await sync.Flush();
+            return await draft.Publish(LinkPrivatePublishRoute(draft.SharedFolder)!, new HexLinkWorktreeGateOptions(Build: command), false, cancel);
+        }
 
         test.Run(() =>
         {
@@ -80,14 +96,13 @@ internal sealed partial class DawnScene
             if (peer is null)
                 return;
             device = peer.Device.Id;
-            LinkSyncStop(device, LINK_SYNC_FOLDER);
             agent = new HexAgentChat(++agentChatsMade, "link_worktree_fixture") { Name = "Private worktree test" };
             agentChats.Add(agent);
             step = OpenDraft(agent);
         });
         test.WaitFor(() => step?.IsCompleted == true, 30.0f);
         test.Run(() => { if (step?.Exception is { } error) Console.WriteLine("[Hex self-test] link-worktree: " + error.GetBaseException().Message); });
-        test.Check("link-worktree: a detached draft opened on the authority", () => step is { IsCompletedSuccessfully: true } && draft is not null && agent is not null && LinkAgentFolder(agent) == draft.Root);
+        test.Check("link-worktree: a detached draft opened while the authority live pair was running", () => step is { IsCompletedSuccessfully: true } && draft is not null && agent is not null && LinkAgentFolder(agent) == draft.Root);
         test.Run(() =>
         {
             if (draft is null)
@@ -106,6 +121,15 @@ internal sealed partial class DawnScene
             result is { IsCompletedSuccessfully: true, Result: { Gate.ExitCode: 7, Receipt: null } } &&
             ReadLinkTestFile(target) == Seed && ReadLinkTestFile(remote) == Seed &&
             !File.Exists(Path.Combine(theirs, "only-draft.txt")));
+
+        test.Run(() =>
+        {
+            if (draft is not null)
+                File.WriteAllText(Path.Combine(theirs, "incoming-live.txt"), "from ordinary live sync");
+        });
+        test.WaitFor(() => draft is null || ReadLinkTestFile(Path.Combine(draft.Root, "incoming-live.txt")) == "from ordinary live sync", 45.0f);
+        test.Check("link-worktree: an ordinary live change also reaches the untouched private checkout", () =>
+            draft is not null && ReadLinkTestFile(Path.Combine(draft.Root, "incoming-live.txt")) == "from ordinary live sync");
 
         test.Run(() =>
         {

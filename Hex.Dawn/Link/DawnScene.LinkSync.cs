@@ -168,7 +168,14 @@ internal sealed partial class DawnScene
                 entry.Sync = sync;
                 entry.Announced.Clear();
                 entry.Said = HexLinkSyncState.Off;
-                starting = entry.Starting = Task.Run(() => sync.Start(force, automatic: automatic));
+                starting = entry.Starting = Task.Run(async () =>
+                {
+                    await LinkEnsureWorktreePublication();
+                    LinkRestorePublicationDeferrals(sync);
+                    await sync.Start(force, automatic: automatic);
+                    if (sync.PublicationPairReady)
+                        LinkPublicationPairReady();
+                });
             }
         }
 
