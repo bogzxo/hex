@@ -178,7 +178,27 @@ separately without stopping sync of the rest.
 
 Bulk-capable peers stream bundles and working files using checked transfers. On an older host, the legacy
 working-file limit still applies. Provisioning preserves genuine mixed-line-ending edits. A tracked file that is
-Git-clean keeps the checkout's bytes.
+Git-clean keeps the checkout's bytes. For older copies, live sync preserves saved line endings. Its file
+manifest does not certify that a local change should be rewritten by the replica's Git checkout filters.
+
+To repair a file copied by an older Get, pause sync and save or close any open editor buffer. Check that the two
+repositories have the same `git rev-parse HEAD` and that `git status --porcelain -- "$path"` is empty on the
+authority. From the replica's affected repository, set `path` to one tracked file and run:
+
+```sh
+path='relative/path/to/file'
+if git --literal-pathspecs ls-files --error-unmatch -- "$path" >/dev/null &&
+   git --literal-pathspecs diff --cached --quiet HEAD -- "$path" &&
+   git --literal-pathspecs diff --no-ext-diff --no-textconv --ignore-cr-at-eol --exit-code HEAD -- "$path"
+then
+    git --literal-pathspecs restore --source=HEAD --worktree -- "$path" &&
+        git --literal-pathspecs status --short -- "$path"
+else
+    printf 'Left %s untouched.\n' "$path"
+fi
+```
+
+Git writes the verified file using this checkout's rules. Resume sync after checking that the repaired paths are clean.
 
 **Clone from Device** and **Fetch from Device** remain available for repository history. A bundle can contain
 committed versions of files excluded from the current working-tree view. Fetch places refs under the device's
@@ -201,6 +221,10 @@ For a bound folder, the replica signals readiness over the authenticated link at
 When the authority has Edit back to the replica, it runs the engine. Without that grant, the replica pulls from
 the authority. A change of role drains the current engine before its replacement starts. Devices with View can
 see the owner's state, transfer counts and conflict or skip summaries in Devices and `hex_link_sync status`.
+The pinned authority can call `hex_link_sync start` on the replica through `hex_link_call` with Steer.
+The replica checks the caller against its recorded authority and uses its direct connection for sync activation.
+Link audits the tool call and checks the current grants and epoch during activation. Third-device relay
+requests cannot stand in for the direct authority.
 
 A single-sided edit is sent or pulled against the last agreed value. A verified common Git base can seed the
 first comparison. If both sides changed, a safe clean merge may apply. Otherwise, Hex preserves both versions and

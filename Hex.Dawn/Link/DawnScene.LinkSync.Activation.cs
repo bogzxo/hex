@@ -57,7 +57,7 @@ internal sealed partial class DawnScene
     {
         var pin = folder.Authority!;
         if (!LinkBoundSyncPeer(peer, folder, pin))
-            throw HexLinkException.NotAllowed("The bound workspace is no longer shared on this link.");
+            throw new HexLinkException(HexLinkErrors.NOT_ALLOWED, "The bound workspace is no longer shared on this link.");
         if (action == "recheck")
         {
             RequireSyncEnabled(peer, folder.Name, resume);
@@ -72,13 +72,13 @@ internal sealed partial class DawnScene
         {
             if (!LinkBoundSyncPeer(peer, folder, pin) ||
                 !HexLinkAllowed.Has(peer.Session.Connection.Rights, HexLinkRights.View))
-                throw HexLinkException.NotAllowed("The bound workspace or access changed.");
+                throw new HexLinkException(HexLinkErrors.NOT_ALLOWED, "The bound workspace or access changed.");
             // A genuinely one-way reader cannot expose its workspace back to the owner.
             // The owner can acknowledge the absence of its engine without reading the replica.
             if (action == "pull")
             {
                 if (HexLinkAllowed.Has(peer.Granted, HexLinkRights.Edit))
-                    throw HexLinkException.NotAllowed("Sync can run on the pinned authority. Retry activation there.");
+                    throw new HexLinkException(HexLinkErrors.NOT_ALLOWED, "Sync can run on the pinned authority. Retry activation there.");
                 RequireSyncEnabled(peer, folder.Name, resume);
                 await LinkDrainBoundEngine(peer.Device.Id, folder.Name, cancel);
                 return null;
@@ -91,7 +91,7 @@ internal sealed partial class DawnScene
             }
 
             if (!HexLinkAllowed.Has(peer.Granted, HexLinkRights.Edit))
-                throw HexLinkException.NotAllowed("The authority cannot write to the replica without Edit.");
+                throw new HexLinkException(HexLinkErrors.NOT_ALLOWED, "The authority cannot write to the replica without Edit.");
             await peer.RefreshWorkspace(cancel);
             if (!LinkBoundSyncPeer(peer, folder, pin) ||
                 !HexLinkAllowed.Has(peer.Session.Connection.Rights, HexLinkRights.View) ||

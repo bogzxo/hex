@@ -56,12 +56,13 @@ internal sealed partial class DawnScene
     {
         if (destination.Length == 0)
             return;
+        HexLinkProvisionResult? download = null;
         Context.Work.Start($"link-provision-{deviceId}", Said("link.provision.get_title", ("device", deviceName)),
             async work =>
             {
                 if (await LinkGetWorkspace(deviceId, destination, new Progress<HexLinkProvisionProgress>(progress => ReportProvision(work, progress)),
-                    work.Token) is { } why)
-                    throw new InvalidOperationException(why);
+                    work.Token, result => download = result) is { } why)
+                    throw new InvalidOperationException(LinkProvisionWithSkips(why, download));
             },
             done =>
             {
@@ -69,7 +70,8 @@ internal sealed partial class DawnScene
                     Say(Said("link.provision.failed", ("why", done.Error ?? string.Empty)), error: true);
                 else if (done.State == WorkState.Succeeded)
                 {
-                    Say(Said("link.provision.ready", ("folder", destination)));
+                    if (download is not null)
+                        LinkProvisionCompleted(download);
                     received?.Invoke();
                 }
             });

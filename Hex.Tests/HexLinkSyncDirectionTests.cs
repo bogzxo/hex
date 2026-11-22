@@ -83,6 +83,8 @@ public sealed partial class HexLinkSyncTests
         parameters["relay"] = new JsonObject { ["hops"] = 1, ["origin"] = new string('1', 64) };
         var relay = await Assert.ThrowsAsync<HexLinkException>(() => pair.PeerA.Session.Ask("sync/activate", (JsonObject)parameters.DeepClone()));
         Assert.Equal(HexLinkErrors.NOT_ALLOWED, relay.Code);
+        Assert.Equal("Workspace sync activation requires a direct link.", relay.Message);
+        Assert.Null(relay.Detail);
         parameters.Remove("relay");
         Assert.Null(await pair.PeerA.ActivateSync("work", new(pair.A.Device.Id, 2), "ready", CancellationToken.None));
     }
@@ -93,5 +95,5 @@ internal sealed partial class LinkServices : IHexLinkSyncActivation
     public Func<HexLinkPeer, HexLinkFolder, string, Task<HexLinkSyncReport?>>? SyncActivation { get; set; }
 
     public Task<HexLinkSyncReport?> ActivateSync(HexLinkPeer peer, HexLinkFolder folder, string action, bool resume, CancellationToken cancel) =>
-        SyncActivation?.Invoke(peer, folder, action) ?? throw HexLinkException.NotAllowed("No activation fixture.");
+        SyncActivation?.Invoke(peer, folder, action) ?? throw new HexLinkException(HexLinkErrors.NOT_ALLOWED, "No activation fixture.");
 }

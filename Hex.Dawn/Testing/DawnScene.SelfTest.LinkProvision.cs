@@ -122,6 +122,17 @@ internal sealed partial class DawnScene
         test.WaitFor(() => ReadProvisionTestFile(mirrorFile) == "One-way mirror.\n", 35.0f);
         test.Check("link-provision: the one-way View mirror received a host edit", () =>
             ReadProvisionTestFile(mirrorFile) == "One-way mirror.\n");
+        Task<McpToolResult>? deniedStart = null;
+        test.Run(() =>
+        {
+            if (peer is not null)
+                deniedStart = ProvisionTestRemoteSync(peer, "start");
+        });
+        test.WaitFor(() => deniedStart is { IsCompleted: true }, 20.0f);
+        test.Check("link-provision: the authority needs Steer to start the replica remotely", () =>
+            deniedStart is { IsCompletedSuccessfully: true, Result.IsError: true } &&
+            deniedStart.Result.AllText().Contains("hasn't granted this device steer", StringComparison.Ordinal));
+
         test.Run(() => File.WriteAllText(upgrade, "grant reverse Edit"));
         test.WaitFor(() => peer is not null && LinkSyncOf(peer.Device.Id, LINK_PROVISION_TEST_SOURCE) is
             { BoundAuthorityEngine: true, State: HexLinkSyncState.Idle }, 45.0f);
@@ -132,6 +143,25 @@ internal sealed partial class DawnScene
         test.Check("link-provision: the owner never took the View-only replica's file or commit", () =>
             File.Exists(viewCheck) && !File.Exists(Path.Combine(root, "view-only.txt"))
                 && ProvisionTestGit(root, "log", "-1", "--format=%s") == "Initial commit");
+        Task<McpToolResult>? remoteStop = null, remoteStart = null;
+        test.Run(() =>
+        {
+            if (peer is not null)
+                remoteStop = ProvisionTestRemoteSync(peer, "stop");
+        });
+        test.WaitFor(() => remoteStop is { IsCompleted: true } && peer is not null &&
+            LinkSyncOf(peer.Device.Id, LINK_PROVISION_TEST_SOURCE) is { State: HexLinkSyncState.Off }, 30.0f);
+        test.Run(() =>
+        {
+            if (peer is not null)
+                remoteStart = ProvisionTestRemoteSync(peer, "start");
+        });
+        test.WaitFor(() => remoteStart is { IsCompleted: true }, 35.0f);
+        test.Check("link-provision: the authority can resume its paused replica via the audited remote sync tool", () =>
+            remoteStop is { IsCompletedSuccessfully: true, Result.IsError: false } &&
+            remoteStart is { IsCompletedSuccessfully: true, Result.IsError: false } &&
+            remoteStart.Result.AllText().Contains("Sync is on", StringComparison.Ordinal) &&
+            peer is not null && LinkSyncOf(peer.Device.Id, LINK_PROVISION_TEST_SOURCE) is { BoundAuthorityEngine: true, State: HexLinkSyncState.Idle });
         test.Run(() =>
         {
             if (peer is not null)
@@ -167,6 +197,14 @@ internal sealed partial class DawnScene
         test.Run(StopLink);
     }
 
+    private Task<McpToolResult> ProvisionTestRemoteSync(HexLinkPeer replica, string action) =>
+        LinkCall(replica, "hex_link_sync", new JsonObject
+        {
+            ["device"] = LinkDevice?.Id,
+            ["folder"] = LINK_PROVISION_TEST_SOURCE,
+            ["action"] = action
+        }, CancellationToken.None, caller: null);
+
     private void TestLinkProvisionJoiner(HexPointerScript test, string destination)
     {
         string home = System.Environment.GetEnvironmentVariable("HEX_HOME")!;
@@ -195,6 +233,7 @@ internal sealed partial class DawnScene
             if (LinkPeers.FirstOrDefault() is not { } peer)
                 return;
             hostId = peer.Device.Id;
+            ShowSide(HexSide.Search);
             getting = LinkProvisionTool(new JsonObject
             {
                 ["device"] = peer.Device.Id, ["action"] = "get", ["destination"] = destination
@@ -216,12 +255,32 @@ internal sealed partial class DawnScene
             && getting.Result.AllText().Contains($"Skipped nested/module/{PROVISION_TEST_UNINITIALIZED}. Submodule is uninitialized", StringComparison.Ordinal)
             && !getting.Result.AllText().Contains("Skipped outside-limit.tar", StringComparison.Ordinal));
 
+        test.Check("link-provision: completion names the added folder, active sync and Open workspace action", () =>
+            getting is { IsCompletedSuccessfully: true, Result.IsError: false } &&
+            getting.Result.AllText().Contains("added to your workspace. Sync is on.", StringComparison.Ordinal) &&
+            getting.Result.AllText().Contains(destination, StringComparison.OrdinalIgnoreCase) &&
+            getting.Result.AllText().Contains("Open workspace", StringComparison.Ordinal) &&
+            explorer.workspace.Folders.Contains(destination, PlatformPaths.Comparer));
+        test.Run(() =>
+        {
+            foreach (var card in toasts.Cards.Where(card => !card.Closed))
+            {
+                if (card.Actions.FirstOrDefault(action => action.Label == "Open workspace") is { Pressed: { } pressed })
+                {
+                    pressed();
+                    break;
+                }
+            }
+        });
+        test.Check("link-provision: Open workspace reveals the downloaded folders without replacing them", () =>
+            ExplorerShowing && explorer.workspace.Folders.Contains(destination, PlatformPaths.Comparer));
+
         string upgrade = Path.Combine(home, "allow-owner.txt");
         test.WaitFor(() => File.Exists(upgrade), 60.0f);
         test.Run(() =>
         {
             if (hostId is not null)
-                LinkSetRights(hostId, PROVISION_TEST_EDIT);
+                LinkSetRights(hostId, PROVISION_TEST_EDIT | HexLinkRights.Steer);
         });
         test.WaitFor(() => LinkPeers.FirstOrDefault() is { } authority &&
             LinkRemoteSyncs(authority).Any(sync => sync.Folder == LINK_PROVISION_TEST_SOURCE && sync.PullOnly)

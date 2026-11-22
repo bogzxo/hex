@@ -20,7 +20,7 @@ internal sealed partial class HexLinkSync
         lock (gate)
         {
             if (!CanReceive)
-                throw HexLinkException.NotAllowed(VIEW_ONLY_REPLICA);
+                throw new HexLinkException(HexLinkErrors.NOT_ALLOWED, "The replica has View only.");
             receiving ??= new();
             return CancellationTokenSource.CreateLinkedTokenSource(cancel, stopping.Token, receiving.Token);
         }

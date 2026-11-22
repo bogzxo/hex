@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 
 using Horizon.Core.Threading;
+using Horizon.UI.Components;
 
 namespace Hex.Dawn;
 
@@ -14,7 +15,7 @@ internal sealed partial class DawnScene
     private sealed record ProvisionedFolder(string DeviceId, HexLinkFolder Folder);
 
     internal async Task<string?> LinkGetWorkspace(string deviceId, string destination, IProgress<HexLinkProvisionProgress>? progress = null,
-        CancellationToken cancel = default, Action<string>? notes = null)
+        CancellationToken cancel = default, Action<HexLinkProvisionResult>? downloaded = null)
     {
         if (link?.PeerOf(deviceId) is not { } peer || peer.IsClosed)
             return Said("link.sync_not_linked", ("device", deviceId));
@@ -35,14 +36,7 @@ internal sealed partial class DawnScene
             HexLinkProvisionResult got = await Task.Run(() => HexLinkProvision.Get(peer, root, journal, progress, cancel), cancel);
             IReadOnlyList<HexLinkFolder> folders = got.Folders;
             cancel.ThrowIfCancellationRequested();
-            if (got.Skipped.Count > 0)
-            {
-                string skipped = ProvisionSkipped(got.Skipped);
-                if (notes is not null)
-                    notes(skipped);
-                else
-                    PostLink(() => Say(skipped));
-            }
+            downloaded?.Invoke(got);
 
             LinkBindProvisionedFolders(peer, folders);
             LinkKeepProvisionedFolders(deviceId, folders);
@@ -80,6 +74,31 @@ internal sealed partial class DawnScene
         {
             linkProvisioning.Release();
         }
+    }
+
+    private static string LinkProvisionWithSkips(string message, HexLinkProvisionResult? download) =>
+        download is { Skipped.Count: > 0 } ? message + "\n" + ProvisionSkipped(download.Skipped) : message;
+
+    private string LinkProvisionCompleted(HexLinkProvisionResult download)
+    {
+        string message = LinkProvisionWithSkips(Said("link.provision.ready") + "\n" +
+            string.Join('\n', download.Folders.Select(folder => folder.Path)), download);
+        if (ExplorerShowing)
+        {
+            Say(message);
+            return message;
+        }
+
+        UINotification? card = null;
+        card = toasts.Show(message, "check", null, 0.0f,
+            (Said("link.provision.open_workspace"), () =>
+            {
+                card?.Close();
+                left.Show(true);
+                Side = HexSide.Explorer;
+                FocusSideList();
+            }));
+        return message + "\n" + Said("link.provision.open_workspace_hint");
     }
 
     private static string ProvisionSkipped(IReadOnlyList<HexLinkProvisionSkip> skipped) =>

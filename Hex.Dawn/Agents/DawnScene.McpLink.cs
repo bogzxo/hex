@@ -48,7 +48,7 @@ internal sealed partial class DawnScene
                 ("sync", McpSchema.Flag("Sync the folder it runs in first (hex_link_sync start, then flush), so it works on the code as it is here."))], "device", "prompt")),
             null, RunAway: LinkSpawnTool, NeedsEditor: false, TakesCaller: true),
         new(new McpTool("hex_link_sync", "Keep a folder the same on another machine",
-            "Keep a workspace folder the same here and on another linked machine that has the same folder (the same repository) open, both ways, a file saved on one written on the other within a moment. start turns it on (and waits for the first comparison), flush returns once everything saved here is there, so you can then tell an agent there to build or test (hex_link_spawn, or hex_link_call with hex_agent_send) and what it changes comes back the same way. status lists every sync, its counts, its conflicts and the files that don't travel; resolve settles a file both sides changed (keep mine or theirs); stop turns it off. Git metadata and ignored files stay local. Bulk peers sync files up to 4 GiB. The JSON path has an 8 MiB limit.",
+            "Keep a workspace folder the same here and on another linked machine that has the same folder (the same repository) open, both ways, a file saved on one written on the other within a moment. start turns it on (and waits for the first comparison), flush returns once everything saved here is there, so you can then tell an agent there to build or test (hex_link_spawn, or hex_link_call with hex_agent_send) and what it changes comes back the same way. status lists every sync, its counts, its conflicts and the files that don't travel; resolve settles a file both sides changed (keep mine or theirs); stop turns it off. The pinned authority can start or resume its pair by calling this tool directly on the replica with Steer. Ignored files stay local. Bulk peers sync files up to 4 GiB. The JSON path has an 8 MiB limit.",
             McpSchema.Object([
                 ("device", McpSchema.String("The device, its name or the start of its id.")),
                 ("action", McpSchema.OneOf("What to do, status by default.", "status", "start", "stop", "flush", "resolve", "align")),
@@ -78,9 +78,10 @@ internal sealed partial class DawnScene
                 ? McpToolResult.Error(shareError) : McpToolResult.Text($"Workspace offered to {peer.Device.Name}.");
 
         string destination = args.String("destination") is { Length: > 0 } selected ? selected : LinkDefaultProvisionDestination(peer);
-        string notes = string.Empty;
-        return await LinkGetWorkspace(peer.Device.Id, destination, cancel: cancel, notes: said => notes = "\n" + said) is { } error
-            ? McpToolResult.Error(error + notes) : McpToolResult.Text($"Workspace from {peer.Device.Name} downloaded to {destination} and sync started.{notes}");
+        HexLinkProvisionResult? download = null;
+        if (await LinkGetWorkspace(peer.Device.Id, destination, cancel: cancel, downloaded: result => download = result) is { } error)
+            return McpToolResult.Error(LinkProvisionWithSkips(error, download));
+        return McpToolResult.Text(await OnEditorForLink(() => LinkProvisionCompleted(download!)).WaitAsync(cancel));
     }
 
     // What a tool says while Link is off
@@ -257,6 +258,22 @@ internal sealed partial class DawnScene
         }
     }
 
+    private async Task<string?> LinkFlushToolSync(HexLinkPeer peer, string folder, CancellationToken cancel, bool start, bool force)
+    {
+        if (HexLinkAllowed.RelayOrigin.Value is not { } caller || caller.Id != peer.Session.Connection.Device.Id ||
+            linkServices?.Workspace.Folders.Any(local => PlatformPaths.Comparer.Equals(local.Name, folder) &&
+                local.FolderAuthorityId == caller.Id) != true)
+            return await LinkFlushSync(peer, folder, cancel, start, force);
+        if (peer.IsClosed || !HexLinkAllowed.Has(peer.Session.Connection.Rights, HexLinkRights.Steer))
+            return "Starting or flushing sync remotely requires Steer on this replica.";
+
+        // The incoming tool call already checked Steer and audited the caller. The replica now acts
+        // as itself on that very pair, including any engine that outlives this request.
+        HexLinkAllowed.RelayOrigin.Value = null;
+        try { return await LinkFlushSync(peer, folder, cancel, start, force); }
+        finally { HexLinkAllowed.RelayOrigin.Value = caller; }
+    }
+
     private async Task<McpToolResult> LinkSyncTool(JsonObject args, CancellationToken cancel)
     {
         if (!LinkOnForTools(out HexLink? links, out _))
@@ -278,12 +295,16 @@ internal sealed partial class DawnScene
             case "flush":
             {
                 bool flushing = action == "flush";
-                if (await LinkFlushSync(peer, folder!, cancel, start: !flushing, force: !flushing && args.Flag("force")) is { } why)
+                if (await LinkFlushToolSync(peer, folder!, cancel, start: !flushing, force: !flushing && args.Flag("force")) is { } why)
                     return McpToolResult.Error(flushing ? why : $"{folder} isn't synced with {peer.Device.Name}: {why}");
                 if (LinkSyncOf(peer.Device.Id, folder!) is not { State: not HexLinkSyncState.Off } sync)
-                    return McpToolResult.Text(CanSendToAuthority(peer)
-                        ? $"{folder} flushed on its authority {peer.Device.Name}. Use hex_link_sync status to review conflicts and skipped files."
-                        : $"{folder} flushed on its authority {peer.Device.Name}. Changes saved here are not sent: view only.");
+                {
+                    string state = flushing ? $"{folder} flushed on its authority {peer.Device.Name}."
+                        : $"Sync is on for {folder}, managed by its authority {peer.Device.Name}.";
+                    return McpToolResult.Text(state + (CanSendToAuthority(peer)
+                        ? " Use hex_link_sync status to review conflicts and skipped files."
+                        : " Changes saved here are not sent: view only."));
+                }
 
                 if (sync.PullOnly)
                     return McpToolResult.Text($"{sync.Summary}. Pull-only: changes saved here stay here.");
@@ -406,10 +427,13 @@ internal sealed partial class DawnScene
         }
         catch (HexLinkException e) when (e.Code == HexLinkErrors.NOT_ALLOWED)
         {
-            string needs = HexLinkData.String(e.Detail as JsonObject, "needs", 20) ?? "a right";
-            return McpToolResult.Error(needs == "never"
-                ? $"{tool} is never reachable over a link, whatever {peer.Device.Name} allows. Its terminal, tasks, screen, settings and debugger stay its own."
-                : $"{peer.Device.Name} doesn't let this machine call {tool}: it takes the {needs} right, which {peer.Device.Name} hasn't granted this one. The person there changes it in Link's devices.");
+            string? needs = HexLinkData.String(e.Detail as JsonObject, "needs", 20);
+            return McpToolResult.Error(needs switch
+            {
+                "never" => $"{tool} is never reachable over a link, whatever {peer.Device.Name} allows. Its terminal, tasks, screen, settings and debugger stay its own.",
+                "view" or "steer" or "edit" or "predict" => $"{peer.Device.Name} hasn't granted this device {needs} for {tool}. The person there can change it in Link's devices.",
+                _ => $"{peer.Device.Name} refused {tool}. {e.Message}"
+            });
         }
         catch (HexLinkException e)
         {
