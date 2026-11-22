@@ -4,6 +4,7 @@ internal sealed partial class DawnScene
 {
     private sealed record LinkPublicationRuntime(LinkServices Services, HexLinkWorktreePublication Publication, HexLinkCoalesce Pump);
     private LinkPublicationRuntime? linkPublicationRuntime;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, HexLinkCoalesce> privateFollow = new(PlatformPaths.Comparer);
 
     private LinkPublicationRuntime? CurrentLinkPublication =>
         Volatile.Read(ref linkPublicationRuntime) is { } active && ReferenceEquals(active.Services, linkServices) ? active : null;
@@ -163,20 +164,36 @@ internal sealed partial class DawnScene
             QueuePrivateWorktreeFollow(folder);
     });
 
+    private void QueuePrivateFollowForPath(string full)
+    {
+        if (linkPrivateDrafts.IsEmpty)
+            return;
+        // Only the shared export is observed. The isolated checkout's own edits never feed this path.
+        foreach (var draft in linkPrivateDrafts.Values)
+        {
+            if (PlatformPaths.IsUnder(full, draft.SharedFolder.Path) && !draft.HoldIncoming)
+            {
+                QueuePrivateWorktreeFollow(draft.SharedFolder);
+                return;
+            }
+        }
+    }
+
     private void QueuePrivateWorktreeFollow(HexLinkFolder folder)
     {
         if (linkPrivateDrafts.IsEmpty)
             return;
-        CancellationToken stop = linkCancel?.Token ?? CancellationToken.None;
-        _ = Task.Run(async () =>
+        string root = Path.GetFullPath(folder.Path);
+        privateFollow.GetOrAdd(root, _ => new HexLinkCoalesce(TimeSpan.FromMilliseconds(500), async () =>
         {
+            CancellationToken stop = linkCancel?.Token ?? CancellationToken.None;
             try { await LinkFollowPrivateWorkingChanges(folder, stop); }
             catch (Exception error) when (error is IOException or HexLinkException or OperationCanceledException)
             {
                 if (!stop.IsCancellationRequested)
                     Console.WriteLine($"[Hex] Private worktree follow is pending: {error.Message}");
             }
-        });
+        })).Poke();
     }
 
     private HexLinkDraftRoute? LinkPrivatePublishRoute(HexLinkFolder folder)

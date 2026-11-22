@@ -110,6 +110,7 @@ internal sealed partial class DawnScene
             throw new HexLinkException(HexLinkErrors.CONFLICT, $"{wire} was edited while the linked write was applying.",
                 new JsonObject { ["hash"] = hash, ["editor_dirty"] = true });
         }
+        QueuePrivateFollowForPath(full);
         return hash;
     }
 
