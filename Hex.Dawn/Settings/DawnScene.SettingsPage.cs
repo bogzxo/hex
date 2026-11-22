@@ -23,7 +23,7 @@ internal sealed partial class DawnScene
     private const float PANEL_PROSE = 640.0f;
 
     // What the editor's panels and its interface size are in
-    private const string PANELS = "Editor · Panels";
+    private const string PANELS = EditorSettingsCatalog.INTERFACE;
 
     // The row of the interface size, the key it's kept under in the settings file too
     private const string INTERFACE_SIZE = "interface_size";
@@ -37,7 +37,7 @@ internal sealed partial class DawnScene
     private WindowPanel? SettingsWindow => settingsView?.Window.Parent is not null ? settingsView.Window : null;
 
     // What the keyboard's section is called, a panel that sends you to the window of the keys
-    private const string KEYS_SECTION = "Editor · Keyboard shortcuts";
+    private const string KEYS_SECTION = EditorSettingsCatalog.KEYS;
 
     /// <summary>
     /// The settings, brought to the front when they're up. Ctrl+, in the settings file goes to the setting on the caret's
@@ -62,8 +62,8 @@ internal sealed partial class DawnScene
             return;
         }
 
-        var sources = new List<ISettingsSource> { new EditorSource(this) };
-        sources.AddRange(settingSources.Select(added => added.Source()));
+        // The text rows come before the editor's own in a section they share, tab size is what most open the settings for
+        var sources = new List<ISettingsSource>(settingSources.Select(added => added.Source())) { new EditorSource(this) };
         sources.Add(new TerminalSettingsSource(terminals, EditorSettingsCatalog.THEME));
         sources.Add(new WindowsSource());
         sources.Add(new DefaultTerminalSource(said => Notify(said, error: true)));
@@ -102,7 +102,7 @@ internal sealed partial class DawnScene
         // The profiles of how Hex looks over all of it, see DawnScene.Looks
         AddLookPicker(settingsView);
         if (lookPicker is not null)
-            settingsPanels[EditorSettingsCatalog.PROFILES] = lookPicker;
+            settingsPanels[EditorSettingsCatalog.LOOKS] = lookPicker;
         foreach (var added in settingSources)
             added.Opened?.Invoke();
 
@@ -379,6 +379,7 @@ internal sealed partial class DawnScene
             HexSettings.EDIT_PREDICTIONS_EXCLUDE => Natives.List(hex.settings.EditPredictionsExclude),
             "edit_predictions_workspace" => Values.Bool(hex.settings.EditPredictionsWorkspace),
             "edit_predictions_share" => Values.Bool(hex.settings.EditPredictionsShare),
+            EditorSettingsCatalog.LINK_SYSTEM_FILE_FOLDERS => Natives.List(hex.settings.LinkSystemFileFolders),
             "files_associations" => UIFormPairs.Value(hex.settings.FileAssociations.Select(pair => (pair.Key, pair.Value))),
             "disabled_extensions" => Natives.List(hex.ExtensionNames().Where((_, at) => !hex.extensions.All[at].Enabled)),
             _ => null
@@ -745,6 +746,10 @@ internal sealed partial class DawnScene
                     break;
                 case ("edit_predictions_workspace", BooleanValue predictsHere):
                     settings.EditPredictionsWorkspace = predictsHere.Value;
+                    break;
+                case (EditorSettingsCatalog.LINK_SYSTEM_FILE_FOLDERS, ListValue systemFolders):
+                    // Only whole local paths name a folder, the way the file is read
+                    settings.LinkSystemFileFolders = [.. HexSettings.Patterns(systemFolders).Where(Path.IsPathFullyQualified)];
                     break;
                 case ("edit_predictions_share", BooleanValue shares):
                     settings.EditPredictionsShare = shares.Value;

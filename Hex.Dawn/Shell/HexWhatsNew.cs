@@ -64,7 +64,7 @@ internal static class HexWhatsNew
         ],
         ["3.0.0"] =
         [
-            new("solstice", "go_profiles", "color-mode", HexNewsPlace.Settings, EditorSettingsCatalog.PROFILES),
+            new("solstice", "go_profiles", "color-mode", HexNewsPlace.Settings, EditorSettingsCatalog.LOOKS),
             new("horizon_line", "go_tasks", "warning", HexNewsPlace.Problems),
             new("new_project", "go_new_project", "new-folder", HexNewsPlace.NewProject)
         ],

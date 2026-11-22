@@ -100,7 +100,7 @@ internal sealed partial class DawnScene
         bool wasEnabled = true;
         test.Run(() => { wasEnabled = settings.FormatOnType; OpenSettings(); });
         test.Wait();
-        test.Check("Format on type: setting appears in Editor Text", () => SettingsPage!.Settings.Any(setting => setting.Key == "format_on_type" && setting.Group == EditorSettingsCatalog.TEXT));
+        test.Check("Format on type: setting appears in Editor Text", () => SettingsPage!.Settings.Any(setting => setting.Key == "format_on_type" && setting.Group == EditorSettingsCatalog.SAVE));
         test.Run(() => SettingsPage!.Enter("format_on_type", Values.Bool(false)));
         test.Check("Format on type: settings control disables native formatting", () => !settings.FormatOnType);
         test.Run(() => SettingsPage!.Reset("format_on_type"));

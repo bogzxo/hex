@@ -44,7 +44,7 @@ internal sealed class HexLookPicker : StackPanel
     public static HexLookPicker AddTo(SettingsWindow view, IHexLookOwner owner)
     {
         var picker = new HexLookPicker(owner, PANEL_WIDTH);
-        view.SetPanel(EditorSettingsCatalog.PROFILES, picker);
+        view.SetPanel(EditorSettingsCatalog.LOOKS, picker);
 
         var changed = view.Page.OnChanged;
         view.Page.OnChanged = (key, value) =>

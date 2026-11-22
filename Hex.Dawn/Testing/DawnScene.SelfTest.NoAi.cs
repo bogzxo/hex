@@ -49,7 +49,7 @@ internal sealed partial class DawnScene
         test.Check("no ai: asked for the Agents view, the side bar shows the explorer", () => Side == HexSide.Explorer);
 
         // The setting's row is there, which is how No AI is switched for the next start
-        test.Check("no ai: the settings have the No AI row under Editor · Run and debug", () =>
-            EditorSettingsCatalog.Settings.Any(setting => setting.Key == "no_ai" && setting.Group == EditorSettingsCatalog.RUN));
+        test.Check("no ai: the settings have the No AI row under AI · Agents", () =>
+            EditorSettingsCatalog.Settings.Any(setting => setting.Key == "no_ai" && setting.Group == EditorSettingsCatalog.AGENTS));
     }
 }

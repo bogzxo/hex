@@ -106,7 +106,7 @@ internal sealed partial class DawnScene
         test.WaitFor(() => chrome.Dialog is { IsOpen: true }, 3.0f);
         VisualStudioShot(test, "visual_studio_palette.png");
         test.Run(() => chrome.Dialog?.Close());
-        test.Run(() => OpenSettings(EditorSettingsCatalog.PROFILES));
+        test.Run(() => OpenSettings(EditorSettingsCatalog.LOOKS));
         test.Wait();
         test.Check("visual studio: the settings window has no glass either", () => SettingsWindow is { Glass: null });
         VisualStudioShot(test, "visual_studio_settings.png");

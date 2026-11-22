@@ -29,7 +29,7 @@ public sealed class NoAiTests
     {
         Assert.False(new HexSettings(null).NoAi);
         Assert.Equal(Values.Bool(false), EditorSettingsCatalog.Usual["no_ai"]);
-        Assert.Contains(EditorSettingsCatalog.Settings, setting => setting.Key == "no_ai" && setting.Group == EditorSettingsCatalog.RUN);
+        Assert.Contains(EditorSettingsCatalog.Settings, setting => setting.Key == "no_ai" && setting.Group == EditorSettingsCatalog.AGENTS);
 
         string folder = Path.Combine(Path.GetTempPath(), "hex-no-ai-" + Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(folder);

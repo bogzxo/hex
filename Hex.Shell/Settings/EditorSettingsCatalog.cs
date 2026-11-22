@@ -21,27 +21,59 @@ public static class EditorSettingsCatalog
     /// The sections, the part of the window before the dot and the section after it. Git and running a file have sections
     /// of their own under the editor, they were rows at the end of its code and the zoom and the debugger sat together.
     /// </summary>
-    public const string PROFILES = "Appearance · Profiles", THEME = "Appearance · Theme", GLASS = "Appearance · Glass", EFFECTS = "Appearance · Effects",
-        MOTION = "Appearance · Motion", BACKDROP = "Appearance · Backdrop", RENDERING = "Appearance · Rendering", TEXT = "Editor · Text", CODE = "Editor · Code", FILES = "Editor · Files",
-        GIT = "Editor · Git", RUN = "Editor · Run and debug", DESIGNER = "Editor · Designer", SEARCH = "Editor · Search";
+    public const string LOOKS = "Appearance · Looks", THEME = "Appearance · Theme", INTERFACE = "Appearance · Interface", GLASS = "Appearance · Glass",
+        EFFECTS = "Appearance · Effects", BACKDROP = "Appearance · Backdrop", BACKDROP_CODE = "Appearance · Backdrop code",
+        BACKDROP_TERMINALS = "Appearance · Backdrop terminals", RENDERING = "Appearance · Rendering",
+        TEXT = "Editor · Text", CARET = "Editor · Caret", CODE = "Editor · Code", SAVE = "Editor · Save and format", FILES = "Editor · Files",
+        GIT = "Editor · Git", RUN = "Editor · Run and debug", KEYS = "Editor · Keys", DESIGNER = "Editor · Designer", STARTUP = "Editor · Startup";
 
     /// <summary>
-    /// The section of edit prediction, a model's guess at what is typed next, after running and debugging. The agents'
-    /// own rows stay under Run and debug.
+    /// The AI part: the agents (the MCP server, the switch that turns every AI off, what finished chats do) and edit
+    /// prediction, a model's guess at what is typed next, with the model and the server it's asked through.
     /// </summary>
-    public const string AI = "Editor · AI";
+    public const string AGENTS = "AI · Agents", AI = "AI · Prediction";
 
     /// <summary>
-    /// The sections in the order they're shown inside their parts, the editor's text first and the profiles first of how
+    /// The Link part. Connection is this machine's own side (on or off, its name, port and whether it's found), Sync what
+    /// travels between the machines and what doesn't, Agents what a linked device's agents may do here (the slot of the
+    /// per-device grants) and Publish the gate on the changes a linked agent keeps private. A section with no row isn't shown.
+    /// </summary>
+    public const string LINK = "Link · Connection", LINK_SYNC = "Link · Sync", LINK_AGENTS = "Link · Agents", LINK_PUBLISH = "Link · Publish";
+
+    /// <summary>The key of the folders Link's synced files leave out the operating system's own files for.</summary>
+    public const string LINK_SYSTEM_FILE_FOLDERS = "link_system_file_folders";
+
+    /// <summary>
+    /// The sections in the order they're shown inside their parts, the editor's text first and the looks first of how
     /// Hex looks, they're the whole of the rest of it in one go.
     /// </summary>
-    public static readonly string[] Sections = [TEXT, CODE, FILES, SEARCH, GIT, RUN, AI, DESIGNER, WindowsSource.GROUP, PROFILES, THEME, GLASS, EFFECTS, MOTION, BACKDROP, RENDERING];
+    public static readonly string[] Sections = [TEXT, CARET, CODE, SAVE, FILES, GIT, RUN, KEYS, DESIGNER, STARTUP, WindowsSource.GROUP,
+        LOOKS, THEME, INTERFACE, GLASS, EFFECTS, BACKDROP, BACKDROP_CODE, BACKDROP_TERMINALS, RENDERING,
+        AGENTS, AI, LINK, LINK_SYNC, LINK_AGENTS, LINK_PUBLISH];
 
     /// <summary>
     /// The parts of the settings window in the order they're shown, whichever mode a setting is (Dusk's theme is the
     /// terminal's and goes with Dawn's under how Hex looks). The editor comes first, the window opens on it.
     /// </summary>
-    public static readonly string[] Parts = ["Editor", "Terminal", "Appearance", "Extensions"];
+    public static readonly string[] Parts = ["Editor", "Terminal", "Appearance", "AI", "Link", "Extensions"];
+
+    /// <summary>
+    /// The section words a row was found by before the sections were drawn again, by its key, added to the words it's
+    /// searched by so "motion" and "run and debug" still find the rows that moved out of them.
+    /// </summary>
+    private static readonly Dictionary<string, string> formerly = new(StringComparer.Ordinal)
+    {
+        ["effect_motion"] = "motion", ["caret_glide"] = "motion", ["ui_animation"] = "motion", ["scroll_speed"] = "motion", ["middle_scroll_speed"] = "motion",
+        ["mcp_server"] = "run and debug", ["no_ai"] = "run and debug", ["agents_resume_after_limit"] = "run and debug", ["agents_auto_settle_seconds"] = "run and debug",
+        ["link"] = "run and debug", ["link_port"] = "run and debug", ["link_name"] = "run and debug", ["link_discoverable"] = "run and debug",
+        ["format_on_type"] = "text", ["format_on_save"] = "files", ["trim_whitespace"] = "files", ["final_newline"] = "files", ["auto_save"] = "files", ["auto_save_delay"] = "files",
+        ["reopen_last"] = "files", ["persistent_process"] = "files", ["persistent_at_login"] = "files",
+        ["files_exclude"] = "search", ["search_exclude"] = "search", ["search_use_ignore_files"] = "search",
+        ["visual_studio_keys"] = "code", ["code_zoom"] = "code", ["code_font"] = "code", ["wrap_code"] = "code", ["minimap"] = "code",
+        ["cursor_style"] = "text", ["caret_fast_after"] = "text", ["caret_fast_rate"] = "text",
+        ["interface_size"] = "panels", ["panels"] = "panels",
+        ["backdrop_scale"] = "backdrop picture", ["backdrop_across"] = "backdrop picture", ["backdrop_up"] = "backdrop picture", ["backdrop_stretch"] = "backdrop picture"
+    };
 
     /// <summary>
     /// How the code is typed and drawn, tabs, indentation, line numbers and guides, and whether a project's .editorconfig
@@ -60,14 +92,14 @@ public static class EditorSettingsCatalog
         new("rulers", HexText.Get("settings_text.rulers_title"), UIFormKind.Text, HexText.Get("settings_text.rulers_help"), TEXT, Placeholder: HexText.Get("settings_text.rulers_placeholder")),
         TextChoice("render_whitespace", ["none", "selection", "boundary", "all"]),
         TextChoice("cursor_style", ["line", "block", "underline"]),
-        new("caret_fast_after", HexText.Get("settings_text.caret_fast_after_title"), UIFormKind.Number, HexText.Get("settings_text.caret_fast_after_help"), TEXT, Least: 0.0f, Most: 3.0f, Step: 0.1f, Slider: true, Unit: "s"),
-        new("caret_fast_rate", HexText.Get("settings_text.caret_fast_rate_title"), UIFormKind.Number, HexText.Get("settings_text.caret_fast_rate_help"), TEXT, Least: 30.0f, Most: 200.0f, Step: 5.0f, Slider: true, Unit: "/s"),
+        new("caret_fast_after", HexText.Get("settings_text.caret_fast_after_title"), UIFormKind.Number, HexText.Get("settings_text.caret_fast_after_help"), CARET, Least: 0.0f, Most: 3.0f, Step: 0.1f, Slider: true, Unit: "s"),
+        new("caret_fast_rate", HexText.Get("settings_text.caret_fast_rate_title"), UIFormKind.Number, HexText.Get("settings_text.caret_fast_rate_help"), CARET, Least: 30.0f, Most: 200.0f, Step: 5.0f, Slider: true, Unit: "/s"),
         new("sticky_scroll", HexText.Get("settings_text.sticky_scroll_title"), UIFormKind.Flag, HexText.Get("settings_text.sticky_scroll_help"), TEXT),
-        new("format_on_save", HexText.Get("settings_text.format_on_save_title"), UIFormKind.Flag, HexText.Get("settings_text.format_on_save_help"), FILES),
-        new("format_on_type", HexText.Get("settings_text.format_on_type_title"), UIFormKind.Flag, HexText.Get("settings_text.format_on_type_help"), TEXT),
+        new("format_on_save", HexText.Get("settings_text.format_on_save_title"), UIFormKind.Flag, HexText.Get("settings_text.format_on_save_help"), SAVE),
+        new("format_on_type", HexText.Get("settings_text.format_on_type_title"), UIFormKind.Flag, HexText.Get("settings_text.format_on_type_help"), SAVE),
         Patterns("files_exclude"),
         Patterns("search_exclude"),
-        new("search_use_ignore_files", HexText.Get("settings_text.search_use_ignore_files_title"), UIFormKind.Flag, HexText.Get("settings_text.search_use_ignore_files_help"), SEARCH),
+        new("search_use_ignore_files", HexText.Get("settings_text.search_use_ignore_files_title"), UIFormKind.Flag, HexText.Get("settings_text.search_use_ignore_files_help"), FILES),
         new("explorer_auto_reveal", HexText.Get("settings_text.explorer_auto_reveal_title"), UIFormKind.Flag, HexText.Get("settings_text.explorer_auto_reveal_help"), FILES)
     ]);
 
@@ -77,7 +109,7 @@ public static class EditorSettingsCatalog
     /// button under them says Add Pattern (a list row's <see cref="UISetting.ValuePlaceholder"/>, it has no values).
     /// </summary>
     private static UISetting Patterns(string key) =>
-        new(key, HexText.Get($"settings_text.{key}_title"), UIFormKind.List, HexText.Get($"settings_text.{key}_help"), SEARCH,
+        new(key, HexText.Get($"settings_text.{key}_title"), UIFormKind.List, HexText.Get($"settings_text.{key}_help"), FILES,
             KeyPlaceholder: HexText.Get($"settings_text.{key}_placeholder"), ValuePlaceholder: HexText.Get("settings_text.add_pattern"));
 
     /// <summary>
@@ -143,48 +175,48 @@ public static class EditorSettingsCatalog
         new("render_sharpness", HexText.Get("settings_catalog.render_sharpness_title"), UIFormKind.Number, HexText.Get("settings_catalog.render_sharpness_help"), RENDERING, Least: 0.0f, Most: 1.0f, Step: 0.05f, Slider: true),
         Choice("text_smoothing", RENDERING, ["auto", "subpixel", "grayscale"]),
 
-        new("effect_motion", HexText.Get("settings_catalog.effect_motion_title"), UIFormKind.Flag, HexText.Get("settings_catalog.effect_motion_help"), MOTION),
-        new("ui_animation", HexText.Get("settings_catalog.ui_animation_title"), UIFormKind.Number, HexText.Get("settings_catalog.ui_animation_help"), MOTION, Least: 0.0f, Most: 3.0f, Step: 0.1f, Slider: true, Unit: "×"),
-        new("scroll_speed", HexText.Get("settings_catalog.scroll_speed_title"), UIFormKind.Number, HexText.Get("settings_catalog.scroll_speed_help"), MOTION, Least: 0.25f, Most: 5.0f, Step: 0.25f, Slider: true, Unit: "×"),
-        new("middle_scroll_speed", HexText.Get("settings_catalog.middle_scroll_speed_title"), UIFormKind.Number, HexText.Get("settings_catalog.middle_scroll_speed_help"), MOTION, Least: 0.25f, Most: 5.0f, Step: 0.25f, Slider: true, Unit: "×"),
-        new("caret_glide", HexText.Get("settings_catalog.caret_glide_title"), UIFormKind.Number, HexText.Get("settings_catalog.caret_glide_help"), MOTION, Least: 0.0f, Most: 0.3f, Step: 0.005f, Slider: true, Unit: "s"),
+        new("effect_motion", HexText.Get("settings_catalog.effect_motion_title"), UIFormKind.Flag, HexText.Get("settings_catalog.effect_motion_help"), CARET),
+        new("ui_animation", HexText.Get("settings_catalog.ui_animation_title"), UIFormKind.Number, HexText.Get("settings_catalog.ui_animation_help"), INTERFACE, Least: 0.0f, Most: 3.0f, Step: 0.1f, Slider: true, Unit: "×"),
+        new("scroll_speed", HexText.Get("settings_catalog.scroll_speed_title"), UIFormKind.Number, HexText.Get("settings_catalog.scroll_speed_help"), INTERFACE, Least: 0.25f, Most: 5.0f, Step: 0.25f, Slider: true, Unit: "×"),
+        new("middle_scroll_speed", HexText.Get("settings_catalog.middle_scroll_speed_title"), UIFormKind.Number, HexText.Get("settings_catalog.middle_scroll_speed_help"), INTERFACE, Least: 0.25f, Most: 5.0f, Step: 0.25f, Slider: true, Unit: "×"),
+        new("caret_glide", HexText.Get("settings_catalog.caret_glide_title"), UIFormKind.Number, HexText.Get("settings_catalog.caret_glide_help"), CARET, Least: 0.0f, Most: 0.3f, Step: 0.005f, Slider: true, Unit: "s"),
 
         new("backdrop", HexText.Get("settings_catalog.backdrop_title"), UIFormKind.Flag, HexText.Get("settings_catalog.backdrop_help"), BACKDROP),
         new("backdrop_terminal", HexText.Get("settings_catalog.backdrop_terminal_title"), UIFormKind.Flag, HexText.Get("settings_catalog.backdrop_terminal_help"), BACKDROP),
         new("backdrop_image", HexText.Get("settings_catalog.backdrop_image_title"), UIFormKind.Text, HexText.Get("settings_catalog.backdrop_image_help"), BACKDROP, Buttons: [HexText.Get("settings_catalog.backdrop_image_button_0"), HexText.Get("settings_catalog.backdrop_image_button_1")], Placeholder: HexText.Get("settings_catalog.backdrop_image_placeholder")),
         new(ARRANGE_BACKDROP, HexText.Get("settings_catalog.backdrop_arrange_title"), UIFormKind.Text, HexText.Get("settings_catalog.backdrop_arrange_help"), BACKDROP, Buttons: [HexText.Get("settings_catalog.backdrop_arrange_button")], ButtonsOnly: true),
         new("backdrop_opacity", HexText.Get("settings_catalog.backdrop_opacity_title"), UIFormKind.Number, HexText.Get("settings_catalog.backdrop_opacity_help"), BACKDROP, Least: 0.05f, Most: 1.0f, Step: 0.01f, Slider: true),
-        new("backdrop_scale", HexText.Get("settings_catalog.backdrop_scale_title"), UIFormKind.Number, HexText.Get("settings_catalog.backdrop_scale_help"), BACKDROP, Least: 0.05f, Most: 1.5f, Step: 0.01f, Slider: true),
-        new("backdrop_across", HexText.Get("settings_catalog.backdrop_across_title"), UIFormKind.Number, HexText.Get("settings_catalog.backdrop_across_help"), BACKDROP, Least: -0.5f, Most: 1.0f, Step: 0.01f, Slider: true),
-        new("backdrop_up", HexText.Get("settings_catalog.backdrop_up_title"), UIFormKind.Number, HexText.Get("settings_catalog.backdrop_up_help"), BACKDROP, Least: -0.5f, Most: 1.0f, Step: 0.01f, Slider: true),
-        new("backdrop_stretch", HexText.Get("settings_catalog.backdrop_stretch_title"), UIFormKind.Number, HexText.Get("settings_catalog.backdrop_stretch_help"), BACKDROP, Least: Hex.Core.HexSettings.LEAST_STRETCH, Most: Hex.Core.HexSettings.MOST_STRETCH, Step: 0.01f, Slider: true, Unit: "×"),
-        new("terminal_backdrop_scale", HexText.Get("settings_catalog.terminal_backdrop_scale_title"), UIFormKind.Number, HexText.Get("settings_catalog.terminal_backdrop_scale_help"), BACKDROP, Least: 0.05f, Most: 1.5f, Step: 0.01f, Slider: true),
-        new("terminal_backdrop_across", HexText.Get("settings_catalog.terminal_backdrop_across_title"), UIFormKind.Number, HexText.Get("settings_catalog.terminal_backdrop_across_help"), BACKDROP, Least: -0.5f, Most: 1.0f, Step: 0.01f, Slider: true),
-        new("terminal_backdrop_up", HexText.Get("settings_catalog.terminal_backdrop_up_title"), UIFormKind.Number, HexText.Get("settings_catalog.terminal_backdrop_up_help"), BACKDROP, Least: -0.5f, Most: 1.0f, Step: 0.01f, Slider: true),
-        new("terminal_backdrop_stretch", HexText.Get("settings_catalog.terminal_backdrop_stretch_title"), UIFormKind.Number, HexText.Get("settings_catalog.terminal_backdrop_stretch_help"), BACKDROP, Least: Hex.Core.HexSettings.LEAST_STRETCH, Most: Hex.Core.HexSettings.MOST_STRETCH, Step: 0.01f, Slider: true, Unit: "×"),
+        new("backdrop_scale", HexText.Get("settings_catalog.backdrop_scale_title"), UIFormKind.Number, HexText.Get("settings_catalog.backdrop_scale_help"), BACKDROP_CODE, Least: 0.05f, Most: 1.5f, Step: 0.01f, Slider: true),
+        new("backdrop_across", HexText.Get("settings_catalog.backdrop_across_title"), UIFormKind.Number, HexText.Get("settings_catalog.backdrop_across_help"), BACKDROP_CODE, Least: -0.5f, Most: 1.0f, Step: 0.01f, Slider: true),
+        new("backdrop_up", HexText.Get("settings_catalog.backdrop_up_title"), UIFormKind.Number, HexText.Get("settings_catalog.backdrop_up_help"), BACKDROP_CODE, Least: -0.5f, Most: 1.0f, Step: 0.01f, Slider: true),
+        new("backdrop_stretch", HexText.Get("settings_catalog.backdrop_stretch_title"), UIFormKind.Number, HexText.Get("settings_catalog.backdrop_stretch_help"), BACKDROP_CODE, Least: Hex.Core.HexSettings.LEAST_STRETCH, Most: Hex.Core.HexSettings.MOST_STRETCH, Step: 0.01f, Slider: true, Unit: "×"),
+        new("terminal_backdrop_scale", HexText.Get("settings_catalog.terminal_backdrop_scale_title"), UIFormKind.Number, HexText.Get("settings_catalog.terminal_backdrop_scale_help"), BACKDROP_TERMINALS, Least: 0.05f, Most: 1.5f, Step: 0.01f, Slider: true),
+        new("terminal_backdrop_across", HexText.Get("settings_catalog.terminal_backdrop_across_title"), UIFormKind.Number, HexText.Get("settings_catalog.terminal_backdrop_across_help"), BACKDROP_TERMINALS, Least: -0.5f, Most: 1.0f, Step: 0.01f, Slider: true),
+        new("terminal_backdrop_up", HexText.Get("settings_catalog.terminal_backdrop_up_title"), UIFormKind.Number, HexText.Get("settings_catalog.terminal_backdrop_up_help"), BACKDROP_TERMINALS, Least: -0.5f, Most: 1.0f, Step: 0.01f, Slider: true),
+        new("terminal_backdrop_stretch", HexText.Get("settings_catalog.terminal_backdrop_stretch_title"), UIFormKind.Number, HexText.Get("settings_catalog.terminal_backdrop_stretch_help"), BACKDROP_TERMINALS, Least: Hex.Core.HexSettings.LEAST_STRETCH, Most: Hex.Core.HexSettings.MOST_STRETCH, Step: 0.01f, Slider: true, Unit: "×"),
         new("backdrop_wrap", HexText.Get("settings_catalog.backdrop_wrap_title"), UIFormKind.Flag, HexText.Get("settings_catalog.backdrop_wrap_help"), BACKDROP),
         new("backdrop_wrap_margin", HexText.Get("settings_catalog.backdrop_wrap_margin_title"), UIFormKind.Number, HexText.Get("settings_catalog.backdrop_wrap_margin_help"), BACKDROP, Least: 0.0f, Most: 60.0f, Slider: true, Unit: "px"),
         new("wrap_flow", HexText.Get("settings_catalog.wrap_flow_title"), UIFormKind.Number, HexText.Get("settings_catalog.wrap_flow_help"), BACKDROP, Least: 0.0f, Most: 40.0f, Slider: true, Unit: "px"),
 
-        new("code_zoom", HexText.Get("settings_catalog.code_zoom_title"), UIFormKind.Number, HexText.Get("settings_catalog.code_zoom_help"), CODE, Least: 0.5f, Most: 3.0f, Step: 0.05f, Slider: true, Unit: "×"),
-        new("code_font", HexText.Get("settings_catalog.code_font_title"), UIFormKind.Choice, HexText.Get("settings_catalog.code_font_help"), CODE, CodeFonts()),
-        new("wrap_code", HexText.Get("settings_catalog.wrap_code_title"), UIFormKind.Flag, HexText.Get("settings_catalog.wrap_code_help"), CODE),
-        new("minimap", HexText.Get("settings_catalog.minimap_title"), UIFormKind.Flag, HexText.Get("settings_catalog.minimap_help"), CODE),
+        new("code_zoom", HexText.Get("settings_catalog.code_zoom_title"), UIFormKind.Number, HexText.Get("settings_catalog.code_zoom_help"), TEXT, Least: 0.5f, Most: 3.0f, Step: 0.05f, Slider: true, Unit: "×"),
+        new("code_font", HexText.Get("settings_catalog.code_font_title"), UIFormKind.Choice, HexText.Get("settings_catalog.code_font_help"), TEXT, CodeFonts()),
+        new("wrap_code", HexText.Get("settings_catalog.wrap_code_title"), UIFormKind.Flag, HexText.Get("settings_catalog.wrap_code_help"), TEXT),
+        new("minimap", HexText.Get("settings_catalog.minimap_title"), UIFormKind.Flag, HexText.Get("settings_catalog.minimap_help"), TEXT),
         new("spell_check", HexText.Get("spelling.title"), UIFormKind.Flag, HexText.Get("spelling.help"), CODE),
         new("spell_check_language", HexText.Get("spelling.language"), UIFormKind.Text, HexText.Get("spelling.language_help"), CODE, Placeholder: HexText.Get("spelling.language_placeholder")),
         new("inlay_hints", HexText.Get("settings_catalog.inlay_hints_title"), UIFormKind.Flag, HexText.Get("settings_catalog.inlay_hints_help"), CODE),
         new("code_lens_references", HexText.Get("settings_catalog.code_lens_references_title"), UIFormKind.Flag, HexText.Get("settings_catalog.code_lens_references_help"), CODE),
         new("semantic_highlighting", HexText.Get("settings_catalog.semantic_highlighting_title"), UIFormKind.Flag, HexText.Get("settings_catalog.semantic_highlighting_help"), CODE),
         Choice("csharp_colors", CODE, ["resharper", "visual_studio", "skin"]),
-        new("visual_studio_keys", HexText.Get("settings_catalog.visual_studio_keys_title"), UIFormKind.Flag, HexText.Get("settings_catalog.visual_studio_keys_help"), CODE),
+        new("visual_studio_keys", HexText.Get("settings_catalog.visual_studio_keys_title"), UIFormKind.Flag, HexText.Get("settings_catalog.visual_studio_keys_help"), KEYS),
 
-        new("reopen_last", HexText.Get("settings_catalog.reopen_last_title"), UIFormKind.Flag, HexText.Get("settings_catalog.reopen_last_help"), FILES),
-        new("persistent_process", HexText.Get("settings_catalog.persistent_process_title"), UIFormKind.Flag, HexText.Get("settings_catalog.persistent_process_help"), FILES),
-        new("persistent_at_login", HexText.Get("settings_catalog.persistent_at_login_title"), UIFormKind.Flag, HexText.Get("settings_catalog.persistent_at_login_help"), FILES),
-        new("trim_whitespace", HexText.Get("settings_catalog.trim_whitespace_title"), UIFormKind.Flag, HexText.Get("settings_catalog.trim_whitespace_help"), FILES),
-        new("final_newline", HexText.Get("settings_catalog.final_newline_title"), UIFormKind.Flag, HexText.Get("settings_catalog.final_newline_help"), FILES),
-        new("auto_save", HexText.Get("settings_catalog.auto_save_title"), UIFormKind.Flag, HexText.Get("settings_catalog.auto_save_help"), FILES),
-        new("auto_save_delay", HexText.Get("settings_catalog.auto_save_delay_title"), UIFormKind.Number, HexText.Get("settings_catalog.auto_save_delay_help"), FILES, Least: 0.5f, Most: 10.0f, Step: 0.5f, Slider: true, Unit: "s"),
+        new("reopen_last", HexText.Get("settings_catalog.reopen_last_title"), UIFormKind.Flag, HexText.Get("settings_catalog.reopen_last_help"), STARTUP),
+        new("persistent_process", HexText.Get("settings_catalog.persistent_process_title"), UIFormKind.Flag, HexText.Get("settings_catalog.persistent_process_help"), STARTUP),
+        new("persistent_at_login", HexText.Get("settings_catalog.persistent_at_login_title"), UIFormKind.Flag, HexText.Get("settings_catalog.persistent_at_login_help"), STARTUP),
+        new("trim_whitespace", HexText.Get("settings_catalog.trim_whitespace_title"), UIFormKind.Flag, HexText.Get("settings_catalog.trim_whitespace_help"), SAVE),
+        new("final_newline", HexText.Get("settings_catalog.final_newline_title"), UIFormKind.Flag, HexText.Get("settings_catalog.final_newline_help"), SAVE),
+        new("auto_save", HexText.Get("settings_catalog.auto_save_title"), UIFormKind.Flag, HexText.Get("settings_catalog.auto_save_help"), SAVE),
+        new("auto_save_delay", HexText.Get("settings_catalog.auto_save_delay_title"), UIFormKind.Number, HexText.Get("settings_catalog.auto_save_delay_help"), SAVE, Least: 0.5f, Most: 10.0f, Step: 0.5f, Slider: true, Unit: "s"),
         new("files_associations", HexText.Get("settings_catalog.files_associations_title"), UIFormKind.Pairs, HexText.Get("settings_catalog.files_associations_help"), FILES,
             KeyPlaceholder: HexText.Get("settings_catalog.files_associations_key_placeholder"), ValuePlaceholder: HexText.Get("settings_catalog.files_associations_value_placeholder")),
 
@@ -192,11 +224,11 @@ public static class EditorSettingsCatalog
         Choice("edit_predictions_provider", AI, ["ollama", "openai", "link"]),
         new("edit_predictions_api_url", HexText.Get("settings_catalog.edit_predictions_api_url_title"), UIFormKind.Text, HexText.Get("settings_catalog.edit_predictions_api_url_help"), AI,
             Placeholder: HexText.Get("settings_catalog.edit_predictions_api_url_placeholder")),
+        new("edit_predictions_model", HexText.Get("settings_catalog.edit_predictions_model_title"), UIFormKind.Text, HexText.Get("settings_catalog.edit_predictions_model_help"), AI,
+            Placeholder: HexText.Get("settings_catalog.edit_predictions_model_placeholder")),
         new(PREDICTION_KEY, HexText.Get("settings_catalog.edit_predictions_api_key_title"),
             UIFormKind.Secret,
             HexText.Get("settings_catalog.edit_predictions_api_key_help"), AI, Placeholder: HexText.Get("settings_catalog.edit_predictions_api_key_placeholder")),
-        new("edit_predictions_model", HexText.Get("settings_catalog.edit_predictions_model_title"), UIFormKind.Text, HexText.Get("settings_catalog.edit_predictions_model_help"), AI,
-            Placeholder: HexText.Get("settings_catalog.edit_predictions_model_placeholder")),
         Choice("edit_predictions_prompt_format", AI, ["infer", "zeta2", "qwen", "code_llama", "star_coder", "deepseek_coder", "code_gemma", "codestral"]),
         new("edit_predictions_max_tokens", HexText.Get("settings_catalog.edit_predictions_max_tokens_title"), UIFormKind.Whole, HexText.Get("settings_catalog.edit_predictions_max_tokens_help"), AI, Least: 16.0f, Most: 2048.0f),
         new("edit_predictions_debounce", HexText.Get("settings_catalog.edit_predictions_debounce_title"), UIFormKind.Whole, HexText.Get("settings_catalog.edit_predictions_debounce_help"), AI, Least: 0.0f, Most: 2000.0f, Unit: "ms"),
@@ -217,14 +249,17 @@ public static class EditorSettingsCatalog
 
         new("debugger_path", HexText.Get("settings_catalog.debugger_path_title"), UIFormKind.Text, HexText.Get("settings_catalog.debugger_path_help"), RUN, Placeholder: HexText.Get("settings_catalog.debugger_path_placeholder")),
         new("run_to_terminal", HexText.Get("settings_catalog.run_to_terminal_title"), UIFormKind.Flag, HexText.Get("settings_catalog.run_to_terminal_help"), RUN),
-        new("mcp_server", HexText.Get("settings_catalog.mcp_server_title"), UIFormKind.Flag, HexText.Get("settings_catalog.mcp_server_help"), RUN),
-        new("no_ai", HexText.Get("settings_catalog.no_ai_title"), UIFormKind.Flag, HexText.Get("settings_catalog.no_ai_help"), RUN),
-        new("agents_resume_after_limit", HexText.Get("settings_catalog.agents_resume_after_limit_title"), UIFormKind.Flag, HexText.Get("settings_catalog.agents_resume_after_limit_help"), RUN),
-        new("agents_auto_settle_seconds", HexText.Get("settings_catalog.agents_auto_settle_seconds_title"), UIFormKind.Whole, HexText.Get("settings_catalog.agents_auto_settle_seconds_help"), RUN, Least: 0.0f, Most: 3600.0f),
-        new("link", HexText.Get("settings_catalog.link_title"), UIFormKind.Flag, HexText.Get("settings_catalog.link_help"), RUN),
-        new("link_port", HexText.Get("settings_catalog.link_port_title"), UIFormKind.Whole, HexText.Get("settings_catalog.link_port_help"), RUN, Least: 1024.0f, Most: 65535.0f),
-        new("link_name", HexText.Get("settings_catalog.link_name_title"), UIFormKind.Text, HexText.Get("settings_catalog.link_name_help"), RUN, Placeholder: HexText.Get("settings_catalog.link_name_placeholder")),
-        new("link_discoverable", HexText.Get("settings_catalog.link_discoverable_title"), UIFormKind.Flag, HexText.Get("settings_catalog.link_discoverable_help"), RUN),
+        new("mcp_server", HexText.Get("settings_catalog.mcp_server_title"), UIFormKind.Flag, HexText.Get("settings_catalog.mcp_server_help"), AGENTS),
+        new("no_ai", HexText.Get("settings_catalog.no_ai_title"), UIFormKind.Flag, HexText.Get("settings_catalog.no_ai_help"), AGENTS),
+        new("agents_resume_after_limit", HexText.Get("settings_catalog.agents_resume_after_limit_title"), UIFormKind.Flag, HexText.Get("settings_catalog.agents_resume_after_limit_help"), AGENTS),
+        new("agents_auto_settle_seconds", HexText.Get("settings_catalog.agents_auto_settle_seconds_title"), UIFormKind.Whole, HexText.Get("settings_catalog.agents_auto_settle_seconds_help"), AGENTS, Least: 0.0f, Most: 3600.0f),
+        new("link", HexText.Get("settings_catalog.link_title"), UIFormKind.Flag, HexText.Get("settings_catalog.link_help"), LINK),
+        new("link_port", HexText.Get("settings_catalog.link_port_title"), UIFormKind.Whole, HexText.Get("settings_catalog.link_port_help"), LINK, Least: 1024.0f, Most: 65535.0f),
+        new("link_name", HexText.Get("settings_catalog.link_name_title"), UIFormKind.Text, HexText.Get("settings_catalog.link_name_help"), LINK, Placeholder: HexText.Get("settings_catalog.link_name_placeholder")),
+        new("link_discoverable", HexText.Get("settings_catalog.link_discoverable_title"), UIFormKind.Flag, HexText.Get("settings_catalog.link_discoverable_help"), LINK),
+
+        new(LINK_SYSTEM_FILE_FOLDERS, HexText.Get("settings_catalog.link_system_file_folders_title"), UIFormKind.List, HexText.Get("settings_catalog.link_system_file_folders_help"), LINK_SYNC,
+            KeyPlaceholder: HexText.Get("settings_catalog.link_system_file_folders_placeholder"), ValuePlaceholder: HexText.Get("settings_catalog.link_system_file_folders_add")),
 
         new("snap", HexText.Get("settings_catalog.snap_title"), UIFormKind.Whole, HexText.Get("settings_catalog.snap_help"), DESIGNER, Least: 0.0f, Most: 16.0f),
         new("canvas_handles", HexText.Get("settings_catalog.canvas_handles_title"), UIFormKind.Flag, HexText.Get("settings_catalog.canvas_handles_help"), DESIGNER)
@@ -237,9 +272,13 @@ public static class EditorSettingsCatalog
     private static UISetting[] Linked(UISetting[] rows) =>
         [.. rows.Select(row => row with { Keywords = KeywordsOf(row.Key), DependsOn = ParentOf(row.Key) })];
 
-    // The words a row is found by besides its own, nothing for a row with none. HexText.Get gives a missing key back
-    // with an @ in front, which the search would have found
-    private static string KeywordsOf(string key) => HexText.Strings.GetValueOrDefault($"settings_keywords.{key}", string.Empty);
+    // The words a row is found by besides its own, nothing for a row with none, and the section it used to be in. HexText.Get
+    // gives a missing key back with an @ in front, which the search would have found
+    private static string KeywordsOf(string key)
+    {
+        string own = HexText.Strings.GetValueOrDefault($"settings_keywords.{key}", string.Empty);
+        return formerly.TryGetValue(key, out string? old) && !own.Contains(old, StringComparison.OrdinalIgnoreCase) ? $"{own} {old}".Trim() : own;
+    }
 
     // The switch a row hangs off, the delay off saving by itself, the picture's sizes and places off the picture being
     // on, the glass's blur and rim off the glass. Empty for a row that stands on its own. The picture's file isn't the
@@ -271,7 +310,7 @@ public static class EditorSettingsCatalog
     /// render_whitespace_help, and every choice's label and line, render_whitespace_all and render_whitespace_all_help.
     /// </summary>
     private static UISetting TextChoice(string key, string[] choices) =>
-        new(key, HexText.Get($"settings_text.{key}_title"), UIFormKind.Choice, HexText.Get($"settings_text.{key}_help"), TEXT, choices,
+        new(key, HexText.Get($"settings_text.{key}_title"), UIFormKind.Choice, HexText.Get($"settings_text.{key}_help"), key == "cursor_style" ? CARET : TEXT, choices,
             ChoiceLabels: [.. choices.Select(choice => HexText.Get($"settings_text.{key}_{choice}"))],
             ChoiceHelp: [.. choices.Select(choice => HexText.Get($"settings_text.{key}_{choice}_help"))]);
 
@@ -389,6 +428,7 @@ public static class EditorSettingsCatalog
         ["search_exclude"] = Horizon.HIDL.Library.Natives.List(Hex.Core.HexSettings.UsualSearchExclude),
         ["search_use_ignore_files"] = Values.Bool(true),
         ["explorer_auto_reveal"] = Values.Bool(true),
+        [LINK_SYSTEM_FILE_FOLDERS] = Horizon.HIDL.Library.Natives.List(Array.Empty<string>()),
 
         ["edit_predictions"] = Values.Bool(false),
         ["edit_predictions_provider"] = new StringValue("ollama"),
