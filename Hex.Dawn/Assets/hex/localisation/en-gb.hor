@@ -4552,6 +4552,7 @@ let strings = {
         devices_cancel_invite: "Cancel invite",
         devices_key_file_chip: "Key in file",
         devices_sync_none: "No active sync",
+        devices_sync_runs_there: "Sync runs on {device}. Manage it there.",
         devices_commit_detached: "detached",
         devices_invite_expired: "This invite expired. Make a new one.",
         devices_invite_expired_join: "This invite expired or was already used. Ask the host for a new one.",

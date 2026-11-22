@@ -30,8 +30,9 @@ internal sealed partial class DawnScene
     {
         List<string> folders = LinkSharedFolders(peer);
         IReadOnlyList<LinkSyncShown> syncs = LinkSyncs;
+        IReadOnlyList<LinkSyncShown> ownerSyncs = LinkRemoteSyncs(peer);
         // A sync kept for a folder that isn't open on both now still shows, to be stopped
-        foreach (LinkSyncShown kept in syncs)
+        foreach (LinkSyncShown kept in syncs.Concat(ownerSyncs))
         {
             if (kept.DeviceId.Equals(peer.Device.Id, StringComparison.OrdinalIgnoreCase) && !folders.Contains(kept.Folder, StringComparer.OrdinalIgnoreCase))
                 folders.Add(kept.Folder);
@@ -46,12 +47,15 @@ internal sealed partial class DawnScene
         foreach (string folder in folders)
         {
             LinkSyncShown? sync = syncs.FirstOrDefault(each => each.DeviceId.Equals(peer.Device.Id, StringComparison.OrdinalIgnoreCase) && each.Folder.Equals(folder, StringComparison.OrdinalIgnoreCase));
-            column.Add(LinkSyncRow(peer, folder, sync));
+            LinkSyncShown? owner = sync is null || sync.State is HexLinkSyncState.Off or HexLinkSyncState.Failed
+                ? ownerSyncs.FirstOrDefault(each => each.Folder.Equals(folder, StringComparison.OrdinalIgnoreCase) && each.State != HexLinkSyncState.Off)
+                : null;
+            column.Add(LinkSyncRow(peer, folder, owner ?? sync, reportedByOwner: owner is not null));
         }
     }
 
     // A folder's sync with a device: its name and state, what it says, the counts, and its buttons
-    private UIComponent LinkSyncRow(HexLinkPeer peer, string folder, LinkSyncShown? sync)
+    private UIComponent LinkSyncRow(HexLinkPeer peer, string folder, LinkSyncShown? sync, bool reportedByOwner = false)
     {
         string id = peer.Device.Id;
         var holder = new StackPanel { Spacing = 2.0f, Fill = UIFill.Horizontal, Padding = new UIEdges(12, 0, 0, 0) };
@@ -72,24 +76,29 @@ internal sealed partial class DawnScene
             Colour = state is HexLinkSyncState.Syncing or HexLinkSyncState.Comparing ? LinkBadgeInfoColour : null,
             Dot = state is HexLinkSyncState.Syncing or HexLinkSyncState.Comparing, TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left
         });
-        if (sync is { PullOnly: true } && state != HexLinkSyncState.PullOnly)
+        if (!reportedByOwner && sync is { PullOnly: true } && state != HexLinkSyncState.PullOnly)
             row.Add(new Badge { Text = Said("link.sync_state_pullonly"), Tone = UIBadgeTone.Warning, TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left, Tooltip = Said("link.sync_pull_only_tip") });
+        if (reportedByOwner)
+            holder.Add(LinkLine(Said("link.devices_sync_runs_there", ("device", LinkNameOf(id, peer.Device.Name)))));
         if (sync is not null && (sync.Sent != 0 || sync.Received != 0 || sync.Conflicts != 0 || sync.Skipped != 0))
         {
             Label counts = holder.Add(LinkLine(Said("link.sync_counts", ("sent", sync.Sent.ToString(CultureInfo.InvariantCulture)),
                 ("received", sync.Received.ToString(CultureInfo.InvariantCulture)), ("conflicts", sync.Conflicts.ToString(CultureInfo.InvariantCulture)),
                 ("skipped", sync.Skipped.ToString(CultureInfo.InvariantCulture)))));
-            if (sync.Skipped > 0)
+            if (!reportedByOwner && sync.Skipped > 0)
                 counts.Tooltip = string.Join("\n", LinkSyncSkipped(id, folder).Take(20).Select(each => each.ToString()));
         }
 
         bool running = state is HexLinkSyncState.Comparing or HexLinkSyncState.Syncing or HexLinkSyncState.Idle or HexLinkSyncState.PullOnly or HexLinkSyncState.NeedsGit;
-        if (running)
-            row.Add(LinkButton(Said("link.sync_stop"), "debug-stop", () => LinkSyncStop(id, folder)));
-        else
-            row.Add(LinkButton(Said(state == HexLinkSyncState.Failed ? "link.devices_try_now" : "link.sync_start"), "sync", () => LinkSyncGo(id, folder, force: false))).Enabled = HexLinkAllowed.Has(peer.Granted, HexLinkRights.View);
-        if (state == HexLinkSyncState.NeedsGit)
-            row.Add(LinkButton(Said("link.sync_anyway"), "warning", () => LinkSyncGo(id, folder, force: true)));
+        if (!reportedByOwner)
+        {
+            if (running)
+                row.Add(LinkButton(Said("link.sync_stop"), "debug-stop", () => LinkSyncStop(id, folder)));
+            else
+                row.Add(LinkButton(Said(state == HexLinkSyncState.Failed ? "link.devices_try_now" : "link.sync_start"), "sync", () => LinkSyncGo(id, folder, force: false))).Enabled = HexLinkAllowed.Has(peer.Granted, HexLinkRights.View);
+            if (state == HexLinkSyncState.NeedsGit)
+                row.Add(LinkButton(Said("link.sync_anyway"), "warning", () => LinkSyncGo(id, folder, force: true)));
+        }
 
         if (sync is not null)
             DrawLinkSyncProgress(holder, sync);
