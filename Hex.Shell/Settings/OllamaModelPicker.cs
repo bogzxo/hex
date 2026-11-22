@@ -6,7 +6,7 @@ using Horizon.UI.Components;
 namespace Hex.Shell;
 
 /// <summary>Discovers installed models only while an Ollama model setting is on the settings page.</summary>
-internal sealed class OllamaModelPicker
+internal sealed class OllamaModelPicker(HttpClient? client = null)
 {
     private const string ModelKey = "edit_predictions_model";
     private SettingsPage? currentPage;
@@ -18,7 +18,9 @@ internal sealed class OllamaModelPicker
     private UISetting? applied;
     private string? selected;
 
-    public void Update(SettingsPage? page)
+    public void Update(SettingsPage? page) => Update(page, System.Environment.TickCount64);
+
+    internal void Update(SettingsPage? page, long now)
     {
         if (page != currentPage)
         {
@@ -26,13 +28,12 @@ internal sealed class OllamaModelPicker
             currentPage = page;
             nextCheck = 0;
         }
-        long now = Environment.TickCount64;
         if (HexAi.Off || page is null || now < nextCheck)
             return;
         nextCheck = now + 250;
         var row = page.Settings.FirstOrDefault(setting => setting.Key == ModelKey);
         string? url = row is not null && page.ValueOf?.Invoke("edit_predictions_provider") is StringValue { Value: "ollama" }
-            ? (page.ValueOf("edit_predictions_api_url") as StringValue)?.Value : null;
+            && page.ValueOf("edit_predictions_api_url") is StringValue address ? address.Value : null;
         if (url != endpoint)
         {
             Reset();
@@ -57,7 +58,7 @@ internal sealed class OllamaModelPicker
         }
         if (row is null)
             return;
-        string value = (page.ValueOf?.Invoke(ModelKey) as StringValue)?.Value ?? "";
+        string value = page.ValueOf?.Invoke(ModelKey) is StringValue model ? model.Value : "";
         if (row == applied && selected == value)
             return;
         var next = ModelRow(row, installed, value);
@@ -79,11 +80,11 @@ internal sealed class OllamaModelPicker
         nextPoll = 0;
     }
 
-    private static async Task<string[]?> Discover(Uri api, CancellationToken token)
+    private async Task<string[]?> Discover(Uri api, CancellationToken token)
     {
         try
         {
-            return await OllamaProvider.InstalledModels(PredictionProviders.Shared, api, token).ConfigureAwait(false);
+            return await OllamaProvider.InstalledModels(client ?? PredictionProviders.Shared, api, token).ConfigureAwait(false);
         }
         catch (Exception e) when (e is HttpRequestException or OperationCanceledException or JsonException or IOException)
         {
