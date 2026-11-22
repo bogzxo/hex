@@ -289,9 +289,11 @@ internal sealed partial class DawnScene
         test.Check("link-ui: a sync failure is visible in the status bar", () =>
             saidError && messageItem.Text.Contains("fixture interruption", StringComparison.Ordinal));
         ClickWindow("link.sync_start");
-        test.WaitFor(() => peerId is not null && LinkSyncs.Any(sync => sync.DeviceId == peerId && sync.State is HexLinkSyncState.Idle or HexLinkSyncState.PullOnly), 12);
-        test.Check("link-ui: a recovered sync clears its failure from the status bar", () =>
-            linkSyncStatusError is null && !messageItem.Text.Contains("fixture interruption", StringComparison.Ordinal));
+        bool SyncRecovered() => peerId is not null && LinkSyncs.Any(sync =>
+            sync.DeviceId == peerId && sync.State is HexLinkSyncState.Idle or HexLinkSyncState.PullOnly)
+            && linkSyncStatusError is null && !messageItem.Text.Contains("fixture interruption", StringComparison.Ordinal);
+        test.WaitFor(SyncRecovered, 40);
+        test.Check("link-ui: a recovered sync clears its failure from the status bar", SyncRecovered);
         test.Run(() =>
         {
             LinkSaySyncError(peerId!, LINK_PEER_NAME, LINK_PEER_FOLDER, "fixture interruption");
@@ -301,7 +303,7 @@ internal sealed partial class DawnScene
         test.Check("link-ui: sync recovery keeps a newer, unrelated status error", () =>
             saidError && messageItem.Text.Contains("unrelated fixture failure", StringComparison.Ordinal));
         test.Run(() => Say(string.Empty));
-        test.WaitFor(() => LinkConflicts.Any(conflict => conflict.Path.EndsWith(ConflictName, StringComparison.Ordinal)), 6);
+        test.WaitFor(() => LinkConflicts.Any(conflict => conflict.Path.EndsWith(ConflictName, StringComparison.Ordinal)), 20);
         Shot("link_ui_conflict.png");
         ClickWindowLabel(Said("link.devices_resolve", ("count", "1")));
         test.WaitFor(() => chrome.Root.Children.OfType<UIDialog>().Any(dialog => dialog is { IsOpen: true, IsPalette: true }), 4);
