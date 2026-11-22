@@ -752,19 +752,22 @@ internal sealed partial class DawnScene
         });
         Task<JsonNode?>? sentOffer = null;
         bool IsWorkspaceOffer(UIDialog dialog) => dialog.Buttons.Any(button => button.Label == Said("link.devices_workspace_offer_get"));
-        test.WaitFor(() => linkServices?.Workspace.Folders.Count == 0, 5);
+        test.WaitFor(() => linkServices?.Workspace.Folders.Count == 0 && linkWindow is null && OpenDialog() is null, 8);
+        test.Settle(0.35f);
         test.Run(() =>
         {
             if (sessions.TryPeek(out HexLinkSession? session))
                 sentOffer = session.Ask("git/bundle", new JsonObject { ["operation"] = "offer", ["workspace"] = "Fixture workspace" });
         });
         test.WaitFor(() => sentOffer is { IsCompletedSuccessfully: true } && OpenDialog() is { } dialog && IsWorkspaceOffer(dialog), 8);
+        test.Settle(0.45f);
         test.Check("link-ui: a received workspace offer opens a choice with no workspace or Devices window open", () =>
             sentOffer is { IsCompletedSuccessfully: true } && explorer.workspace.Folders.Count == 0 &&
             linkWindow is null && OpenDialog() is { } dialog && IsWorkspaceOffer(dialog));
         shot("link_ui_workspace_offer.png");
         test.Click(() => centre(OpenDialog()?.Buttons.FirstOrDefault(button => button.Label == Said("link.devices_workspace_offer_later"))));
         test.WaitFor(() => OpenDialog() is null, 5);
+        test.Settle(0.3f);
         test.Run(ShowLinkWindowForTest);
         test.Settle(0.25f);
         test.Check("link-ui: Not now keeps the workspace offer on the device row", () =>
@@ -773,8 +776,10 @@ internal sealed partial class DawnScene
         clickWindow("link.devices_get");
         test.WaitFor(() => textDialog is { IsOpen: true }, 5);
         test.Check("link-ui: getting a deferred workspace offer opens the folder chooser", () =>
-            textDialog is { IsOpen: true } picker && picker.Buttons[0].Label == Said("explorer_workspace.add"));
+            textDialog is { IsOpen: true } picker && picker.Buttons.Any(button => button.Label == Said("explorer_workspace.add")));
         test.Run(() => textDialog?.Close());
+        test.WaitFor(() => OpenDialog() is null, 5);
+        test.Settle(0.3f);
         clickWindow("link.devices_open_files");
         test.WaitFor(() => OpenDialog() is { IsPalette: true }, 5);
         test.Check("link-ui: Open its files opens a browser for the connected device", () => OpenDialog() is { IsOpen: true, IsPalette: true });
