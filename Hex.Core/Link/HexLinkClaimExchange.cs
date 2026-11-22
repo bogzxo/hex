@@ -90,10 +90,10 @@ internal sealed class HexLinkClaimExchange(IHexLinkServices services)
             peers = [.. routes.Values.Select(route => route.Peer).Where(peer => !peer.IsClosed)];
         var chosen = peers.ToDictionary(peer => peer.Device.Id, peer => services.ChosenSyncFolders(peer.Device.Id));
         var now = services.Workspace.Folders.Where(folder => HexLinkClaims.ValidPath(folder.Name, false) && !folder.Name.Contains('/'))
-            .Select(folder => folder.Authority is { } authority
+            .Select(folder => Paired(folder, peers, chosen) ?? (folder.Authority is { } authority
                 ? new HexLinkClaimFolder(folder, new HexLinkClaimScope(folder.Name,
                     HexLinkFiles.Hash(Encoding.UTF8.GetBytes($"{authority.DeviceId}\n{authority.Epoch}\n{folder.Name}"))), authority.DeviceId)
-                : Paired(folder, peers, chosen))
+                : null))
             .OfType<HexLinkClaimFolder>().Take(HexLinkHost.MOST_TREES).ToArray();
         lock (gate)
         {
@@ -109,15 +109,17 @@ internal sealed class HexLinkClaimExchange(IHexLinkServices services)
         }
     }
 
-    // A folder without an authority that this device keeps in sync with a linked device, or that device with it, counts
-    // for claims between the two: both compute the same scope from the folder's name, so each side's claims reach the other.
+    // A folder this device keeps in sync with a linked device, or that device with it, counts for claims between the two
+    // when the two don't pin the same authority for it (none yet, or only one of them): both compute the same scope from
+    // the folder's name, so each side's claims reach the other. Two that pin the same authority use its scope instead.
     private static HexLinkClaimFolder? Paired(HexLinkFolder folder, HexLinkPeer[] peers, Dictionary<string, IReadOnlyList<string>> chosen)
     {
-        string[] with = [.. peers.Where(peer => peer.Workspace.Folders.FirstOrDefault(other => PlatformPaths.Comparer.Equals(other.Name, folder.Name))
-                is { Authority: null }
-            && (chosen[peer.Device.Id].Contains(folder.Name, PlatformPaths.Comparer)
-                || peer.ChosenSyncFolders.Contains(folder.Name, PlatformPaths.Comparer)))
-            .Select(peer => peer.Device.Id).Order(StringComparer.Ordinal)];
+        var synced = peers.Select(peer => (Peer: peer, Remote: peer.Workspace.Folders.FirstOrDefault(other => PlatformPaths.Comparer.Equals(other.Name, folder.Name))))
+            .Where(each => each.Remote is not null && (chosen[each.Peer.Device.Id].Contains(folder.Name, PlatformPaths.Comparer)
+                || each.Peer.ChosenSyncFolders.Contains(folder.Name, PlatformPaths.Comparer))).ToArray();
+        if (folder.Authority is not null && synced.All(each => each.Remote!.Authority == folder.Authority))
+            return null;
+        string[] with = [.. synced.Select(each => each.Peer.Device.Id).Order(StringComparer.Ordinal)];
         if (with.Length == 0)
             return null;
         string identity = HexLinkFiles.Hash(Encoding.UTF8.GetBytes($"sync\n{folder.Name}"));

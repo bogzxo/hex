@@ -21,7 +21,10 @@ internal sealed partial class DawnScene
             if (peer.IsClosed || LinkPeerOf(peer.Device.Id) != peer || !HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))
                 return;
             if (refreshed)
+            {
                 LinkLearnAuthority(peer);
+                LinkPinSyncedFolders(peer, start: false);
+            }
             LinkSyncResume(peer);
             if (refreshed)
                 LinkSyncStartSharedFolders(peer);

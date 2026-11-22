@@ -378,9 +378,14 @@ internal sealed partial class DawnScene
             yield break;
         }
 
-        if (target is not { } requested || CallerOf(args) is not { } id || ChatById(id) is not { } chat)
+        if (CallerOf(args) is not { } id || ChatById(id) is not { } chat)
         {
-            yield return McpToolResult.Error("Use a Hex agent chat and a path in a folder that was shared or provisioned.");
+            yield return McpToolResult.Error("Only a Hex agent chat can claim or release, this call isn't from one.");
+            yield break;
+        }
+        if (target is not { } requested)
+        {
+            yield return McpToolResult.Error(ClaimRefusal(exchange, supplied));
             yield break;
         }
 
@@ -404,6 +409,36 @@ internal sealed partial class DawnScene
         linkExplicitClaims[(requested.Scope, key)] = new HexLinkClaimDraft(key, ChatName(chat.Id), EtaTick: eta);
         linkClaimWait = 0;
         yield return McpToolResult.Text($"Claimed {supplied}. Release it when finished. Other holders keep their claims.");
+    }
+
+    // Exactly which condition a path failed to meet for a claim, in the order they're checked
+    private string ClaimRefusal(HexLinkClaimExchange exchange, string supplied)
+    {
+        HexLinkWorkspace workspace = linkServices?.Workspace ?? HexLinkWorkspace.Empty;
+        string names = string.Join(", ", workspace.Folders.Select(folder => folder.Name));
+        if (string.IsNullOrWhiteSpace(supplied))
+            return "Say the path to claim.";
+        string input = supplied.Trim().Replace('\\', '/');
+        HexLinkFolder? inside = null;
+        if (Path.IsPathFullyQualified(input))
+            inside = workspace.Folders.Where(folder => PlatformPaths.IsUnder(Path.GetFullPath(input), folder.Path)).MaxBy(folder => folder.Path.Length);
+        else
+        {
+            string first = input.Split('/')[0];
+            inside = workspace.Folders.FirstOrDefault(folder => PlatformPaths.Comparer.Equals(folder.Name, first)) ?? workspace.Folders.FirstOrDefault();
+        }
+        if (inside is null)
+            return $"{supplied} is in no folder of this workspace (folders: {(names.Length == 0 ? "none" : names)}).";
+        if (exchange.Folders.All(each => !PlatformPaths.Comparer.Equals(each.Scope.Folder, inside.Name)))
+        {
+            string chosen = linkServices is null ? string.Empty : string.Join(", ", LinkPeers.Select(peer =>
+                $"{peer.Device.Name}: {(linkServices.ChosenSyncFolders(peer.Device.Id).Count == 0 ? "no folder synced" : string.Join('/', linkServices.ChosenSyncFolders(peer.Device.Id)))}, "
+                + $"its folders {(peer.Workspace.Folders.Count == 0 ? "none" : string.Join('/', peer.Workspace.Folders.Select(folder => folder.Name)))}"));
+            return $"{inside.Name} has no claim scope: it has no pinned authority"
+                + $" ({(inside.Authority is null ? "none" : "pinned")}) and no linked device keeps a folder of that name in sync with it"
+                + $" ({(chosen.Length == 0 ? "no device is linked" : chosen)}). Sync it with Link: Sync Folder, or hex_link_authority it.";
+        }
+        return $"{supplied} is a path claims can't cover (ignored, hidden or not inside {inside.Name}).";
     }
 
     private IEnumerable<McpToolResult?> LinkClaimAgentMessage(JsonObject args)

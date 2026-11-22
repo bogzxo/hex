@@ -131,6 +131,20 @@ public sealed class HexLinkClaimsTests
     }
 
     [Fact]
+    public async Task A_synced_folder_pinned_on_one_side_only_still_shares_claims_by_its_name()
+    {
+        using var pair = await LinkedPair.Up(HexLinkRights.View, HexLinkRights.View);
+        pair.A.Chosen[DeviceB.Id] = ["work"];
+        pair.B.Chosen[DeviceA.Id] = ["work"];
+        pair.A.Workspace = new HexLinkWorkspace("Test", [pair.A.Workspace.Folders[0] with { Authority = new HexLinkAuthority(DeviceA.Id, 1) }], []);
+        pair.LinkA.Claims.RefreshFolders();
+        pair.LinkB.Claims.RefreshFolders();
+        var folder = Assert.Single(pair.LinkA.Claims.Folders);
+        Assert.Equal(Assert.Single(pair.LinkB.Claims.Folders).Scope, folder.Scope);
+        Assert.NotEqual(string.Empty, folder.PairedWith);
+    }
+
+    [Fact]
     public void A_claim_keeps_the_time_it_was_first_made_across_changes_and_a_short_gap()
     {
         using var services = Services(DeviceA);

@@ -337,6 +337,22 @@ internal sealed partial class DawnScene
     // The folders chosen to be synced with a device
     private List<string> LinkSyncChosen(string deviceId) => LinkSyncChosenIn(LinkSyncChoices(), deviceId);
 
+    // The folders chosen to be synced with a device and those with a sync running now, a sync restored at start or made by hand
+    internal List<string> LinkSyncedWith(string deviceId)
+    {
+        List<string> synced = LinkSyncChosen(deviceId);
+        lock (linkSyncGate)
+        {
+            foreach (LinkSyncEntry entry in linkSyncs.Values)
+            {
+                if (entry.DeviceId == deviceId && entry.Sync is not null && !synced.Contains(entry.Folder, PlatformPaths.Comparer))
+                    synced.Add(entry.Folder);
+            }
+        }
+
+        return synced;
+    }
+
     private List<HexLinkSyncPause> LinkSyncPaused(string deviceId) =>
         [.. LinkSyncChoices().Where(choice => HexLinkData.String(choice, "device", 200) == deviceId &&
             HexLinkData.Bool(choice, "enabled") == false)

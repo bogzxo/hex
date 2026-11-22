@@ -81,7 +81,7 @@ internal sealed partial class DawnScene
             hex.LinkMoved();
         }
 
-        public IReadOnlyList<string> ChosenSyncFolders(string deviceId) => hex.LinkSyncChosen(deviceId);
+        public IReadOnlyList<string> ChosenSyncFolders(string deviceId) => hex.LinkSyncedWith(deviceId);
         public IReadOnlyList<HexLinkSyncPause> PausedSyncFolders(string deviceId) => hex.LinkSyncPaused(deviceId);
 
         public Task ResumeLegacyPair(HexLinkPeer peer, HexLinkFolder folder, CancellationToken cancel) =>

@@ -536,8 +536,10 @@ internal sealed partial class DawnScene
         peer.SyncPausesChanged = () => PostLink(() => LinkAcceptRemotePauses(peer));
         peer.WorkspaceChanged = () => PostLink(() =>
         {
-            if (LinkPeerOf(peer.Device.Id) == peer)
-                LinkLearnAuthority(peer);
+            if (LinkPeerOf(peer.Device.Id) != peer)
+                return;
+            LinkLearnAuthority(peer);
+            LinkPinSyncedFolders(peer);
         });
         LinkAcceptRemotePauses(peer);
         peer.RightsChanged += () =>
