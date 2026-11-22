@@ -13,6 +13,7 @@ namespace Hex.Dusk;
 internal sealed partial class DuskScene
 {
     private SettingsWindow? settingsView;
+    private readonly OllamaModelPicker ollamaModels = new();
 
     // The part of the settings that's the terminal's, what Dusk's window is for
     private const string TERMINAL_PART = "Terminal";

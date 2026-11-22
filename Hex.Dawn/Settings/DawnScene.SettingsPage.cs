@@ -29,6 +29,7 @@ internal sealed partial class DawnScene
     private const string INTERFACE_SIZE = "interface_size";
 
     private SettingsWindow? settingsView;
+    private readonly OllamaModelPicker ollamaModels = new();
 
     /// <summary>The page while it is up, for the self test.</summary>
     internal SettingsPage? SettingsPage => settingsView?.Window.Parent is not null ? settingsView.Page : null;

@@ -87,16 +87,8 @@ internal sealed class OllamaProvider(HttpClient http, Uri api, string model) : I
         string has;
         try
         {
-            using var wait = CancellationTokenSource.CreateLinkedTokenSource(cancel);
-            wait.CancelAfter(TimeSpan.FromSeconds(3));
-            var tags = new UriBuilder(api) { Path = "/api/tags" }.Uri;
-            using HttpResponseMessage response = await http.GetAsync(tags, wait.Token).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
-            using JsonDocument document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(wait.Token).ConfigureAwait(false));
-            string[] names = document.RootElement.TryGetProperty("models", out JsonElement list) && list.ValueKind == JsonValueKind.Array
-                ? [.. list.EnumerateArray().Select(each => each.TryGetProperty("name", out JsonElement name) ? name.GetString() ?? "" : "").Where(each => each.Length > 0).Take(6)]
-                : [];
-            has = names.Length == 0 ? "The server has no models at all." : "The server has: " + string.Join(", ", names) + ".";
+            string[] names = await InstalledModels(http, api, cancel).ConfigureAwait(false);
+            has = names.Length == 0 ? "The server has no models at all." : "The server has: " + string.Join(", ", names.Take(6)) + ".";
         }
         catch (Exception exception) when (exception is not OperationCanceledException || !cancel.IsCancellationRequested)
         {
@@ -105,6 +97,22 @@ internal sealed class OllamaProvider(HttpClient http, Uri api, string model) : I
 
         return new PredictionException(PredictionStatus.NoSuchModel,
             $"{e.Message} (asked for {model}). {has} If it should have it, Ollama may be reading another model folder: set OLLAMA_MODELS and restart Ollama.".Replace(". .", ".").Replace("  ", " "));
+    }
+
+    internal static async Task<string[]> InstalledModels(HttpClient client, Uri generate, CancellationToken cancel)
+    {
+        using var wait = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+        wait.CancelAfter(TimeSpan.FromSeconds(3));
+        var tags = new UriBuilder(generate) { Path = generate.AbsolutePath[..^"generate".Length] + "tags" }.Uri;
+        using HttpResponseMessage response = await client.GetAsync(tags, wait.Token).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(wait.Token).ConfigureAwait(false));
+        if (json.RootElement.ValueKind != JsonValueKind.Object || !json.RootElement.TryGetProperty("models", out var models) || models.ValueKind != JsonValueKind.Array)
+            throw new JsonException("Expected a list of Ollama models.");
+        return [.. models.EnumerateArray()
+            .Where(item => item.ValueKind == JsonValueKind.Object && item.TryGetProperty("name", out var name) && name.ValueKind == JsonValueKind.String)
+            .Select(item => item.GetProperty("name").GetString()!)
+            .Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.Ordinal)];
     }
 
     private async IAsyncEnumerable<string> Stream(PredictionWireRequest request, [EnumeratorCancellation] CancellationToken cancel)
