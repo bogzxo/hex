@@ -177,6 +177,9 @@ internal sealed partial class HexLinkPeer : IDisposable
                 case "link/rights":
                     TakeRights(HexLinkData.RightsOf(parameters, "granted"));
                     break;
+                case "sync/status":
+                    TakeSyncReport(parameters);
+                    break;
                 default:
                     if (HexLinkAllowed.Has(Granted, HexLinkRights.View))
                         TreeTold(method, parameters);
@@ -205,6 +208,7 @@ internal sealed partial class HexLinkPeer : IDisposable
                 FleetVersion = 0;
                 Tools = [];
                 Workspace = HexLinkWorkspace.Empty;
+                remoteSyncReport = [];
             }
         }
         RightsChanged?.Invoke();
@@ -486,6 +490,7 @@ internal sealed partial class HexLinkPeer : IDisposable
     public void Dispose()
     {
         workspaceRefresh?.Dispose();
+        syncReports?.Dispose();
         presenceSend.Dispose();
         foreach (var (_, receiving) in bundles)
             receiving.Fail("the link closed");

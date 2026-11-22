@@ -309,10 +309,16 @@ internal sealed partial class DawnScene
     private string LinkSyncStatusSaid(string? deviceId)
     {
         var said = new StringBuilder();
-        IReadOnlyList<LinkSyncShown> syncs = [.. LinkSyncs.Where(each => deviceId is null || each.DeviceId == deviceId)];
-        if (syncs.Count == 0)
+        var local = LinkSyncs.Where(each => deviceId is null || each.DeviceId == deviceId).ToList();
+        var remote = LinkPeers.Where(peer => deviceId is null || peer.Device.Id == deviceId)
+            .SelectMany(peer => peer.RemoteSyncReport.Select(report => (Peer: peer, Report: report)))
+            .Where(row => !local.Any(sync => sync.DeviceId == row.Peer.Device.Id && sync.State != HexLinkSyncState.Off &&
+                PlatformPaths.Comparer.Equals(sync.Folder, row.Report.Folder))).ToList();
+        local.RemoveAll(sync => sync.State == HexLinkSyncState.Off && remote.Any(row => row.Peer.Device.Id == sync.DeviceId &&
+            PlatformPaths.Comparer.Equals(sync.Folder, row.Report.Folder)));
+        if (local.Count == 0 && remote.Count == 0)
             return "No folder is synced" + (deviceId is null ? "." : " with that device.") + " hex_link_sync start turns it on for one.";
-        foreach (LinkSyncShown sync in syncs)
+        foreach (LinkSyncShown sync in local)
         {
             said.Append("- ").Append(sync.Summary).Append(" [").Append(sync.State.ToString().ToLowerInvariant()).Append("]\n");
             foreach (LinkConflictShown conflict in LinkConflicts.Where(each => each.DeviceId == sync.DeviceId && each.Folder == sync.Folder))
@@ -328,7 +334,21 @@ internal sealed partial class DawnScene
         }
 
         if (said.ToString().Contains("  conflict: ", StringComparison.Ordinal))
-            said.Append("Settle a conflict with hex_link_sync resolve {device, path, keep: mine|theirs}.");
+            said.AppendLine("Settle a conflict with hex_link_sync resolve {device, path, keep: mine|theirs}.");
+        foreach (var (peer, report) in remote)
+        {
+            said.Append("- ").Append(report.Folder).Append(" managed by ").Append(peer.Device.Name)
+                .Append(" [").Append(report.State.ToString().ToLowerInvariant()).Append("]: ")
+                .Append(report.Received).Append(" sent, ").Append(report.Sent).Append(" received, ")
+                .Append(report.Conflicts).Append(" conflicts, ").Append(report.Skipped).AppendLine(" skipped");
+            if (report.Why is { Length: > 0 } why)
+                said.Append("  ").AppendLine(why);
+            foreach (HexLinkSyncSkipped conflict in report.ConflictSamples)
+                said.Append("  conflict: ").Append(conflict.Path).Append(" (").Append(conflict.Why).AppendLine(")");
+            foreach (HexLinkSyncSkipped skipped in report.SkipSamples)
+                said.Append("  doesn't travel: ").Append(skipped.Path).Append(", ").AppendLine(skipped.Why);
+        }
+
         return said.ToString().TrimEnd();
     }
 

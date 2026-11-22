@@ -56,6 +56,33 @@ public sealed class HexLinkPeerTests
     }
 
     [Fact]
+    public async Task The_sync_owner_reports_progress_and_status_until_view_is_revoked_or_the_sync_stops()
+    {
+        using var pair = await LinkedPair.Up(HexLinkRights.View);
+        var report = new HexLinkSyncReport("work", HexLinkSyncState.Idle, null, 7, 11,
+            1, 1, false, 18, 18, 1200, 1200, 0, null,
+            [new("work/conflict.txt", "both edited")], [new("work/skipped.txt", "unavailable")]);
+        pair.PeerB.QueueSyncReport(() => [report]);
+        Assert.True(Eventually(() => pair.PeerA.RemoteSyncReport.Count == 1));
+        HexLinkSyncReport received = Assert.Single(pair.PeerA.RemoteSyncReport);
+        Assert.Equal(("work", HexLinkSyncState.Idle, 7, 11, 18, 1200L),
+            (received.Folder, received.State, received.Sent, received.Received, received.FilesDone, received.BytesDone));
+        Assert.Equal(report.ConflictSamples[0], Assert.Single(received.ConflictSamples));
+        Assert.Equal(report.SkipSamples[0], Assert.Single(received.SkipSamples));
+
+        pair.BOnA = HexLinkRights.None;
+        pair.LinkA.RightsMoved(pair.B.Device.Id);
+        Assert.True(Eventually(() => pair.PeerA.Granted == HexLinkRights.None));
+        Assert.Empty(pair.PeerA.RemoteSyncReport);
+
+        pair.BOnA = HexLinkRights.View;
+        pair.LinkA.RightsMoved(pair.B.Device.Id);
+        Assert.True(Eventually(() => pair.PeerA.RemoteSyncReport.Count == 1));
+        pair.PeerB.QueueSyncReport(static () => []);
+        Assert.True(Eventually(() => pair.PeerA.RemoteSyncReport.Count == 0));
+    }
+
+    [Fact]
     public async Task The_fleet_mirror_follows_a_changing_hub()
     {
         using var pair = await LinkedPair.Up(HexLinkRights.View);

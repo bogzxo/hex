@@ -169,7 +169,10 @@ internal sealed partial class HexLink(IHexLinkServices services) : IDisposable
         foreach (Joined link in All())
         {
             if (link.Session.Connection.Device.Id == deviceId)
+            {
                 link.Host.RightsMoved();
+                link.Peer.RefreshSyncReport();
+            }
         }
     }
 

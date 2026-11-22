@@ -206,6 +206,8 @@ internal sealed partial class DawnScene
         }
 
         LinkSyncRemember(deviceId, folder, on: false);
+        if (entry is not null)
+            LinkReportSync(deviceId);
         if (entry?.GitCard is { } card)
             PostLink(card.Close);
         LinkMoved();
@@ -370,6 +372,7 @@ internal sealed partial class DawnScene
                 return;
         }
 
+        LinkReportSync(entry.DeviceId);
         HexLinkSyncState state = sync.State;
         if (state != entry.Said)
         {
