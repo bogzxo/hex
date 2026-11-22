@@ -94,7 +94,7 @@ internal sealed partial class DawnScene
         {
             if (document.Path is not { } path || !PlatformPaths.Same(path, localFile))
                 return;
-            LinkDocumentHost(document, CLAIM_TEST_WORK + "/" + CLAIM_TEST_FILE);
+            LinkLiveDocumentHost(document, CLAIM_TEST_WORK + "/" + CLAIM_TEST_FILE, explicitly: true);
             document.Editor.Document.Insert("Typing after releasing the plan.\n");
         });
         test.WaitFor(() => File.Exists(Path.Combine(peerHome, "claim-joined-document")), 35.0f);
