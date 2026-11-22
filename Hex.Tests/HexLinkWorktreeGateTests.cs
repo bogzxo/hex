@@ -54,7 +54,7 @@ public sealed class HexLinkWorktreeGateTests : IDisposable
         var task = new HexLinkWorktreeGateOptions(Build: "echo nested gate", WorkingFolder: "nested");
         var selected = HexLinkWorktreeGateSelection.Defaults(new("work", root), ["", "nested"],
             ["work/nested/lib/Foo.cs", "work/nested/Bar.cs"],
-            directory => PlatformPaths.Same(directory, Path.Combine(root, "nested")) ? task : null);
+            directory => directory == Path.Combine(root, "nested") ? task : null);
         Assert.Equal(task, Assert.Single(selected));
     }
 
@@ -88,7 +88,7 @@ public sealed class HexLinkWorktreeGateTests : IDisposable
         pair.B.Workspace = pair.B.Workspace with { Folders = [folder with { Authority = pin }] };
         var policy = new HexLinkWorktreeGatePolicy("dotnet build", "hex/docs/_linkpass/proj", null, "Name=Small", 45);
         pair.B.GateFor = each => each.Authority == pin ? policy : null;
-        await pair.PeerB.RefreshWorkspace(TestContext.Current.CancellationToken);
+        await pair.PeerB.RefreshWorkspace(CancellationToken.None);
 
         HexLinkFolder remote = Assert.Single(pair.PeerB.Workspace.Folders);
         Assert.Equal(pin, remote.Authority);
@@ -97,7 +97,7 @@ public sealed class HexLinkWorktreeGateTests : IDisposable
         Assert.True(HexLinkAllowed.May(HexLinkRights.View | HexLinkRights.Edit, "hex_link_worktree_gate"));
 
         pair.B.GateFor = null;
-        await pair.PeerB.RefreshWorkspace(TestContext.Current.CancellationToken);
+        await pair.PeerB.RefreshWorkspace(CancellationToken.None);
         Assert.Null(Assert.Single(pair.PeerB.Workspace.Folders).WorktreeGate);
     }
 
@@ -108,12 +108,12 @@ public sealed class HexLinkWorktreeGateTests : IDisposable
         string log = Path.Combine(root, "run.log");
         string check = OperatingSystem.IsWindows() ? "if (!(Test-Path marker.txt)) { exit 6 }" : "test -f marker.txt";
         var gate = new HexLinkWorktreeGateOptions(Build: check, WorkingFolder: "narrow", TestCommand: "exit 7");
-        var failed = await HexLinkWorktreeGate.Run(root, log, gate, TestContext.Current.CancellationToken);
+        var failed = await HexLinkWorktreeGate.Run(root, log, gate, CancellationToken.None);
         Assert.Equal(7, failed.ExitCode);
         Assert.Contains("narrow", Assert.Single(failed.Ran));
 
         string sleep = OperatingSystem.IsWindows() ? "Start-Sleep -Seconds 20" : "sleep 20";
-        var timedOut = await HexLinkWorktreeGate.Run(root, log, gate with { Build = sleep, TimeoutSeconds = 1 }, TestContext.Current.CancellationToken);
+        var timedOut = await HexLinkWorktreeGate.Run(root, log, gate with { Build = sleep, TimeoutSeconds = 1 }, CancellationToken.None);
         Assert.Equal(124, timedOut.ExitCode);
         Assert.Contains("timed out", timedOut.Output);
     }
