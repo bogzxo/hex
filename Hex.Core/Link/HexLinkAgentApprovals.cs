@@ -10,7 +10,7 @@ internal sealed record HexLinkAgentStarter(string Device, int Chat, string Recei
 
     internal static HexLinkAgentStarter? Read(JsonObject? value) =>
         HexLinkData.String(value, "device", 64) is { Length: 64 } device &&
-        HexLinkData.Int(value, "chat") is > 0 and var chat &&
+        value?["chat"] is JsonValue number && number.TryGetValue(out int chat) && chat > 0 &&
         HexLinkData.String(value, "receipt", 32) is { } receipt && Guid.TryParseExact(receipt, "N", out _)
             ? new(device, chat, receipt) : null;
 
