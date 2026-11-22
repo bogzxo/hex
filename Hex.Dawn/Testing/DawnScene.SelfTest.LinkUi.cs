@@ -285,8 +285,22 @@ internal sealed partial class DawnScene
             wroteRemote = peer?.Write($"{LINK_PEER_FOLDER}/{ConflictName}", null, "the other device\n"u8.ToArray());
         });
         test.WaitFor(() => wroteRemote?.IsCompleted == true, 5);
+        test.Run(() => LinkSaySyncError(peerId!, LINK_PEER_NAME, LINK_PEER_FOLDER, "fixture interruption"));
+        test.Check("link-ui: a sync failure is visible in the status bar", () =>
+            saidError && messageItem.Text.Contains("fixture interruption", StringComparison.Ordinal));
         ClickWindow("link.sync_start");
         test.WaitFor(() => peerId is not null && LinkSyncs.Any(sync => sync.DeviceId == peerId && sync.State is HexLinkSyncState.Idle or HexLinkSyncState.PullOnly), 12);
+        test.Check("link-ui: a recovered sync clears its failure from the status bar", () =>
+            linkSyncStatusError is null && !messageItem.Text.Contains("fixture interruption", StringComparison.Ordinal));
+        test.Run(() =>
+        {
+            LinkSaySyncError(peerId!, LINK_PEER_NAME, LINK_PEER_FOLDER, "fixture interruption");
+            Say("unrelated fixture failure", error: true);
+            LinkClearRecoveredSyncError(peerId!, LINK_PEER_FOLDER, HexLinkSyncState.Idle);
+        });
+        test.Check("link-ui: sync recovery keeps a newer, unrelated status error", () =>
+            saidError && messageItem.Text.Contains("unrelated fixture failure", StringComparison.Ordinal));
+        test.Run(() => Say(string.Empty));
         test.WaitFor(() => LinkConflicts.Any(conflict => conflict.Path.EndsWith(ConflictName, StringComparison.Ordinal)), 6);
         Shot("link_ui_conflict.png");
         ClickWindowLabel(Said("link.devices_resolve", ("count", "1")));
