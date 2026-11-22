@@ -194,7 +194,13 @@ A pair runs one automatic sync for the selected folder. It compares certified, p
 for incremental changes. Directory digests and a shared scan and hash cache reduce repeat work. Git inventory
 includes tracked files and untracked files eligible under ignore and workspace exclusion rules. Nested
 repositories retain their own boundaries. Cached metadata or digests can avoid scans or reads. A transfer still
-checks exact content and the agreed base before publication. Cache data lives outside the exported tree.
+checks exact content and the agreed base before publication. When the usual cache directory overlaps an export, Hex
+uses the profile's private app-data location. If that also overlaps an export, the cache stays in memory.
+
+For a bound folder, the replica signals readiness over the authenticated link at the matching authority epoch.
+When the authority has Edit back to the replica, it runs the engine. Without that grant, the replica pulls from
+the authority. A change of role drains the current engine before its replacement starts. Devices with View can
+see the owner's state, transfer counts and conflict or skip summaries in Devices and `hex_link_sync status`.
 
 A single-sided edit is sent or pulled against the last agreed value. A verified common Git base can seed the
 first comparison. If both sides changed, a safe clean merge may apply. Otherwise, Hex preserves both versions and

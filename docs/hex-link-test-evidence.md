@@ -57,7 +57,27 @@ rollout.
 | Publication fence, private worktrees and separate storage | `73db327` | 31/31 focused Release tests |
 | Claims, HEAD follow and streamed provisioning | `74754da` | 39/39 focused Release tests |
 
-The documented integration snapshot is `c792157`. Its full integrated gate was pending at this evidence cutoff.
+The integrated code at `0a2feb9` passed the Windows Release build, all 1,927 Hex.Tests cases, and 238/238 checks
+across the ten combined app suites. The main unit run passed 1,925 cases. The bundle cleanup and checkpoint
+discovery fixtures passed in a second run with serial collections and a scratch drive boundary. The bundle
+fixture inspects the process-wide temp directory. The checkpoint fixture needs a path outside an enclosing
+Git repository. Horizon remained at `0e01c6c`.
+
+| Combined app suite | Passed |
+| --- | ---: |
+| `link` | 23/23 |
+| `link-files` | 33/33 |
+| `link-worktree` | 8/8 |
+| `link-provision` | 17/17 |
+| `link-git-follow` | 5/5 |
+| `link-missing-repository` | 6/6 |
+| `link-documents` | 38/38 |
+| `link-editor-notices` | 12/12 |
+| `link-claims` | 13/13 |
+| `link-ui` | 83/83 |
+
+The companion processes that printed totals passed their checks. Provisioning exercised one-way View,
+handoff when reverse Edit arrived, and both sides restarting. Link Files also passed alone on this revision.
 
 The feature rows retain the original tested commit IDs, even where integration picked them under new IDs.
 
