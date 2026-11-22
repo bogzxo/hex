@@ -114,7 +114,11 @@ internal sealed class HexLinkTreeSubscription : IDisposable
         lock (subscriptions)
         {
             if (!watches.TryGetValue(tree, out SharedWatch? found))
+            {
+                // The preceding snapshot may straddle a period with no watcher.
+                tree.InvalidateSnapshot();
                 watches.Add(tree, found = new SharedWatch(tree, quiet, rescan));
+            }
             shared = found;
             shared.Add(this);
         }
@@ -174,7 +178,10 @@ internal sealed class HexLinkTreeSubscription : IDisposable
         {
             last = shared.Remove(this);
             if (last)
+            {
+                shared.Tree.InvalidateSnapshot();
                 watches.Remove(shared.Tree);
+            }
         }
         if (last)
             shared.Watch.Dispose();

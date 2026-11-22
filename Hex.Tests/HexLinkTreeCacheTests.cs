@@ -94,6 +94,26 @@ public sealed class HexLinkTreeCacheTests
     }
 
     [Fact]
+    public void Reconnecting_after_the_last_watcher_stops_reads_a_new_manifest()
+    {
+        using var site = new LinkServices(HexLinkTestKit.DeviceA);
+        HexLinkFolder folder = site.Workspace.Folders[0];
+        HexLinkTree tree = HexLinkTree.Shared(folder, () => HexExcludes.Usual, cacheDirectory: null, streamLarge: true);
+        string file = Path.Combine(folder.Path, "a.txt");
+        File.WriteAllText(file, "before");
+        HexLinkManifest before;
+        using (var first = new HexLinkTreeSubscription(tree, _ => { }, TimeSpan.FromSeconds(1), TimeSpan.FromMinutes(1)))
+        {
+            before = tree.Manifest();
+            first.Seed(before);
+        }
+
+        File.WriteAllText(file, "an edit while disconnected");
+        using var next = new HexLinkTreeSubscription(tree, _ => { }, TimeSpan.FromSeconds(1), TimeSpan.FromMinutes(1));
+        Assert.NotEqual(Assert.Single(before.Files).Hash, Assert.Single(tree.Manifest().Files).Hash);
+    }
+
+    [Fact]
     public void Windows_persists_the_received_executable_bit_in_the_tree_cache()
     {
         if (!OperatingSystem.IsWindows())
