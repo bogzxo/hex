@@ -20,11 +20,13 @@ internal sealed record HexLinkWorktreeGatePolicy(string Command, string? Working
         string? folder = HexLinkData.String(value, "directory", HexLinkFiles.MOST_PATH + 1);
         string? test = HexLinkData.String(value, "test_command", 4001);
         string? filter = HexLinkData.String(value, "test_filter", 1001);
-        int seconds = HexLinkData.Int(value, "timeout_seconds") ?? DefaultTimeout;
+        int? configuredSeconds = value["timeout_seconds"] is JsonValue timeout && timeout.TryGetValue(out int integer)
+            ? integer : HexLinkData.Int(value, "timeout_seconds");
+        int seconds = configuredSeconds ?? DefaultTimeout;
         if (string.IsNullOrWhiteSpace(command) || command.Length > 4000 || test?.Length > 4000 ||
             filter?.Length > 1000 || folder?.Length > HexLinkFiles.MOST_PATH || seconds is < 1 or > 3600 ||
             (test is not null && filter is not null) ||
-            (value["timeout_seconds"] is not null && HexLinkData.Int(value, "timeout_seconds") is null) ||
+            (value["timeout_seconds"] is not null && configuredSeconds is null) ||
             (value["directory"] is not null && folder is null) || (value["test_command"] is not null && test is null) ||
             (value["test_filter"] is not null && filter is null))
             throw HexLinkException.Invalid("Enter a build command, at most one test command or filter, and a timeout from 1 to 3600 seconds.");

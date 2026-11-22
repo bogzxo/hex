@@ -70,6 +70,7 @@ public sealed class HexLinkWorktreeGateTests : IDisposable
             ["test_command"] = "dotnet test", ["timeout_seconds"] = 30
         });
         HexLinkWorktreeGatePolicyFile.Save(file, folder, pin, policy);
+        Assert.Equal(30, policy.TimeoutSeconds);
         Assert.Equal(policy, HexLinkWorktreeGatePolicyFile.Read(file, folder, pin));
         Assert.Null(HexLinkWorktreeGatePolicyFile.Read(file, folder, pin with { Epoch = 2 }));
         var invalid = policy.Json();
