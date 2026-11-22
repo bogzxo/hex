@@ -37,7 +37,15 @@ internal sealed partial class DawnScene
         Button? follow = null;
         if (session.CanFollow || linkFollowing is not null)
         {
-            follow = LinkButton(Said("link.devices_session_follow"), "eye", () => { });
+            string label = Said("link.devices_session_follow");
+            if (linkFollowing is { } followed)
+            {
+                IReadOnlyList<LinkSessionPerson> people = [];
+                LinkReadSessionPeople(shown, ref people);
+                if (people.FirstOrDefault(person => person.Id == followed) is { } person)
+                    label = Said("link.devices_session_following", ("device", OneLine(person.Name, 24)));
+            }
+            follow = LinkButton(label, "eye", () => { });
             follow.OnPressed = () => ShowLinkSessionPeople(shown, follow);
         }
 

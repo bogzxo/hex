@@ -14,12 +14,13 @@ internal sealed partial class DawnScene
     private sealed record LinkDeviceConnection(bool Connecting, DateTime? RetryAtUtc, string? Reason, CancellationTokenSource? Attempt = null);
     private readonly Dictionary<string, LinkDeviceConnection> linkManualDials = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, (HexLinkPeer Peer, long Sampled, double? Milliseconds)> linkLatencies = new(StringComparer.OrdinalIgnoreCase);
-    private readonly List<(Badge State, Label Details, HexLinkKnown Device)> linkOfflineRows = [];
+    private readonly List<(Badge State, Label Details, HexLinkKnown Device, bool HasAddress)> linkOfflineRows = [];
 
     private Panel LinkDeviceCard(HexLinkKnown known, IReadOnlyList<LinkConflictShown> conflicts)
     {
         string id = known.Device.Id;
         HexLinkPeer? peer = LinkPeerOf(id);
+        bool hasAddress = peer is not null || LinkReconnectAddresses(known).Length > 0;
         Vector4 tint = LinkDeviceTint(id, Skin);
         Panel card = StripedCard(tint);
         var column = card.Add(new StackPanel { Spacing = 5, Fill = UIFill.Horizontal });
@@ -36,8 +37,8 @@ internal sealed partial class DawnScene
         if (peer is null)
         {
             Label details = column.Add(LinkLine(string.Empty));
-            linkOfflineRows.Add((badge, details, known));
-            DrawLinkOfflineRow(badge, details, known);
+            linkOfflineRows.Add((badge, details, known, hasAddress));
+            DrawLinkOfflineRow(badge, details, known, hasAddress);
         }
         else
         {
@@ -94,7 +95,7 @@ internal sealed partial class DawnScene
             LinkActionRow(column).Add(LinkButton(Said("link.devices_resolve", ("count", forDevice.Length.ToString(CultureInfo.InvariantCulture))),
                 "warning", () => LinkChooseConflict(forDevice)));
 
-        DrawLinkDeviceActions(column, known, peer);
+        DrawLinkDeviceActions(column, known, peer, hasAddress);
         return card;
     }
 
@@ -171,7 +172,7 @@ internal sealed partial class DawnScene
         return LinkLine(Said("link.devices_commit", ("repo", OneLine(repo.Name, 45)), ("branch", branch), ("head", head), ("state", comparison)));
     }
 
-    private void DrawLinkDeviceActions(StackPanel column, HexLinkKnown known, HexLinkPeer? peer)
+    private void DrawLinkDeviceActions(StackPanel column, HexLinkKnown known, HexLinkPeer? peer, bool hasAddress)
     {
         string id = known.Device.Id;
         LinkWorkspaceOffer? pendingOffer = linkWorkspaceOffers.GetValueOrDefault(id);
@@ -211,9 +212,9 @@ internal sealed partial class DawnScene
             else if (state?.Reason != "version")
             {
                 string key = state?.RetryAtUtc is not null || state?.Reason is "unreachable" or "timeout" or "firewall" ? "link.devices_try_now" : "link.device_connect";
-                if (LinkOn && state?.Connecting != true && LinkReconnectAddresses(known).Length == 0)
+                if (LinkOn && state?.Connecting != true && !hasAddress)
                 {
-                    actions.Add(LinkButton(Said("link.devices_join"), "link", () => ShowLinkDevicePage(LinkDevicePage.Join)));
+                    actions.Add(LinkButton(Said("link.devices_join_from_invite"), "link", () => ShowLinkDevicePage(LinkDevicePage.Join)));
                     column.Add(LinkLine(Said("link.devices_no_reconnect")));
                 }
                 else
@@ -288,7 +289,7 @@ internal sealed partial class DawnScene
         return linkManualDials.TryGetValue(id, out LinkDeviceConnection? manual) && (manual.Connecting || state is null) ? manual : state;
     }
 
-    private void DrawLinkOfflineRow(Badge badge, Label details, HexLinkKnown known)
+    private void DrawLinkOfflineRow(Badge badge, Label details, HexLinkKnown known, bool hasAddress)
     {
         string id = known.Device.Id;
         LinkDeviceConnection? state = LinkOn ? GetLinkDeviceConnection(id) : null;
@@ -316,7 +317,7 @@ internal sealed partial class DawnScene
         if (state?.Connecting == true)
             action = Said("link.devices_trying_route", ("address", known.Address));
         else if (state?.RetryAtUtc is not null)
-            action = Said("link.devices_retry_help", ("why", action));
+            action = hasAddress ? Said("link.devices_retry_help", ("why", action)) : Said("link.devices_retry_no_address");
         else if (key == "link.device_not_connected" && LinkOn)
             action = Said("link.devices_last_seen", ("time", known.Seen.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)), ("next", action));
         string escaped = UIRichText.Literal(action);
@@ -335,8 +336,8 @@ internal sealed partial class DawnScene
 
     private void TickLinkDeviceRows()
     {
-        foreach (var (badge, details, id) in linkOfflineRows)
-            DrawLinkOfflineRow(badge, details, id);
+        foreach (var (badge, details, device, hasAddress) in linkOfflineRows)
+            DrawLinkOfflineRow(badge, details, device, hasAddress);
         long now = System.Environment.TickCount64;
         foreach (HexLinkPeer peer in LinkPeers)
         {
