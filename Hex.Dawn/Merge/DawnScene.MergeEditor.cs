@@ -53,6 +53,8 @@ internal sealed partial class DawnScene
         tab.SavedCode = tab.Editor.Text;
         documents.Add(tab);
         Show(tab);
+        if (!session.IsBinary)
+            languages.AttachMergeResult(tab, session.Path);
         tabsDirty = true;
         return merge;
     }
@@ -110,6 +112,7 @@ internal sealed partial class DawnScene
     {
         if (!documents.Contains(tab))
             return;
+        languages.DetachMergeResult(tab);
         HexDocument previous = document;
         if (document != tab)
             Show(tab);

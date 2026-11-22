@@ -184,16 +184,22 @@ internal sealed partial class HexLanguages
         if (document.Path is not { } path || LanguageServers.RegistrationFor(ServerPathFor(document, path)) is not { } entry
             || !entry.Arguments.Any(argument => argument.Contains("{solution}", StringComparison.Ordinal)))
             return null;
+        return SolutionFor(root);
+    }
+
+    private string? SolutionFor(string root)
+    {
         string? selected = context.Workspace.Solution;
         return selected is not null && PlatformPaths.Same(Path.GetDirectoryName(selected)!, root)
             ? selected : LanguageServers.SolutionIn(root);
     }
 
     /// <summary>The name of the server linting a document, null for none.</summary>
-    internal string? LinterOf(HexDocument of) => linters.TryGetValue(of, out LanguageServer? server) ? server.Name : null;
+    internal string? LinterOf(HexDocument of) => (mergeResults.GetValueOrDefault(of)?.Server ?? linters.GetValueOrDefault(of))?.Name;
 
     /// <summary>Whether a document's server is still starting, there and not ready yet and not fallen over, for the status bar's spinner.</summary>
-    internal bool Starting(HexDocument of) => linters.TryGetValue(of, out LanguageServer? server) && !server.IsReady && server.Failure is null;
+    internal bool Starting(HexDocument of) =>
+        (mergeResults.GetValueOrDefault(of)?.Server ?? linters.GetValueOrDefault(of)) is { IsReady: false, Failure: null };
 
     /// <summary>
     /// The program linting a document as somebody knows it, serve-d, csharp-ls, null for none. Its name in
@@ -414,6 +420,7 @@ internal sealed partial class HexLanguages
     /// <summary>A file of another language was closed, its server is told and forgets it.</summary>
     private void StopLinting(HexDocument closed)
     {
+        StopMergeResult(closed);
         lintSolutions.Remove(closed);
 
         // By the path the server was told of it under, which after Save As or a rename isn't the one it has now: closing
@@ -558,6 +565,7 @@ internal sealed partial class HexLanguages
             }
         }
 
+        UpdateMergeResults(dt);
         UpdateChecks(dt);
         UpdateAnswers();
         UpdateWarm();
