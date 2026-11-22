@@ -41,6 +41,9 @@ internal sealed partial class DawnScene
     // How many times the first-time notice was given this run, for the self test
     private int predictionNotices;
 
+    // The server, model and failure the notice about a missing model or server was last given for
+    private string? predictionFailureNoticed;
+
     /// <summary>The status bar's item, beside the language's.</summary>
     private void BuildPredictionItem()
     {
@@ -195,6 +198,19 @@ internal sealed partial class DawnScene
         predictionItemStatusText = predictions.StatusText;
         if (state == PredictionItemState.Hidden)
             return;
+
+        // A server or model that isn't there is said once in a notice, not only in the item's tooltip; again only when
+        // the server, the model or the way it failed changes
+        if (state == PredictionItemState.Failed && status is PredictionStatus.NoSuchModel or PredictionStatus.Unreachable && predictions.StatusText.Length > 0)
+        {
+            string failure = $"{status}|{settings.EditPredictionsApiUrl}|{settings.EditPredictionsModel}";
+            if (failure != predictionFailureNoticed)
+            {
+                predictionFailureNoticed = failure;
+                predictionNotices++;
+                Notify(Said("prediction.notice_failed", ("why", predictions.StatusText)), error: true);
+            }
+        }
 
         string icon = state switch
         {

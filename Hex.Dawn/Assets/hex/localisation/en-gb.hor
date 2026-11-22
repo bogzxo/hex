@@ -3171,6 +3171,7 @@ let strings = {
         tip_cache: "The last came from the cache in {total} ms",
         tip_press: "Press for the switches and the settings",
         a_device: "a paired device",
+        notice_failed: "Edit predictions can't work yet. {why}",
         notice: "Edit predictions are on. As you type, the lines round the caret, your last edits and a few lines of the files you edited last are sent to {host}. Files that hold secrets never are, and nothing is sent while you aren't typing."
     },
 

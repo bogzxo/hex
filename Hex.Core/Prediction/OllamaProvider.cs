@@ -24,6 +24,53 @@ internal sealed class OllamaProvider(HttpClient http, Uri api, string model) : I
 
     public async IAsyncEnumerable<string> Complete(PredictionWireRequest request, [EnumeratorCancellation] CancellationToken cancel)
     {
+        await using IAsyncEnumerator<string> pieces = Stream(request, cancel).GetAsyncEnumerator(cancel);
+        while (true)
+        {
+            try
+            {
+                if (!await pieces.MoveNextAsync().ConfigureAwait(false))
+                    yield break;
+            }
+            catch (PredictionException e) when (e.Status == PredictionStatus.NoSuchModel)
+            {
+                throw await Explained(e, cancel).ConfigureAwait(false);
+            }
+            yield return pieces.Current;
+        }
+    }
+
+    /// <summary>
+    /// A "no such model" with what the user needs to put it right: the model and the server by name, what the server does
+    /// have (asked of /api/tags, a few seconds at most) and where Ollama reads its models from.
+    /// </summary>
+    private async Task<PredictionException> Explained(PredictionException e, CancellationToken cancel)
+    {
+        string has;
+        try
+        {
+            using var wait = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+            wait.CancelAfter(TimeSpan.FromSeconds(3));
+            var tags = new UriBuilder(api) { Path = "/api/tags" }.Uri;
+            using HttpResponseMessage response = await http.GetAsync(tags, wait.Token).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            using JsonDocument document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(wait.Token).ConfigureAwait(false));
+            string[] names = document.RootElement.TryGetProperty("models", out JsonElement list) && list.ValueKind == JsonValueKind.Array
+                ? [.. list.EnumerateArray().Select(each => each.TryGetProperty("name", out JsonElement name) ? name.GetString() ?? "" : "").Where(each => each.Length > 0).Take(6)]
+                : [];
+            has = names.Length == 0 ? "The server has no models at all." : "The server has: " + string.Join(", ", names) + ".";
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException || !cancel.IsCancellationRequested)
+        {
+            has = "";
+        }
+
+        return new PredictionException(PredictionStatus.NoSuchModel,
+            $"{e.Message} (asked for {model}). {has} If it should have it, Ollama may be reading another model folder: set OLLAMA_MODELS and restart Ollama.".Replace(". .", ".").Replace("  ", " "));
+    }
+
+    private async IAsyncEnumerable<string> Stream(PredictionWireRequest request, [EnumeratorCancellation] CancellationToken cancel)
+    {
         using var message = new HttpRequestMessage(HttpMethod.Post, api)
         {
             Content = PredictionHttp.Json(writer => Body(writer, request)),

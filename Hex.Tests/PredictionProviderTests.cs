@@ -116,6 +116,32 @@ public sealed class PredictionProviderTests
         Assert.Contains("model 'zeta' not found", failure.Message);
     }
 
+    [Fact]
+    public async Task A_missing_model_names_the_model_what_the_server_has_and_the_models_folder()
+    {
+        var server = new FakeServer(request => Task.FromResult(request.RequestUri!.AbsolutePath == "/api/tags"
+            ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"models\":[{\"name\":\"qwen:7b\"},{\"name\":\"llama3\"}]}") }
+            : new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new StringContent("{\"error\":\"model 'zeta' not found\"}") }));
+        var failure = await Failing(Ollama(server));
+
+        Assert.Equal(PredictionStatus.NoSuchModel, failure.Status);
+        Assert.Contains("zeta", failure.Message);
+        Assert.Contains("qwen:7b, llama3", failure.Message);
+        Assert.Contains("OLLAMA_MODELS", failure.Message);
+    }
+
+    [Fact]
+    public async Task A_server_with_no_models_at_all_says_so()
+    {
+        var server = new FakeServer(request => Task.FromResult(request.RequestUri!.AbsolutePath == "/api/tags"
+            ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"models\":[]}") }
+            : new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new StringContent("{\"error\":\"model 'zeta' not found\"}") }));
+        var failure = await Failing(Ollama(server));
+
+        Assert.Contains("no models at all", failure.Message);
+        Assert.Contains("OLLAMA_MODELS", failure.Message);
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.Unauthorized)]
     [InlineData(HttpStatusCode.Forbidden)]
