@@ -450,13 +450,16 @@ public sealed class HexLinkProtocolTests
     public async Task A_slow_request_never_holds_up_a_quick_one()
     {
         var (a, b) = Sessions();
-        b.Requested = Echo("b");
+        var slowReply = new TaskCompletionSource<JsonNode?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var echo = Echo("b");
+        b.Requested = (method, args, cancel) => method == "slow" ? slowReply.Task.WaitAsync(cancel) : echo(method, args, cancel);
         a.Start();
         b.Start();
         Task<JsonNode?> slow = a.Ask("slow");
         JsonNode? quick = await a.Ask("echo", new JsonObject { ["text"] = "hi" }).WaitAsync(TimeSpan.FromMilliseconds(WAIT_MS));
         Assert.False(slow.IsCompleted);
         Assert.Equal("hi", quick!["said"]!.GetValue<string>());
+        slowReply.SetResult(new JsonObject { ["slow"] = true });
         Assert.True((await slow)!["slow"]!.GetValue<bool>());
         a.Dispose();
     }
