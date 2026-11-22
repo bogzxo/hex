@@ -1,3 +1,5 @@
+using Hex.Core.Git;
+
 namespace Hex.Core;
 
 internal sealed partial class HexLinkSync
@@ -7,16 +9,18 @@ internal sealed partial class HexLinkSync
     private readonly HashSet<string> remoteHeld = new(PlatformPaths.Comparer);
     private readonly Dictionary<string, string?> offeredWhileHeld = new(PlatformPaths.Comparer);
     private readonly Dictionary<string, string?> remoteSeenWhileHeld = new(PlatformPaths.Comparer);
+    private readonly Dictionary<string, string?> releasedPeerOffers = new(PlatformPaths.Comparer);
 
     // Called under the sync gate.
-    private void NoteRemoteHold(string wire, bool held)
+    private void NoteRemoteHold(string wire, bool held, bool fromNotice = false)
     {
         if (held)
             remoteHeld.Add(wire);
         else
         {
             remoteHeld.Remove(wire);
-            offeredWhileHeld.Remove(wire);
+            if (offeredWhileHeld.Remove(wire, out string? offered) && fromNotice)
+                releasedPeerOffers[wire] = offered;
         }
     }
 
@@ -63,6 +67,23 @@ internal sealed partial class HexLinkSync
         return true;
     }
 
+    private async Task<bool> TakeReleasedPeerChange(string wire, string full, HexLinkTreeFile? mine, HexLinkTreeFile? theirs,
+        CancellationToken stop)
+    {
+        lock (gate)
+        {
+            if (!releasedPeerOffers.Remove(wire, out string? offered) || mine?.Hash != offered || mine?.Hash == theirs?.Hash)
+                return false;
+        }
+        if (!CanReceive)
+            return false;
+        if ((mine?.Size ?? 0) > HexLinkFiles.MOST_READ || (theirs?.Size ?? 0) > HexLinkFiles.MOST_READ)
+            await PullStreamed(wire, full, mine?.Hash, theirs, stop);
+        else
+            await Pull(wire, full, mine?.Hash, theirs, stop);
+        return true;
+    }
+
     private void RecordHeldOffer(string wire, string? hash)
     {
         lock (gate)
@@ -78,7 +99,71 @@ internal sealed partial class HexLinkSync
         if (Holds is null)
             return;
         Holds.Changed += HoldsMoved;
+        Holds.Released += HoldsReleased;
         holdPaths = new HashSet<string>(Holds.List().Select(entry => entry.Path), PlatformPaths.Comparer);
+    }
+
+    internal async Task<HexLinkHoldBasis?> HoldBasis(string wire, CancellationToken cancel)
+    {
+        HexLinkSyncAgreed? agreed;
+        lock (gate)
+        {
+            agreed = bases.GetValueOrDefault(wire);
+            if (agreed is null)
+                return ready && remoteCertified && !remote.ContainsKey(wire) && !conflicts.ContainsKey(wire)
+                    ? new([], HexLinkHoldBaseSource.Agreed, Deleted: true) : null;
+        }
+
+        if (HexLinkMerge.CachedBase(agreed.Local) is { } cached)
+            return new(cached, HexLinkHoldBaseSource.Agreed, Executable: agreed.Executable);
+        string full = Jailed(wire);
+        if (HexLinkTree.RegularFile(full, tree.Root) is { } info && info.Length <= HexLinkFileTransfer.MaximumLength)
+        {
+            byte[] working = await HexLinkFiles.ReadSharedAsync(full, cancel);
+            if (HexLinkFiles.Hash(working) == agreed.Local)
+                return new(working, HexLinkHoldBaseSource.Agreed, Executable: agreed.Executable);
+        }
+
+        string? directory = Path.GetDirectoryName(full);
+        if (directory is null || !Directory.Exists(directory) || HexLinkGit.Why() is not null)
+            return null;
+        GitResult git = await Task.Run(() => GitProcess.Run(directory, ["rev-parse", "--show-toplevel", "HEAD"],
+            unattended: true, cancel: cancel), cancel);
+        if (!git.Ok)
+            return null;
+        string[] location = git.Output.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (location.Length != 2 || !HexLinkGit.IsCommitId(location[1]))
+            return null;
+
+        string relative = Path.GetRelativePath(location[0], full).Replace('\\', '/');
+        byte[]? head = await ReadHeadBlob(location[0], location[1], relative, cancel, HexLinkFileTransfer.MaximumLength);
+        return head is not null && HexLinkFiles.Hash(head) == agreed.Local
+            ? new(head, HexLinkHoldBaseSource.Git, Executable: agreed.Executable) : null;
+    }
+
+    private void HoldsReleased(IReadOnlyList<HexLinkHold> released)
+    {
+        lock (gate)
+        {
+            foreach (HexLinkHold entry in released)
+            {
+                string wire = entry.Path;
+                if (remoteHeld.Contains(wire))
+                    continue;
+                HexLinkTreeFile? theirs = remote.GetValueOrDefault(wire);
+                HexLinkSyncAgreed? old = bases.GetValueOrDefault(wire);
+                var hasAcceptedIncoming = entry.HasIncoming && (entry.IncomingDeleted ? theirs is null : theirs?.Hash == entry.IncomingHash);
+                var hasUpdatedBase = !entry.HasIncoming && old?.Local != entry.BaseHash &&
+                    (entry.BaseDeleted ? theirs is null : theirs?.Hash == entry.BaseHash);
+                if (!hasAcceptedIncoming && !hasUpdatedBase)
+                    continue;
+
+                if (theirs?.Hash is { } hash)
+                    SetBase(wire, new(entry.BaseHash, hash, null, old?.LocalEol ?? HexLinkEol.Unknown, EolIn(theirs.Eol), theirs.Executable));
+                else
+                    RemoveBase(wire);
+            }
+        }
     }
 
     private void HoldsMoved()

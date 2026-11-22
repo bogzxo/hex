@@ -181,7 +181,7 @@ internal sealed partial class HexLinkPeer
 
         if (changes.Count > 0)
             RememberTreeChanges(folder, changes);
-        foreach (JsonObject notice in HexLinkData.Objects(said, "hold_notices", 2 * HexLinkTree.MaximumHoldNotices))
+        foreach (JsonObject notice in HexLinkData.Objects(said, "hold_notices", HexLinkTreeWatch.MOST_BATCH))
         {
             if (HexLinkData.String(notice, "path", HexLinkFiles.MOST_PATH) is { } path &&
                 path.StartsWith(folder + "/", StringComparison.Ordinal) && HexLinkData.Bool(notice, "held") is { } held)

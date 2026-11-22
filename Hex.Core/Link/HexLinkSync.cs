@@ -659,7 +659,10 @@ internal sealed partial class HexLinkSync : IDisposable
             drained = null;
             peer.RightsChanged -= UpdateRights;
             if (Holds is not null)
+            {
                 Holds.Changed -= HoldsMoved;
+                Holds.Released -= HoldsReleased;
+            }
             queue.Clear();
             queued.Clear();
             again.Clear();

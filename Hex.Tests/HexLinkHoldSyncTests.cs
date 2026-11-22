@@ -286,6 +286,72 @@ public sealed class HexLinkHoldSyncTests
         Assert.Empty(sync.Conflicts);
     }
 
+    [Fact]
+    public async Task The_holder_submits_a_clean_merge_against_the_peer_version_it_received()
+    {
+        using var pair = await LinkedPair.Up(Edit, Edit);
+        const string basis = "a\nb\nc\nd\ne\n";
+        Both(pair, basis);
+        HexLinkHoldStore holds = EnableHolds(pair.A);
+        using var sync = new HexLinkSync(pair.PeerB, pair.A.Workspace.Folders[0], Path.Combine(pair.A.Root, "sync"))
+        {
+            Holds = holds, Quiet = TimeSpan.FromSeconds(3),
+        };
+        await Ready(sync);
+        var service = new HexLinkHoldService(pair.A.Workspace.Folders[0], holds) { AgreedBasis = sync.HoldBasis };
+        File.WriteAllText(Local(pair.A), "A\nb\nc\nd\ne\n");
+        var entry = await service.Hold(Wire);
+        Assert.Equal(HexLinkHoldBaseSource.Agreed, entry.BaseSource);
+        Assert.Equal(Bytes(basis), holds.Read(Wire)!.BaseBytes);
+
+        File.WriteAllText(Local(pair.B), "a\nb\nc\nd\nE\n");
+        await Flush(sync);
+        Assert.Equal(Wire, Assert.Single((await service.Submit()).Paths));
+        await Flush(sync);
+        Assert.Equal("A\nb\nc\nd\nE\n", File.ReadAllText(Local(pair.A)));
+        Assert.Equal(File.ReadAllText(Local(pair.A)), File.ReadAllText(Local(pair.B)));
+        Assert.Empty(sync.Conflicts);
+    }
+
+    [Fact]
+    public async Task Hold_reuses_the_exact_head_blob_when_an_agreed_binary_base_is_not_cached()
+    {
+        using var pair = await LinkedPair.Up(Edit, Edit);
+        byte[] basis = [0, 1, 2, 255];
+        Repository(pair, basis);
+        var holds = EnableHolds(pair.A);
+        var folder = pair.A.Workspace.Folders[0];
+        using var sync = new HexLinkSync(pair.PeerB, folder, Path.Combine(pair.A.Root, "sync"))
+        {
+            Holds = holds, Quiet = TimeSpan.FromSeconds(3),
+        };
+        await Ready(sync);
+        File.WriteAllBytes(Local(pair.A), [0, 3, 4, 255]);
+        var service = new HexLinkHoldService(folder, holds) { AgreedBasis = sync.HoldBasis };
+        Assert.Equal(HexLinkHoldBaseSource.Git, (await service.Hold(Wire)).BaseSource);
+        Assert.Equal(basis, holds.Read(Wire)!.BaseBytes);
+    }
+
+    [Fact]
+    public async Task A_peer_only_sync_accepts_the_completed_resolution_for_the_version_it_offered()
+    {
+        using var pair = await LinkedPair.Up(Edit, Edit);
+        Both(pair, Baseline);
+        HoldPrivate(pair.A);
+        using var sync = Sync(pair.B, pair.PeerA);
+        await Ready(sync);
+        File.WriteAllText(Local(pair.B), Shared);
+        await Flush(sync);
+        var service = new HexLinkHoldService(pair.A.Workspace.Folders[0], pair.A.HoldStore!);
+        var conflict = Assert.Single((await service.Submit()).NeedsMerge);
+        const string resolved = "the chosen resolution\n";
+        await conflict.Session!.Complete(Bytes(resolved));
+        await Flush(sync);
+        Assert.Equal(resolved, File.ReadAllText(Local(pair.A)));
+        Assert.Equal(resolved, File.ReadAllText(Local(pair.B)));
+        Assert.Empty(sync.Conflicts);
+    }
+
     private static HexLinkHoldStore EnableHolds(LinkServices services) =>
         services.HoldStore = new(services.Workspace.Folders[0], Path.Combine(services.Root, "sync"));
 
@@ -323,11 +389,11 @@ public sealed class HexLinkHoldSyncTests
         File.WriteAllText(Local(pair.B), text);
     }
 
-    private static string Repository(LinkedPair pair)
+    private static string Repository(LinkedPair pair, byte[]? initialBytes = null)
     {
         Git(pair.A.Work, "init", "-q", "-b", "development");
         Configure(pair.A.Work);
-        File.WriteAllText(Local(pair.A), Baseline);
+        File.WriteAllBytes(Local(pair.A), initialBytes ?? Bytes(Baseline));
         Git(pair.A.Work, "add", ".");
         Git(pair.A.Work, "commit", "-qm", "baseline");
         Git(pair.B.Root, "-c", "core.autocrlf=false", "clone", "--quiet", "--no-local", pair.A.Work, pair.B.Work);

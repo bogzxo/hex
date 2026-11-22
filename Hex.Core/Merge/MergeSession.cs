@@ -5,4 +5,11 @@ internal sealed record MergeSession(string Title, string MineLabel, string Their
     MergeModel Model, Func<byte[], Task> Complete, Action Cancel, string Path)
 {
     public bool IsBinary => Model.IsBinary;
+    public MergeSideChoices? SideChoices { get; init; }
+    public DateTimeOffset? MineModified { get; init; }
+    public DateTimeOffset? TheirsModified { get; init; }
 }
+
+internal enum MergeSide { Mine, Theirs }
+
+internal sealed record MergeSideChoices(bool MineDeleted, bool TheirsDeleted, Func<MergeSide, Task> Complete);

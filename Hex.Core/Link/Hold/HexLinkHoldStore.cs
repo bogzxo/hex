@@ -35,6 +35,7 @@ internal sealed class HexLinkHoldStore
     internal long Revision => Volatile.Read(ref revision);
     internal string BaseFile(HexLinkHold entry) => Path.Combine(BlobDirectory, entry.BaseHash);
     public event Action? Changed;
+    internal event Action<IReadOnlyList<HexLinkHold>>? Released;
 
     public HexLinkHold Hold(string path, byte[] baseBytes, HexLinkHoldBaseSource baseSource, bool baseDeleted = false, bool? baseExecutable = null)
     {
@@ -126,12 +127,12 @@ internal sealed class HexLinkHoldStore
         return true;
     }
 
-    public bool Rebase(string path, byte[] newBaseBytes, bool baseDeleted = false)
+    public bool Rebase(string path, byte[] newBaseBytes, bool baseDeleted = false, HexLinkHold? expected = null)
     {
         string hash = HexLinkFiles.Hash(newBaseBytes);
         lock (gate)
         {
-            if (Get(path) is not { } entry)
+            if (Get(path) is not { } entry || expected is not null && !SameVersion(entry, expected))
                 return false;
             HexLinkHold next = entry with
             {
@@ -155,17 +156,35 @@ internal sealed class HexLinkHoldStore
         }
     }
 
-    public bool Release(string path)
+    public bool Release(string path) => Get(path) is { } held && Release([held]);
+
+    internal bool Release(IReadOnlyList<HexLinkHold> holds)
     {
+        if (holds.Count == 0)
+            return true;
         lock (gate)
         {
-            if (Get(path) is not { } entry)
+            if (holds.Any(held => Get(held.Path) is not { } current || !SameVersion(current, held)))
                 return false;
-            Commit(entry.Path, null);
+            var next = new Dictionary<string, HexLinkHold>(entries, entries.Comparer);
+            foreach (HexLinkHold held in holds)
+                next.Remove(held.Path);
+            Persist(next);
+            foreach (HexLinkHold held in holds)
+            {
+                Retire(held.BaseHash, next);
+                Retire(held.IncomingHash, next);
+            }
         }
+        Released?.Invoke(holds);
         Changed?.Invoke();
         return true;
     }
+
+    internal bool Matches(HexLinkHold hold) => Get(hold.Path) is { } current && SameVersion(current, hold);
+
+    private static bool SameVersion(HexLinkHold left, HexLinkHold right) =>
+        left with { NoticeShown = right.NoticeShown } == right;
 
     // Must be called under gate. Persist the new index before retiring any blobs it no longer references.
     private void Commit(string path, HexLinkHold? entry, string? hash = null, byte[]? blob = null, string? staged = null)
@@ -193,12 +212,7 @@ internal sealed class HexLinkHoldStore
 
         try
         {
-            var state = new JsonObject
-            {
-                ["version"] = 1,
-                ["entries"] = new JsonArray([.. next.Values.OrderBy(each => each.Path, StringComparer.Ordinal).Select(WriteEntry)]),
-            };
-            HexLinkFiles.WriteAtomic(StateFile, Encoding.UTF8.GetBytes(state.ToJsonString()));
+            Persist(next);
         }
         catch
         {
@@ -206,10 +220,20 @@ internal sealed class HexLinkHoldStore
             throw;
         }
 
-        entries = next;
-        Interlocked.Increment(ref revision);
         Retire(previous?.BaseHash, next);
         Retire(previous?.IncomingHash, next);
+    }
+
+    private void Persist(Dictionary<string, HexLinkHold> next)
+    {
+        var state = new JsonObject
+        {
+            ["version"] = 1,
+            ["entries"] = new JsonArray([.. next.Values.OrderBy(each => each.Path, StringComparer.Ordinal).Select(WriteEntry)]),
+        };
+        HexLinkFiles.WriteAtomic(StateFile, Encoding.UTF8.GetBytes(state.ToJsonString()));
+        entries = next;
+        Interlocked.Increment(ref revision);
     }
 
     private static void CopyBlob(string from, string to)

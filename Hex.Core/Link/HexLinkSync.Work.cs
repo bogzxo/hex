@@ -63,6 +63,7 @@ internal sealed partial class HexLinkSync
             remoteHeld.UnionWith(theirs.HeldPaths ?? []);
             offeredWhileHeld.Clear();
             remoteSeenWhileHeld.Clear();
+            releasedPeerOffers.Clear();
             remoteCertified = theirs.Certified;
             CompareHeads(mine, theirs);
             insensitivePaths = mine.CaseSensitive != true || theirs.CaseSensitive != true;
@@ -269,7 +270,7 @@ internal sealed partial class HexLinkSync
     {
         if (change.HoldNotice is { } held)
         {
-            NoteRemoteHold(change.Path, held);
+            NoteRemoteHold(change.Path, held, fromNotice: true);
             return;
         }
         ObserveDuringPublication(change.Path);
@@ -784,7 +785,8 @@ internal sealed partial class HexLinkSync
         }
 
         Unskip(wire);
-        if (await ReconcilePeerHold(wire, full, mine, theirs, agreed, localBytes, stop))
+        if (await ReconcilePeerHold(wire, full, mine, theirs, agreed, localBytes, stop)
+            || await TakeReleasedPeerChange(wire, full, mine, theirs, stop))
             return;
         if (!CanReceive && await ReconcileWithoutReplicaEdits(wire, full, mine, theirs, agreed, localBytes, stop))
             return;

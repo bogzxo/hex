@@ -958,12 +958,14 @@ internal sealed class HexLinkTreeWatch : IDisposable
                 HexLinkManifest now = tree.Manifest(verify, reuse: false);
                 if (tree.Holds is not null)
                 {
-                    var holdsNow = new HashSet<string>(now.HeldPaths ?? [], PlatformPaths.Comparer);
-                    foreach (string path in holdsNow.Except(projectedHolds, PlatformPaths.Comparer))
-                        changes.Add(new(path, null, HoldNotice: true));
-                    foreach (string path in projectedHolds.Except(holdsNow, PlatformPaths.Comparer))
+                    foreach (string path in now.HeldPaths ?? [])
+                        if (projectedHolds.Add(path))
+                            changes.Add(new(path, null, HoldNotice: true));
+                    foreach (string path in projectedHolds.Where(path => !tree.Holds.IsHeld(path)).ToArray())
+                    {
+                        projectedHolds.Remove(path);
                         changes.Add(new(path, null, HoldNotice: false));
-                    projectedHolds = holdsNow;
+                    }
                 }
                 if (verify)
                     verifyAt = Environment.TickCount64 + (long)VerifyEvery.TotalMilliseconds;
