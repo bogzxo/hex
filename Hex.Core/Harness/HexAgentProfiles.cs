@@ -73,12 +73,10 @@ internal static class HexAgentProfiles
         + "over the workspace, use the hex tool that does it instead.";
 
     /// <summary>
-    /// What the agent of a chat is told about its Plan tab and the agents working beside it, said only where the
-    /// connection can write that chat's plan (its system prompt, and the server's instructions on a chat's own
-    /// connection). Kept out of <see cref="HARNESS_RULES"/>, which the subagents a system starts are told as well, and
-    /// those share their chat's connection, so one told to keep a plan would write over the chat's. A person who typed
-    /// write a plan saw nothing in the tab because nothing at the start of a turn said the tab was there. No
-    /// apostrophes, as for the rules above.
+    /// What the agent of a chat is told about its title, its Plan tab and the agents working beside it. These rules
+    /// are shared with the main agent through its system prompt and the instructions on its chat connection. They
+    /// stay out of <see cref="HARNESS_RULES"/> because a provider's own subagents share that connection and could
+    /// overwrite the main agent's title or plan. No apostrophes, as for the rules above.
     /// </summary>
     public const string PLAN_RULES =
         "Your chat has a Plan tab the user watches. When the user asks for a plan, publish the proposed steps with hex_plan_update and leave future work pending. "
@@ -87,7 +85,8 @@ internal static class HexAgentProfiles
         + "Start implementation when the user requests it. A quick question or a one-step change needs no plan.\n"
         + "Other agents can be working in the same workspace at the same time. hex_agent_list shows every chat and the step it is doing, "
         + "hex_plan_read with a chat id reads the plan of one in your family. Before changing files another running agent is working on, "
-        + "name the files in your step note and agree who goes first with hex_agent_message rather than editing over its work.";
+        + "name the files in your step note and agree who goes first with hex_agent_message rather than editing over its work.\n"
+        + "When your assigned task changes, call hex_agent_rename with just name to give your chat a short title for the new work. Keep the title for routine progress.";
 
     private static readonly Lock changing = new();
     private static volatile HexAgentProfile[] all = [];

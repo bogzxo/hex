@@ -75,11 +75,11 @@ internal sealed partial class DawnScene
             McpSchema.Object([
                 ("id", McpSchema.Integer("The chat.")),
                 ("text", McpSchema.String("What to tell it as it starts again, 'carry on from where you were' by default."))], "id")), AgentRestart),
-        new(new McpTool("hex_agent_rename", "Rename an agent's chat",
-            "Give a chat a name of your own in the Agents panel, an empty name gives it the automatic one back. Only for agents you started. Over Hex Link, for a chat this device started on the device that has it (Steer), or any chat when that device allows Manage agents for you.",
+        new(new McpTool("hex_agent_rename", "Rename an agent chat",
+            "Rename your own chat in the Agents panel when your task changes. Omit id to rename yourself, or provide the id of a chat you started. Clients outside an agent chat must provide id. An empty name restores the automatic title. Over Hex Link, a chat this device started takes Steer, and any other chat takes Manage agents.",
             McpSchema.Object([
-                ("id", McpSchema.Integer("The chat.")),
-                ("name", McpSchema.String("The new name, at most 40 characters, empty for the automatic name."))], "id", "name")), AgentRename),
+                ("id", McpSchema.Integer("The chat to rename. Defaults to your own chat on a Hex agent connection.")),
+                ("name", McpSchema.String("The new name, at most 40 characters, empty for the automatic name."))], "name")), AgentRename),
         new(new McpTool("hex_agent_close", "Close or clear an agent you started",
             "Delete the chat of an agent you started, its agent stopped and the chats it started deleted with it, when its work is done and its chat would only be in the way. clear true keeps the chat and empties it instead, its rows, mail and session gone, so the next hex_agent_send starts it afresh on a new task without what it knew. Only for agents you started. Over Hex Link, a chat this device started there takes Steer, any other chat takes Manage agents, and deleting takes confirm true.",
             McpSchema.Object([
@@ -611,18 +611,27 @@ internal sealed partial class DawnScene
             : $"#{chat.Id} wasn't running, it's going again from where it was. hex_agent_wait waits for it.");
     }
 
-    /// <summary>A chat given a name of somebody's own, by the agent that started it, or a client that isn't an agent of the panel.</summary>
+    /// <summary>Renames the caller's chat or an explicitly selected chat that the caller may rename.</summary>
     private IEnumerable<McpToolResult?> AgentRename(JsonObject args)
     {
-        if (ChatById(args.Integer("id") ?? -1) is not { } chat)
+        int? caller = CallerOf(args);
+        bool hasTarget = args.ContainsKey("id");
+        int? target = hasTarget ? args.Integer("id") : caller;
+        if (target is not { } id)
+        {
+            yield return McpToolResult.Error(hasTarget ? "'id' should be a whole number." : "Specify a chat id when calling from outside an agent chat.");
+            yield break;
+        }
+
+        if (ChatById(id) is not { } chat)
         {
             yield return McpToolResult.Error("There's no such chat, hex_agent_list says which there are.");
             yield break;
         }
 
-        if (CallerOf(args) is { } asking && chat.Parent != asking && chat.Id != asking)
+        if (caller is { } asking && chat.Parent != asking && chat.Id != asking)
         {
-            yield return McpToolResult.Error($"#{chat.Id} wasn't started by you, only the agent that started it renames it.");
+            yield return McpToolResult.Error($"You can rename your own chat or chats you started. You did not start #{chat.Id}.");
             yield break;
         }
 

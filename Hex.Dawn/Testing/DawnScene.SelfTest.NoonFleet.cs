@@ -1,3 +1,5 @@
+using System.Text.Json.Nodes;
+
 using Hex.Shell;
 
 using Horizon.UI.Components;
@@ -56,6 +58,49 @@ internal sealed partial class DawnScene
         });
         test.Settle(0.4f);
         test.Check("noon fleet: and none once it's done", () => noonFleetSummary.Text.Contains("0 running", StringComparison.Ordinal));
+
+        const string newWork = "Verify merge results";
+        Task<McpToolResult>? selfRename = null, otherRename = null, unboundRename = null, parentRename = null, resetName = null;
+        bool acceptsNameOnly = false;
+        test.Run(() =>
+        {
+            var args = new JsonObject { ["name"] = newWork };
+            McpTool rename = McpTools.ChatTools.Single(tool => tool.Name == "hex_agent_rename");
+            acceptsNameOnly = McpSchema.Check(rename.InputSchema, args) is null;
+            selfRename = McpTools.CallAs(rename.Name, args, CancellationToken.None, scout!.Id);
+        });
+        test.WaitFor(() => selfRename?.IsCompleted == true, 5);
+        bool ShowsNewWork() => Descendants(noonFleetRows).OfType<AgentCardButton>()
+            .Any(button => button.Chat == scout && button.Title?.Text == newWork);
+        test.WaitFor(ShowsNewWork, 5);
+        test.Check("noon fleet: an agent renames its own chat by name alone and the fleet updates", () =>
+            acceptsNameOnly && selfRename is { IsCompletedSuccessfully: true, Result.IsError: false }
+            && scout!.Shown == newWork && agentStatuses[scout.Id].Shown == newWork && ShowsNewWork());
+
+        test.Run(() =>
+        {
+            otherRename = McpTools.CallAs("hex_agent_rename", new JsonObject { ["id"] = scout!.Id, ["name"] = "Other chat" },
+                CancellationToken.None, builder!.Id);
+            unboundRename = McpTools.Call("hex_agent_rename", new JsonObject { [HexMcpCaller.CALLER] = scout.Id, ["name"] = "Unbound" },
+                CancellationToken.None);
+        });
+        test.WaitFor(() => otherRename?.IsCompleted == true && unboundRename?.IsCompleted == true, 5);
+        test.Check("noon fleet: a sibling cannot rename the chat and an unbound client needs the target id", () =>
+            otherRename is { IsCompletedSuccessfully: true, Result.IsError: true }
+            && unboundRename is { IsCompletedSuccessfully: true, Result.IsError: true }
+            && unboundRename.Result.AllText().Contains("Specify a chat id", StringComparison.Ordinal) && scout!.Shown == newWork);
+
+        test.Run(() => parentRename = McpTools.CallAs("hex_agent_rename",
+            new JsonObject { ["id"] = scout!.Id, ["name"] = "Review verification" }, CancellationToken.None, lead!.Id));
+        test.WaitFor(() => parentRename?.IsCompleted == true, 5);
+        test.Check("noon fleet: a starter still renames its child by explicit id", () =>
+            parentRename is { IsCompletedSuccessfully: true, Result.IsError: false } && scout!.Shown == "Review verification");
+
+        test.Run(() => resetName = McpTools.CallAs("hex_agent_rename",
+            new JsonObject { ["name"] = string.Empty }, CancellationToken.None, scout!.Id));
+        test.WaitFor(() => resetName?.IsCompleted == true, 5);
+        test.Check("noon fleet: an agent restores the automatic title with an empty name", () =>
+            resetName is { IsCompletedSuccessfully: true, Result.IsError: false } && scout!.Name is null && scout.Shown == "look round");
 
         // The one that started them clears one and deletes the other, which nobody else may
         Task<McpToolResult>? stranger = null, cleared = null, deleted = null;
