@@ -26,6 +26,7 @@ internal sealed partial class DawnScene
     // made at, and every remote chat (stand-in or mirror) to the card it is
     private readonly Dictionary<(string Device, int Id), HexAgentChat> linkStandIns = [];
     private readonly Dictionary<HexAgentChat, LinkRemoteCard> linkRemoteOf = [];
+    private readonly HashSet<(string Device, int Id)> linkStartedHere = [];
     private readonly Dictionary<string, (long Version, string Name)> linkStandInsAt = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Whether the cards carry the badge of the machine they run on, while any device is linked.</summary>
@@ -139,6 +140,11 @@ internal sealed partial class DawnScene
             linkStandInsAt[device] = now;
         }
 
+        if (row.StartedByYou)
+            linkStartedHere.Add((device, row.Id));
+        else
+            linkStartedHere.Remove((device, row.Id));
+
         if (linkStandIns.TryGetValue((device, row.Id), out HexAgentChat? made))
             return made;
 
@@ -171,10 +177,11 @@ internal sealed partial class DawnScene
         chat is not null && linkRemoteOf.Count > 0 && linkRemoteOf.TryGetValue(chat, out LinkRemoteCard? remote) ? remote : null;
 
     /// <summary>What started a remote chat as its card says it, the starter's number and name there, and its agent system.</summary>
-    private string LinkStarterOf(LinkRemoteCard remote, HexAgentChat chat, string system)
+    private string LinkStarterOf(LinkRemoteCard remote, string system, string startedHere)
     {
         // Its own number there leads, who started it is in the card's tooltip (LinkStarterTip)
-        return $"#{remote.Id} · {system}";
+        string line = $"#{remote.Id} · {system}";
+        return startedHere.Length > 0 ? $"{line} · {startedHere}" : line;
     }
 
     /// <summary>The line of a remote card's tooltip that says which chat started it, empty for one that nothing started.</summary>
@@ -182,7 +189,10 @@ internal sealed partial class DawnScene
     {
         if (chat.Parent is not { } parent)
             return string.Empty;
-        HexLinkRow? starter = LinkPeerOf(remote.DeviceId)?.Fleet.FirstOrDefault(row => row.Id == parent);
+        IReadOnlyList<HexLinkRow>? rows = LinkChatRows(remote.DeviceId);
+        if (rows is null && linkChatsLast.TryGetValue(remote.DeviceId, out var last))
+            rows = last.Device.Rows;
+        HexLinkRow? starter = rows?.FirstOrDefault(row => row.Id == parent);
         return Said("agents_panel.started_by", ("name", starter is null ? $"#{parent}" : $"#{parent} {starter.Name}"));
     }
 
@@ -190,14 +200,15 @@ internal sealed partial class DawnScene
     /// The badge of the machine a card's agent runs on, put on the card at its top beside the agent system's: another
     /// device's in its colour, this one's quiet, and none while nothing is linked. How much room it takes there.
     /// </summary>
-    private float LinkCardBadge(UIComponent root, LinkRemoteCard? remote, float y)
+    private float LinkCardBadge(UIComponent root, LinkRemoteCard? remote, float y, out Badge? badge)
     {
+        badge = null;
         if (remote is null && !LinkBadgesShown)
             return 0.0f;
         string id = remote?.DeviceId ?? LinkDevice?.Id ?? string.Empty;
         string name = OneLine(remote?.DeviceName ?? LinkDevice?.Name ?? LinkNameWanted, 18);
         Vector4 tint = LinkDeviceTint(id, Skin);
-        var badge = root.Add(new Badge
+        badge = root.Add(new Badge
         {
             Text = name, Icon = "vm", Colour = tint, TextScale = 0.1f, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(38, y),
             Tooltip = Said(remote is null ? "link.badge_here" : "link.badge_there", ("device", remote?.DeviceName ?? name))

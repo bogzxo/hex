@@ -62,7 +62,7 @@ internal sealed partial class DawnScene
     private AgentCard AgentCardOf(HexAgentChat chat, int step, bool closable, bool quiet = false, bool rail = false, LinkRemoteCard? remote = null, HexAgentApprovalStatus? approval = null)
     {
         UISkin? skin = Skin;
-        float indent = step * CHAT_STEP;
+        float indent = (remote is null ? step : Math.Min(step, 2)) * CHAT_STEP;
         var root = new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, AGENT_CARD), Padding = new UIEdges(indent, 0, 0, 0), Color = Vector4.Zero };
         var pick = root.Add(new AgentCardButton(this, chat)
         {
@@ -91,10 +91,10 @@ internal sealed partial class DawnScene
         string system = profile?.Name ?? chat.Agent;
         Vector4 tint = AgentTint(chat.Agent, skin);
         // A pill of the system's letters in its own colour, the same badge as the card's state across from it
-        root.Add(new Badge { Text = Initials(system), Colour = tint, TextScale = 0.1f, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_TOP + 1) });
+        var agentBadge = root.Add(new Badge { Text = Initials(system), Colour = tint, TextScale = 0.1f, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_TOP + 1), Tooltip = system });
 
         // The machine it runs on, while there's more than one to say (DawnScene.LinkFleet), and who started it after that
-        float fromAt = 38 + LinkCardBadge(root, remote, -CARD_TOP + 1);
+        float fromAt = 38 + LinkCardBadge(root, remote, -CARD_TOP + 1, out Badge? deviceBadge);
         var from = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(fromAt, -CARD_TOP - 1), TextScale = CARD_SMALL, Dim = true, Align = Origin.Left });
         // How it's doing as a badge in the colour of it, a beating dot while it works. It was words in a colour, which read
         // as one more line of the card's small print
@@ -108,6 +108,8 @@ internal sealed partial class DawnScene
         var under = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_UNDER), TextScale = CARD_SMALL, Dim = true, Align = Origin.Left });
         // A double click on the name renames it in place, the box over it while it does (DawnScene.AgentsPanel.Rename)
         pick.Title = name;
+        if (remote is not null)
+            name.Tooltip = pick.Tooltip;
 
         // How full its context is, a thin bar along the card's foot in the colour of how full, there once the agent said
         var contextRow = root.Add(new Panel
@@ -142,15 +144,43 @@ internal sealed partial class DawnScene
             // Who it's run by over its name, the agent system, and the chat that started it first for one an agent started.
             // The model goes with what it used under its name, where the model and what it cost read together
             // The row's own number leads (#12 · Claude Code), the chat that started it is on the tooltip
-            string starter = remote is not null ? LinkStarterOf(remote, chat, system) : $"#{chat.Id} · {system}";
+            string startedHere = remote is not null && linkStartedHere.Contains((remote.DeviceId, remote.Id))
+                ? Said("link.chats_started_here") : string.Empty;
+            string starter = remote is not null ? LinkStarterOf(remote, system, startedHere) : $"#{chat.Id} · {system}";
             string startedBy = remote is not null ? LinkStarterTip(remote, chat) : chat.Parent is { } startedParent ? Said("agents_panel.started_by", ("name", ChatName(startedParent))) : string.Empty;
-            if (from.Tooltip != startedBy)
-                from.Tooltip = startedBy;
+            string starterTip = remote is null ? startedBy : startedBy.Length > 0 ? $"{starter}\n{startedBy}" : starter;
+            if (from.Tooltip != starterTip)
+                from.Tooltip = starterTip;
             ShowAgentStatus(state, chat, approval);
 
             // As much of it as fits beside the state, measured in the font, which a count of letters guessed at short
             float stateWidth = (Skin?.Font.Measure(state.Text, state.TextScale, markup: false).X ?? 100.0f) + 40.0f;
-            string said = UIRichText.Literal(FitText(starter, from.TextScale, room - fromAt - stateWidth - (closable ? 30 : 10) - 10));
+            string said;
+            bool startedBelow = false;
+            if (remote is not null && deviceBadge is not null)
+            {
+                state.Colour = LinkBadgeColour(state.Tone);
+                state.Opacity = 1.0f;
+                stateWidth = LinkChatChipWidth(state);
+                float right = room - stateWidth - 16.0f;
+                float deviceAt = 10.0f + LinkChatChipWidth(agentBadge) + 6.0f;
+                string id = $"#{remote.Id} ·";
+                float idWidth = (Skin?.Font.Measure(id, from.TextScale, markup: false).X ?? 48.0f) + 10.0f;
+                float line = (Skin?.Font.LineHeight ?? 120) * deviceBadge.TextScale;
+                float deviceRoom = MathF.Min(112.0f, right - deviceAt - idWidth - 6.0f);
+                deviceBadge.Text = FitLinkChatText(OneLine(remote.DeviceName, 18), deviceBadge.TextScale, deviceRoom - 19 - line);
+                deviceBadge.Visible = deviceBadge.Text.Length > 0;
+                deviceBadge.Position = new Vector2(deviceAt, -CARD_TOP + 1);
+                fromAt = deviceBadge.Visible ? deviceAt + LinkChatChipWidth(deviceBadge) + 6.0f : deviceAt;
+                from.Position = new Vector2(fromAt, -CARD_TOP - 1);
+                string fitted = FitLinkChatText(starter, from.TextScale, right - fromAt);
+                startedBelow = startedHere.Length > 0 && fitted != starter;
+                if (startedBelow)
+                    fitted = FitLinkChatText(LinkStarterOf(remote, system, string.Empty), from.TextScale, right - fromAt);
+                said = UIRichText.Literal(fitted);
+            }
+            else
+                said = UIRichText.Literal(FitText(starter, from.TextScale, room - fromAt - stateWidth - (closable ? 30 : 10) - 10));
             if (from.Text != said)
                 from.Text = said;
 
@@ -168,7 +198,22 @@ internal sealed partial class DawnScene
             string mail = unread > 0 ? $" · $(mail) {unread}" : string.Empty;
             float mailWidth = mail.Length > 0 ? 40.0f : 0.0f;
             // The model stays in front of what it's doing, it was gone from the card for as long as a tool ran
-            if (approval is not null)
+            if (remote is not null)
+            {
+                string? extra = approval?.Summary ?? doing;
+                if (extra is null && chat.Cost > 0)
+                    extra = "$" + chat.Cost.ToString("0.000", CultureInfo.InvariantCulture);
+                string details = JoinAgentCardDetails(model, extra);
+                string? time = chat.TurnSeconds > 0 && (approval is not null || chat.RunGoing || chat.Failed || chat.Stopped)
+                    ? Took(chat.TurnSeconds) : null;
+                string tail = JoinAgentCardDetails(time, startedBelow ? startedHere : null);
+                float tailWidth = tail.Length == 0 ? 0.0f : Skin?.Font.Measure(" · " + tail, under.TextScale, markup: false).X ?? 110.0f;
+                string fitted = FitLinkChatText(details, under.TextScale, room - 24 - tailWidth);
+                said = UIRichText.Literal(JoinAgentCardDetails(fitted, tail));
+                string summary = JoinAgentCardDetails(details, tail);
+                under.Tooltip = approval is { Detail.Length: > 0 } ? $"{summary}\n{approval.Detail}" : summary;
+            }
+            else if (approval is not null)
             {
                 said = UIRichText.Literal(FitText(approval.Summary, under.TextScale, room - 24));
                 under.Tooltip = approval.Detail.Length > 0 ? approval.Summary + "\n" + approval.Detail : approval.Summary;
@@ -200,6 +245,17 @@ internal sealed partial class DawnScene
         }
 
         return new AgentCard(root, Refresh);
+    }
+
+    private static string JoinAgentCardDetails(string? first, string? second) =>
+        string.IsNullOrEmpty(first) ? second ?? string.Empty : string.IsNullOrEmpty(second) ? first : $"{first} · {second}";
+
+    private string FitLinkChatText(string text, float scale, float width)
+    {
+        if (width <= 0)
+            return string.Empty;
+        string fitted = FitText(text, scale, width);
+        return Skin?.Font.Measure(fitted, scale, markup: false).X > width ? string.Empty : fitted;
     }
 
     /// <summary>

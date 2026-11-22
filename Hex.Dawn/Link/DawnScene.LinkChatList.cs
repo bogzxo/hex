@@ -205,6 +205,9 @@ internal sealed partial class DawnScene
     private float LinkFleetSections(StackPanel rows, List<Action<float>> refreshes, float inset = 10.0f)
     {
         float tall = 0.0f;
+        ScrollPanel scroll = rows == agentsListRows ? agentsListScroll : noonFleetScroll;
+        float trim = scroll.Padding.Total.X + scroll.BarWidth + scroll.BarGap
+            + (rows == agentsListRows ? agentsList.Padding.Total.X : -6.0f);
         foreach (LinkChatDevice device in LinkChatDevices())
         {
             bool FailedUnseen(HexLinkRow row) => linkFailedUnseen.Contains((device.Id, row.Id));
@@ -213,7 +216,7 @@ internal sealed partial class DawnScene
             bool open = LinkChatOpen(key, HexLinkChatGroups.DeviceUsuallyOpen(counts));
             var (head, refresh) = LinkSectionHead(device, counts, inset, key, open);
             rows.Add(head);
-            refreshes.Add(refresh);
+            refreshes.Add(width => refresh(width - trim));
             tall += LINK_CHAT_HEAD + rows.Spacing;
 
             foreach (HexLinkChatSection section in linkChatSections)
@@ -239,7 +242,7 @@ internal sealed partial class DawnScene
                     AgentCard card = AgentCardOf(standIn, step, closable: false, quiet: !device.Online || section == HexLinkChatSection.Finished,
                         rail: HexLinkChatGroups.NeedsYou(row, FailedUnseen), remote: remote, approval: row.Approvals.FirstOrDefault());
                     rows.Add(card.Root);
-                    refreshes.Add(card.Refresh);
+                    refreshes.Add(width => card.Refresh(width - trim));
                     tall += AGENT_CARD + rows.Spacing;
                 }
             }
@@ -327,7 +330,8 @@ internal sealed partial class DawnScene
             return 80.0f;
         float line = skin.Font.LineHeight * chip.TextScale;
         float text = skin.Font.Measure(chip.Text, chip.TextScale, markup: false).X;
-        return MathF.Ceiling(text + 16 + (chip.Icon.Length > 0 ? line + 4 : 0) + (chip.Dot ? line * 0.45f + 4 : 0));
+        float width = 14 + text + (chip.Icon.Length > 0 ? line + 5 : 0) + (chip.Dot ? line * 0.45f + 5 : 0);
+        return MathF.Ceiling(MathF.Max(width, MathF.Round(line * 1.45f)));
     }
 
     private float PlaceLinkChatChips(List<Badge> chips, float y)

@@ -4497,6 +4497,7 @@ let strings = {
         chats_offline: "Offline",
         chats_offline_seen: "Offline: last seen {time}",
         chats_offline_reason: "{device} is offline. Chat actions are unavailable.",
+        chats_started_here: "started here",
         badge_here: "Runs on this machine, {device}",
         badge_there: "Runs on {device}",
         chat_stop: "Stop",
