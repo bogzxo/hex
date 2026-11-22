@@ -5,8 +5,6 @@ namespace Hex.Dawn;
 
 internal sealed partial class DawnScene
 {
-    private Lock linkHoldServicesGate { get => LazyInitializer.EnsureInitialized(ref field, static () => new()); }
-    private Dictionary<HexLinkHoldStore, HexLinkHoldService> linkHoldServices { get => LazyInitializer.EnsureInitialized(ref field, static () => new()); }
     private DateTimeOffset linkHoldCheckAt;
 
     private void LinkHoldPaletteCommands(List<(string Text, Action Picked)> entries)
@@ -37,9 +35,9 @@ internal sealed partial class DawnScene
     {
         LinkServices services = linkServices ?? throw HexLinkException.NotFound("Hex Link is off.");
         HexLinkHoldStore store = services.Holds(folder);
-        lock (linkHoldServicesGate)
+        lock (services.HoldServicesGate)
         {
-            if (linkHoldServices.TryGetValue(store, out HexLinkHoldService? kept))
+            if (services.HoldServices.TryGetValue(store, out HexLinkHoldService? kept))
                 return kept;
             var service = new HexLinkHoldService(folder, store)
             {
@@ -64,7 +62,7 @@ internal sealed partial class DawnScene
                 Apply = LinkCompareAndReplace,
                 ApplyStream = LinkCompareAndReplaceStream,
             };
-            linkHoldServices.Add(store, service);
+            services.HoldServices.Add(store, service);
             return service;
         }
     }

@@ -94,6 +94,10 @@ internal sealed partial class DawnScene
         predictionOptions = null;
         predictionPrivacy = null;
         predictionPrivacyRoots = null;
+        predictionPrivacyPatterns = predictionAllowedPatterns = predictionLanguagesOf = null;
+        predictionLanguageFor = predictionItemLanguage = null;
+        predictionLanguageKnown = false;
+        predictionAskedPath = predictionShownPath = string.Empty;
         predictionOptionsOf = predictionPrivacyOf = predictionAllowedOf = null;
         predictionKeyOf = predictionFailureNoticed = predictionItemStatusText = null;
         predictionItemState = PredictionItemState.Hidden;

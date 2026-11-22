@@ -42,20 +42,24 @@ internal sealed partial class DawnScene
         }
     }
 
+    private void SetLinkClaimSession(HexLink? current)
+    {
+        if (linkClaimSession == current)
+            return;
+        linkClaimSession = current;
+        linkExplicitClaims.Clear();
+        linkPrivateClaims.Clear();
+        linkClaimPlans.Clear();
+        linkClaimEditors.Clear();
+        linkClaimEtas.Clear();
+    }
+
     private void UpdateLinkClaims(float dt)
     {
         if (link is not { } current || (linkClaimWait -= dt) > 0)
             return;
         linkClaimWait = 0.5f;
-        if (linkClaimSession != current)
-        {
-            linkClaimSession = current;
-            linkExplicitClaims.Clear();
-            linkPrivateClaims.Clear();
-            linkClaimPlans.Clear();
-            linkClaimEditors.Clear();
-            linkClaimEtas.Clear();
-        }
+        SetLinkClaimSession(current);
 
         HexLinkClaimExchange exchange = current.Claims;
         exchange.RefreshFolders();

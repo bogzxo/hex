@@ -36,6 +36,8 @@ internal sealed partial class DawnScene
         public IHexLinkPublicationService? Publication => hex.CurrentLinkPublication?.Publication;
         public HexLinkWorktreeGatePolicy? WorktreeGate(HexLinkFolder folder) => hex.LinkReadOwnedWorktreeGate(this, folder);
 
+        internal Lock HoldServicesGate { get => LazyInitializer.EnsureInitialized(ref field, static () => new()); }
+        internal Dictionary<HexLinkHoldStore, HexLinkHoldService> HoldServices { get => LazyInitializer.EnsureInitialized(ref field, static () => new()); }
         private readonly Lock holdStoresGate = new();
         private readonly Dictionary<(string Name, string Path), HexLinkHoldStore> holdStores = new();
 
