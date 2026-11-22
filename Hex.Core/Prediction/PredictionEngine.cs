@@ -41,6 +41,20 @@ internal sealed class PredictionEngine(TimeProvider time)
     /// <summary>What the settings say, null when predictions are off; asked on the editor's thread.</summary>
     public Func<PredictionOptions?> Options { get; set; } = () => null;
 
+    public bool ShortcutOnly
+    {
+        get;
+        set
+        {
+            if (field == value)
+                return;
+            field = value;
+            ShutDown();
+            immediate = false;
+            SetStatus(PredictionStatus.Ok, "");
+        }
+    }
+
     /// <summary>
     /// The document as it is, taken on the editor's thread when the debounce is over, null when nothing is to be asked
     /// for it now (the completion list open, text selected, the file excluded, the window not focused).
@@ -85,13 +99,18 @@ internal sealed class PredictionEngine(TimeProvider time)
         this.document = document;
         this.version = version;
         dismissed = false;
-        if (typedThrough && same)
-            return;
-
         editedAt = time.GetTimestamp();
-        pending = true;
+        immediate = false;
+        pending = !ShortcutOnly && !(typedThrough && same);
         if (flight is not null)
-            Stop(counted: true);
+        {
+            lock (gate)
+            {
+                Stop(counted: true);
+                if (!pending && Status == PredictionStatus.Waiting)
+                    SetStatus(PredictionStatus.Ok, "");
+            }
+        }
         if (ready is not null)
             Volatile.Write(ref ready, null);
     }
@@ -161,13 +180,15 @@ internal sealed class PredictionEngine(TimeProvider time)
             retryAt = 0;
             LastTiming = default;
             SetStatus(PredictionStatus.Off, "");
-            pending |= asking;
+            pending |= asking && !ShortcutOnly;
         }
     }
 
     /// <summary>A prediction was taken: the next is asked for at once, without the debounce, while the hand is still on Tab.</summary>
     public void Accepted(object document)
     {
+        if (ShortcutOnly)
+            return;
         this.document = document;
         pending = true;
         immediate = true;
@@ -213,6 +234,8 @@ internal sealed class PredictionEngine(TimeProvider time)
     /// </summary>
     public void Warm()
     {
+        if (ShortcutOnly)
+            return;
         PredictionOptions? options = Options();
         if (options is not { On: true } || options == warmedFor)
             return;
@@ -222,7 +245,7 @@ internal sealed class PredictionEngine(TimeProvider time)
 
         var warming = new CancellationTokenSource();
         var previous = Interlocked.Exchange(ref preload, warming);
-        previous?.Cancel();
+        _ = previous?.CancelAsync();
         _ = Task.Run(async () =>
         {
             PredictionException? problem = await ollama.Preload(warming.Token).ConfigureAwait(false);
@@ -264,7 +287,7 @@ internal sealed class PredictionEngine(TimeProvider time)
             document = null;
             Volatile.Write(ref ready, null);
         }
-        Interlocked.Exchange(ref preload, null)?.Cancel();
+        _ = Interlocked.Exchange(ref preload, null)?.CancelAsync();
     }
 
     private IPredictionProvider? Provider(PredictionOptions options)

@@ -65,6 +65,8 @@ internal sealed partial class DawnScene
         commands.Add(PREDICTION_MENU, Said("prediction.settings"), () => OpenSettings(EditorSettingsCatalog.AI), icon: "settings-gear");
     }
 
+    private MenuItem? predictNowCommand;
+
     private void AddActivePredictionCommands()
     {
         if (activePredictionCommandsAdded)
@@ -81,7 +83,9 @@ internal sealed partial class DawnScene
         }
 
         Add(commands.Add(PREDICTION_MENU, Said("prediction.toggle_language"), TogglePredictionsForLanguage, icon: "symbol-misc"), InCode);
-        Add(commands.Add(PREDICTION_MENU, Said("prediction.predict_now"), PredictNow, "Alt+\\", "sparkle", UIKeyUse.BoundWhileTyping), Asking);
+        predictNowCommand = commands.Add(PREDICTION_MENU, Said("prediction.predict_now"), PredictNow, "Ctrl+Alt+.", "sparkle", UIKeyUse.BoundWhileTyping);
+        Add(predictNowCommand, Asking);
+        BindShared("Ctrl+Alt+.", whileTyping: true, predictNowCommand);
         Add(commands.Add(PREDICTION_MENU, Said("prediction.accept"), () => code.AcceptPrediction(), "Alt+L", "check", UIKeyUse.BoundWhileTyping), () => InCode() && code.HasPrediction);
         Add(commands.Add(PREDICTION_MENU, Said("prediction.accept_word"), () => code.AcceptPredictionWord(), icon: "arrow-right"), () => InCode() && code.PredictionIsGhost);
         Add(commands.Add(PREDICTION_MENU, Said("prediction.dismiss"), () => code.ClearPrediction(), icon: "close"), () => InCode() && code.HasPrediction);
@@ -130,6 +134,7 @@ internal sealed partial class DawnScene
             return;
         if (predictionSession is null)
             StartPredictions();
+        predictions.ShortcutOnly = settings.PredictionShortcutOnly;
         predictions.Edited(document, code.Document.Version);
         predictions.PredictNow(document);
     }

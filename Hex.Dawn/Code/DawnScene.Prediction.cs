@@ -61,6 +61,7 @@ internal sealed partial class DawnScene
     {
         predictionSession = new(new PredictionEngine(TimeProvider.System)
         {
+            ShortcutOnly = settings.PredictionShortcutOnly,
             Options = PredictionOptionsNow,
             Snapshot = PredictionSnapshotOf
         });
@@ -130,6 +131,7 @@ internal sealed partial class DawnScene
             predictionShownCaret = text.Caret;
         }
 
+        predictions.ShortcutOnly = settings.PredictionShortcutOnly;
         RememberEdited(changed, text.Caret.Line);
         predictions.Edited(changed, text.Version, through);
     }
@@ -146,6 +148,7 @@ internal sealed partial class DawnScene
         if (predictionSession is null)
             StartPredictions();
 
+        predictions.ShortcutOnly = settings.PredictionShortcutOnly;
         SayPredictionsOnce();
 
         // A prediction taken is in the history now, the next is asked for at once

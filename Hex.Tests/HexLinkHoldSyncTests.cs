@@ -96,6 +96,82 @@ public sealed class HexLinkHoldSyncTests
         Assert.Equal(Wire, Assert.Single(pair.B.SubmittedPaths));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Forwarded_submission_survives_a_sync_pass_on_the_previous_contents(bool packed)
+    {
+        using var pair = await LinkedPair.Up(Edit, Edit, bulk: packed ? HexLinkBulkSupport.Raw : HexLinkBulkSupport.None);
+        Both(pair, Baseline);
+        using var sync = Sync(pair.A, pair.PeerB);
+        await Ready(sync);
+
+        const string before = "the checked write will replace this version\n";
+        const string submitted = "exact checked result from the first peer\n";
+        sync.RememberHeldSubmission(Wire, new(HexLinkFiles.Hash(Bytes(submitted)), HexLinkFiles.Hash(Bytes(before)), Forwarded: true));
+
+        // Give the worker a complete pass on the predecessor before the checked write lands.
+        File.WriteAllText(Local(pair.A), before);
+        await Flush(sync);
+        Assert.Equal(before, File.ReadAllText(Local(pair.B)));
+        Assert.Empty(pair.B.SubmittedPaths);
+
+        File.WriteAllText(Local(pair.A), submitted);
+        await Flush(sync);
+        Assert.Equal(submitted, File.ReadAllText(Local(pair.B)));
+        Assert.Empty(sync.Conflicts);
+        Assert.Equal(Wire, Assert.Single(pair.B.SubmittedPaths));
+
+        // A later ordinary save of identical bytes must not inherit the consumed receipt.
+        File.WriteAllText(Local(pair.A), before);
+        await Flush(sync);
+        File.WriteAllText(Local(pair.A), submitted);
+        await Flush(sync);
+        Assert.Equal(submitted, File.ReadAllText(Local(pair.B)));
+        Assert.Equal(Wire, Assert.Single(pair.B.SubmittedPaths));
+    }
+
+    [Fact]
+    public async Task An_unrelated_change_invalidates_a_forwarded_receipt()
+    {
+        using var pair = await LinkedPair.Up(Edit, Edit);
+        Both(pair, Baseline);
+        using var sync = Sync(pair.A, pair.PeerB);
+        await Ready(sync);
+
+        const string submitted = "a checked result that has not reached disk\n";
+        const string unrelated = "a newer independent edit\n";
+        sync.RememberHeldSubmission(Wire, new(HexLinkFiles.Hash(Bytes(submitted)), HexLinkFiles.Hash(Bytes(Baseline)), Forwarded: true));
+        File.WriteAllText(Local(pair.A), unrelated);
+        await Flush(sync);
+        Assert.Equal(unrelated, File.ReadAllText(Local(pair.B)));
+
+        File.WriteAllText(Local(pair.A), submitted);
+        await Flush(sync);
+        Assert.Equal(submitted, File.ReadAllText(Local(pair.B)));
+        Assert.Empty(pair.B.SubmittedPaths);
+    }
+
+    [Fact]
+    public async Task Clearing_an_older_receipt_preserves_a_new_receipt_for_identical_bytes()
+    {
+        using var pair = await LinkedPair.Up(Edit, Edit);
+        Both(pair, Baseline);
+        using var sync = Sync(pair.A, pair.PeerB);
+        await Ready(sync);
+
+        const string submitted = "the same checked result arrived twice\n";
+        var older = new HexLinkSync.HeldSubmission(HexLinkFiles.Hash(Bytes(submitted)), HexLinkFiles.Hash(Bytes(Baseline)), Forwarded: true);
+        sync.RememberHeldSubmission(Wire, older);
+        sync.RememberHeldSubmission(Wire, older with { });
+        sync.ForgetHeldSubmission(Wire, older);
+
+        File.WriteAllText(Local(pair.A), submitted);
+        await Flush(sync);
+        Assert.Equal(submitted, File.ReadAllText(Local(pair.B)));
+        Assert.Equal(Wire, Assert.Single(pair.B.SubmittedPaths));
+    }
+
     [Fact]
     public async Task Holder_keeps_its_edits_records_peer_changes_and_leaves_other_files_live()
     {
