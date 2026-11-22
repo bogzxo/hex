@@ -111,7 +111,7 @@ public sealed class HexLinkSyncTlsBenchmark(ITestOutputHelper output)
             };
             BeginProfile();
             var elapsed = Stopwatch.StartNew();
-            await sync.Start(cancel: stop);
+            await sync.Start(force: true, cancel: stop);
             await Idle(sync, stop, () => Write($"{label} cold progress: {sync.Sent} sent, {sync.FilesDone}/{sync.FilesTotal} complete, {sync.Summary}"));
             Assert.Empty(sync.Conflicts);
             Write($"{label} cold: {elapsed.Elapsed.TotalSeconds:F3} s, {files} files compared for transfer, " +
@@ -125,6 +125,13 @@ public sealed class HexLinkSyncTlsBenchmark(ITestOutputHelper output)
                 Assert.Equal(files, sync.Sent + sync.Received);
             }
             await sync.Flush(stop);
+        }
+
+        // The destination index already has the same tracked tree. Move only its HEAD back before the no-change pass.
+        foreach (var repo in repositories)
+        {
+            string commit = repo.Relative == "." ? baseline : repo.Commit;
+            Git(Path.Combine(there.Work, repo.Relative), "update-ref", "--no-deref", "HEAD", commit);
         }
 
         using (var transport = new BenchmarkLink(a, b, here, there, capability))
@@ -212,7 +219,12 @@ public sealed class HexLinkSyncTlsBenchmark(ITestOutputHelper output)
             Git(destination, "checkout", "-q", "--detach", commit);
         else
         {
-            Git(destination, "update-ref", "--no-deref", "HEAD", commit);
+            // An intentionally unpopulated checkout has no common checked-out base for the cold comparison.
+            // Keep its index lined up with the source so Git still treats the same paths as tracked.
+            string tree = Git(destination, "rev-parse", commit + "^{tree}").Trim();
+            string unpopulated = Git(destination, "-c", "user.name=Link benchmark", "-c",
+                "user.email=link-benchmark@example.invalid", "commit-tree", tree, "-p", commit, "-m", "Unpopulated benchmark checkout").Trim();
+            Git(destination, "update-ref", "--no-deref", "HEAD", unpopulated);
             Git(destination, "read-tree", commit);
         }
     }
