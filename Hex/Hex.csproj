@@ -63,6 +63,14 @@
     <AddToPath Directory="$(MSBuildProgramFiles32)\Microsoft Visual Studio\Installer" />
   </Target>
 
+  <!-- Hex ships its own Graphite palette at the engine's standard theme path. -->
+  <Target Name="PreferHexGraphiteTheme" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <_EngineGraphite Include="$(HorizonRoot)Horizon/Assets/uix/flat/themes/graphite.hor" />
+      <ResolvedFileToPublish Remove="@(_EngineGraphite)" MatchOnMetadata="FullPath" MatchOnMetadataOptions="PathLike" />
+    </ItemGroup>
+  </Target>
+
   <!-- The libraries' .pdb files came along into the folder to hand out, nobody debugs a published Hex -->
   <Target Name="LeaveTheSymbols" AfterTargets="ComputeResolvedFilesToPublishList" Condition="'$(Configuration)' == 'Release'">
     <ItemGroup>
