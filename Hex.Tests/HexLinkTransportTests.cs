@@ -295,6 +295,24 @@ public sealed class HexLinkTransportTests(ITestOutputHelper output) : IDisposabl
     }
 
     [Fact]
+    public async Task A_known_incoming_link_uses_the_selected_address()
+    {
+        HexLinkTestMachine.Know(pc, HexLinkRights.View, mac, HexLinkRights.View);
+        int port = mac.Listen();
+        using var cancel = new CancellationTokenSource(HexLinkTestMachine.WAIT);
+
+        Assert.True(mac.Trust.SetRoute(pc.Device.Id, new HexLinkEndpoint("::1", port)));
+        HexLinkRefused refused = await Assert.ThrowsAsync<HexLinkRefused>(() => pc.Transport.Dial("127.0.0.1", port, mac.Device.Id, cancel.Token));
+        Assert.Equal("route", refused.Reason);
+        Assert.False(mac.Accepted.Task.IsCompleted);
+
+        Assert.True(mac.Trust.SetRoute(pc.Device.Id, new HexLinkEndpoint("127.0.0.1", port)));
+        using HexLinkConnection accepted = await pc.Transport.Dial("127.0.0.1", port, mac.Device.Id, cancel.Token);
+        Assert.Equal(mac.Device.Id, accepted.Device.Id);
+        Assert.Equal(HexLinkRights.View, accepted.Rights);
+    }
+
+    [Fact]
     public async Task An_unknown_device_is_refused_having_been_shown_nothing()
     {
         // The PC knows the Mac, the Mac doesn't know the PC

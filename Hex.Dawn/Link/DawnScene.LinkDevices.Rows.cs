@@ -105,13 +105,14 @@ internal sealed partial class DawnScene
     {
         if (peer is null && GetLinkDeviceConnection(known.Device.Id)?.Connecting != true)
             return;
-        string address = peer?.Session.Connection.Address ?? known.Address;
+        string address = peer?.Session.Connection.Address ?? known.PreferredRoute?.Host ?? known.Address;
         if (address.Length > 0)
         {
             bool knownIp = IPAddress.TryParse(address, out IPAddress? ip);
             bool vpn = ip is not null && LinkIsVpn(ip);
             string route = Said(!knownIp ? "link.devices_route_network" : vpn ? "link.devices_route_vpn" : "link.devices_route_lan");
-            string tip = vpn && peer is not null ? Said("link.devices_route_vpn_active", ("address", address)) : address;
+            string tip = Said("link.devices_route_tip", ("address", address), ("choice",
+                known.PreferredRoute is { } routeChoice ? LinkRouteAddress(routeChoice) : Said("link.devices_route_auto")));
             row.Add(new Badge { Text = route, Tooltip = tip, TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left });
         }
         if (peer is not null && linkLatencies.TryGetValue(known.Device.Id, out var sampled) && sampled.Peer == peer && sampled.Milliseconds is { } ms)
@@ -124,8 +125,7 @@ internal sealed partial class DawnScene
     }
 
     private (string Host, int Port)[] LinkReconnectAddresses(HexLinkKnown known) =>
-        [.. LinkAddressesOf(known, LinkNearby, linkRedial.Addresses(known.Device.Id))
-            .OrderBy(route => IPAddress.TryParse(route.Host, out IPAddress? address) && LinkIsVpn(address))];
+        [.. LinkDialRoutes(known, LinkNearby, linkRedial.Addresses(known.Device.Id)).Select(route => (route.Host, route.Port))];
 
     private void LinkChangeDeviceRights(HexLinkKnown known)
     {
@@ -260,6 +260,7 @@ internal sealed partial class DawnScene
         more.OnPressed = () =>
         {
             var menu = new Menu("device actions");
+            LinkAddRouteMenu(menu, known);
             if (peer is not null)
             {
                 menu.Add(Said(offerShare ? "link.devices_get" : "link.devices_share"),
@@ -344,7 +345,7 @@ internal sealed partial class DawnScene
             ? Said(!LinkOn ? "link.pair_off_text" : LinkHeldOff(id) ? "link.devices_held_help" : "link.devices_offline_help")
             : LinkDialFailureSaid(reason);
         if (state?.Connecting == true)
-            action = Said("link.devices_trying_route", ("address", known.Address));
+            action = Said("link.devices_trying_route", ("address", known.PreferredRoute is { } route ? LinkRouteAddress(route) : known.Address));
         else if (state?.RetryAtUtc is not null)
             action = hasAddress ? Said("link.devices_retry_help", ("why", action)) : Said("link.devices_retry_no_address");
         else if (key == "link.device_not_connected" && LinkOn)
@@ -358,6 +359,7 @@ internal sealed partial class DawnScene
     private static string LinkDialFailureSaid(string reason) => reason switch
     {
         "version" => Said("link.devices_version_help"),
+        "route" => Said("link.devices_route_refused"),
         "refused" or "pin" or "unknown" => Said("link.devices_refused_help"),
         "unreachable" or "timeout" or "firewall" => Said("link.devices_firewall_help"),
         _ => Said("link.devices_dial_help", ("why", OneLine(reason, 150).TrimEnd('.')))

@@ -17,6 +17,9 @@ internal sealed record HexLinkKnown(HexLinkDevice Device, HexLinkRights Rights, 
 
     public HexLinkPreApproval RemotePreApproval { get; init; } = HexLinkPreApproval.Edits;
 
+    /// <summary>The route this machine should use for this peer, or null to choose automatically.</summary>
+    public HexLinkEndpoint? PreferredRoute { get; init; }
+
     /// <summary>The name it's shown by here, the person's for it or its own.</summary>
     public string Shown => Named ?? Device.Name;
 }
@@ -79,7 +82,9 @@ internal sealed class HexLinkTrust
             DateTime first = devices.TryGetValue(device.Id, out HexLinkKnown? was) ? was.Added : now;
             added = new HexLinkKnown(device, rights, first, now, address, port)
             {
-                Named = was?.Named, RemotePreApproval = was?.RemotePreApproval ?? HexLinkPreApproval.Edits
+                Named = was?.Named,
+                RemotePreApproval = was?.RemotePreApproval ?? HexLinkPreApproval.Edits,
+                PreferredRoute = was?.PreferredRoute
             };
             devices[device.Id] = added;
             Save();
@@ -93,6 +98,9 @@ internal sealed class HexLinkTrust
     public bool SetRights(string id, HexLinkRights rights) => Change(id, known => known with { Rights = rights });
 
     public bool SetRemotePreApproval(string id, HexLinkPreApproval policy) => Change(id, known => known with { RemotePreApproval = policy });
+
+    public bool SetRoute(string id, HexLinkEndpoint? endpoint) =>
+        Change(id, known => known with { PreferredRoute = endpoint });
 
     /// <summary>
     /// Calls a device something of the person's own here, which wins over what it calls itself, or goes back to its own
@@ -139,7 +147,12 @@ internal sealed class HexLinkTrust
             if (!devices.TryGetValue(id, out HexLinkKnown? known))
                 return false;
             devices[id] = change(known);
-            Save();
+            try { Save(); }
+            catch
+            {
+                devices[id] = known;
+                throw;
+            }
         }
 
         Changed?.Invoke(id);
@@ -165,7 +178,8 @@ internal sealed class HexLinkTrust
                 ["added"] = known.Added.ToString("O"),
                 ["seen"] = known.Seen.ToString("O"),
                 ["address"] = known.Address,
-                ["port"] = known.Port
+                ["port"] = known.Port,
+                ["preferred_route"] = known.PreferredRoute is { } route ? new JsonObject { ["host"] = route.Host, ["port"] = route.Port } : null
             });
         }
 
@@ -225,7 +239,9 @@ internal sealed class HexLinkTrust
                     rights, added, seen, Text(device, "address") ?? "", port)
                 {
                     Named = HexLinkNames.Clean(Text(device, "named")),
-                    RemotePreApproval = HexLinkSpawnPolicy.Read(Text(device, "remote_preapproval"))
+                    RemotePreApproval = HexLinkSpawnPolicy.Read(Text(device, "remote_preapproval")),
+                    PreferredRoute = device["preferred_route"] is JsonObject route
+                        ? HexLinkRedial.Endpoint(Text(route, "host"), HexLinkData.Int(route, "port") ?? 0) : null
                 });
             }
         }

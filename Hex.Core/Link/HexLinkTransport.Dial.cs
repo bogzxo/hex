@@ -50,12 +50,14 @@ internal sealed partial class HexLinkTransport
                 throw new HexLinkRefused("unknown", $"{address} answered as a device this machine doesn't know");
             }
 
+            RequireSelectedRoute(pin, address, port);
             await Say(ssl, HelloLine("link"), timeout.Token);
             string? line = await Answer(ssl, timeout.Token);
             Hello? hello = ParseHello(line, pin);
             if (hello is null || hello.Mode != "link" || hello.Version != 1)
                 throw new HexLinkRefused("refused", $"{address} said something that isn't Link's answer");
 
+            RequireSelectedRoute(pin, address, port);
             HexLinkConnection connection = await DiallerSettles(ssl, socket, hello.Device, address, port, timeout.Token, NegotiateBulk(hello.Bulk));
             kept = true;
             return connection;
@@ -170,6 +172,7 @@ internal sealed partial class HexLinkTransport
                 "full" => "the other device has as many links as it may",
                 "closed" => "the other device isn't pairing now",
                 "version" => "the other device speaks another version of Link",
+                "route" => "the other device has selected a different route here",
                 "mismatch" => "the pairing's numbers didn't agree",
                 _ => $"refused, {reason}"
             });

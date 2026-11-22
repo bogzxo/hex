@@ -127,6 +127,37 @@ public class HexLinkWiringTests : IDisposable
     }
 
     [Fact]
+    public void Selected_route_is_exclusive_and_survives_updates_and_restart()
+    {
+        var trust = new HexLinkTrust(folder);
+        var lan = new HexLinkEndpoint("192.168.0.30", 47900);
+        var vpn = new HexLinkEndpoint("100.80.122.37", 47900);
+        HexLinkDevice peer = HexLinkTestKit.DeviceB;
+        HexLinkKnown known = trust.Add(peer, HexLinkRights.View, vpn.Host, vpn.Port);
+
+        // Settings written before routing existed default to Automatic. Prefer LAN even when VPN was last used.
+        Assert.Null(new HexLinkTrust(folder).Find(peer.Id)!.PreferredRoute);
+        Assert.Equal([lan, vpn], DawnScene.LinkDialRoutes(known, [], [lan, vpn]));
+        Assert.True(trust.SetRoute(peer.Id, vpn));
+        Assert.True(trust.Seen(peer.Id, peer, lan.Host, lan.Port));
+        Assert.True(trust.SetRights(peer.Id, HexLinkRights.View | HexLinkRights.Edit));
+
+        trust = new HexLinkTrust(folder);
+        known = trust.Find(peer.Id)!;
+        Assert.Equal(vpn, known.PreferredRoute);
+        Assert.Equal(HexLinkRights.View | HexLinkRights.Edit, known.Rights);
+        Assert.Equal([vpn], DawnScene.LinkDialRoutes(known, [], [lan]));
+        string listed = DawnScene.LinkDevicesSaid([], [known]);
+        Assert.Contains("route preference: 100.80.122.37:47900", listed);
+        Assert.Contains("LAN addresses: 192.168.0.30:47900", listed);
+        Assert.Contains("VPN addresses: 100.80.122.37:47900", listed);
+
+        Assert.True(trust.SetRoute(peer.Id, null));
+        Assert.Null(new HexLinkTrust(folder).Find(peer.Id)!.PreferredRoute);
+        Assert.Equal([lan, vpn], DawnScene.LinkDialRoutes(trust.Find(peer.Id)!, [], [vpn]));
+    }
+
+    [Fact]
     public void Advertised_addresses_survive_restart_and_make_an_inbound_device_dialable()
     {
         var known = new HexLinkKnown(HexLinkTestKit.DeviceB, HexLinkRights.View, DateTime.UtcNow, DateTime.UtcNow, "192.168.1.30", 0);

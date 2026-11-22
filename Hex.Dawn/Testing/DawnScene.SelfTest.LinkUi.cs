@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 using System.Numerics;
 using System.Text.Json.Nodes;
 
@@ -698,6 +699,9 @@ internal sealed partial class DawnScene
         HexLinkIdentity? identity = null;
         HexLinkTransport? other = null;
         HexLinkInvite? token = null;
+        TcpListener? secondRoute = null;
+        HexLinkEndpoint alternate = default, direct = default;
+        Task<McpToolResult>? routeTool = null, routeList = null;
         var sessions = new System.Collections.Concurrent.ConcurrentBag<HexLinkSession>();
         const string Device = "Invite fixture";
         string? clipboard = null;
@@ -893,6 +897,52 @@ internal sealed partial class DawnScene
         clickWindow("link.device_connect");
         test.WaitFor(() => LinkPeers.Count == 1 && HasBadge("link.device_connected"), 8);
         test.Check("link-ui: Connect redials the saved route", () => LinkPeers.Count == 1 && HasBadge("link.device_connected"));
+
+        // Use an IPv6 loopback entry as a second route to the same pinned TLS peer.
+        test.Run(() =>
+        {
+            if (other is null || identity is null)
+                return;
+            secondRoute = new TcpListener(IPAddress.IPv6Loopback, 0);
+            secondRoute.Start();
+            direct = new HexLinkEndpoint(IPAddress.Loopback.ToString(), other.Port);
+            alternate = new HexLinkEndpoint(IPAddress.IPv6Loopback.ToString(), ((IPEndPoint)secondRoute.LocalEndpoint).Port);
+            linkRedial.Remember(identity.Id, [direct, alternate]);
+            _ = LinkUiRelay(secondRoute, other.Port);
+        });
+        ContextMenu? RouteMenu() => chrome.Root.Children.OfType<ContextMenu>().FirstOrDefault(menu => menu.Showing is not null);
+        clickMore("link.devices_route_reconnect");
+        test.WaitFor(() => RouteMenu()?.OpenSubmenu?.Title == Said("link.devices_route_reconnect"), 4);
+        string RouteLabel(HexLinkEndpoint route) => $"{Said("link.devices_route_lan")} · {LinkRouteAddress(route)}";
+        test.Check("link-ui: Reconnect via lists Automatic and both known endpoints", () =>
+            RouteMenu()?.OpenSubmenu is { } routes && routes.Items.Any(item => item.Label == Said("link.devices_route_auto") && item.IsChecked?.Invoke() == true) &&
+            routes.Items.Any(item => item.Label == RouteLabel(direct)) && routes.Items.Any(item => item.Label == RouteLabel(alternate)));
+        shot("link_ui_routes.png");
+        test.Click(() => chrome.ToWorld(RouteMenu()?.ItemBounds(RouteLabel(alternate)).Center ?? Vector2.Zero));
+        test.WaitFor(() => LinkPeers.Any(peer => peer.Session.Connection.Address == alternate.Host), 13);
+        test.Check("link-ui: pointer switches to the second route with the existing pin and rights", () =>
+            LinkPeers is [var routed] && routed.Device.Id == identity?.Id && routed.Session.Connection.Address == alternate.Host &&
+            routed.Granted == (HexLinkRights.View | HexLinkRights.Steer) && LinkKnown is [{ PreferredRoute: var saved, Rights: HexLinkRights.View }] &&
+            saved == alternate && LinkPairingPending is null);
+        test.Run(() => routeList = McpTools.Call("hex_link_devices", [], CancellationToken.None));
+        test.WaitFor(() => routeList?.IsCompleted == true, 5);
+        test.Check("link-ui: hex_link_devices shows the selected route and both addresses", () =>
+            routeList is { IsCompletedSuccessfully: true } listed && listed.Result.AllText() is { } report &&
+            report.Contains($"current route: LAN {alternate.Host}", StringComparison.Ordinal) &&
+            report.Contains(LinkRouteAddress(direct), StringComparison.Ordinal) &&
+            report.Contains(LinkRouteAddress(alternate), StringComparison.Ordinal));
+        test.Run(() => routeTool = McpTools.Call("hex_link_route",
+            new JsonObject { ["device"] = Device, ["address"] = LinkRouteAddress(direct) }, CancellationToken.None));
+        test.WaitFor(() => routeTool is { IsCompletedSuccessfully: true } && LinkPeers.Any(peer => peer.Session.Connection.Address == direct.Host), 13);
+        test.Check("link-ui: hex_link_route reconnects directly without pairing", () =>
+            routeTool is { IsCompletedSuccessfully: true, Result.IsError: false } && LinkPeers is [var routed] &&
+            routed.Device.Id == identity?.Id && routed.Session.Connection.Address == direct.Host && LinkPairingPending is null);
+        test.Run(() => routeTool = McpTools.Call("hex_link_route",
+            new JsonObject { ["device"] = Device, ["address"] = "automatic" }, CancellationToken.None));
+        test.WaitFor(() => routeTool is { IsCompletedSuccessfully: true } && LinkPeers.Count == 1, 13);
+        test.Check("link-ui: Automatic clears the route pin and reconnects", () =>
+            routeTool is { IsCompletedSuccessfully: true, Result.IsError: false } && LinkKnown is [{ PreferredRoute: null }] && LinkPeers.Count == 1);
+
         clickMore("link.device_forget");
         test.WaitFor(() => OpenDialog() is not null, 5);
         test.Settle(0.3f);
@@ -906,9 +956,27 @@ internal sealed partial class DawnScene
             linkWindow?.Close();
             foreach (HexLinkSession session in sessions)
                 session.Dispose();
+            secondRoute?.Stop();
             other?.Dispose();
             identity?.Dispose();
             linkInviteCopyForTest = null;
         });
+    }
+
+    private static async Task LinkUiRelay(TcpListener second, int destination)
+    {
+        try
+        {
+            using TcpClient incoming = await second.AcceptTcpClientAsync();
+            using var outgoing = new TcpClient(AddressFamily.InterNetwork);
+            await outgoing.ConnectAsync(IPAddress.Loopback, destination);
+            NetworkStream left = incoming.GetStream(), right = outgoing.GetStream();
+            Task toPeer = left.CopyToAsync(right), fromPeer = right.CopyToAsync(left);
+            await await Task.WhenAny(toPeer, fromPeer);
+        }
+        catch (Exception error) when (error is IOException or SocketException or ObjectDisposedException)
+        {
+            Console.WriteLine($"[Hex self-test] link-ui alternate route closed: {error.Message}");
+        }
     }
 }

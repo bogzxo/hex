@@ -329,7 +329,7 @@ internal sealed partial class HexLinkTransport : IDisposable
                 return;
             }
 
-            kept = await ListenerSettles(ssl, socket, hello.Device, address, port: 0, timeout.Token, bulk: NegotiateBulk(hello.Bulk));
+            kept = await ListenerSettlesKnown(ssl, socket, hello, address, timeout.Token);
         }
         catch (Exception e) when (e is IOException or OperationCanceledException or System.Security.Authentication.AuthenticationException or ObjectDisposedException or SocketException or InvalidOperationException)
         {

@@ -565,11 +565,11 @@ internal sealed partial class DawnScene
         foreach (HexLinkKnown known in linkTrust.Known)
         {
             string id = known.Device.Id;
-            if (linkDialling.Contains(id) || linkHeldOff.Contains(id) || link.PeerOf(id) is not null || transport.LinkTo(id) is not null || !linkRedial.Due(id, now))
+            if (linkDialling.Contains(id) || linkHeldOff.Contains(id) || linkManualDials.GetValueOrDefault(id)?.Connecting == true || link.PeerOf(id) is not null || transport.LinkTo(id) is not null || !linkRedial.Due(id, now))
                 continue;
 
-            List<(string Host, int Port)> tries = LinkAddressesOf(known, nearby, linkRedial.Addresses(id));
-            if (tries.Count == 0)
+            HexLinkEndpoint[] tries = LinkDialRoutes(known, nearby, linkRedial.Addresses(id));
+            if (tries.Length == 0)
             {
                 linkRedial.Failed(id, now, "No listening address is known for this device.");
                 linkDirty = true;
@@ -585,6 +585,8 @@ internal sealed partial class DawnScene
                 string? detail = null;
                 foreach (var (host, port) in tries)
                 {
+                    if (stop.IsCancellationRequested || linkTrust?.Find(id)?.PreferredRoute != known.PreferredRoute)
+                        break;
                     try
                     {
                         HexLinkConnection connection = await transport.Dial(host, port, id, stop);
@@ -627,7 +629,8 @@ internal sealed partial class DawnScene
                     if (linkTransport != transport)
                         return;
                     linkDialling.Remove(id);
-                    linkRedial.Failed(id, DateTime.UtcNow, detail ?? said);
+                    if (linkTrust?.Find(id)?.PreferredRoute == known.PreferredRoute)
+                        linkRedial.Failed(id, DateTime.UtcNow, detail ?? said);
                     linkDirty = true;
                     LinkRedialRefused?.Invoke(id, said);
                 });
