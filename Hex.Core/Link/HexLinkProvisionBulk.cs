@@ -172,10 +172,21 @@ internal sealed partial class HexLinkPeer
         bool Allowed() => !stop.IsCancellationRequested && revision == Volatile.Read(ref viewRevision)
             && HexLinkAllowed.Has(Granted, HexLinkRights.View);
         HexLinkProvisionBulk.Staging? staging = null;
+        IOException? openFailure = null;
+        IHexLinkBulkSink OpenStaging()
+        {
+            try { return staging = new HexLinkProvisionBulk.Staging(path, length, progress); }
+            catch (IOException error)
+            {
+                openFailure = error;
+                throw;
+            }
+        }
+
         bool keep = false;
         request["request"] = id;
         using var expected = session.ExpectBulkResponse(purpose, id, length, hash, HexLinkProvisionBulk.TransferLease,
-            Allowed, () => staging = new HexLinkProvisionBulk.Staging(path, length, progress));
+            Allowed, OpenStaging);
         try
         {
             JsonObject complete = await AskObject("provision/bulk", request, stop, HexLinkProvisionBulk.TransferLease);
@@ -186,7 +197,7 @@ internal sealed partial class HexLinkPeer
             keep = true;
             return path;
         }
-        catch (HexLinkException) when (staging?.WriteFailure is { } error)
+        catch (HexLinkException) when ((staging?.WriteFailure ?? openFailure) is { } error)
         {
             throw error;
         }
