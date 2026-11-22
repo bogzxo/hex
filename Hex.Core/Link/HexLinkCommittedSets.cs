@@ -77,7 +77,7 @@ internal sealed class HexLinkCommittedSets
         Directory.CreateDirectory(this.directory);
     }
 
-    public void Queue(HexLinkCommittedSet set, IEnumerable<string> recipients)
+    public IReadOnlyList<string> Queue(HexLinkCommittedSet set, IEnumerable<string> recipients)
     {
         JsonObject body = Canonical(set);
         string path = PathFor(set.Id, outgoing: true);
@@ -86,7 +86,9 @@ internal sealed class HexLinkCommittedSets
             if (Load(path) is { } existing)
             {
                 RequireMatch(body, existing);
-                return;
+                return existing["pending"] is JsonArray pending
+                    ? [.. pending.Select(peer => peer!.GetValue<string>())]
+                    : throw new IOException("The committed set outbox is invalid.");
             }
 
             long sequence = Directory.EnumerateFiles(directory, "out-*.json")
@@ -94,6 +96,7 @@ internal sealed class HexLinkCommittedSets
             string[] peers = [.. recipients.Distinct(StringComparer.OrdinalIgnoreCase)];
             Write(path, new JsonObject { ["set"] = body, ["sequence"] = sequence,
                 ["pending"] = new JsonArray([.. peers.Select(peer => (JsonNode)JsonValue.Create(peer)!)]) });
+            return peers;
         }
     }
 
@@ -109,11 +112,13 @@ internal sealed class HexLinkCommittedSets
 
     // Delivery retries after disconnect by calling this with the same authenticated peer ID.
     public async Task Deliver(string peer, Func<HexLinkCommittedSet, CancellationToken, Task<HexLinkCommittedAck>> send,
-        CancellationToken cancel, Action<HexLinkCommittedSet>? acknowledged = null)
+        CancellationToken cancel, Action<HexLinkCommittedSet>? acknowledged = null, Predicate<HexLinkCommittedSet>? canSend = null)
     {
         foreach (HexLinkCommittedSet set in Pending(peer))
         {
             cancel.ThrowIfCancellationRequested();
+            if (canSend?.Invoke(set) == false)
+                continue;
             HexLinkCommittedAck ack = await send(set, cancel);
             if (ack != Acknowledge(set))
                 throw HexLinkException.Invalid("The receiver acknowledged a different committed set.");

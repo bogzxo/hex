@@ -48,6 +48,8 @@ internal sealed class HexLinkWorktreePublication : IHexLinkPublicationService
         {
             if (Pinned(folder) is not { } pin || pin.DeviceId != services.Device.Id)
                 continue;
+            if (!HasOwnerStore(folder, pin.Epoch))
+                continue;
             HexLinkPublishJournal owner = await Owner(folder, pin.Epoch, cancel);
             if (await owner.PendingProjection(cancel) is { } id)
                 Fence(folder).HoldRecovery(id, HexLinkFenceKind.Publication);
@@ -142,7 +144,11 @@ internal sealed class HexLinkWorktreePublication : IHexLinkPublicationService
             RequireEpoch(folder, set.Epoch);
             await acknowledgeLive(folder, set, peer.Device.Id, lease.Stop);
             return new HexLinkCommittedAck(set.Id, digest);
-        }, cancel, set => releaseLive?.Invoke(Folder(set.Folder), set, peer.Device.Id));
+        }, cancel, set => releaseLive?.Invoke(Folder(set.Folder), set, peer.Device.Id), CanDeliver);
+
+    private bool CanDeliver(HexLinkCommittedSet set) =>
+        services.Workspace.Folders.FirstOrDefault(folder => folder.Name == set.Folder) is { } folder &&
+        Pinned(folder) is { } pin && pin.Epoch == set.Epoch && pin.DeviceId == services.Device.Id;
 
     private async Task<HexLinkPublishReceipt> Submit(HexLinkFolder folder, long epoch, Guid id,
         IReadOnlyList<HexLinkPublishEdit> edits, bool bypass, HexLinkDevice device, CancellationToken cancel)
@@ -158,16 +164,30 @@ internal sealed class HexLinkWorktreePublication : IHexLinkPublicationService
 
     private async Task<HexLinkPublishJournal> Owner(HexLinkFolder folder, long epoch, CancellationToken cancel)
     {
-        string root = Path.GetFullPath(folder.Path);
-        string key = HexLinkFiles.Hash(Encoding.UTF8.GetBytes(root + "\n" + epoch.ToString(System.Globalization.CultureInfo.InvariantCulture)))[..24];
-        Task<HexLinkPublishJournal> opening = owners.GetOrAdd(key, _ => OpenOwner(folder, epoch, key));
+        string data = OwnerDirectory(folder, epoch);
+        Task<HexLinkPublishJournal> opening = owners.GetOrAdd(data, _ => OpenOwner(folder, epoch, data));
         try { return await opening.WaitAsync(cancel); }
-        catch when (opening.IsFaulted) { owners.TryRemove(new KeyValuePair<string, Task<HexLinkPublishJournal>>(key, opening)); throw; }
+        catch when (opening.IsFaulted) { owners.TryRemove(new KeyValuePair<string, Task<HexLinkPublishJournal>>(data, opening)); throw; }
     }
 
-    private async Task<HexLinkPublishJournal> OpenOwner(HexLinkFolder folder, long epoch, string key)
+    private string OwnerDirectory(HexLinkFolder folder, long epoch)
     {
-        string data = Path.Combine(storage, "owner", key);
+        string root = Path.GetFullPath(folder.Path);
+        if (PlatformPaths.Comparison != StringComparison.Ordinal)
+            root = root.ToUpperInvariant();
+        string key = HexLinkFiles.Hash(Encoding.UTF8.GetBytes(root + "\n" + epoch.ToString(System.Globalization.CultureInfo.InvariantCulture)))[..24];
+        return Path.Combine(storage, "owner", key);
+    }
+
+    private bool HasOwnerStore(HexLinkFolder folder, long epoch)
+    {
+        try { File.GetAttributes(Path.Combine(OwnerDirectory(folder, epoch), "git", "HEAD")); return true; }
+        catch (FileNotFoundException) { return false; }
+        catch (DirectoryNotFoundException) { return false; }
+    }
+
+    private async Task<HexLinkPublishJournal> OpenOwner(HexLinkFolder folder, long epoch, string data)
+    {
         var fence = Fence(folder);
         var objects = await HexLinkWorktreeGit.Open(Path.Combine(data, "git"), CancellationToken.None);
         string Resolve(string wire) => HexLinkFiles.Resolve([folder], wire, services.Excludes);
@@ -192,8 +212,8 @@ internal sealed class HexLinkWorktreePublication : IHexLinkPublicationService
             {
                 HexLinkCommittedSet set = Descriptor(folder, epoch, receipt.Id, edits) with { Author = receipt.Author };
                 string[] peers = [.. recipients(folder.Name).Where(id => id != services.Device.Id).Distinct(StringComparer.OrdinalIgnoreCase)];
-                receipts.Queue(set, peers);
-                await deferLive(folder, set, peers, stop);
+                var pending = receipts.Queue(set, peers);
+                await deferLive(folder, set, pending, stop);
                 queued?.Invoke(folder);
             },
             (id, pending) =>

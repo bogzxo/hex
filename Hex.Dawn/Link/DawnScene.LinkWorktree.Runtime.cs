@@ -8,6 +8,49 @@ internal sealed partial class DawnScene
     private LinkPublicationRuntime? CurrentLinkPublication =>
         Volatile.Read(ref linkPublicationRuntime) is { } active && ReferenceEquals(active.Services, linkServices) ? active : null;
 
+    private readonly SemaphoreSlim publicationStarting = new(1, 1);
+
+    internal async Task LinkEnsureWorktreePublication()
+    {
+        if (linkByTest || CurrentLinkPublication is not null || linkServices is not { } services)
+            return;
+
+        string storage = Path.GetFullPath(LinkPrivateStorage);
+        IReadOnlyList<HexLinkFolder> folders = services.Workspace.Folders;
+        if (folders.Count == 0 || folders.Any(folder => PlatformPaths.IsUnder(storage, folder.Path)))
+            return;
+
+        CancellationToken stop = linkCancel?.Token ?? CancellationToken.None;
+        await publicationStarting.WaitAsync(stop);
+        try
+        {
+            if (ReferenceEquals(linkServices, services) && CurrentLinkPublication is null)
+                await LinkActivateWorktreePublication(PublicationRecipients, stop);
+        }
+        finally
+        {
+            publicationStarting.Release();
+        }
+    }
+
+    private IReadOnlyList<string> PublicationRecipients(string folder) =>
+        [.. LinkKnown.Select(device => device.Device.Id).Concat(LinkPeers.Select(peer => peer.Device.Id))
+            .Distinct(StringComparer.OrdinalIgnoreCase).Where(device => LinkSyncChosen(device).Contains(folder, PlatformPaths.Comparer))];
+
+    private async Task LinkPreparePublicationAndShare(HexLinkPeer peer)
+    {
+        try
+        {
+            await LinkEnsureWorktreePublication();
+            await LinkPrepareSharedWorkspace(peer);
+        }
+        catch (OperationCanceledException) when (peer.IsClosed || linkCancel?.IsCancellationRequested != false) { }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or HexLinkException)
+        {
+            PostLink(() => Say(error.Message, error: true));
+        }
+    }
+
     // The live sync adapter calls this before starting any engine in the workspace. Leaving the
     // callbacks unbound keeps publication unavailable on peers that cannot persist paired baselines.
     internal async Task LinkActivateWorktreePublication(Func<string, IReadOnlyList<string>> recipients,

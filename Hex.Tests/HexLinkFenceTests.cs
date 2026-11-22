@@ -97,6 +97,8 @@ public sealed class HexLinkFenceTests
             await source.Deliver("b", (batch, _) => Task.FromResult(target.PrepareIncoming(batch)!.Value), default);
             Assert.Empty(source.Pending("b"));
             Assert.Single(source.Pending("c"));
+            Assert.Equal("c", Assert.Single(source.Queue(set, ["new-peer"])));
+            Assert.Empty(source.Pending("new-peer"));
             Assert.Throws<HexLinkException>(() => target.PrepareIncoming(set with { Epoch = 2 }));
         }
         finally
