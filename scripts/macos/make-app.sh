@@ -178,7 +178,7 @@ codesign --verify --deep --strict --verbose=2 "$app"
 
 name="Hex-$version-macos-$arch"
 package=""
-if [ "$zip" = 1 ] || [ -n "$notary" ] && [ "$dmg" = 0 ]; then
+if [ "$zip" = 1 ] || { [ -n "$notary" ] && [ "$dmg" = 0 ]; }; then
     package="$out/$name.zip"
     rm -f "$package"
     ditto -c -k --sequesterRsrc --keepParent "$app" "$package"
