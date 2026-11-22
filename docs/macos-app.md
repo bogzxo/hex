@@ -9,7 +9,8 @@ install: no .NET, no runtime. `scripts/macos/make-app.sh` makes it from a checko
 2. A Hex that isn't signed with a Developer ID and notarized by Apple (every build made for a person's own Mac, see
    below) is stopped by Gatekeeper the first time when it was downloaded: *Control-click Hex, Open*, or in System Settings,
    Privacy & Security, "Open Anyway". A Hex built on the Mac it runs on has nothing to be stopped for.
-3. Hex needs a Mac with Apple silicon or an Intel Mac with Metal, macOS 13 or newer (the minimum is in Info.plist).
+3. Hex needs macOS 14 or newer (the minimum is read from the executable into Info.plist) and a Metal graphics card. The
+   build made on Apple silicon is arm64 only; `--arch universal` adds Intel (not tried yet).
 
 Settings, keys, the agents' chats and caches are in your own folders, never in the app, so replacing Hex.app with a
 newer one keeps all of it:
@@ -19,7 +20,7 @@ newer one keeps all of it:
 | settings.hor, keys.hor, plugins, sessions | `~/Library/Application Support/Hex` |
 | agents' chats, pictures, harness index | `~/Library/Application Support/Hex/data` |
 | new layouts, extensions you install | `~/Library/Application Support/Hex/layouts`, `.../extensions`, `.../extension_catalog` |
-| compiled shaders and other caches | `~/Library/Caches/Hex` (shaders), `~/Library/Application Support/Hex/data/cache` |
+| caches (compiled shaders, the harness's code index) | `~/Library/Application Support/Hex/cache`, `.../data/cache` |
 | the debug log | `~/Library/Logs/Hex/debug.log` |
 
 `HEX_HOME=<folder>` (an environment variable, `open --env HEX_HOME=<folder> -n -a Hex`) moves the first two rows under
