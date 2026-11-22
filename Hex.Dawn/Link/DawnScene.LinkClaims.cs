@@ -430,7 +430,7 @@ internal sealed partial class DawnScene
             yield break;
         }
 
-        Task<McpToolResult> sent = LinkCall(peer, tool, message, linkCancel?.Token ?? default);
+        Task<McpToolResult> sent = LinkCall(peer, tool, message, linkCancel?.Token ?? default, caller: null);
         while (!sent.IsCompleted)
             yield return null;
         yield return sent.IsCompletedSuccessfully ? sent.Result : McpToolResult.Error(sent.Exception?.GetBaseException().Message ?? "The message was cancelled.");
