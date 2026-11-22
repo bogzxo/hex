@@ -131,7 +131,7 @@ internal sealed partial class DawnScene
 
     /// <summary>Why a pairing ended in words, for the dialog and the notice.</summary>
     private static string LinkPairReasonSaid(string? reason) =>
-        Said("link.pair_reason_" + (reason is "declined-there" or "mismatch" or "closed" or "busy" or "timeout" or "unknown" or "unreachable" or "invite_expired" or "invite_invalid" or "version" or "pin" ? reason.Replace('-', '_') : "failed"));
+        Said("link.pair_reason_" + (reason is "declined-there" or "mismatch" or "closed" or "busy" or "timeout" or "unknown" or "unreachable" or "public_disabled" or "invite_expired" or "invite_invalid" or "version" or "pin" ? reason.Replace('-', '_') : "failed"));
 
     private void CloseLinkPairingDialog()
     {

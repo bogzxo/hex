@@ -101,7 +101,12 @@ internal sealed partial class DawnScene
     internal void ApplyLink(bool restart = false)
     {
         if (linkByTest)
+        {
+            if (linkTransport is not null)
+                linkTransport.AllowPublic = settings.LinkAllowPublic;
+            ApplyLinkMapping();
             return;
+        }
 
         if (LinkWanted && linkTransport is null)
             StartLink();
@@ -110,13 +115,16 @@ internal sealed partial class DawnScene
             StopLink();
             Say(Said("link.stopped"));
         }
-        else if (linkTransport is not null && restart && HexHost.Listens && linkTransport.Port != (options.LinkPort ?? settings.LinkPort))
+        else if (linkTransport is not null && ((linkTransport.AllowPublic && !settings.LinkAllowPublic)
+            || (restart && HexHost.Listens && linkTransport.Port != (options.LinkPort ?? settings.LinkPort))))
         {
             StopLink();
             StartLink();
         }
         else if (linkTransport is not null)
         {
+            linkTransport.AllowPublic = settings.LinkAllowPublic;
+            ApplyLinkMapping();
             LinkTakeName();
             LinkAnnounce(!options.SelfTest);
             linkDirty = true;
@@ -211,6 +219,7 @@ internal sealed partial class DawnScene
             };
             linkTransport = new HexLinkTransport(linkIdentity, linkTrust)
             {
+                AllowPublic = settings.LinkAllowPublic,
                 Audit = linkAudit,
                 Accepted = connection => _ = LinkAdd(connection),
                 Changed = LinkMoved,
@@ -234,6 +243,7 @@ internal sealed partial class DawnScene
                     }
                 }
             }
+            ApplyLinkMapping();
             linkOwner = this;
             linkFoldersSeen = [];
             linkLookWait = 0.0f;
@@ -263,6 +273,7 @@ internal sealed partial class DawnScene
     /// <summary>Takes Link down: the listener closed, every link cut, the LAN told goodbye and a pairing asked about answered no.</summary>
     internal void StopLink()
     {
+        _ = linkPortMapping?.SetPort(0);
         linkCancel?.Cancel();
         if (linkListeningForAddressChanges)
         {
@@ -313,6 +324,7 @@ internal sealed partial class DawnScene
         try
         {
             linkTransport?.Stop();
+            linkPortMapping?.SetPort(0).Wait(TimeSpan.FromSeconds(2));
         }
         catch (Exception)
         {

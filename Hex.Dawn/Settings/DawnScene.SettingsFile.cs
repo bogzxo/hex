@@ -366,7 +366,8 @@ internal sealed partial class DawnScene
             ApplyKeyLayer(force: true);
         if (now.McpServer != was.McpServer)
             ApplyMcp();
-        if (now.Link != was.Link || now.LinkPort != was.LinkPort || now.LinkName != was.LinkName || now.LinkDiscoverable != was.LinkDiscoverable)
+        if (now.Link != was.Link || now.LinkPort != was.LinkPort || now.LinkName != was.LinkName
+            || now.LinkDiscoverable != was.LinkDiscoverable || now.LinkAllowPublic != was.LinkAllowPublic || now.LinkMapPublicPort != was.LinkMapPublicPort)
             ApplyLink(restart: now.LinkPort != was.LinkPort);
         if (now.NoAi != was.NoAi)
             NoAiChanged();

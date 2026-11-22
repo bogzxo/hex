@@ -37,6 +37,10 @@ public class HexLinkWiringTests : IDisposable
     {
         var settings = new HexSettings(Path.Combine(folder, "settings.hor"));
         Assert.False(settings.Link);
+        Assert.False(settings.LinkAllowPublic);
+        Assert.False(settings.LinkMapPublicPort);
+        Assert.False(HexSettings.IsWorkspaceKey("link_allow_public"));
+        Assert.False(HexSettings.IsWorkspaceKey("link_map_public_port"));
         Assert.Equal(HexLinkTransport.DEFAULT_PORT, settings.LinkPort);
         Assert.Equal(string.Empty, settings.LinkName);
         Assert.True(settings.LinkDiscoverable);
@@ -56,7 +60,7 @@ public class HexLinkWiringTests : IDisposable
     public void LinkSettingsGoRoundTheFile()
     {
         string file = Path.Combine(folder, "settings.hor");
-        var settings = new HexSettings(file) { Link = true, LinkPort = 48000, LinkName = "Studio Mac", LinkDiscoverable = false };
+        var settings = new HexSettings(file) { Link = true, LinkPort = 48000, LinkName = "Studio Mac", LinkDiscoverable = false, LinkAllowPublic = true, LinkMapPublicPort = true };
         Assert.Null(settings.Save());
 
         var read = new HexSettings(file);
@@ -64,6 +68,8 @@ public class HexLinkWiringTests : IDisposable
         Assert.Equal(48000, read.LinkPort);
         Assert.Equal("Studio Mac", read.LinkName);
         Assert.False(read.LinkDiscoverable);
+        Assert.True(read.LinkAllowPublic);
+        Assert.True(read.LinkMapPublicPort);
 
         // A port past either end is held to them, a name has its spaces taken off
         File.WriteAllText(file, "let settings = {\n    editor: {\n        link_port: 80,\n        link_name: \"  Desk  \"\n    }\n};\n");

@@ -27,6 +27,25 @@ public sealed class HexLinkTransportTests(ITestOutputHelper output) : IDisposabl
         mac.Dispose();
     }
 
+    [Fact]
+    public async Task Public_access_is_opt_in_and_still_requires_a_known_identity()
+    {
+        IPAddress publicAddress = IPAddress.Parse("203.0.113.42");
+        Assert.False(mac.Transport.Admits(publicAddress));
+        using var timeout = new CancellationTokenSource(HexLinkTestMachine.WAIT);
+        var refusal = await Assert.ThrowsAsync<HexLinkRefused>(() => pc.Transport.Dial(publicAddress.ToString(), 47833, timeout.Token));
+        Assert.Equal("public_disabled", refusal.Reason);
+        IPAddress[] dnsAnswer = [publicAddress, IPAddress.Loopback];
+        Assert.Equal([IPAddress.Loopback], pc.Transport.DialAddresses(dnsAnswer));
+
+        mac.Transport.AllowPublic = pc.Transport.AllowPublic = true;
+        Assert.True(mac.Transport.Admits(publicAddress));
+        Assert.Equal(dnsAnswer, pc.Transport.DialAddresses(dnsAnswer));
+        int port = mac.Listen();
+        var stranger = await Assert.ThrowsAsync<HexLinkRefused>(() => pc.Transport.Dial("localhost", port, timeout.Token));
+        Assert.Equal("unknown", stranger.Reason);
+    }
+
     private async Task<(HexLinkConnection Dialled, HexLinkConnection Accepted)> Link()
     {
         HexLinkTestMachine.Know(pc, HexLinkRights.View, mac, HexLinkRights.View | HexLinkRights.Steer);

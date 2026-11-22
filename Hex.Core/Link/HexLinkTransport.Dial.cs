@@ -102,6 +102,15 @@ internal sealed partial class HexLinkTransport
         return Up(slot, ssl, device, address, port, dialled: true, bulk);
     }
 
+    internal IPAddress[] DialAddresses(IPAddress[] resolved)
+    {
+        if (resolved.Length == 0)
+            throw new HexLinkRefused("unreachable", "The host has no IP addresses.");
+        IPAddress[] permitted = AllowPublic ? resolved : [.. resolved.Where(HexLinkAddresses.IsPrivate)];
+        return permitted.Length > 0 ? permitted
+            : throw new HexLinkRefused("public_disabled", "Public connections can be enabled in Devices.");
+    }
+
     /// <summary>A TCP connection and the TLS handshake as the client, the server's pin noted, nothing yet said.</summary>
     private async Task<(SslStream Ssl, Socket Socket, string Pin, string Address)> Connect(string host, int port, CancellationToken cancel, Func<string, bool>? accepts = null)
     {
@@ -111,7 +120,9 @@ internal sealed partial class HexLinkTransport
         {
             try
             {
-                await socket.ConnectAsync(host, port, cancel);
+                IPAddress[] resolved = IPAddress.TryParse(host, out var literal)
+                    ? [literal] : await Dns.GetHostAddressesAsync(host, cancel);
+                await socket.ConnectAsync(DialAddresses(resolved), port, cancel);
             }
             catch (SocketException e)
             {
