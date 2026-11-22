@@ -156,6 +156,11 @@ internal sealed partial class DawnScene
             }
         }
         bool pairedAuthority = authority is not null && remote?.Authority is not null;
+        // A sync set up two-way (Sync Folder) stays two-way once its folder is pinned: the pin serves publication and claims
+        // and the one engine of a legacy pair goes on, only a folder provisioned as a replica runs bound
+        bool twoWay = pairedAuthority && !boundEngine && LinkSyncTwoWay(deviceId, local.Name);
+        if (twoWay)
+            pairedAuthority = false;
         if (LinkSyncPaused(deviceId).FirstOrDefault(pause => PlatformPaths.Comparer.Equals(pause.Folder, local.Name)) is { } localPause)
         {
             if (!resume)
@@ -231,7 +236,7 @@ internal sealed partial class DawnScene
                     TreeCacheDirectory = services.TreeCacheDirectory,
                     BoundAuthorityEngine = boundEngine && authority?.DeviceId == services.Device.Id,
                     BoundPullMirror = boundEngine && authority?.DeviceId == peer.Device.Id,
-                    GitFollowEnabled = !pairedAuthority && (authority is not null || remote?.Authority is not null)
+                    GitFollowEnabled = !pairedAuthority && !twoWay && (authority is not null || remote?.Authority is not null)
                         ? static () => false : LinkGitFollowChoice(local, peer, !automatic),
                     GitFollowData = linkData,
                     GitFollowAudited = detail => services.Audit("git", peer.Device, detail)
@@ -298,7 +303,7 @@ internal sealed partial class DawnScene
                         return;
                     var local = services.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, folder));
                     var remote = peer.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, folder));
-                    if (local?.Authority is { } pin && remote?.Authority is not null)
+                    if (local?.Authority is { } pin && remote?.Authority is not null && !LinkSyncTwoWay(peer.Device.Id, folder))
                     {
                         if (pin != remote.Authority || pin.DeviceId != peer.Device.Id)
                             return; // The replica requests activation after advertising its binding.
@@ -336,6 +341,50 @@ internal sealed partial class DawnScene
 
     // The folders chosen to be synced with a device
     private List<string> LinkSyncChosen(string deviceId) => LinkSyncChosenIn(LinkSyncChoices(), deviceId);
+
+    // The device and folder pairs whose sync was set up two-way and then pinned, kept beside the sync choices
+    private const string LINK_SYNC_TWOWAY = "sync-twoway.json";
+
+    internal static string LinkTwoWayKey(string deviceId, string folder) => deviceId + "\n" + folder.ToLowerInvariant();
+
+    private HashSet<string> LinkSyncTwoWayKept()
+    {
+        string file = Path.Combine(linkKeys, LINK_SYNC_TWOWAY);
+        try
+        {
+            if (linkKeys.Length > 0 && File.Exists(file) && JsonNode.Parse(File.ReadAllBytes(file)) is JsonArray kept)
+                return [.. kept.Select(item => item?.GetValue<string>() ?? string.Empty).Where(item => item.Length > 0)];
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException)
+        {
+        }
+
+        return [];
+    }
+
+    internal bool LinkSyncTwoWay(string deviceId, string folder) => LinkSyncTwoWayKept().Contains(LinkTwoWayKey(deviceId, folder));
+
+    private void LinkSyncMarkTwoWay(string deviceId, string folder)
+    {
+        if (linkKeys.Length == 0)
+            return;
+        lock (linkSyncGate)
+        {
+            HashSet<string> kept = LinkSyncTwoWayKept();
+            if (!kept.Add(LinkTwoWayKey(deviceId, folder)))
+                return;
+            try
+            {
+                Directory.CreateDirectory(linkKeys);
+                HexLinkFiles.WriteAtomic(Path.Combine(linkKeys, LINK_SYNC_TWOWAY),
+                    Encoding.UTF8.GetBytes(new JsonArray([.. kept.Select(item => (JsonNode)item)]).ToJsonString()));
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                Console.WriteLine($"[Hex] Link couldn't keep which syncs are two-way, {e.Message}");
+            }
+        }
+    }
 
     // The folders chosen to be synced with a device and those with a sync running now, a sync restored at start or made by hand
     internal List<string> LinkSyncedWith(string deviceId)

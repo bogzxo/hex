@@ -84,6 +84,26 @@ public sealed class HexLinkHoldSyncTests
         Assert.Equal(HexLinkFiles.Hash(Bytes(Private)), again.BaseHash);
     }
 
+    [Fact]
+    public async Task A_two_way_sync_stays_two_way_when_both_folders_are_pinned_to_one_authority()
+    {
+        using var pair = await LinkedPair.Up(Edit, Edit);
+        var pin = new HexLinkAuthority(DeviceA.Id, 1);
+        foreach (LinkServices side in new[] { pair.A, pair.B })
+            side.Workspace = new HexLinkWorkspace("Test", [side.Workspace.Folders[0] with { Authority = pin }], []);
+        Both(pair, Baseline);
+
+        // The engine a legacy pair runs, which the pin leaves as it is: no bound flags, nothing pull only
+        using var sync = Sync(pair.A, pair.PeerB);
+        await Ready(sync);
+        Assert.NotEqual(HexLinkSyncState.PullOnly, sync.State);
+
+        File.WriteAllText(Local(pair.A), "from the authority\n");
+        await Until(() => File.ReadAllText(Local(pair.B)) == "from the authority\n", sync);
+        File.WriteAllText(Local(pair.B), "from the other device\n");
+        await Until(() => File.ReadAllText(Local(pair.A)) == "from the other device\n", sync);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

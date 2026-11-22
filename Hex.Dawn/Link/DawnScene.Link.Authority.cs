@@ -90,6 +90,10 @@ internal sealed partial class DawnScene
                 LinkAutoSyncOwner(peer.Session.Connection.Dialled, peer.Session.Connection.Rights, peer.Granted) ? services.Device.Id : peer.Device.Id, 1);
             if (pin.DeviceId != services.Device.Id && pin.DeviceId != peer.Device.Id)
                 continue;
+            // Pinned for publication and claims, the sync stays the two-way one it was, as both devices pin it together. A
+            // folder the device pinned already (a share, a folder provisioned as a replica) isn't two-way, nothing says it ran so
+            if (remote.Authority is null && LinkProvisionedLocal(peer.Device.Id, name) is null)
+                LinkSyncMarkTwoWay(peer.Device.Id, name);
             try
             {
                 services.FolderAuthorities.Bind(local, pin, HexLinkAuthorityProvenance.Provisioned);
