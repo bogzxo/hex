@@ -4,7 +4,8 @@ namespace Hex.Dawn;
 
 internal sealed partial class DawnScene
 {
-    private const string HELD_TIP = "Held on this device: not sent to others";
+    private const string HELD_REASON = "Held on this device";
+    private const string HELD_TIP = HELD_REASON + ": not sent to others";
 
     private void LinkHoldExplorerMark(UITreeItem row, string path)
     {
@@ -50,9 +51,14 @@ internal sealed partial class DawnScene
                 .Tooltip = string.Join("\n", held.Select(entry => entry.Path));
         }
 
-        if (LinkSyncOf(peer.Device.Id, name)?.RemoteHeldPaths is { Count: > 0 } remote)
+        IReadOnlyList<string> remote = LinkSyncOf(peer.Device.Id, name)?.RemoteHeldPaths ?? [];
+        HexLinkSyncReport? report = peer.RemoteSyncReport.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Folder, name));
+        if (remote.Count == 0 && report is { Held: > 0 })
+            remote = [.. report.SkipSamples.Where(row => row.Why.StartsWith(HELD_REASON, StringComparison.Ordinal)).Select(row => row.Path)];
+        int count = Math.Max(remote.Count, report?.Held ?? 0);
+        if (count > 0)
         {
-            var label = holder.Add(LinkLine($"{peer.Device.Name} holds {HexText.Count("file", remote.Count)}"));
+            var label = holder.Add(LinkLine($"{peer.Device.Name} holds {HexText.Count("file", count)}"));
             label.Tooltip = string.Join("\n", remote);
         }
     }
