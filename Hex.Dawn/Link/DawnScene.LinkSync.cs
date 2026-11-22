@@ -354,10 +354,11 @@ internal sealed partial class DawnScene
         if (state != entry.Said)
         {
             entry.Said = state;
+            LinkClearRecoveredSyncError(entry.DeviceId, entry.Folder, state);
             if (state == HexLinkSyncState.NeedsGit)
                 LinkSyncAskGit(entry, sync);
             else if (state == HexLinkSyncState.Failed)
-                Say(Said("link.sync_failed", ("folder", entry.Folder), ("device", entry.DeviceName), ("why", sync.Why ?? string.Empty)), error: true);
+                LinkSaySyncError(entry.DeviceId, entry.DeviceName, entry.Folder, sync.Why);
             else if (state == HexLinkSyncState.PullOnly)
                 Say(Said("link.sync_pull_only", ("folder", entry.Folder), ("device", entry.DeviceName)));
             else if (state is HexLinkSyncState.Syncing or HexLinkSyncState.Idle && entry.GitCard is { } card)

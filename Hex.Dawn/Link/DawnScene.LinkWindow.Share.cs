@@ -184,7 +184,7 @@ internal sealed partial class DawnScene
             }
 
             if (why is not null)
-                PostLink(() => Say(Said("link.sync_failed", ("folder", folder), ("why", why)), error: true));
+                PostLink(() => LinkSaySyncError(deviceId, LinkNameOf(deviceId), folder, why));
         });
     }
 
