@@ -303,6 +303,7 @@ internal sealed partial class DawnScene
         LinkShareStopAll();
         link?.Dispose();
         link = null;
+        SetLinkClaimSession(null);
         if (linkTrust is not null)
             linkTrust.Changed -= LinkTrustChanged;
         linkTransport?.Dispose();
