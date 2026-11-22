@@ -265,7 +265,8 @@ internal sealed partial class HexSettings
     public bool Link;
 
     /// <summary>The TCP port Link listens on, 47833 unless somebody changes it.</summary>
-    public int LinkPort = HexLinkTransport.DEFAULT_PORT;
+    public int LinkPort = DefaultLinkPort;
+    public const int DefaultLinkPort = 47833;
 
     /// <summary>What this device is called to the others, empty for the machine's own name.</summary>
     public string LinkName = string.Empty;
