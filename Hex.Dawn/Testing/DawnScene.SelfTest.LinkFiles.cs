@@ -56,6 +56,8 @@ internal sealed partial class DawnScene
             if (!StartLink(port: 0, home: home, loopbackOnly: true))
                 return;
             linkByTest = true;
+            // Keep the file sync unbound while the caret fixture opens README on both sides.
+            linkLivePaused.Add($"{LINK_SYNC_FOLDER}/README.md");
             LinkOpenPairing(TimeSpan.FromMinutes(3));
             LinkStartPeer(peerHome, $"127.0.0.1:{LinkPort}", new Dictionary<string, string> { [LINK_TEST_FOLDER] = theirs, [LINK_TEST_SECONDS] = "420" });
         });
@@ -105,7 +107,14 @@ internal sealed partial class DawnScene
             Open(shared);
             tab = document;
             Rewrite(document, "Saved in A's editor.\n");
+            long notesBeforeSave = saidTotal;
             Save();
+            if (Read(shared) != "Saved in A's editor.\n")
+            {
+                string errors = string.Join(" | ", said.TakeLast((int)Math.Min(8, saidTotal - notesBeforeSave))
+                    .Where(entry => entry.Error).Select(entry => entry.Text));
+                Console.WriteLine($"[Hex self-test] link-files: first save pending, read-only {document.Editor.ReadOnly}, shared session {LinkLiveOf(document) is not null}, saved text matches disk {document.DiskText is { } disk && disk.ReplaceLineEndings("\n") == Read(shared)}, errors {errors}");
+            }
         });
         test.WaitFor(() => Read(sharedThere) == "Saved in A's editor.\n", 15.0f);
         test.Run(() => Console.WriteLine($"[Hex self-test] link-files: saved here {Read(shared).ReplaceLineEndings("\\n")}, there {Read(sharedThere).ReplaceLineEndings("\\n")}, {Sync()?.Summary}, conflicts {string.Join(", ", LinkConflicts.Select(each => each.Path + " " + each.Kind))}"));
