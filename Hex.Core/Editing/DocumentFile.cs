@@ -5,6 +5,8 @@ namespace Hex.Core;
 /// <summary>Preserves a text document's Unicode encoding and replaces its bytes only after a complete write.</summary>
 internal static class DocumentFile
 {
+    private const int WindowsCannotRemoveReplacedFile = unchecked((int)0x80070497);
+
     public static string WithLineEndings(string text, string? original, bool crlf, bool savedCrLf)
     {
         string preferred = crlf ? "\r\n" : "\n";
@@ -52,7 +54,14 @@ internal static class DocumentFile
         return new UTF8Encoding(count >= 3 && start[0] == 0xEF && start[1] == 0xBB && start[2] == 0xBF, true);
     }
 
-    public static void Write(string path, string text, Encoding encoding)
+    public static void Write(string path, string text, Encoding encoding) =>
+        Write(path, text, encoding, null, File.Replace);
+
+    public static bool Write(string path, string text, Encoding encoding, Func<bool> recheck) =>
+        Write(path, text, encoding, recheck, File.Replace);
+
+    internal static bool Write(string path, string text, Encoding encoding, Func<bool>? recheck,
+        Action<string, string, string?> replace)
     {
         // Follow a symbolic link as an ordinary text save does; do not replace the link itself.
         path = Path.GetFullPath(path);
@@ -66,8 +75,24 @@ internal static class DocumentFile
                 file.Flush(flushToDisk: true);
             }
             using IDisposable publication = FilePublication.Enter(path);
-            if (File.Exists(path)) File.Replace(temporary, path, null);
-            else File.Move(temporary, path);
+            if (File.Exists(path))
+            {
+                try
+                {
+                    replace(temporary, path, null);
+                }
+                catch (IOException error) when (OperatingSystem.IsWindows() &&
+                    error.HResult == WindowsCannotRemoveReplacedFile && recheck is not null)
+                {
+                    // Windows leaves both names intact for this refusal. Reuse the staged bytes once.
+                    if (!recheck())
+                        return false;
+                    replace(temporary, path, null);
+                }
+            }
+            else
+                File.Move(temporary, path);
+            return true;
         }
         finally
         {

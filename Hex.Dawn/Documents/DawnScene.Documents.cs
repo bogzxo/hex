@@ -471,8 +471,8 @@ internal sealed partial class DawnScene
             string onDisk = Hex.Core.DocumentFile.WithLineEndings(written, document.DiskText, document.CrLf, document.SavedCrLf);
             if (Untouched(document, path, written))
                 onDisk = document.DiskText!;
-            else
-                Hex.Core.DocumentFile.Write(path, onDisk, document.DiskEncoding);
+            else if (!Hex.Core.DocumentFile.Write(path, onDisk, document.DiskEncoding, () => SafeToSave(path)))
+                return;
             UILayout.Forget(path);
 
             document.Path = path;
