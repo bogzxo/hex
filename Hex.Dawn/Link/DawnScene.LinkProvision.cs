@@ -15,7 +15,7 @@ internal sealed partial class DawnScene
     private sealed record ProvisionedFolder(string DeviceId, HexLinkFolder Folder);
 
     internal async Task<string?> LinkGetWorkspace(string deviceId, string destination, IProgress<HexLinkProvisionProgress>? progress = null,
-        CancellationToken cancel = default)
+        CancellationToken cancel = default, Action<string>? notes = null)
     {
         if (link?.PeerOf(deviceId) is not { } peer || peer.IsClosed)
             return Said("link.sync_not_linked", ("device", deviceId));
@@ -33,8 +33,17 @@ internal sealed partial class DawnScene
 
             string transferKey = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(deviceId + "\n" + root)));
             string journal = Path.Combine(linkData, "provision", transferKey + ".json");
-            var folders = await Task.Run(() => HexLinkProvision.Get(peer, root, journal, progress, cancel), cancel);
+            HexLinkProvisionResult got = await Task.Run(() => HexLinkProvision.Get(peer, root, journal, progress, cancel), cancel);
+            IReadOnlyList<HexLinkFolder> folders = got.Folders;
             cancel.ThrowIfCancellationRequested();
+            if (got.Skipped.Count > 0)
+            {
+                string skipped = ProvisionSkipped(got.Skipped);
+                if (notes is not null)
+                    notes(skipped);
+                else
+                    PostLink(() => Say(skipped));
+            }
 
             LinkKeepProvisionedFolders(deviceId, folders);
             await OnEditorForLink(() =>
@@ -48,7 +57,7 @@ internal sealed partial class DawnScene
                 return true;
             });
 
-            progress?.Report(new HexLinkProvisionProgress(HexLinkProvisionPhase.Sync, 0, 0));
+            progress?.Report(new HexLinkProvisionProgress(HexLinkProvisionPhase.Sync, 0, 0, Skipped: got.Skipped));
             foreach (HexLinkFolder folder in folders)
                 LinkSyncRemember(deviceId, folder.Name, on: true);
             foreach (HexLinkFolder folder in folders)
@@ -59,7 +68,7 @@ internal sealed partial class DawnScene
             }
 
             HexLinkGit.TryDelete(journal);
-            progress?.Report(new HexLinkProvisionProgress(HexLinkProvisionPhase.Complete, 0, 0));
+            progress?.Report(new HexLinkProvisionProgress(HexLinkProvisionPhase.Complete, 0, 0, Skipped: got.Skipped));
             return null;
         }
         catch (Exception e) when (e is HexLinkException or IOException or InvalidOperationException or UnauthorizedAccessException or ArgumentException or JsonException)
@@ -71,6 +80,9 @@ internal sealed partial class DawnScene
             linkProvisioning.Release();
         }
     }
+
+    private static string ProvisionSkipped(IReadOnlyList<HexLinkProvisionSkip> skipped) =>
+        string.Join('\n', skipped.Select(entry => Said("link.provision.skipped_repository", ("path", entry.Path), ("why", entry.Reason))));
 
     internal async Task<string?> LinkShareWorkspace(string deviceId, CancellationToken cancel = default)
     {

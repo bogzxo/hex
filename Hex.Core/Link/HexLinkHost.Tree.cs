@@ -110,6 +110,22 @@ internal sealed partial class HexLinkHost
         return tree;
     }
 
+    private string ResolveUsableTreeFile(string wire)
+    {
+        string full = HexLinkFiles.Resolve(Folders, wire, services.Excludes);
+        int slash = wire.IndexOf('/');
+        if (slash > 0)
+        {
+            string name = wire[..slash];
+            if (!trees.TryGetValue(name, out HexLinkTree? tree))
+                tree = trees.Values.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Folder.Name, name));
+            if (tree is not null && (tree.RepositoryUnavailable(wire[(slash + 1)..].TrimEnd('/')) ||
+                tree.RepositoryUnavailable(Path.GetRelativePath(tree.Root, full).Replace('\\', '/'))))
+                throw new HexLinkException(HexLinkErrors.NOT_ALLOWED, "Git could not list the repository containing this path.");
+        }
+        return full;
+    }
+
     private async Task<JsonNode?> SyncManifest(JsonObject parameters, CancellationToken cancel)
     {
         Need(HexLinkRights.View, "sync/manifest");
@@ -133,7 +149,7 @@ internal sealed partial class HexLinkHost
             string prefix = tree.Folder.Name + "/";
             if (!path.StartsWith(prefix, StringComparison.Ordinal))
                 throw HexLinkException.Invalid("The path is outside the manifest folder.");
-            ResolveFile(path);
+            HexLinkFiles.Resolve(Folders, path, services.Excludes);
             return new JsonObject { ["absent"] = tree.Gone(path[prefix.Length..]) };
         }
         if (HexLinkData.String(parameters, "snapshot", 64) is { } id)

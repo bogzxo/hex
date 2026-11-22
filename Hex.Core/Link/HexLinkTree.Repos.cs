@@ -3,11 +3,24 @@ using Hex.Core.Git;
 
 namespace Hex.Core;
 
+internal sealed record HexLinkGitIssue(string Message, bool Unavailable = false);
+
 internal sealed partial class HexLinkTree
 {
     internal const int MOST_REPOS = 256;
 
     private volatile string[] nestedRepositories = [];
+    private volatile string[] unavailableRepositories = [];
+
+    internal bool RepositoryUnavailable(string relative)
+    {
+        foreach (string repository in unavailableRepositories)
+        {
+            if (HexLinkMissingRepositories.Under(relative, repository))
+                return true;
+        }
+        return false;
+    }
 
     // Look for .git markers even in ignored directories. A workspace repository often ignores its nested checkouts.
     internal static List<string> FindNestedRepositories(string root, CancellationToken cancel = default)
@@ -43,7 +56,7 @@ internal sealed partial class HexLinkTree
         return repositories;
     }
 
-    private IReadOnlyDictionary<string, string?>? AddNestedGitFiles(List<string> relative)
+    private IReadOnlyDictionary<string, string?>? AddNestedGitFiles(List<string> relative, Dictionary<string, HexLinkGitIssue> issues)
     {
         if (HexLinkGit.Why() is not null)
             return null;
@@ -52,51 +65,68 @@ internal sealed partial class HexLinkTree
         if (repositories.Length == 0)
         {
             nestedRepositories = [];
+            unavailableRepositories = [];
             return null;
         }
 
         relative.RemoveAll(path => RepositoryContaining(path, repositories) is not null);
         var heads = new Dictionary<string, string?>(StringComparer.Ordinal);
         var folders = new[] { Folder };
-        var scans = new (string Output, string? Head, Exception? Error)[repositories.Length];
+        var scans = new (string Paths, string? Head, string? Warning, string? Failure)[repositories.Length];
         var options = new ParallelOptions { MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount - 1, 1, 4) };
         Parallel.For(0, repositories.Length, options, i =>
         {
-            string path = repositories[i];
             try
             {
+                string path = repositories[i];
                 string directory = HexLinkFiles.Resolve(folders, Folder.Name + "/" + path);
-                GitResult listed = GitProcess.Run(directory, ["ls-files", "-co", "--exclude-standard", "-z"], patience: TimeSpan.FromMinutes(2));
-                if (!listed.Ok || !string.IsNullOrWhiteSpace(listed.Error))
-                    throw new IOException($"Couldn't list Git files in {path}: {listed.Why}");
-                GitResult head = GitProcess.Run(directory, ["rev-parse", "--verify", "--quiet", "HEAD"]);
+                GitResult listed = GitProcess.Run(directory, ["ls-files", "-co", "--exclude-standard", "-z"], patience: TimeSpan.FromSeconds(15));
+                if (!listed.Ok)
+                {
+                    scans[i] = ("", null, null, OneLine(listed.Why));
+                    return;
+                }
+                GitResult head = GitProcess.Run(directory, ["rev-parse", "--verify", "--quiet", "HEAD"], patience: TimeSpan.FromSeconds(15));
                 string commit = head.Output.Trim();
                 if (head.Exit != 1 && (!head.Ok || !HexLinkGit.IsCommitId(commit)))
-                    throw new IOException($"Couldn't read HEAD in {path}: {head.Why}");
-                scans[i] = (listed.Output, head.Ok ? commit : null, null);
+                {
+                    scans[i] = ("", null, null, string.IsNullOrWhiteSpace(head.Why) ? "Git did not return a valid HEAD." : OneLine(head.Why));
+                    return;
+                }
+                scans[i] = (listed.Output, head.Ok ? commit : null,
+                    string.IsNullOrWhiteSpace(listed.Error) ? head.Error : listed.Error, null);
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or HexLinkException)
             {
-                scans[i] = ("", null, error);
+                scans[i] = ("", null, null, OneLine(error.Message));
             }
         });
 
-        for (int i = 0; i < repositories.Length; i++)
+        // A failed parent quarantines its descendants, even when a parallel child listing succeeded.
+        for (int i = repositories.Length - 1; i >= 0; i--)
         {
-            var (output, head, error) = scans[i];
-            if (error is not null)
-                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error).Throw();
             string path = repositories[i];
+            if (issues.Any(each => each.Value.Unavailable && HexLinkMissingRepositories.Under(path, each.Key)))
+                continue;
+            var (output, head, warning, failure) = scans[i];
+            if (failure is not null)
+            {
+                issues[path] = new HexLinkGitIssue(failure, Unavailable: true);
+                continue;
+            }
+            if (warning is not null)
+                RecordGitWarning(issues, path, warning);
+            heads.Add(path, head);
             foreach (string file in output.Split('\0', StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.Ordinal))
             {
                 string full = path + "/" + file;
                 if (RepositoryContaining(full, repositories) == path)
                     relative.Add(full);
             }
-            heads.Add(path, head);
         }
 
         nestedRepositories = repositories;
+        unavailableRepositories = [.. issues.Where(each => each.Value.Unavailable).Select(each => each.Key)];
         return heads;
     }
 
@@ -137,11 +167,59 @@ internal sealed partial class HexLinkTree
 
             // Exit 1 means none are ignored. Any other failure cannot establish which files are safe to carry.
             GitResult said = GitProcess.Run(directory, ["check-ignore", "--stdin", "-z"], string.Join('\0', ask) + "\0");
-            if (said.Exit is not (0 or 1) || !string.IsNullOrWhiteSpace(said.Error))
-                throw new IOException($"Couldn't check which files Git ignores in {repository ?? Folder.Name}: {said.Why}");
+            if (said.Exit is not (0 or 1))
+            {
+                if (repository is null)
+                    throw new IOException($"Couldn't check which files Git ignores in {Folder.Name}: {said.Why}");
+                ignored.UnionWith(paths);
+                continue;
+            }
             foreach (string each in said.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries))
                 ignored.Add(prefix + each);
         }
+    }
+
+    private const int GitIssueLimit = 512;
+
+    private static string OneLine(string message)
+    {
+        string line = new(message.Trim().Take(GitIssueLimit).Select(c => char.IsControl(c) ? ' ' : c).ToArray());
+        return line.Length == 0 ? "Git returned no diagnostic." : line;
+    }
+
+    private static void RecordGitWarning(Dictionary<string, HexLinkGitIssue> issues, string repository, string message)
+    {
+        if (!string.IsNullOrWhiteSpace(message))
+            issues.TryAdd(repository, new HexLinkGitIssue(OneLine(message)));
+    }
+
+    private static JsonObject GitIssuesJson(IReadOnlyDictionary<string, HexLinkGitIssue> issues)
+    {
+        var result = new JsonObject();
+        foreach (var (path, issue) in issues)
+            result[path] = new JsonObject { ["message"] = issue.Message, ["unavailable"] = issue.Unavailable };
+        return result;
+    }
+
+    private static IReadOnlyDictionary<string, HexLinkGitIssue>? GitIssuesOf(JsonObject said)
+    {
+        if (said["git_issues"] is null)
+            return null;
+        if (said["git_issues"] is not JsonObject entries || entries.Count > MOST_REPOS + 1)
+            throw HexLinkException.Invalid("The peer sent an invalid Git issue list.");
+
+        var result = new Dictionary<string, HexLinkGitIssue>(StringComparer.Ordinal);
+        foreach (var (path, item) in entries)
+        {
+            if (item is not JsonObject issue || HexLinkData.String(issue, "message", GitIssueLimit + 1) is not { Length: > 0 and <= GitIssueLimit } message ||
+                (path.Length > 0 && (!Plain(path) || path.Length > HexLinkFiles.MOST_PATH)))
+                throw HexLinkException.Invalid("The peer sent an invalid Git issue.");
+            bool unavailable = HexLinkData.Bool(issue, "unavailable") == true;
+            if (path.Length == 0 && unavailable)
+                throw HexLinkException.Invalid("The peer reported an unavailable workspace root.");
+            result.Add(path, new HexLinkGitIssue(OneLine(message), unavailable));
+        }
+        return result;
     }
 
     internal static string? CommitsDiffer(HexLinkManifest local, HexLinkManifest remote, HexLinkMissingRepositories? missing = null)

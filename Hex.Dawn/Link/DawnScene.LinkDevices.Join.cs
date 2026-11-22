@@ -366,13 +366,7 @@ internal sealed partial class DawnScene
         return [.. routes.Take(HexLinkInvite.MaxEndpoints)];
     }
 
-    /// <summary>CGNAT addresses include VPNs such as Tailscale. Tailscale also assigns an IPv6 ULA prefix.</summary>
-    internal static bool LinkIsVpn(IPAddress address)
-    {
-        byte[] bytes = (address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address).GetAddressBytes();
-        return bytes.Length == 4 && bytes[0] == 100 && (bytes[1] & 0xC0) == 64
-            || bytes.AsSpan().StartsWith((ReadOnlySpan<byte>)[0xfd, 0x7a, 0x11, 0x5c, 0xa1, 0xe0]);
-    }
+    internal static bool LinkIsVpn(IPAddress address) => HexLinkInvite.IsVpn(address);
 
     partial void LinkCanAutoShare(ref bool available);
 }
