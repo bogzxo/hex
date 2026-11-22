@@ -34,7 +34,12 @@ internal sealed partial class DawnScene
         if (linkServices is not { } services)
             throw new InvalidOperationException("Link stopped before the folder authority could be kept.");
         foreach (HexLinkFolder folder in folders)
-            services.FolderAuthorities.Bind(folder, folder.Authority ?? new HexLinkAuthority(source.Device.Id, 1));
+        {
+            HexLinkAuthority authority = folder.Authority
+                ?? source.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, folder.Name))?.Authority
+                ?? new HexLinkAuthority(source.Device.Id, 1);
+            services.FolderAuthorities.Bind(folder, authority);
+        }
     }
 
     private void UpdateLinkClaims(float dt)
