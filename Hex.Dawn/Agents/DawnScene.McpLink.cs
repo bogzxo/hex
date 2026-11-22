@@ -342,9 +342,12 @@ internal sealed partial class DawnScene
             .SelectMany(peer => LinkPausedSyncs(peer).Where(choice =>
                 !local.Any(sync => sync.DeviceId == peer.Device.Id && sync.State != HexLinkSyncState.Off &&
                     PlatformPaths.Comparer.Equals(sync.Folder, choice.Folder)) &&
-                !remote.Any(sync => sync.Peer.Device.Id == peer.Device.Id && PlatformPaths.Comparer.Equals(sync.Report.Folder, choice.Folder))))
+                !remote.Any(sync => sync.Peer.Device.Id == peer.Device.Id && PlatformPaths.Comparer.Equals(sync.Report.Folder, choice.Folder)))
+                .Select(choice => (DeviceId: peer.Device.Id, choice.Folder, choice.Reason)))
             .ToArray();
-        foreach (var (folder, reason) in paused)
+        local.RemoveAll(sync => sync.State == HexLinkSyncState.Off && paused.Any(pause =>
+            pause.DeviceId == sync.DeviceId && PlatformPaths.Comparer.Equals(pause.Folder, sync.Folder)));
+        foreach (var (_, folder, reason) in paused)
             said.Append("- ").Append(folder).Append(" [paused]. ").AppendLine(reason);
         if (local.Count == 0 && remote.Count == 0 && paused.Length == 0)
             return "No folder is synced" + (deviceId is null ? "." : " with that device.") + " hex_link_sync start turns it on for one.";

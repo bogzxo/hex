@@ -35,6 +35,9 @@ internal sealed partial class HexLinkHost
         string name = HexLinkData.Need(parameters, "folder", 200);
         HexLinkFolder folder = services.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, name))
             ?? throw HexLinkException.NotFound("That folder is no longer exported.");
+        // Reading an existing pin needs View. Creating the source's pin for a legacy Get changes its local profile.
+        if (folder.Authority is null)
+            Need(HexLinkRights.Steer, "sync/provision-authority");
         return new JsonObject { ["authority"] = activation.BindProvisionSource(folder)?.ToJson() };
     }
 

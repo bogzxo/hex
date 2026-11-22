@@ -69,11 +69,12 @@ internal sealed partial class DawnScene
             otherId is not null && !LinkSyncOptedOut(otherId, UPGRADE_FOLDER) &&
             LinkSyncOf(otherId, UPGRADE_FOLDER) is { BoundAuthorityEngine: true, State: HexLinkSyncState.Idle });
         test.Run(() => File.WriteAllText(Path.Combine(work, "resume-one.txt"), "made by the owner"));
-        test.WaitFor(() => File.Exists(paused) && otherId is not null && LinkSyncOf(otherId, UPGRADE_FOLDER)?.State == HexLinkSyncState.Off, 35);
-        test.Check("link-sync-upgrade: the owner sees the replica's stop and its author", () =>
-            File.Exists(paused) && otherId is not null && LinkPeers.FirstOrDefault()?.PausedSyncFolders
-                .Any(item => item.Folder == UPGRADE_FOLDER && item.By == "Upgrade fixture") == true
-            && LinkSyncStatusSaid(otherId).Contains("stopped by Upgrade fixture", StringComparison.Ordinal));
+        bool ReplicaPaused() => File.Exists(paused) && otherId is not null &&
+            LinkSyncOf(otherId, UPGRADE_FOLDER)?.State == HexLinkSyncState.Off &&
+            LinkPeers.FirstOrDefault()?.PausedSyncFolders.Any(item => item.Folder == UPGRADE_FOLDER && item.By == "Upgrade fixture") == true
+            && LinkSyncStatusSaid(otherId).Contains("stopped by Upgrade fixture", StringComparison.Ordinal);
+        test.WaitFor(ReplicaPaused, 35);
+        test.Check("link-sync-upgrade: the owner sees the replica's stop and its author", ReplicaPaused);
         test.Run(() =>
         {
             if (otherId is not null)
@@ -111,6 +112,16 @@ internal sealed partial class DawnScene
             peer.PausedSyncFolders.Any(item => item.Folder == UPGRADE_FOLDER) &&
             LinkSyncStatusSaid(owner).Contains("stopped by an unknown caller", StringComparison.Ordinal);
         test.WaitFor(Migrated, 45);
+        test.Run(() =>
+        {
+            if (Migrated())
+                return;
+            var peer = LinkPeers.FirstOrDefault();
+            var pin = linkServices?.FolderAuthorities.Of(new HexLinkFolder(UPGRADE_FOLDER, folder));
+            Console.WriteLine($"[Hex self-test] link-sync-upgrade: expected source {owner[..8]}, pin {pin?.DeviceId[..8]} epoch {pin?.Epoch}, " +
+                $"peer {peer?.Device.Name}, paused {string.Join(", ", peer?.PausedSyncFolders.Select(item => item.Folder) ?? [])}, " +
+                LinkSyncStatusSaid(owner).ReplaceLineEndings(" | "));
+        });
         test.Check("link-sync-upgrade: old provisioning source became the verified authority and status explains the stop", Migrated);
         test.Run(() => { if (Migrated()) File.WriteAllText(Path.Combine(home, "migrated"), "ready"); });
         test.WaitFor(() => File.Exists(Path.Combine(home, "resume-here")), 40);
