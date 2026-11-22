@@ -202,7 +202,6 @@ internal sealed partial class DawnScene
                 return;
             var folder = services.Workspace.Folders.Single(each => each.Name == Path.GetFileName(workspace));
             services.FolderAuthorities.Bind(folder, new HexLinkAuthority(owner, 1));
-            LinkSyncStop(owner, folder.Name);
             restoring = LinkActivateWorktreePublication(_ => [],
                 (_, _, _, _) => Task.CompletedTask, (_, _, _, _) => Task.CompletedTask,
                 (_, _, _) => Task.CompletedTask, (_, _, _) => { }, linkCancel?.Token ?? CancellationToken.None);
