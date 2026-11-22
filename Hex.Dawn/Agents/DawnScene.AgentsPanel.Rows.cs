@@ -285,7 +285,7 @@ internal sealed partial class DawnScene
     // The bouncing dots at the end while the agent's working and nothing of it is going on a row already
     private void ShowTyping(HexAgentChat chat, bool still = false)
     {
-        bool quiet = chat.Running && chat.Entries[^1] is not { Kind: HexAgentEntryKind.Tool, State: HexAgentToolState.Running };
+        bool quiet = chat.Running && chat.Entries is not [.., { Kind: HexAgentEntryKind.Tool, State: HexAgentToolState.Running }];
         long now = System.Environment.TickCount64;
         if (!quiet)
             typingWantedSince = -1;
@@ -306,7 +306,7 @@ internal sealed partial class DawnScene
             agentsRows.Remove(agentsTyping);
             agentsTyping = null;
         }
-        else if (agentsTyping is not null && agentsRows.Children[^1] != agentsTyping)
+        else if (agentsTyping is not null && agentsRows.Children.LastOrDefault() != agentsTyping)
         {
             agentsRows.MoveChild(agentsTyping, agentsRows.Children.Count);
         }

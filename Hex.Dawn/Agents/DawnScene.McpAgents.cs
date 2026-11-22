@@ -48,11 +48,11 @@ internal sealed partial class DawnScene
             AgentSpawn),
         AgentApproveTool(),
         new(new McpTool("hex_agent_wait", "Wait for agents",
-            "Wait until agents finish their turn and get what they said. By default every agent you started that's running (every running chat when you aren't a chat of the panel), until all of them are done. any returns when the first is. A message sent to you by one of them returns at once with it, so you can steer the others on what it found (messages false waits on regardless). A timeout says what's still running.",
+            "Wait until agents finish their turn and get what they said. By default every agent you started that's running (every running chat when you aren't a chat of the panel), until all of them are done. any returns when the first is. Messages return at once so you can steer the agents. Messages from the person watching and questions or blockers addressed to you always end the wait. A timeout says what's still running.",
             McpSchema.Object([
                 ("ids", new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "integer" }, ["description"] = "The chats to wait for, those you started that are running by default." }),
                 ("mode", McpSchema.OneOf("all (the default) or any.", "all", "any")),
-                ("messages", McpSchema.Flag("Return as soon as a message comes for you, true by default.")),
+                ("messages", McpSchema.Flag("Wake on ordinary agent messages, true by default. The person, questions and blockers always wake the wait.")),
                 ("timeout", McpSchema.Number($"Seconds, {AGENTS_WAIT} by default, {AGENTS_WAIT_MOST} at the most."))])),
             null, RunAway: AgentWait),
         new(new McpTool("hex_agent_read", "Read an agent's chat",
@@ -284,29 +284,36 @@ internal sealed partial class DawnScene
         {
             while (true)
             {
-                now = agentStatuses;
+                HexHubSnapshot snapshot = hub.Snapshot;
+                now = snapshot.Rows;
                 HexHubRow[] those = [.. ids.Select(id => now.GetValueOrDefault(id)).OfType<HexHubRow>()];
                 int done = those.Count(status => !status.State.StartsWith("running", StringComparison.Ordinal));
                 bool over = any ? done > 0 : done == those.Length;
-                bool late = System.Environment.TickCount64 >= deadline;
-                HexAgentMail[] mail = caller is { } me && wakes && now.GetValueOrDefault(me) is { } mine ? mine.Unread : [];
+                long remaining = deadline - System.Environment.TickCount64;
+                bool late = remaining <= 0;
+                HexHubRow? receiver = caller is { } me ? now.GetValueOrDefault(me) : null;
+                HexAgentMail[] mail = receiver?.UnreadForWait(wakes, over || late) ?? [];
                 if (over || late || mail.Length > 0)
                 {
                     // What came for it is read with the report, the waiting one steering the others on it
-                    string report = WaitReport(those, late && !over && mail.Length == 0);
+                    string report = WaitReport(those, late && !over);
                     if (mail.Length == 0)
                         return McpToolResult.Text(report);
 
-                    now[caller!.Value].Chat.MailRead(mail[^1].Seq);
+                    receiver!.Chat.MailRead(mail.Max(message => message.Seq));
                     return McpToolResult.Text("Messages for you:\n\n" + string.Join("\n\n", mail.Select(MailText))
-                        + (over ? string.Empty : "\n\nThe rest are still working, hex_agent_wait again to go on waiting.") + "\n\n" + report);
+                        + (over || late ? string.Empty : "\n\nThe rest are still working, hex_agent_wait again to go on waiting.") + "\n\n" + report);
                 }
 
                 try
                 {
-                    await Task.Delay(250, cancel);
+                    await hub.ChangedAfter(snapshot).WaitAsync(TimeSpan.FromMilliseconds(remaining), cancel);
                 }
-                catch (TaskCanceledException)
+                catch (TimeoutException)
+                {
+                    // Recheck the published rows and return any mail with the timeout.
+                }
+                catch (OperationCanceledException)
                 {
                     return McpToolResult.Error("hex_agent_wait was cancelled.");
                 }

@@ -60,6 +60,7 @@ internal sealed partial class HexLinkSync
             stop = stopping.Token;
             remote.Clear();
             remoteCertified = theirs.Certified;
+            CompareHeads(mine, theirs);
             insensitivePaths = mine.CaseSensitive != true || theirs.CaseSensitive != true;
             hereNames.Clear();
             thereNames.Clear();
@@ -88,7 +89,7 @@ internal sealed partial class HexLinkSync
             paths.UnionWith(conflicts.Keys);
             foreach (string path in paths)
             {
-                if (conflicts.GetValueOrDefault(path)?.HasUnsavedChanges == true)
+                if (BlockedRepository(path) || conflicts.GetValueOrDefault(path)?.HasUnsavedChanges == true)
                     continue;
                 if (CaseDiffers(path))
                 {
@@ -256,7 +257,7 @@ internal sealed partial class HexLinkSync
             RemoveRemote(change.Path);
         else
         {
-            remote[change.Path] = new HexLinkTreeFile(change.Path, change.Hash, change.Size, change.Text, change.Eol, change.Executable);
+            remote[change.Path] = new HexLinkTreeFile(change.Path, change.Hash, change.Size, change.Text, change.Eol, change.Executable, change.Unavailable);
             thereNames.Add(change.Path);
         }
     }
@@ -656,6 +657,8 @@ internal sealed partial class HexLinkSync
     // A path looked at as it is on both sides now against its base, and whatever that calls for done
     private async Task Reconcile(string wire, bool ignored, CancellationToken stop)
     {
+        if (BlockedRepository(wire))
+            return;
         string full;
         try
         {
@@ -670,6 +673,15 @@ internal sealed partial class HexLinkSync
         // What git ignores here never travels, either way: the other side sending one is never written over this side's
         if (ignored)
             return;
+
+        bool unavailable;
+        lock (gate)
+            unavailable = remote.GetValueOrDefault(wire)?.Unavailable == true;
+        if (unavailable)
+        {
+            Again(wire, "The other device cannot read this file. Link will retry.");
+            return;
+        }
 
         if (await ReconcileCase(wire, stop))
             return;
@@ -692,11 +704,19 @@ internal sealed partial class HexLinkSync
         HexLinkTreeFile? theirs;
         HexLinkSyncAgreed? agreed;
         HexLinkSyncConflict? held;
+        bool firstComparison;
         lock (gate)
         {
             remote.TryGetValue(wire, out theirs);
             bases.TryGetValue(wire, out agreed);
             conflicts.TryGetValue(wire, out held);
+            firstComparison = passSizes?.ContainsKey(wire) == true;
+        }
+
+        if (theirs?.Unavailable == true)
+        {
+            Again(wire, "The other device cannot read this file. Link will retry.");
+            return;
         }
 
         if (mine is { Big: true } || theirs is { Big: true })
@@ -775,6 +795,15 @@ internal sealed partial class HexLinkSync
                 await Push(wire, full, agreed, localBytes, m, t, stop);
                 return;
             }
+        }
+        else if (firstComparison && await ReconcileFromHead(wire, full, mine, theirs, localBytes, stop))
+        {
+            return;
+        }
+        else if (firstComparison && staleTracked.Contains(wire))
+        {
+            await Conflict(wire, full, m, t, stop);
+            return;
         }
         else if (m is null)
         {

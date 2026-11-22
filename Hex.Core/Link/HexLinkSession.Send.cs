@@ -13,6 +13,9 @@ internal sealed partial class HexLinkSession
     private readonly Channel<BulkFrame> bulkControl = Bounded<BulkFrame>(32);
     private readonly Channel<BulkFrame> bulkOutgoing = Bounded<BulkFrame>(36);
     private readonly SemaphoreSlim sendReady = new(0);
+    private readonly Lock snapshotsGate = new();
+    private readonly Dictionary<(string Method, string? Source), JsonObject> snapshots = [];
+    private bool sendingSnapshots;
     private readonly record struct Outgoing(JsonNode Message, CancellationToken Cancel = default, TaskCompletionSource<bool>? Sent = null);
 
     // Used by the writer task alone.
@@ -23,18 +26,55 @@ internal sealed partial class HexLinkSession
     {
         var sent = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         Channel<Outgoing> queue = priority ? control : outgoing;
-        await queue.Writer.WriteAsync(new Outgoing(message, cancel, sent), cancel);
-        sendReady.Release();
+        await QueueJson(queue, new Outgoing(message, cancel, sent), cancel);
         return await sent.Task.WaitAsync(cancel);
     }
 
-    private bool TrySend(Outgoing message, bool priority, bool reply = false)
+    // The caller supplies replaceable state, such as the latest pointer or current grants. Ordered updates use TellAsync.
+    internal void TellLatest(string method, JsonObject parameters, string? source = null)
     {
-        Channel<Outgoing> queue = priority ? control : reply ? replies : outgoing;
-        if (IsClosed || !queue.Writer.TryWrite(message))
-            return false;
+        lock (snapshotsGate)
+        {
+            if (IsClosed)
+                return;
+
+            var key = (method, source);
+            // The hub supplies at most MOST active presence sources. Retire an old queued source after device churn.
+            if (source is not null && !snapshots.ContainsKey(key) && snapshots.Count(each => each.Key.Source is not null) >= HexLink.MOST)
+                snapshots.Remove(snapshots.Keys.First(each => each.Source is not null));
+            snapshots[key] = parameters;
+            if (sendingSnapshots)
+                return;
+            sendingSnapshots = true;
+        }
+        _ = SendSnapshots();
+    }
+
+    private async Task SendSnapshots()
+    {
+        while (true)
+        {
+            KeyValuePair<(string Method, string? Source), JsonObject> next;
+            lock (snapshotsGate)
+            {
+                if (IsClosed || snapshots.Count == 0)
+                {
+                    snapshots.Clear();
+                    sendingSnapshots = false;
+                    return;
+                }
+                next = snapshots.First();
+                snapshots.Remove(next.Key);
+            }
+            try { await TellAsync(next.Key.Method, next.Value); }
+            catch (Exception error) when (!IsClosed) { AuditFault(next.Key.Method, error); }
+        }
+    }
+
+    private async ValueTask QueueJson(Channel<Outgoing> queue, Outgoing message, CancellationToken cancel)
+    {
+        await queue.Writer.WriteAsync(message, cancel);
         sendReady.Release();
-        return true;
     }
 
     private async Task Write()

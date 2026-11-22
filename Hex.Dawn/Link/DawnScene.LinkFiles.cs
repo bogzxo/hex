@@ -555,7 +555,7 @@ internal sealed partial class DawnScene
     // Display paths can coincide when workspace roots have the same basename. Route from the indexed
     // file on the host, where Link's unique folder names and the actual roots are both available.
     private HexAnswer LinkSymbolLocations(HexCodeIndex index, JsonObject args) =>
-        LinkSymbolLocations(index.Current(), linkServices?.Workspace.Folders ?? [], args);
+        LinkSymbolLocations(index.VisibleSnapshot(), linkServices?.Workspace.Folders ?? [], args);
 
     internal static HexAnswer LinkSymbolLocations(HexIndexSnapshot index, IReadOnlyList<HexLinkFolder> folders, JsonObject args)
     {

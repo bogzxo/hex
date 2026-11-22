@@ -5,6 +5,16 @@ using System.Security.Cryptography.X509Certificates;
 
 namespace Hex.Core;
 
+public enum HexLinkIdentityProblem { Unavailable, Corrupt }
+
+public sealed record HexLinkIdentityFailure(HexLinkIdentityProblem Problem, string Reason);
+
+internal sealed class HexLinkIdentityLoadException(HexLinkIdentityFailure failure, Exception cause)
+    : IOException(failure.Reason, cause)
+{
+    public HexLinkIdentityFailure Failure { get; } = failure;
+}
+
 /// <summary>
 /// This Hex as other Hexes know it (docs/hex-link-plan.md, 3.1): one P-256 key, made the first time Link is used, and a
 /// self-signed certificate over it good for 20 years, whose subject is only a label. The device id is the SHA-256 of the
@@ -52,37 +62,33 @@ internal sealed class HexLinkIdentity : IDisposable
     }
 
     /// <summary>
-    /// The identity kept in <paramref name="folder"/>, made and kept there when there's none. A file that can't be
-    /// read because it's broken or was made for another user is set aside as <c>identity.unreadable</c> and a new identity
-    /// made, which means pairing again; one that can't be read because its Keychain or secret service is out of reach
-    /// right now throws <see cref="HexLinkSecretsUnavailableException"/> and is left as it is.
+    /// The identity kept in <paramref name="folder"/>, made and kept there when there's none. An unreadable identity
+    /// stays where it is and throws <see cref="HexLinkIdentityLoadException"/>. Resetting it is an explicit action.
     /// </summary>
     /// <param name="fileOnly">Keep a new key by the file's permissions alone, see <see cref="HexLinkSecrets"/>.</param>
     public static HexLinkIdentity LoadOrCreate(string folder, string name, bool fileOnly = false)
     {
-        MakeFolder(folder);
         string path = Path.Combine(folder, FILE);
-        if (File.Exists(path))
+        byte[]? wrapped;
+        try
         {
+            MakeFolder(folder);
             try
             {
-                byte[] wrapped = File.ReadAllBytes(path);
-                HexLinkProtection protection = HexLinkSecrets.ProtectionOf(wrapped);
-                byte[] pfx = HexLinkSecrets.Unprotect(wrapped);
-                try
-                {
-                    return new HexLinkIdentity(Load(pfx), protection, name, made: false);
-                }
-                finally
-                {
-                    CryptographicOperations.ZeroMemory(pfx);
-                }
+                wrapped = File.ReadAllBytes(path);
             }
-            catch (CryptographicException)
+            catch (FileNotFoundException)
             {
-                File.Move(path, Path.Combine(folder, FILE + ".unreadable"), overwrite: true);
+                wrapped = null;
             }
         }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            throw LoadFailure(HexLinkIdentityProblem.Unavailable, e);
+        }
+
+        if (wrapped is not null)
+            return Read(wrapped, name);
 
         using ECDsa key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var request = new CertificateRequest("CN=Hex Link", key, HashAlgorithmName.SHA256);
@@ -91,13 +97,88 @@ internal sealed class HexLinkIdentity : IDisposable
         try
         {
             byte[] kept = HexLinkSecrets.Protect(exported, fileOnly);
-            WriteUserOnly(path, kept);
-            return new HexLinkIdentity(Load(exported), HexLinkSecrets.ProtectionOf(kept), name, made: true);
+            try
+            {
+                WriteUserOnly(path, kept, overwrite: false);
+                return new HexLinkIdentity(Load(exported), HexLinkSecrets.ProtectionOf(kept), name, made: true);
+            }
+            catch (IOException) when (File.Exists(path))
+            {
+                // A second Hex using the same profile may have created the key first.
+                return Read(File.ReadAllBytes(path), name);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(kept);
+            }
+        }
+        catch (Exception e) when (e is not HexLinkIdentityLoadException && e is IOException or UnauthorizedAccessException)
+        {
+            throw LoadFailure(HexLinkIdentityProblem.Unavailable, e);
         }
         finally
         {
             CryptographicOperations.ZeroMemory(exported);
         }
+    }
+
+    private static HexLinkIdentity Read(byte[] wrapped, string name)
+    {
+        try
+        {
+            HexLinkProtection protection = HexLinkSecrets.ProtectionOf(wrapped);
+            byte[] pfx;
+            try
+            {
+                pfx = HexLinkSecrets.Unprotect(wrapped);
+            }
+            catch (CryptographicException e) when (protection == HexLinkProtection.Dpapi)
+            {
+                throw LoadFailure(HexLinkIdentityProblem.Unavailable, e);
+            }
+
+            try
+            {
+                X509Certificate2 certificate = Load(pfx);
+                if (!certificate.HasPrivateKey)
+                {
+                    certificate.Dispose();
+                    throw new CryptographicException("the certificate has no private key");
+                }
+                return new HexLinkIdentity(certificate, protection, name, made: false);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(pfx);
+            }
+        }
+        catch (HexLinkSecretsUnavailableException e)
+        {
+            throw LoadFailure(HexLinkIdentityProblem.Unavailable, e);
+        }
+        catch (CryptographicException e)
+        {
+            throw LoadFailure(HexLinkIdentityProblem.Corrupt, e);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(wrapped);
+        }
+    }
+
+    private static HexLinkIdentityLoadException LoadFailure(HexLinkIdentityProblem problem, Exception reason) =>
+        new(new HexLinkIdentityFailure(problem, problem == HexLinkIdentityProblem.Unavailable
+            ? $"The Link identity is unavailable. Retry with access to its original account or key store. {reason.Message}"
+            : $"The Link identity could not be verified. Restore a backup or reset it to pair again. {reason.Message}"), reason);
+
+    /// <summary>Backs up the existing identity without overwriting another backup. The next start creates a key.</summary>
+    public static string Reset(string folder)
+    {
+        string path = Path.Combine(folder, FILE);
+        string date = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture);
+        string backup = $"{path}.backup-{date}-{Guid.NewGuid():N}";
+        File.Move(path, backup);
+        return backup;
     }
 
     /// <summary>The SHA-256 of a certificate's public key in upper-case hex, what a device is known by.</summary>
@@ -149,27 +230,37 @@ internal sealed class HexLinkIdentity : IDisposable
     /// Writes a file whole and at once (beside it, then moved over it), readable and writable by its user alone where the
     /// OS has modes, the mode set before a byte is written so there's no moment it's anyone's to read.
     /// </summary>
-    public static void WriteUserOnly(string path, byte[] bytes)
+    public static void WriteUserOnly(string path, byte[] bytes, bool overwrite = true)
     {
-        string next = path + ".new";
-        if (OperatingSystem.IsWindows())
+        string next = $"{path}.{Guid.NewGuid():N}.new";
+        try
         {
-            File.WriteAllBytes(next, bytes);
-        }
-        else
-        {
-            var options = new FileStreamOptions
+            if (OperatingSystem.IsWindows())
             {
-                Mode = FileMode.Create,
-                Access = FileAccess.Write,
-                UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite
-            };
-            using (var stream = new FileStream(next, options))
+                using var stream = new FileStream(next, FileMode.CreateNew, FileAccess.Write, FileShare.None);
                 stream.Write(bytes);
-            File.SetUnixFileMode(next, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+            else
+            {
+                var options = new FileStreamOptions
+                {
+                    Mode = FileMode.CreateNew,
+                    Access = FileAccess.Write,
+                    UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite
+                };
+                using (var stream = new FileStream(next, options))
+                    stream.Write(bytes);
+                File.SetUnixFileMode(next, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+            if (overwrite && OperatingSystem.IsWindows() && File.Exists(path))
+                HexLinkFiles.ReplaceWhileOpenOnWindows(next, path);
+            else
+                File.Move(next, path, overwrite);
         }
-
-        File.Move(next, path, overwrite: true);
+        finally
+        {
+            try { File.Delete(next); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        }
     }
 
     public void Dispose() => Certificate.Dispose();

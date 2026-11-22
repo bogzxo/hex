@@ -187,9 +187,9 @@ the chat that started them, so they can be watched and talked to like any other.
   `hex_agent_send` starts it afresh. Only the agent that started it may close or clear it.
 
 So one agent can coordinate others, a more capable model keeping the judgement while cheaper ones explore, implement and
-test. `hex_agent_wait` returns as soon as a message comes for the agent waiting (`messages: false` waits on
-regardless), so what one finds steers the rest straight away. A message to an agent that's waiting wakes its wait
-rather than going in on its stdin, which it would only read once the wait was over. Only chats of one family talk, the
+test. Messages from the person watching and questions or blockers addressed to a waiting agent wake `hex_agent_wait`
+in either mode. Ordinary agent mail also wakes the wait by default. With `messages: false` it waits in the inbox
+until the wait returns. The result includes all unread mail, with the person's messages first. Only chats of one family talk, the
 chat somebody started and everything under it. Each message is a line in both chats, to or from whom, its kind and how
 it starts, and what a chat wasn't working to read goes in front of what it's next asked.
 

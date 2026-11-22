@@ -303,6 +303,16 @@ internal sealed partial class HexLinkTransport : IDisposable
                 return;
             }
 
+            if (hello.Mode == "invite")
+            {
+                kept = await HostInvite(ssl, socket, hello.Device, address, stop, timeout.Token, NegotiateBulk(hello.Bulk), () =>
+                {
+                    handshakes.Release();
+                    handshakeHeld = false;
+                });
+                return;
+            }
+
             if (hello.Mode == "pair")
             {
                 // The person takes as long as they take, this connection stops counting against the handshakes

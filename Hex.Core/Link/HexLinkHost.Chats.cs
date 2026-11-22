@@ -15,16 +15,66 @@ internal sealed partial class HexLinkHost
     /// <summary>The most chats one device may have open at once.</summary>
     public const int MOST_WATCHED = 32;
 
-    // A chat whole, or that it's as it was when the asker says the version it has
+    private const int MOST_GET_MARKS = 24;
+    private readonly Dictionary<(int Id, int Version), HexLinkChatMark> fetchedChats = [];
+    private readonly Queue<(int Id, int Version)> fetchedOrder = new();
+
+    // A chat whole, or a patch from a version previously sent to this device.
     private async Task<JsonNode?> ChatGet(JsonObject parameters)
     {
         Need(HexLinkRights.View, "chat/get");
         int id = HexLinkData.NeedInt(parameters, "id");
         int? since = HexLinkData.Int(parameters, "since");
-        JsonObject? said = await services.Chat(id, chat => since == chat.Version
-            ? new JsonObject { ["id"] = chat.Id, ["version"] = chat.Version, ["unchanged"] = true }
-            : HexLinkChats.Whole(chat, new HexLinkChatMark()));
+        JsonObject? said = await services.Chat(id, chat =>
+        {
+            lock (fetchedChats)
+            {
+                if (since == chat.Version)
+                    return new JsonObject { ["id"] = chat.Id, ["version"] = chat.Version, ["unchanged"] = true };
+
+                HexLinkChatMark mark = since is { } known && fetchedChats.TryGetValue((id, known), out HexLinkChatMark? prior)
+                    ? CopyMark(prior) : new HexLinkChatMark();
+                JsonObject answer = mark.Seq < 0
+                    ? HexLinkChats.Whole(chat, mark)
+                    : HexLinkChats.Patch(chat, mark) ?? new JsonObject
+                    {
+                        ["id"] = id, ["count"] = chat.Entries.Count, ["dropped"] = chat.Dropped, ["rows"] = new JsonArray()
+                    };
+                answer["version"] = chat.Version;
+                if (mark.Seq >= 0 && HexLinkData.Bool(answer, "whole") != true)
+                    answer["since"] = since;
+                RememberFetchedLocked(id, chat.Version, mark);
+                return answer;
+            }
+        });
         return said ?? throw HexLinkException.NotFound($"There's no chat #{id}.");
+    }
+
+    private static HexLinkChatMark CopyMark(HexLinkChatMark prior)
+    {
+        var copy = new HexLinkChatMark { Dropped = prior.Dropped, Reshaped = prior.Reshaped, Seq = prior.Seq, Head = prior.Head };
+        copy.Rows.AddRange(prior.Rows);
+        return copy;
+    }
+
+    private void RememberFetchedLocked(int id, int version, HexLinkChatMark mark)
+    {
+        var key = (id, version);
+        if (fetchedChats.TryAdd(key, mark))
+        {
+            fetchedOrder.Enqueue(key);
+            if (fetchedOrder.Count > MOST_GET_MARKS)
+                fetchedChats.Remove(fetchedOrder.Dequeue());
+        }
+    }
+
+    private void ForgetFetchedChats()
+    {
+        lock (fetchedChats)
+        {
+            fetchedChats.Clear();
+            fetchedOrder.Clear();
+        }
     }
 
     // A chat whole, and what changes of it from now on sent as chat/changed
@@ -81,14 +131,14 @@ internal sealed partial class HexLinkHost
             if (chats.TryRemove(id, out WatchedChat? gone))
             {
                 gone.Coalesce.Dispose();
-                session.Tell("chat/changed", new JsonObject { ["id"] = id, ["gone"] = true });
+                await session.TellAsync("chat/changed", new JsonObject { ["id"] = id, ["gone"] = true });
             }
 
             return;
         }
 
         if (patch.Count > 0)
-            session.Tell("chat/changed", patch);
+            await session.TellAsync("chat/changed", patch);
     }
 
     // A question card answered as the person would

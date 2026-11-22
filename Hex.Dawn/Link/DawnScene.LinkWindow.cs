@@ -8,21 +8,11 @@ using Horizon.UI.Skinning;
 
 namespace Hex.Dawn;
 
-// Link's window (docs/hex-link-plan.md, 6): everything Link does in one place. Along the top this device, the name it
-// goes by (typed in here, kept in link_name), its fingerprint, how its key is kept (the file alone said as a warning),
-// Link's own switch, its port and whether it's found on the network. Then pairing, with its countdown and the addresses
-// to type on the other machine, and a box to connect to an address. Then every device this one knows, whether it's
-// linked and over which TLS, what it may do here (three switches, Steer in the warning colour with what it means) and
-// what this machine may do there, with Connect or Disconnect, Rename and Forget. Then the Hexes heard on the LAN, and
-// the latest of the audit log.
-//
-// The window is made once as it opens and its parts made again only when LinkChanged says something moved, never under
-// a held button (a part made again between the press and the letting go lost the click), the two boxes typed into kept
-// whole across that. Closed, it costs nothing: nothing listens to LinkChanged and nothing is ticked for it.
+// Devices window. Input rows stay mounted as peer state changes around them.
 internal sealed partial class DawnScene
 {
     // The window's size as it opens and the least it goes to
-    private static readonly Vector2 LINK_WINDOW_SIZE = new(780, 720), LINK_WINDOW_LEAST = new(560, 420);
+    private static readonly Vector2 LINK_WINDOW_SIZE = new(780, 640), LINK_WINDOW_LEAST = new(480, 360);
 
     // How many lines of the audit log the window shows
     private const int LINK_ACTIVITY_LINES = 14;
@@ -34,7 +24,9 @@ internal sealed partial class DawnScene
     private const float LINK_ROW = 28.0f;
 
     private WindowPanel? linkWindow;
-    private StackPanel? linkWindowHead, linkWindowPairing, linkWindowDevices, linkWindowNearby, linkWindowActivity;
+    private bool linkActivityShown, linkDeviceRowsNarrow;
+    private ScrollPanel? linkDevicesScroll;
+    private StackPanel? linkWindowHead, linkWindowDevices, linkWindowNearby, linkWindowActivity;
     private TextBox? linkNameBox, linkAddressBox;
     private Label? linkPairingCountdown, linkNameSeen;
 
@@ -67,7 +59,7 @@ internal sealed partial class DawnScene
         var window = new WindowPanel(Said("link.window_title"))
         {
             Icon = "link",
-            Size = LINK_WINDOW_SIZE,
+            Size = Vector2.Clamp(chrome.Root.Bounds.Size - new Vector2(30, 60), LINK_WINDOW_LEAST, LINK_WINDOW_SIZE),
             MinSize = LINK_WINDOW_LEAST
         };
         DressWindow(window);
@@ -78,23 +70,31 @@ internal sealed partial class DawnScene
             window.Parent?.Remove(window);
             LinkChanged -= LinkWindowChanged;
             linkWindow = null;
-            linkWindowHead = linkWindowPairing = linkWindowDevices = linkWindowNearby = linkWindowActivity = linkWindowShare = null;
+            linkOnboardingDialog?.Close();
+            linkThisDeviceDialog?.Close();
+            linkWindowHead = linkWindowDevices = linkWindowNearby = linkWindowActivity = linkWindowShare = linkIdentityWarning = null;
+            linkThisDeviceName = linkThisDeviceStatus = null;
+            linkKeyFileBadge = null;
+            linkThisDeviceSwitch = null;
             linkNameBox = linkAddressBox = null;
-            linkPairingCountdown = linkNameSeen = null;
+            linkPairingCountdown = linkNameSeen = linkJoinStatus = null;
+            linkJoinSubmit = linkCopyInvite = null;
+            linkDevicesScroll = null;
+            linkDevicePage = LinkDevicePage.Overview;
+            linkLatencies.Clear();
+            linkOfflineRows.Clear();
         };
 
         var scroll = window.Add(new ScrollPanel { Fill = UIFill.Both, Padding = new UIEdges(18, 14, 12, 16) });
+        linkDevicesScroll = scroll;
         var column = scroll.Add(new StackPanel { Spacing = 10.0f, Fill = UIFill.Horizontal });
 
-        // The parts made again as Link moves, between the two rows typed into, which are made once
-        linkWindowHead = column.Add(new StackPanel { Spacing = 8.0f, Fill = UIFill.Horizontal });
-        column.Add(LinkNameRow());
-        linkWindowPairing = column.Add(new StackPanel { Spacing = 6.0f, Fill = UIFill.Horizontal });
-        column.Add(LinkAddressRow());
-        linkWindowDevices = column.Add(new StackPanel { Spacing = 8.0f, Fill = UIFill.Horizontal });
-        linkWindowShare = column.Add(new StackPanel { Spacing = 6.0f, Fill = UIFill.Horizontal });
-        linkWindowNearby = column.Add(new StackPanel { Spacing = 6.0f, Fill = UIFill.Horizontal });
-        linkWindowActivity = column.Add(new StackPanel { Spacing = 2.0f, Fill = UIFill.Horizontal });
+        linkIdentityWarning = column.Add(new StackPanel { Fill = UIFill.Horizontal });
+        linkWindowHead = column.Add(new StackPanel { Spacing = 4, Fill = UIFill.Horizontal });
+        BuildLinkHead();
+        linkWindowDevices = column.Add(new StackPanel { Spacing = 8, Fill = UIFill.Horizontal });
+        linkWindowShare = column.Add(new StackPanel { Spacing = 6, Fill = UIFill.Horizontal });
+        linkWindowActivity = column.Add(new StackPanel { Spacing = 2, Fill = UIFill.Horizontal });
 
         linkWindow = window;
         LinkChanged += LinkWindowChanged;
@@ -118,25 +118,40 @@ internal sealed partial class DawnScene
         UpdateLinkPairingDialog();
         LinkRemoteTick();
         if (link is not null)
+        {
             LinkSayGrantsMoved();
+            TickLinkAutoShare();
+        }
         if (linkWindow is null)
             return;
 
-        if (linkWindowStale && !Engine.Input.Mouse.IsDown(Horizon.Input.MouseButton.Left))
+        bool narrow = linkWindow.Bounds.Width < 615;
+        if (narrow != linkDeviceRowsNarrow)
+        {
+            linkDeviceRowsNarrow = narrow;
+            linkWindowStale = true;
+        }
+        TickLinkDeviceRows();
+        TickLinkInviteCopy();
+        if (linkWindowStale && !chrome.Compositor.Pointer.Down)
         {
             linkWindowStale = false;
             DrawLinkWindow();
         }
 
-        if (linkPairingCountdown is not null && LinkPairingUntil is { } until)
+        if (linkPairingCountdown is not null)
         {
-            int left = Math.Max(0, (int)Math.Ceiling((until - DateTime.UtcNow).TotalSeconds));
+            int left = LinkPairingUntil is { } until ? Math.Max(0, (int)Math.Ceiling((until - DateTime.UtcNow).TotalSeconds)) : 0;
             if (left != linkCountdownShown)
             {
                 linkCountdownShown = left;
-                linkPairingCountdown.Text = Said("link.pairing_left", ("time", $"{left / 60}:{(left % 60).ToString("00", CultureInfo.InvariantCulture)}"));
+                string leftText = UIRichText.Literal(Said("link.pairing_left", ("time", $"{left / 60}:{(left % 60).ToString("00", CultureInfo.InvariantCulture)}")));
+                linkPairingCountdown.Text = left < 30 ? $"[color:{HexColour(LinkWarning)}]{leftText}[/color]" : leftText;
                 if (left == 0)
+                {
+                    linkInviteExpired = true;
                     linkWindowStale = true;
+                }
             }
         }
     }
@@ -158,43 +173,114 @@ internal sealed partial class DawnScene
             linkNameBox.Placeholder = HexLinkNames.Clean(System.Environment.MachineName) ?? string.Empty;
         if (linkNameSeen is not null)
             linkNameSeen.Text = UIRichText.Literal(Said("link.name_seen_as", ("name", LinkDevice?.Name ?? LinkNameWanted)));
-        if (linkAddressBox is not null)
-            linkAddressBox.Enabled = LinkOn;
+
     }
 
     /* This device */
 
-    private void DrawLinkHead()
+    private Label? linkThisDeviceName, linkThisDeviceStatus;
+    private Badge? linkKeyFileBadge;
+    private ToggleButton? linkThisDeviceSwitch;
+    private UIDialog? linkThisDeviceDialog;
+
+    private void BuildLinkHead()
     {
         StackPanel head = linkWindowHead!;
-        ClearRows(head);
-        HexLinkDevice? me = LinkDevice;
-        string name = me?.Name ?? LinkNameWanted;
-        head.Add(WindowSummary(name, Said(LinkOn ? "link.window_on" : "link.window_off"),
-            me is null ? Said("link.window_off_text") : Said("link.window_fingerprint", ("fingerprint", me.Fingerprint)), LinkOn ? Skin?.Palette.Success : null));
-
-        // How the key's kept, said plainly, the file alone as a warning
-        if (LinkProtection is { } protection)
+        StackPanel identity = LinkActionRow(head, 23);
+        linkThisDeviceName = identity.Add(new Label { Bold = true, TextScale = LINK_HEADING, Anchor = Origin.Left, Pivot = Origin.Left });
+        linkKeyFileBadge = identity.Add(new Badge
         {
-            string said = Said("link.key_" + protection switch
+            Text = Said("link.devices_key_file_chip"), Icon = "warning", Tone = UIBadgeTone.Warning,
+            TextScale = 0.11f, Tooltip = Said("link.key_file"), Anchor = Origin.Left, Pivot = Origin.Left
+        });
+        linkThisDeviceStatus = head.Add(LinkLine(string.Empty));
+        StackPanel actions = LinkActionRow(head, 36);
+        var invite = actions.Add(LinkButton(Said("link.devices_invite"), "add", () => ShowLinkDevicePage(LinkDevicePage.Invite)));
+        invite.Primary = true;
+        invite.Size = invite.Size with { Y = 36 };
+        var join = actions.Add(LinkButton(Said("link.devices_join"), "plug", () => ShowLinkDevicePage(LinkDevicePage.Join)));
+        join.Size = join.Size with { Y = 36 };
+        linkThisDeviceSwitch = actions.Add(new ToggleButton(Said("link.devices_link_switch"), LinkOn)
+        {
+            Anchor = Origin.Left, Pivot = Origin.Left, LabelScale = LINK_TEXT, Tooltip = Said("link.devices_link_on_help")
+        });
+        linkThisDeviceSwitch.OnPressed = () => LinkSwitch(linkThisDeviceSwitch.State);
+        Button more = actions.Add(LinkButton(Said("link.devices_more"), string.Empty, () => { }));
+        more.Tooltip = Said("link.devices_more_this");
+        more.OnPressed = () =>
+        {
+            var menu = new Menu("this device");
+            menu.Add(Said("link.devices_identity_details"), ShowLinkIdentityDetails, icon: "edit");
+            if (LinkPort != 0)
+                menu.Add(Said("link.pair_button"), () =>
+                {
+                    LinkStartAddressPairing();
+                    ShowLinkDevicePage(LinkDevicePage.Invite);
+                }, icon: "plug");
+            menu.Add(Said(linkActivityShown ? "link.devices_activity_hide" : "link.devices_activity_show"), () =>
             {
-                HexLinkProtection.Dpapi => "dpapi",
-                HexLinkProtection.Keychain => "keychain",
-                HexLinkProtection.SecretService => "secret_service",
-                _ => "file"
-            });
-            string icon = protection == HexLinkProtection.File ? "warning" : "lock";
-            head.Add(new Label
-            {
-                Text = protection == HexLinkProtection.File ? $"[color:{HexColour(LinkWarning)}]$({icon}) {UIRichText.Literal(said)}[/color]" : $"$({icon}) {UIRichText.Literal(said)}",
-                TextScale = LINK_SMALL, Dim = protection != HexLinkProtection.File, Wrap = true, Align = Origin.Left, Fill = UIFill.Horizontal
-            });
-        }
+                linkActivityShown = !linkActivityShown;
+                linkWindowStale = true;
+            }, icon: "history");
+            ContextMenu.Show(chrome, more.Bounds.PointAt(Origin.TopLeft), menu);
+        };
+    }
 
-        var switches = head.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 18.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, LINK_ROW) });
-        var on = switches.Add(new ToggleButton(Said("link.switch_on"), LinkOn) { Anchor = Origin.Left, Pivot = Origin.Left, LabelScale = LINK_TEXT, Tooltip = Said("settings_catalog.link_help") });
-        on.OnPressed = () => LinkSwitch(on.State);
-        var found = switches.Add(new ToggleButton(Said("link.switch_discoverable"), settings.LinkDiscoverable) { Anchor = Origin.Left, Pivot = Origin.Left, LabelScale = LINK_TEXT, Tooltip = Said("settings_catalog.link_discoverable_help") });
+    private void DrawLinkHead()
+    {
+        if (linkThisDeviceName is null || linkThisDeviceStatus is null || linkThisDeviceSwitch is null)
+            return;
+        HexLinkDevice? me = LinkDevice;
+        linkThisDeviceName.Text = $"[b]{UIRichText.Literal(Said("link.devices_this_device", ("name", me?.Name ?? LinkNameWanted)))}[/b]";
+        string state = Said(LinkOn ? "link.devices_on" : "link.devices_off_short");
+        string fingerprint = me is null ? string.Empty : Said("link.devices_fingerprint", ("fingerprint", me.Fingerprint));
+        string detail = UIRichText.Literal(fingerprint.Length > 0 ? $"{fingerprint} · {state}" : state);
+        linkThisDeviceStatus.Text = Skin is { } skin ? $"[color:{HexColour(skin.Palette.DimText)}]{detail}[/color]" : detail;
+        linkThisDeviceSwitch.State = LinkOn;
+        if (linkKeyFileBadge is not null)
+            linkKeyFileBadge.Visible = LinkProtection == HexLinkProtection.File;
+        DrawLinkIdentityWarning();
+    }
+
+    private StackPanel? linkIdentityWarning;
+
+    private void DrawLinkIdentityWarning()
+    {
+        StackPanel slot = linkIdentityWarning!;
+        ClearRows(slot);
+        string? reason = null;
+        string? label = null;
+        Action? recover = null;
+        LinkDeviceIdentityRecovery(ref reason, ref label, ref recover);
+        slot.Visible = reason is not null;
+        if (!slot.Visible)
+            return;
+        var panel = slot.Add(new Panel { Fill = UIFill.Horizontal, Radius = 8, Padding = new UIEdges(10, 8), Outline = Skin?.BorderColor ?? Vector4.Zero });
+        var body = panel.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 5 });
+        body.Add(new Label
+        {
+            Text = $"[color:{HexColour(LinkWarning)}]$(warning) {UIRichText.Literal(reason ?? string.Empty)}[/color]",
+            TextScale = LINK_SMALL, Wrap = true, Fill = UIFill.Horizontal, Align = Origin.Left
+        });
+        if (recover is not null && label is not null)
+            LinkActionRow(body).Add(LinkButton(label, "warning", recover)).Danger = label == Said("link.devices_identity_reset");
+    }
+
+    private void ShowLinkIdentityDetails()
+    {
+        UIDialog dialog = UIDialog.Show(chrome, Said("link.devices_identity_details"), string.Empty, new DialogChoice(Said("link.devices_done")));
+        linkThisDeviceDialog = dialog;
+        dialog.Body.Add(LinkNameRow());
+        if (LinkProtection == HexLinkProtection.File)
+            dialog.Body.Add(LinkLine(Said("link.key_file")));
+        if (LinkDevice is { } me)
+            dialog.Body.Add(LinkLine(Said("link.devices_fingerprint", ("fingerprint", me.Fingerprint))));
+        dialog.Body.Add(LinkLine(Said(LinkPort > 0 ? "link.window_port" : LinkOn ? "link.window_dialling" : "link.window_port_off",
+            ("port", (LinkPort > 0 ? LinkPort : settings.LinkPort).ToString(CultureInfo.InvariantCulture)))));
+        var found = dialog.Body.Add(new ToggleButton(Said("link.switch_discoverable"), settings.LinkDiscoverable)
+        {
+            Anchor = Origin.Left, Pivot = Origin.Left, LabelScale = LINK_TEXT, Tooltip = Said("settings_catalog.link_discoverable_help")
+        });
         found.OnPressed = () =>
         {
             settings.LinkDiscoverable = found.State;
@@ -202,24 +288,26 @@ internal sealed partial class DawnScene
             SettingsPage?.Refresh("link_discoverable");
             ApplyLink();
         };
-        switches.Add(new Label
+        dialog.Closed = () =>
         {
-            Text = LinkPort > 0 ? Said("link.window_port", ("port", LinkPort.ToString(CultureInfo.InvariantCulture))) : Said(LinkOn ? "link.window_dialling" : "link.window_port_off", ("port", settings.LinkPort.ToString(CultureInfo.InvariantCulture))),
-            TextScale = LINK_SMALL, Dim = true, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left, Tooltip = Said("settings_catalog.link_port_help")
-        });
-        if (LinkNearbyOff is { } off)
-            head.Add(new Label { Text = UIRichText.Literal(Said("link.nearby_off", ("why", off))), TextScale = LINK_SMALL, Dim = true, Wrap = true, Align = Origin.Left, Fill = UIFill.Horizontal });
+            linkThisDeviceDialog = null;
+            linkNameBox = null;
+            linkNameSeen = null;
+        };
+        linkWindowStale = true;
+        linkNameBox?.Focus();
     }
+
 
     // The name this device goes by, typed in and kept in link_name, the machine's own name when it's left empty
     private UIComponent LinkNameRow()
     {
         var row = new StackPanel { Direction = UIDirection.Horizontal, Spacing = 8.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, LINK_ROW) };
-        row.Add(new Label { Text = Said("link.name_label"), TextScale = LINK_TEXT, Size = new Vector2(120, LINK_ROW), Align = Origin.Left, Anchor = Origin.Left, Pivot = Origin.Left });
+        row.Add(new Label { Text = Said("link.name_label"), TextScale = LINK_TEXT, Size = new Vector2(75, LINK_ROW), Align = Origin.Left, Anchor = Origin.Left, Pivot = Origin.Left });
         linkNameBox = row.Add(new TextBox
         {
             Text = settings.LinkName, Placeholder = HexLinkNames.Clean(System.Environment.MachineName) ?? string.Empty, MaxLength = HexLinkNames.MOST,
-            Size = new Vector2(300, LINK_ROW), Anchor = Origin.Left, Pivot = Origin.Left, Tooltip = Said("settings_catalog.link_name_help")
+            Size = new Vector2(140, LINK_ROW), Anchor = Origin.Left, Pivot = Origin.Left, Tooltip = Said("settings_catalog.link_name_help")
         });
         void Keep()
         {
@@ -238,7 +326,7 @@ internal sealed partial class DawnScene
         }
 
         linkNameBox.OnSubmitted = _ => Keep();
-        row.Add(new Button { Label = Said("link.name_keep"), Size = new Vector2(80, LINK_ROW), LabelScale = LINK_TEXT, Animated = false, Anchor = Origin.Left, Pivot = Origin.Left, OnPressed = Keep });
+        row.Add(new Button { Label = Said("link.name_keep"), Size = new Vector2(55, LINK_ROW), LabelScale = LINK_TEXT, Animated = false, Anchor = Origin.Left, Pivot = Origin.Left, OnPressed = Keep });
         // Back to the machine's own name, the setting emptied
         row.Add(LinkButton(Said("link.name_reset"), "discard", () =>
         {
@@ -248,94 +336,8 @@ internal sealed partial class DawnScene
         }));
         var holder = new StackPanel { Spacing = 4.0f, Fill = UIFill.Horizontal };
         holder.Add(row);
-        linkNameSeen = holder.Add(new Label { TextScale = LINK_SMALL, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal, Padding = new UIEdges(128, 0, 0, 0) });
-        return holder;
-    }
-
-    /* Pairing and connecting */
-
-    private void DrawLinkPairing()
-    {
-        StackPanel pairing = linkWindowPairing!;
-        ClearRows(pairing);
-        linkPairingCountdown = null;
-        linkCountdownShown = -1;
-        pairing.Add(LinkHeading(Said("link.pair_heading")));
-        if (!HexHost.Listens)
-        {
-            pairing.Add(LinkLine(Said("link.pair_not_here")));
-            return;
-        }
-
-        var row = pairing.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 10.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, LINK_ROW) });
-        bool open = LinkPairingUntil is { } until && until > DateTime.UtcNow;
-        row.Add(new Button
-        {
-            Label = Said(open ? "link.pair_stop" : "link.pair_button"), Icon = open ? "debug-stop" : "add", Primary = !open, Enabled = LinkOn,
-            Size = new Vector2(170, LINK_ROW), LabelScale = LINK_TEXT, Animated = false, Anchor = Origin.Left, Pivot = Origin.Left,
-            OnPressed = () =>
-            {
-                if (LinkPairingUntil is not null)
-                    LinkClosePairing();
-                else
-                    LinkPairCommand();
-            }
-        });
-        if (open)
-        {
-            linkPairingCountdown = row.Add(new Label { Text = string.Empty, TextScale = LINK_TEXT, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left });
-            // The addresses to type on the other machine, the LAN's first and a VPN's (Tailscale's 100.x) said as such
-            string port = LinkPort.ToString(CultureInfo.InvariantCulture);
-            List<System.Net.IPAddress> mine = HexLinkAddresses.Preferred(LinkLocalAddresses());
-            if (mine.Count == 0)
-                pairing.Add(LinkLine(Said("link.pair_addresses_none", ("port", port))));
-            else
-            {
-                pairing.Add(LinkLine(Said("link.pair_addresses")));
-                foreach (System.Net.IPAddress address in mine.OrderBy(address => LinkIsVpn(address) ? 1 : 0).Take(6))
-                {
-                    string shown = $"{HexLinkAddresses.Show(address)}:{port}";
-                    pairing.Add(new Label
-                    {
-                        Text = LinkIsVpn(address) ? $"[b]{shown}[/b]  {UIRichText.Literal(Said("link.address_vpn"))}" : $"[b]{shown}[/b]  {UIRichText.Literal(Said("link.address_lan"))}",
-                        TextScale = LINK_TEXT, Align = Origin.Left, Fill = UIFill.Horizontal, Padding = new UIEdges(14, 0, 0, 0)
-                    });
-                }
-            }
-        }
-        else
-            pairing.Add(LinkLine(Said(LinkOn ? "link.pair_text" : "link.pair_off_text")));
-    }
-
-    /// <summary>Whether an address is one a VPN hands out (CGNAT's 100.64/10, Tailscale's), said beside it so the LAN's is picked when both work.</summary>
-    internal static bool LinkIsVpn(System.Net.IPAddress address)
-    {
-        byte[] bytes = (address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address).GetAddressBytes();
-        return bytes.Length == 4 && bytes[0] == 100 && (bytes[1] & 0xC0) == 64;
-    }
-
-    // A box for host[:port] and Connect, a known device linked to, another paired with
-    private UIComponent LinkAddressRow()
-    {
-        var holder = new StackPanel { Spacing = 6.0f, Fill = UIFill.Horizontal };
-        holder.Add(LinkHeading(Said("link.connect_heading")));
-        var row = holder.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 8.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, LINK_ROW) });
-        linkAddressBox = row.Add(new TextBox
-        {
-            Placeholder = Said("link.connect_placeholder"), MaxLength = 200, Size = new Vector2(300, LINK_ROW), Anchor = Origin.Left, Pivot = Origin.Left,
-            Tooltip = Said("link.connect_text"), Enabled = LinkOn
-        });
-        void Go()
-        {
-            string typed = linkAddressBox?.Text.Trim() ?? string.Empty;
-            if (typed.Length == 0 || !LinkOn)
-                return;
-            LinkConnectAddress(typed);
-        }
-
-        linkAddressBox.OnSubmitted = _ => Go();
-        row.Add(new Button { Label = Said("link.connect_button"), Icon = "plug", Size = new Vector2(110, LINK_ROW), LabelScale = LINK_TEXT, Animated = false, Anchor = Origin.Left, Pivot = Origin.Left, OnPressed = Go });
-        holder.Add(LinkLine(Said("link.connect_vpn")));
+        linkNameSeen = holder.Add(LinkLine(Said("link.name_seen_as", ("name", LinkDevice?.Name ?? LinkNameWanted))));
+        linkNameSeen.Padding = new UIEdges(83, 0, 0, 0);
         return holder;
     }
 
@@ -345,16 +347,24 @@ internal sealed partial class DawnScene
     {
         StackPanel devices = linkWindowDevices!;
         ClearRows(devices);
+        linkOfflineRows.Clear();
         IReadOnlyList<HexLinkKnown> known = LinkKnown;
-        devices.Add(LinkHeading(Said("link.devices_heading", ("count", known.Count.ToString(CultureInfo.InvariantCulture)))));
+        devices.Add(LinkHeading(Said("link.devices_counts", ("connected", LinkPeers.Count.ToString(CultureInfo.InvariantCulture)),
+            ("total", known.Count.ToString(CultureInfo.InvariantCulture)))));
         if (known.Count == 0)
         {
-            devices.Add(LinkLine(Said(LinkOn ? "link.devices_none" : "link.devices_off")));
+            var empty = devices.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 5 });
+            empty.Add(LinkLine(Said(LinkOn ? "link.devices_none" : "link.window_off_text")));
+            LinkActionRow(empty).Add(LinkOn
+                ? LinkButton(Said("link.devices_invite"), "add", () => ShowLinkDevicePage(LinkDevicePage.Invite))
+                : LinkButton(Said("link.devices_turn_on"), "plug", () => LinkSwitch(true)));
             return;
         }
 
-        foreach (HexLinkKnown device in known.OrderBy(each => LinkPeerOf(each.Device.Id) is null ? 1 : 0).ThenBy(each => each.Shown, StringComparer.OrdinalIgnoreCase))
-            devices.Add(LinkDeviceCard(device));
+        IReadOnlyList<LinkConflictShown> conflicts = LinkConflicts;
+        foreach (HexLinkKnown device in known.OrderBy(each => LinkPeerOf(each.Device.Id) is not null ? 0 : GetLinkDeviceConnection(each.Device.Id) is { Connecting: true } or { RetryAtUtc: not null } ? 1 : 2)
+            .ThenBy(each => each.Shown, StringComparer.OrdinalIgnoreCase))
+            devices.Add(LinkDeviceCard(device, conflicts));
     }
 
     /// <summary>The linked peer of a device, null when it isn't linked.</summary>
@@ -368,97 +378,6 @@ internal sealed partial class DawnScene
         }
 
         return null;
-    }
-
-    // A device as a card: its name and whether it's linked, where, what it may do here and this machine there, its buttons
-    private Panel LinkDeviceCard(HexLinkKnown known)
-    {
-        string id = known.Device.Id;
-        HexLinkPeer? peer = LinkPeerOf(id);
-        Vector4 tint = LinkDeviceTint(id, Skin);
-        Panel card = StripedCard(tint);
-        var column = card.Add(new StackPanel { Spacing = 6.0f, Fill = UIFill.Horizontal });
-
-        // Its name with the computer's glyph in its colour, linked or not, and the TLS it's linked over
-        var top = column.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 8.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, 22) });
-        top.Add(new Label { Text = $"[color:{HexColour(tint)}]$(vm)[/color] [b]{UIRichText.Literal(known.Shown)}[/b]", TextScale = LINK_HEADING, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left });
-        top.Add(new Badge
-        {
-            Text = Said(peer is not null ? "link.device_connected" : LinkHeldOff(id) ? "link.device_held_off" : "link.device_not_connected"),
-            Tone = peer is not null ? UIBadgeTone.Success : UIBadgeTone.Neutral, Dot = peer is not null, TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left
-        });
-        if (peer is not null && LinkTlsOf(id) is { } tls)
-            top.Add(new Badge { Text = LinkTlsSaid(tls), Icon = "lock", Tone = UIBadgeTone.Neutral, TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left });
-
-        // What it calls itself, when the person here calls it something else
-        if (known.Named is not null)
-            column.Add(new Label { Text = UIRichText.Literal(Said("link.device_calls_itself", ("name", known.Device.Name))), TextScale = LINK_SMALL, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal });
-
-        // Where it is and what it is
-        string where = peer?.Session.Connection.Address is { Length: > 0 } address ? address
-            : known.Address.Length > 0 ? (known.Port > 0 ? $"{known.Address}:{known.Port.ToString(CultureInfo.InvariantCulture)}" : known.Address) : Said("link.device_no_address");
-        string what = string.Join(" · ", new[] { known.Device.Fingerprint, where, peer?.Device.Os is { Length: > 0 } os ? $"{os} {peer.Device.Arch}".Trim() : null }.Where(part => !string.IsNullOrEmpty(part)));
-        column.Add(new Label { Text = UIRichText.Literal(what), TextScale = LINK_SMALL, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal });
-
-        // What it may do here, a switch each, every change through LinkSetRights and never more than was ticked
-        column.Add(new Label { Text = Said("link.device_may_here", ("device", UIRichText.Literal(known.Shown))), TextScale = LINK_SMALL, Bold = true, Align = Origin.Left, Fill = UIFill.Horizontal });
-        var rights = column.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 18.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, LINK_ROW) });
-        foreach (HexLinkRights right in (ReadOnlySpan<HexLinkRights>)[HexLinkRights.View, HexLinkRights.Steer, HexLinkRights.Edit, HexLinkRights.Predict])
-        {
-            bool has = (known.Rights & right) != 0;
-            string label = Said("link.right_title_" + HexLinkTrust.RightsNames(right).First());
-            // A switch's caption is plain text, Steer's warning colour is in the line under the switches
-            var toggle = rights.Add(new ToggleButton(label, has)
-            {
-                Anchor = Origin.Left, Pivot = Origin.Left, LabelScale = LINK_TEXT, Tooltip = Said("link.right_means_" + HexLinkTrust.RightsNames(right).First())
-            });
-            HexLinkRights each = right;
-            toggle.OnPressed = () =>
-            {
-                HexLinkRights now = LinkKnown.FirstOrDefault(found => found.Device.Id == id)?.Rights ?? HexLinkRights.None;
-                LinkSetRights(id, LinkRightsToggled(now, each, toggle.State));
-                linkWindowStale = true;
-            };
-        }
-
-        // Steer's meaning, never hidden, in the warning colour under the switches
-        column.Add(new Label
-        {
-            Text = $"[color:{HexColour(LinkWarning)}]$(warning)[/color] {UIRichText.Literal(Said("link.right_means_steer"))}", TextScale = LINK_SMALL, Dim = (known.Rights & HexLinkRights.Steer) == 0,
-            Wrap = true, Align = Origin.Left, Fill = UIFill.Horizontal
-        });
-
-        // What this machine may do there, as it says, read-only
-        var there = column.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 6.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, 22) });
-        there.Add(new Label { Text = Said("link.device_may_there"), TextScale = LINK_SMALL, Bold = true, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left });
-        if (peer is null)
-            there.Add(new Label { Text = Said("link.device_there_unknown"), TextScale = LINK_SMALL, Dim = true, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left });
-        else
-        {
-            foreach (Badge chip in LinkRightsChips(peer.Granted))
-                there.Add(chip);
-        }
-
-        // The folders both have open and how their syncs are doing (DawnScene.LinkWindow.Share)
-        if (peer is not null)
-            LinkDeviceSyncRows(column, peer);
-
-        // Connect or Disconnect, Rename, Forget (asked once)
-        var buttons = column.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 8.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, LINK_ROW) });
-        if (peer is not null)
-            buttons.Add(LinkButton(Said("link.device_disconnect"), "debug-disconnect", () => LinkDisconnect(id)));
-        else
-            buttons.Add(LinkButton(Said("link.device_connect"), "plug", () => LinkConnectKnown(known))).Enabled = LinkOn && LinkAddressesOf(known, LinkNearby).Count > 0;
-        buttons.Add(LinkButton(Said("link.device_rename"), "edit", () => AskText(Said("link.rename_title"), Said("link.rename_text", ("device", known.Device.Name)), known.Shown, Said("link.rename_button"), typed =>
-        {
-            if (LinkRename(id, typed))
-                linkWindowStale = true;
-        })));
-        if (known.Named is not null)
-            buttons.Add(LinkButton(Said("link.device_own_name"), "discard", () => LinkUseOwnName(id)));
-        Button forget = buttons.Add(LinkButton(Said("link.device_forget"), "trash", () => AskForgetDevice(known)));
-        forget.Danger = true;
-        return card;
     }
 
     /// <summary>
@@ -493,25 +412,48 @@ internal sealed partial class DawnScene
     private void LinkConnectKnown(HexLinkKnown known)
     {
         List<(string Host, int Port)> tries = LinkAddressesOf(known, LinkNearby);
-        if (tries.Count == 0)
+        string id = known.Device.Id;
+        if (tries.Count == 0 || linkManualDials.GetValueOrDefault(id)?.Connecting == true)
             return;
+        var attempt = CancellationTokenSource.CreateLinkedTokenSource(linkCancel?.Token ?? CancellationToken.None);
+        var connecting = new LinkDeviceConnection(true, null, null, attempt);
+        linkManualDials[id] = connecting;
+        linkWindowStale = true;
         _ = Task.Run(async () =>
         {
-            Exception? failed = null;
+            string? reason = null;
             foreach (var (host, port) in tries)
             {
+                if (attempt.IsCancellationRequested)
+                    break;
                 try
                 {
-                    await LinkConnect(host, port, known.Device.Id);
-                    return;
+                    await LinkConnect(host, port, id, attempt.Token);
+                    reason = null;
+                    break;
                 }
                 catch (Exception e)
                 {
-                    failed = e;
+                    reason = e is HexLinkRefused refusal ? refusal.Reason : OneLine(e.Message, 150);
                 }
             }
 
-            PostLink(() => Say(Said("link.connect_failed", ("address", $"{tries[0].Host}:{tries[0].Port}"), ("why", failed?.Message ?? "unreachable")), error: true));
+            PostLink(() =>
+            {
+                bool current = ReferenceEquals(linkManualDials.GetValueOrDefault(id), connecting);
+                bool cancelled = attempt.IsCancellationRequested;
+                attempt.Dispose();
+                if (!current)
+                    return;
+                if (reason is null || cancelled)
+                    linkManualDials.Remove(id);
+                else
+                {
+                    linkManualDials[id] = new LinkDeviceConnection(false, null, reason);
+                    Say(LinkDialFailureSaid(reason), error: true);
+                }
+                linkWindowStale = true;
+            });
         });
     }
 
@@ -519,13 +461,17 @@ internal sealed partial class DawnScene
 
     private void DrawLinkNearby()
     {
-        StackPanel nearby = linkWindowNearby!;
+        if (linkWindowNearby is not { } nearby)
+            return;
         ClearRows(nearby);
+        nearby.Visible = linkDevicePage == LinkDevicePage.Join;
+        if (!nearby.Visible)
+            return;
         IReadOnlyList<HexLinkNearby> found = LinkNearby;
         nearby.Add(LinkHeading(Said("link.nearby_heading")));
         if (!LinkOn || found.Count == 0)
         {
-            nearby.Add(LinkLine(Said(LinkOn ? "link.nearby_none" : "link.devices_off")));
+            nearby.Add(LinkLine(LinkNearbyOff is { } off ? Said("link.nearby_off", ("why", off)) : Said(LinkOn ? "link.devices_nearby_empty" : "link.pair_off_text")));
             return;
         }
 
@@ -534,11 +480,12 @@ internal sealed partial class DawnScene
             HexLinkKnown? known = heard.Id8.Length >= 8 ? LinkKnown.FirstOrDefault(each => each.Device.Id.StartsWith(heard.Id8, StringComparison.OrdinalIgnoreCase)) : null;
             bool linked = known is not null && LinkPeerOf(known.Device.Id) is not null;
             var row = nearby.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 10.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, LINK_ROW) });
-            string addresses = string.Join(", ", HexLinkAddresses.Preferred(heard.Addresses).Take(2).Select(HexLinkAddresses.Show));
+            string addresses = string.Join(", ", HexLinkAddresses.Preferred(heard.Addresses).Take(2)
+                .Select(address => new System.Net.IPEndPoint(address, heard.Port).ToString()));
             row.Add(new Label
             {
-                Text = $"$(vm) [b]{UIRichText.Literal(HexLinkNames.Clean(heard.Name) ?? heard.Id8)}[/b]  {UIRichText.Literal(addresses)}:{heard.Port.ToString(CultureInfo.InvariantCulture)}",
-                TextScale = LINK_TEXT, Size = new Vector2(420, LINK_ROW), Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left
+                Text = $"$(vm) [b]{UIRichText.Literal(OneLine(HexLinkNames.Clean(heard.Name) ?? heard.Id8, 26))}[/b]",
+                TextScale = LINK_TEXT, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left, Tooltip = addresses
             });
             if (linked)
                 row.Add(new Badge { Text = Said("link.device_connected"), Tone = UIBadgeTone.Success, Dot = true, TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left });
@@ -548,8 +495,11 @@ internal sealed partial class DawnScene
             {
                 string host = HexLinkAddresses.Show(first);
                 int port = heard.Port;
-                row.Add(LinkButton(Said("link.nearby_pair"), "add", () => _ = LinkPair(host, port)));
+                row.Add(LinkButton(Said("link.devices_join_submit"), "add", () => JoinDevice(host, port))).Enabled = !linkJoining;
             }
+
+            if (addresses.Length > 0)
+                nearby.Add(LinkLine(addresses));
         }
     }
 
@@ -559,7 +509,9 @@ internal sealed partial class DawnScene
     {
         StackPanel activity = linkWindowActivity!;
         ClearRows(activity);
-        activity.Add(LinkHeading(Said("link.activity_heading")));
+        activity.Visible = linkActivityShown;
+        if (!linkActivityShown)
+            return;
         List<HexLinkAuditEntry> latest = LinkAuditLatest(LINK_ACTIVITY_LINES);
         if (latest.Count == 0)
         {
@@ -595,12 +547,13 @@ internal sealed partial class DawnScene
     // A button of a row, as wide as its words
     private Button LinkButton(string label, string icon, Action pressed)
     {
-        float wide = Skin is { } skin ? MathF.Ceiling(skin.Font.MeasureLine($"$({icon}) {label}", LINK_TEXT, Horizon.UI.Drawing.UITextStyle.None, default) + skin.ButtonPadding.Total.X + 14.0f) : 110.0f;
+        string shown = icon.Length > 0 ? $"$({icon}) {label}" : label;
+        float wide = Skin is { } skin ? MathF.Ceiling(skin.Font.MeasureLine(shown, LINK_TEXT, Horizon.UI.Drawing.UITextStyle.None, default) + skin.ButtonPadding.Total.X + 14.0f) : 110.0f;
         return new Button { Label = label, Icon = icon, Size = new Vector2(wide, LINK_ROW), LabelScale = LINK_TEXT, Animated = false, Anchor = Origin.Left, Pivot = Origin.Left, OnPressed = pressed };
     }
 
     /// <summary>What a set of rights is as chips, View, Steer (in the warning tone) and Edit, a quiet "nothing" for none.</summary>
-    private static List<Badge> LinkRightsChips(HexLinkRights rights)
+    private List<Badge> LinkRightsChips(HexLinkRights rights)
     {
         var chips = new List<Badge>();
         if (rights == HexLinkRights.None)
@@ -613,13 +566,17 @@ internal sealed partial class DawnScene
         {
             chips.Add(new Badge
             {
-                Text = Said("link.right_title_" + name), Tone = name == "steer" ? UIBadgeTone.Warning : name is "edit" or "predict" ? UIBadgeTone.Info : UIBadgeTone.Neutral,
+                Text = Said("link.right_title_" + name), Icon = name == "steer" ? "warning" : string.Empty,
+                Tone = name == "steer" ? UIBadgeTone.Warning : name is "edit" or "predict" ? UIBadgeTone.Info : UIBadgeTone.Neutral,
+                Colour = name is "edit" or "predict" ? LinkBadgeInfoColour : null,
                 TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left, Tooltip = Said("link.right_means_" + name)
             });
         }
 
         return chips;
     }
+
+    private Vector4? LinkBadgeInfoColour => Skin is { Palette.LightField: true } skin ? skin.Palette.Link : null;
 
     // TLS's version as people write it
     private static string LinkTlsSaid(System.Security.Authentication.SslProtocols tls) => tls switch
@@ -637,6 +594,9 @@ internal sealed partial class DawnScene
     /// section of the fleet and where its person is read as one machine.
     /// </summary>
     internal static Vector4 LinkDeviceTint(string id, UISkin? skin) => LinkDeviceColour(id);
+
+    // Worker E supplies a reason and an explicit recovery action when its identity state lands.
+    partial void LinkDeviceIdentityRecovery(ref string? reason, ref string? label, ref Action? recovery);
 
     /* Steering, for the status item */
 

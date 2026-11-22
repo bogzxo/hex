@@ -18,7 +18,7 @@ internal sealed partial class HexLinkPeer
     // A prediction being received, its text in order and how it ended when it didn't end well
     private sealed class PredictionStream
     {
-        public Channel<string> Text { get; } = Channel.CreateUnbounded<string>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
+        public Channel<string> Text { get; } = Channel.CreateBounded<string>(new BoundedChannelOptions(64) { SingleReader = true });
 
         public Exception? Failed { get; set; }
     }
@@ -51,38 +51,55 @@ internal sealed partial class HexLinkPeer
     {
         string id = "p" + Interlocked.Increment(ref predictIds).ToString(System.Globalization.CultureInfo.InvariantCulture);
         var stream = new PredictionStream();
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancel);
         predictionStreams[id] = stream;
         bool ended = false;
         try
         {
             // The link going ends the stream with why; registered after it's in, so a close a moment before still lands
+            using CancellationTokenRegistration abandoned = lifetime.Token.Register(() => stream.Text.Writer.TryComplete());
             using CancellationTokenRegistration closing = session.Closing.Register(() =>
             {
                 stream.Failed ??= new HexLinkException(HexLinkErrors.CLOSED, $"The link closed, {session.Why}");
                 stream.Text.Writer.TryComplete();
             });
 
-            await session.Ask("predict/start", request.ToJson(id), cancel, PREDICT_PATIENCE).ConfigureAwait(false);
+            // Chunks can arrive before the start reply. Drain them while waiting so a full consumer window cannot
+            // hold the start reply behind itself in the ordered dispatch queue.
+            Task<JsonNode?> accepted = session.Ask("predict/start", request.ToJson(id), lifetime.Token, PREDICT_PATIENCE);
+            _ = FinishOnStartFailure(accepted, stream);
             while (await stream.Text.Reader.WaitToReadAsync(cancel).ConfigureAwait(false))
             {
                 while (stream.Text.Reader.TryRead(out string? text))
+                {
+                    cancel.ThrowIfCancellationRequested();
                     yield return text;
+                }
             }
 
+            await accepted.ConfigureAwait(false);
             ended = true;
             if (stream.Failed is { } failed)
                 throw failed;
         }
         finally
         {
+            stream.Text.Writer.TryComplete();
             predictionStreams.TryRemove(id, out _);
+            lifetime.Cancel();
             if (!ended && !session.IsClosed)
-                session.Tell("predict/cancel", new JsonObject { ["id"] = id });
+                await session.TellAsync("predict/cancel", new JsonObject { ["id"] = id });
         }
     }
 
-    // A notification of predictions', true when it was (the reading task calls it, it never throws)
-    private bool PredictTold(string method, JsonObject parameters)
+    private static async Task FinishOnStartFailure(Task accepted, PredictionStream stream)
+    {
+        try { await accepted.ConfigureAwait(false); }
+        catch (Exception) { stream.Text.Writer.TryComplete(); }
+    }
+
+    // The dispatcher awaits the stream's receive window before it takes the next notice.
+    private async ValueTask<bool> PredictTold(string method, JsonObject parameters)
     {
         switch (method)
         {
@@ -92,7 +109,10 @@ internal sealed partial class HexLinkPeer
             case "predict/chunk":
                 if (HexLinkData.String(parameters, "id", HexLinkPrediction.LONGEST_ID) is { } chunkOf && predictionStreams.TryGetValue(chunkOf, out PredictionStream? into)
                     && HexLinkData.String(parameters, "text", HexLinkPrediction.MOST_CHUNK) is { Length: > 0 } text)
-                    into.Text.Writer.TryWrite(text);
+                {
+                    if (await into.Text.Writer.WaitToWriteAsync().ConfigureAwait(false))
+                        into.Text.Writer.TryWrite(text);
+                }
                 return true;
             case "predict/done":
                 if (HexLinkData.String(parameters, "id", HexLinkPrediction.LONGEST_ID) is { } doneOf && predictionStreams.TryGetValue(doneOf, out PredictionStream? ending))

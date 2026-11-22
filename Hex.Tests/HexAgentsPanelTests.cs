@@ -783,6 +783,7 @@ public sealed partial class HexAgentsPanelTests : IDisposable
             "-c", "mcp_servers.hex.command=\"C:/Hex/Hex.exe\"",
             "-c", "mcp_servers.hex.args=[\"--mcp-connect\",\"--folder\",\"C:/work\",\"--agent-chat\",\"1\"]",
             "-c", "mcp_servers.hex.tool_timeout_sec=660", "-c", "mcp_servers.hex.enabled=true",
+            "-c", "mcp_servers.hex.env_vars=[\"HEX_HOME\"]",
             "-c", "mcp_servers.hex.default_tools_approval_mode=\"approve\""], Arguments(runtime, run, api));
         Assert.Contains(HexAgentProfiles.HARNESS_RULES.Replace("\n", "\\n").Replace("\"", "\\\"")[..40], Said(runtime, run, api, "hi"));
 

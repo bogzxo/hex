@@ -8,7 +8,7 @@ namespace Hex.Core;
 /// and says hello. What the editor tells it (the hub moved, a chat moved, a device's rights changed) goes to every
 /// link; where a device's person is goes on to the other devices that may see here. At most <see cref="MOST"/> at once.
 /// </summary>
-internal sealed class HexLink(IHexLinkServices services) : IDisposable
+internal sealed partial class HexLink(IHexLinkServices services) : IDisposable
 {
     /// <summary>The most links at once.</summary>
     public const int MOST = 8;
@@ -75,11 +75,8 @@ internal sealed class HexLink(IHexLinkServices services) : IDisposable
         }
 
         session.Requested = host.Handle;
-        session.Told = (method, parameters) =>
-        {
-            if (!host.Told(method, parameters))
-                peer.Told(method, parameters);
-        };
+        session.ToldAsync = (method, parameters) =>
+            host.Told(method, parameters) ? ValueTask.CompletedTask : peer.ToldAsync(method, parameters);
         host.DirectlyLinked = id =>
         {
             lock (links)
@@ -200,6 +197,7 @@ internal sealed class HexLink(IHexLinkServices services) : IDisposable
     /// <summary>Every link closed.</summary>
     public void Dispose()
     {
+        workspaceNotices?.Dispose();
         foreach (Joined link in All())
             link.Session.Close("Link was turned off");
     }

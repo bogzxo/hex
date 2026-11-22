@@ -50,6 +50,7 @@ internal sealed partial class DawnScene
 
     /// <summary>When the pairing window closes, null when it's closed.</summary>
     internal DateTime? LinkPairingUntil => linkTransport?.PairingUntil;
+    internal HexLinkInvite? LinkActiveInvite => linkTransport?.ActiveInvite;
 
     /// <summary>The TLS version a device's link was made with (Tls13, Tls12), null when it isn't linked.</summary>
     internal System.Security.Authentication.SslProtocols? LinkTlsOf(string id) =>
@@ -71,6 +72,21 @@ internal sealed partial class DawnScene
         return true;
     }
 
+    internal bool LinkOpenInvite()
+    {
+        if (linkTransport is not { Listening: true } transport || !transport.OpenInvite(InviteAddresses(), LINK_PAIRING_WINDOW,
+            pairing => LinkAskPerson(pairing, host: true), LinkInvitationTerms))
+            return false;
+        linkDirty = true;
+        return true;
+    }
+
+    private HexLinkPairingTerms LinkInvitationTerms()
+    {
+        LinkInviteOptions chosen = Volatile.Read(ref linkInviteOptions);
+        return new HexLinkPairingTerms(chosen.Preset, chosen.Rights, LinkPresetRequest(chosen.Preset), linkAutoShareAvailable && chosen.Share);
+    }
+
     /// <summary>Closes the pairing window, a pairing already under way going on to its end.</summary>
     internal void LinkClosePairing()
     {
@@ -83,14 +99,14 @@ internal sealed partial class DawnScene
     /// it as the person there is, unless <paramref name="ask"/> answers instead (a self test, never the program). Once
     /// paired the connection carries on as a link. How it ended, never throws but for Link being off.
     /// </summary>
-    internal async Task<HexLinkPairResult> LinkPair(string host, int port, Func<HexLinkPairing, Task<HexLinkRights?>>? ask = null)
+    internal async Task<HexLinkPairResult> LinkPair(string host, int port, Func<HexLinkPairing, Task<HexLinkRights?>>? ask = null, HexLinkInvite? invite = null)
     {
         HexLinkTransport transport = linkTransport ?? throw new InvalidOperationException(Said("link.off"));
         CancellationToken stop = linkCancel?.Token ?? CancellationToken.None;
         HexLinkPairResult result;
         try
         {
-            result = await transport.Pair(host, port, ask ?? (pairing => LinkAskPerson(pairing, host: false)), stop);
+            result = await transport.Pair(host, port, ask ?? (pairing => LinkAskPerson(pairing, host: false)), stop, invite);
         }
         catch (OperationCanceledException)
         {
@@ -108,10 +124,15 @@ internal sealed partial class DawnScene
     /// said). The peer once it's up; throws HexLinkRefused with why when it isn't let in (unknown when the other end
     /// doesn't know this one, busy when they're linked already).
     /// </summary>
-    internal async Task<HexLinkPeer> LinkConnect(string host, int port, string? expectId = null)
+    internal async Task<HexLinkPeer> LinkConnect(string host, int port, string? expectId = null, CancellationToken cancel = default)
     {
         HexLinkTransport transport = linkTransport ?? throw new InvalidOperationException(Said("link.off"));
-        HexLinkConnection connection = await transport.Dial(host, port, expectId, linkCancel?.Token ?? CancellationToken.None);
+        HexLinkConnection connection = await transport.Dial(host, port, expectId, cancel.CanBeCanceled ? cancel : linkCancel?.Token ?? CancellationToken.None);
+        if (cancel.IsCancellationRequested)
+        {
+            connection.Dispose();
+            cancel.ThrowIfCancellationRequested();
+        }
         PostLink(() => linkHeldOff.Remove(connection.Device.Id));
         return await LinkAdd(connection) ?? throw new HexLinkRefused("refused", Said("link.not_linked", ("device", connection.Device.Name), ("why", "hello failed")));
     }
@@ -119,6 +140,8 @@ internal sealed partial class DawnScene
     /// <summary>A device's link cut by the person, not dialled again until they connect it. False when it wasn't linked.</summary>
     internal bool LinkDisconnect(string id)
     {
+        if (linkManualDials.Remove(id, out LinkDeviceConnection? connecting))
+            connecting.Attempt?.Cancel();
         linkHeldOff.Add(id);
         linkDirty = true;
         return link?.Remove(id, "it was disconnected here") == true;
@@ -134,6 +157,8 @@ internal sealed partial class DawnScene
         link?.Remove(id, "it was forgotten here");
         linkRedial.Soon(id);
         linkHeldOff.Remove(id);
+        if (linkManualDials.Remove(id, out LinkDeviceConnection? connecting))
+            connecting.Attempt?.Cancel();
         // The transport writes it in the audit log as it cuts the link
         if (forgot)
             Say(Said("link.forgotten", ("device", name)));
@@ -186,7 +211,16 @@ internal sealed partial class DawnScene
     /// </summary>
     private Task<HexLinkRights?> LinkAskPerson(HexLinkPairing pairing, bool host)
     {
-        var ask = new LinkPairingAsk(pairing.Other, pairing.Code, pairing.Address, host, pairing.Ended);
+        HexLinkPairingTerms? terms = pairing.Terms;
+        var ask = new LinkPairingAsk(pairing.Other, pairing.Code, pairing.Address, host, pairing.Ended)
+        {
+            Invited = pairing.Invited,
+            Terms = terms,
+            Preset = terms?.Preset ?? (pairing.Invited ? HexLinkPreset.Collaborator : null),
+            InitialRights = terms is not null ? host ? terms.HostGrants : terms.HostRequests
+                : pairing.Invited ? LINK_COLLABORATOR : HexLinkRights.None,
+            ShareOnJoin = host && terms?.ShareWorkspace == true
+        };
         pairing.Ended.Register(() =>
         {
             ask.Decide(null);
@@ -202,6 +236,13 @@ internal sealed partial class DawnScene
     private void LinkPairEnded(HexLinkPairResult result)
     {
         linkDirty = true;
+        if (result.Device?.Id is { } id && linkShareAfterPairing == id)
+        {
+            linkShareAfterPairing = null;
+            if (result.Paired)
+                linkShareAfterConnected = (id, System.Environment.TickCount64 + 30000);
+        }
+
         string device = result.Device?.Name ?? Said("link.another_device");
         if (result.Paired)
         {
@@ -238,6 +279,14 @@ internal sealed class LinkPairingAsk(HexLinkDevice other, string code, string ad
     public string Address { get; } = address;
 
     public bool Host { get; } = host;
+
+    public bool Invited { get; init; }
+    public HexLinkPreset? Preset { get; init; }
+    public HexLinkRights InitialRights { get; init; }
+    public bool ShareOnJoin { get; init; }
+    public HexLinkPairingTerms? Terms { get; init; }
+    public bool CanApproveNone => !Host && Invited && Terms is { HostRequests: HexLinkRights.None, HostGrants: not HexLinkRights.None };
+    public bool CanApprove(HexLinkRights rights) => CanApproveNone || DawnScene.LinkRightsAnything(rights);
 
     public CancellationToken Ended { get; } = ended;
 

@@ -24,7 +24,10 @@ public sealed partial class HexLinkSyncTests
         {
             locked.Write("edited during lock"u8);
             locked.Flush();
-            await Assert.ThrowsAsync<HexLinkException>(() => pair.PeerB.Flush("work"));
+            Put(pair.B, "healthy.txt", "new while locked");
+            await pair.PeerB.Flush("work");
+            Assert.True(await Until(() => Get(pair.A, "healthy.txt") == "new while locked"), Said(sync));
+            Assert.True(await Until(() => sync.Queued > 0 && sync.Skipped.Any(file => file.Path == "work/locked.txt")), Said(sync));
             Assert.Equal("original", Get(pair.A, "locked.txt"));
             Assert.Empty(sync.Conflicts);
         }
@@ -313,6 +316,7 @@ public sealed partial class HexLinkSyncTests
         sessionB.Start();
         try
         {
+            sessionB.Tell("link/rights", new JsonObject { ["granted"] = new JsonArray("view") });
             HexLinkManifest manifest = await peer.WatchTree("work", changes => changed.TrySetResult(Assert.Single(changes)));
             Assert.True(manifest.Certified);
             Assert.Equal(new[] { "work/0", "work/1" }, manifest.Files.Select(file => file.Path));

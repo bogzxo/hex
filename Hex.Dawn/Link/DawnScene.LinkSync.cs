@@ -123,7 +123,7 @@ internal sealed partial class DawnScene
             return Said("link.off");
         if (links.PeerOf(deviceId) is not { } peer || peer.IsClosed)
             return Said("link.sync_not_linked", ("device", LinkKnown.FirstOrDefault(known => known.Device.Id == deviceId)?.Device.Name ?? deviceId));
-        if (services.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, folder)) is not { } local)
+        if ((LinkProvisionedLocal(deviceId, folder) ?? services.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, folder))) is not { } local)
             return Said("link.sync_no_folder_here", ("folder", folder));
 
         Task starting;
@@ -148,7 +148,7 @@ internal sealed partial class DawnScene
             else
             {
                 entry.Sync?.Dispose();
-                var sync = new HexLinkSync(peer, local, Path.Combine(linkData, LINK_SYNC_STATES))
+                var sync = new HexLinkSync(peer, local with { Authority = services.FolderAuthorities.Of(local) }, Path.Combine(linkData, LINK_SYNC_STATES))
                 {
                     ApplyLocal = LinkCompareAndReplace,
                     ApplyStream = LinkCompareAndReplaceStream,
@@ -378,17 +378,17 @@ internal sealed partial class DawnScene
         entry.Announced.RemoveWhere(said => !sync.Conflicts.Any(conflict => conflict.Path + "\n" + conflict.Copy == said));
     }
 
-    // The two sides have different commits out: a card to fetch from the other or go on anyway
+    // The two sides have different commits checked out. Offer a safe fast-forward to the host.
     private void LinkSyncAskGit(LinkSyncEntry entry, HexLinkSync sync)
     {
         entry.GitCard?.Close();
         string device = entry.DeviceName, folder = entry.Folder, id = entry.DeviceId;
         entry.GitCard = toasts.Show(Said("link.sync_needs_git", ("folder", folder), ("device", device), ("why", sync.Why ?? string.Empty)), "warning", null, 0.0f,
-            (Said("link.sync_fetch", ("device", device)), () =>
+            (Said("link.provision.align_button", ("device", device)), () =>
             {
                 entry.GitCard?.Close();
                 entry.GitCard = null;
-                LinkFetchFrom(id, folder);
+                LinkAlignWorkspaceCommand(id, folder);
             }),
             (Said("link.sync_anyway"), () =>
             {

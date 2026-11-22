@@ -296,6 +296,87 @@ public sealed class HexLinkPeerTests
         int version = whole["version"]!.GetValue<int>();
         JsonObject again = (JsonObject)(await pair.PeerA.Session.Ask("chat/get", new JsonObject { ["id"] = 3, ["since"] = version }))!;
         Assert.True(again["unchanged"]!.GetValue<bool>());
+
+        Moved(pair, chat, () => chat.Say("there"));
+        JsonObject patch = (JsonObject)(await pair.PeerA.Session.Ask("chat/get", new JsonObject { ["id"] = 3, ["since"] = version }))!;
+        Assert.Equal(version, HexLinkData.Int(patch, "since"));
+        Assert.Equal(1, Assert.Single(patch["rows"]!.AsArray())!["index"]!.GetValue<int>());
+        Assert.Equal(chat.Version, HexLinkData.Int(patch, "version"));
+        JsonObject fallback = (JsonObject)(await pair.PeerA.Session.Ask("chat/get", new JsonObject { ["id"] = 3, ["since"] = -1 }))!;
+        Assert.True(fallback["whole"]!.GetValue<bool>());
+        Assert.Equal(2, fallback["rows"]!.AsArray().Count);
+    }
+
+    [Fact]
+    public async Task Regranting_view_restores_fleet_chat_file_and_tree_watches()
+    {
+        using var pair = await LinkedPair.Up(HexLinkRights.View);
+        var chat = new HexAgentChat(4, "claude_code");
+        pair.A.OnEditor(() =>
+        {
+            pair.A.Hub.Add(chat);
+            chat.Ask("before");
+        });
+        string file = Path.Combine(pair.A.Work, "watch.txt");
+        File.WriteAllText(file, "before");
+        await pair.PeerA.WatchFleet();
+        HexAgentChat mirror = await pair.PeerA.OpenChat(chat.Id);
+        await pair.PeerA.Watch("work/watch.txt");
+        var hashes = new System.Collections.Concurrent.ConcurrentQueue<string?>();
+        pair.PeerA.FileChanged = (_, hash) => hashes.Enqueue(hash);
+        var changes = new System.Collections.Concurrent.ConcurrentQueue<HexLinkTreeChange>();
+        await pair.PeerA.WatchTree("work", batch => { foreach (HexLinkTreeChange change in batch) changes.Enqueue(change); });
+
+        pair.BOnA = HexLinkRights.None;
+        pair.LinkA.RightsMoved(DeviceB.Id);
+        Assert.True(Eventually(() => pair.PeerA.Granted == HexLinkRights.None));
+        File.WriteAllText(file, "during revocation");
+        Moved(pair, chat, () => chat.Say("during revocation"));
+
+        pair.BOnA = HexLinkRights.View;
+        pair.LinkA.RightsMoved(DeviceB.Id);
+        string? changed = HexLinkFiles.HashOf(file);
+        int fleetVersion = pair.A.Fleet.Rows[chat.Id].Version;
+        Assert.True(Eventually(() =>
+        {
+            pair.PeerA.Pump();
+            return pair.PeerA.Fleet.FirstOrDefault()?.Version == fleetVersion
+                && mirror.Entries.LastOrDefault()?.Text == "during revocation"
+                && hashes.Contains(changed) && changes.Any(change => change.Hash == changed);
+        }), $"fleet {pair.PeerA.Fleet.FirstOrDefault()?.Version}/{fleetVersion}, mirror {mirror.Entries.LastOrDefault()?.Text}, file {hashes.Contains(changed)}, tree {changes.Any(change => change.Hash == changed)}");
+
+        Moved(pair, chat, () => chat.Say("after regrant"));
+        fleetVersion = pair.A.Fleet.Rows[chat.Id].Version;
+        Assert.True(Eventually(() =>
+        {
+            pair.PeerA.Pump();
+            return pair.PeerA.Fleet.FirstOrDefault()?.Version == fleetVersion
+                && mirror.Entries.LastOrDefault()?.Text == "after regrant";
+        }));
+    }
+
+    [Theory]
+    [InlineData(0, 0, true)]
+    [InlineData(1, 2, false)]
+    public async Task Bundles_accept_early_frames_and_check_both_size_reports(int bytes, int response, bool succeeds)
+    {
+        using var pair = await LinkedPair.Up(HexLinkRights.View);
+        pair.PeerB.Session.Requested = (_, parameters, _) =>
+        {
+            string id = parameters["id"]!.GetValue<string>();
+            if (bytes > 0)
+                pair.PeerB.Session.Tell("git/chunk", new JsonObject { ["id"] = id, ["at"] = 0, ["data"] = Convert.ToBase64String(new byte[bytes]) });
+            pair.PeerB.Session.Tell("git/done", new JsonObject { ["id"] = id, ["ok"] = true, ["size"] = bytes });
+            return Task.FromResult<JsonNode?>(new JsonObject { ["id"] = id, ["size"] = response });
+        };
+        Task<string?> bundle = pair.PeerA.Bundle("work", []);
+        if (succeeds)
+            Assert.Null(await bundle.WaitAsync(TimeSpan.FromSeconds(10)));
+        else
+        {
+            var failure = await Assert.ThrowsAsync<HexLinkException>(() => bundle.WaitAsync(TimeSpan.FromSeconds(10)));
+            Assert.Contains("response said 2", failure.Message, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

@@ -25,7 +25,9 @@ internal sealed partial class HexLinkPeer
         trees[folder] = changes;
         try
         {
-            return await ReadManifest("sync/watch", folder, cancel, basis);
+            HexLinkManifest manifest = await ReadManifest("sync/watch", folder, cancel, basis);
+            RememberTree(folder, manifest);
+            return manifest;
         }
         catch (Exception)
         {
@@ -69,7 +71,8 @@ internal sealed partial class HexLinkPeer
             HexLinkManifest page = HexLinkTree.Of(said);
             if (HexLinkData.String(said, "snapshot", 64) != id || HexLinkData.Int(said, "offset") != files.Count ||
                 HexLinkData.Int(said, "total") != total || page.Folder != first.Folder || page.Head != first.Head ||
-                page.Root != first.Root || page.CaseSensitive != first.CaseSensitive || !JsonNode.DeepEquals(said["repositories"], repositories) || !page.Certified || page.Files.Count == 0 || page.Files.Count > total - files.Count)
+                page.Root != first.Root || page.CaseSensitive != first.CaseSensitive || page.Checkout != first.Checkout ||
+                page.Authority != first.Authority || !JsonNode.DeepEquals(said["repositories"], repositories) || !page.Certified || page.Files.Count == 0 || page.Files.Count > total - files.Count)
                 throw HexLinkException.Invalid("The peer sent an inconsistent manifest page.");
             foreach (HexLinkTreeFile file in page.Files)
             {
@@ -88,7 +91,8 @@ internal sealed partial class HexLinkPeer
     public Task UnwatchTree(string folder, CancellationToken cancel = default)
     {
         trees.TryRemove(folder, out _);
-        return session.Ask("sync/unwatch", new JsonObject { ["folder"] = folder }, cancel);
+        treeWatchFiles.TryRemove(folder, out _);
+        return AskWithRelay("sync/unwatch", new JsonObject { ["folder"] = folder }, cancel);
     }
 
     /// <summary>
@@ -96,7 +100,7 @@ internal sealed partial class HexLinkPeer
     /// there is known here before an agent here is told to go on.
     /// </summary>
     public Task Flush(string folder, CancellationToken cancel = default) =>
-        session.Ask("sync/flush", new JsonObject { ["folder"] = folder }, cancel, TimeSpan.FromMinutes(5));
+        AskWithRelay("sync/flush", new JsonObject { ["folder"] = folder }, cancel, TimeSpan.FromMinutes(5));
 
     internal async Task RenameCase(string folder, string from, string to, string expected, CancellationToken cancel)
     {
@@ -116,7 +120,7 @@ internal sealed partial class HexLinkPeer
 
     /// <summary>A file of the other machine's deleted if it's still what was read (its hash), conflict otherwise, not found when it's gone.</summary>
     public Task Delete(string path, string baseHash, CancellationToken cancel = default) =>
-        session.Ask("fs/delete", new JsonObject { ["path"] = path, ["base"] = baseHash }, cancel);
+        AskWithRelay("fs/delete", new JsonObject { ["path"] = path, ["base"] = baseHash }, cancel);
 
     // A notification of the working-tree sync's, taken
     private void TreeTold(string method, JsonObject said)
@@ -132,6 +136,9 @@ internal sealed partial class HexLinkPeer
         }
 
         if (changes.Count > 0)
+        {
+            RememberTreeChanges(folder, changes);
             hear(changes);
+        }
     }
 }

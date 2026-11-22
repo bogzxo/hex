@@ -171,7 +171,7 @@ internal sealed partial class DawnScene
     }
 
     // Who a message typed in the panel's box is from, as the agent reads it
-    private const string FROM_PERSON = "the person watching";
+    private const string FROM_PERSON = HexAgentMail.PersonName;
 
     /// <summary>
     /// What somebody typed for an agent that's working but can't take it in on its stdin now, kept as an instruction in

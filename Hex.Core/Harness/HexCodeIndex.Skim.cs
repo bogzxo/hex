@@ -199,6 +199,11 @@ internal sealed partial class HexCodeIndex
     public HexAnswer Changes(long since, int budget)
     {
         var (list, complete) = ChangesSince(since);
+        if (HexLinkAllowed.RemoteFileAllowed.Value is { } allowed)
+        {
+            string[] roots = Current().Roots;
+            list.RemoveAll(change => !ChangeVisible(change.Relative, roots, allowed));
+        }
         long now = Generation;
         var said = new HexBudget(budget);
         said.Line(list.Count == 0 ? $"Nothing changed since generation {since}." : $"{list.Count} files changed since generation {since}, + came, ~ changed, - went.");
@@ -210,5 +215,17 @@ internal sealed partial class HexCodeIndex
         string text = said.Finish("ask from a later generation");
         Stats.Count("hex_changes", text.Length, list.Sum(change => (long)change.Relative.Length + 40), kept: false);
         return new HexAnswer(text, 0);
+    }
+
+    private static bool ChangeVisible(string relative, string[] roots, Func<string, bool> allowed)
+    {
+        if (Path.IsPathFullyQualified(relative))
+            return allowed(relative);
+        if (roots.Length == 1)
+            return allowed(Path.GetFullPath(Path.Combine(roots[0], relative)));
+        int slash = relative.IndexOf('/');
+        return slash > 0 && roots.Any(root =>
+            PlatformPaths.Comparer.Equals(Path.GetFileName(root.TrimEnd('\\', '/')), relative[..slash])
+                && allowed(Path.GetFullPath(Path.Combine(root, relative[(slash + 1)..]))));
     }
 }

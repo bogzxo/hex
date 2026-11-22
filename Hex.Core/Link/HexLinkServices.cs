@@ -3,7 +3,11 @@ using System.Text.Json.Nodes;
 namespace Hex.Core;
 
 /// <summary>A folder of the workspace, by the name the wire knows it by, and where it is here (never sent).</summary>
-internal sealed record HexLinkFolder(string Name, string Path);
+internal sealed record HexLinkFolder(string Name, string Path, HexLinkAuthority? Authority = null)
+{
+    public string? FolderAuthorityId => Authority?.DeviceId;
+    public long FolderAuthorityEpoch => Authority?.Epoch ?? 0;
+}
 
 /// <summary>A repository of the workspace, its name, the branch it's on and the commit at its head, and where it is here (never sent).</summary>
 internal sealed record HexLinkRepository(string Name, string Branch, string Head, string Path);
@@ -40,8 +44,13 @@ internal interface IHexLinkServices
     /// <summary>The workspace open now, swapped whole when it changes.</summary>
     HexLinkWorkspace Workspace { get; }
 
+    HexLinkAuthorityStore? FolderAuthorities => null;
+
     /// <summary>The workspace's current files.exclude patterns.</summary>
     HexExcludes Excludes => HexExcludes.Usual;
+
+    /// <summary>Where the authenticated device can dial this editor after the connection closes.</summary>
+    JsonObject RedialAdvertisement() => HexLinkRedial.Advertisement(0, []);
 
     /// <summary>Renames an unchanged file within its current directory.</summary>
     Task RenameCase(string from, string to, string expected, CancellationToken cancel) =>
@@ -57,6 +66,9 @@ internal interface IHexLinkServices
     /// <summary>Applies a linked write or deletion only if the local file still matches its base hash.</summary>
     Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes, CancellationToken cancel, bool? executable = null) =>
         HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel, executable);
+
+    /// <summary>Folders this device is already responsible for syncing with this peer.</summary>
+    IReadOnlyList<string> ChosenSyncFolders(string deviceId) => [];
 
     /// <summary>Buffers explicitly shared by the host editor, across all its connections.</summary>
     HexLinkDocuments? Documents => null;

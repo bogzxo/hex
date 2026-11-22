@@ -624,7 +624,7 @@ internal static partial class HexLinkFiles
 
     // MoveFileEx refuses to replace a file with any open handles. FileRenameInfoEx can replace the checked file
     // while we hold its write-denying handle.
-    private static void ReplaceWhileOpenOnWindows(string temp, string full)
+    internal static void ReplaceWhileOpenOnWindows(string temp, string full)
     {
         const uint delete = 0x00010000, openExisting = 3;
         const int fileRenameInfoEx = 22, replaceWithOpenHandles = 0x01 | 0x02;

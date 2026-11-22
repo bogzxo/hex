@@ -38,7 +38,7 @@ internal sealed partial class DawnScene
         string? why = null;
 
         HexLinkSync? Sync() => peerId is null ? null : LinkSyncOf(peerId, LINK_SYNC_FOLDER);
-        static string Read(string file) => File.Exists(file) ? File.ReadAllText(file) : "(no file)";
+        static string Read(string file) => ReadLinkTestFile(file);
 
         test.Run(() =>
         {
@@ -260,7 +260,7 @@ internal sealed partial class DawnScene
         Task<string?>? opened = null;
         HexDocument? tab = null;
         var sent = new List<string?>();
-        static string Read(string file) => File.Exists(file) ? File.ReadAllText(file) : "(no file)";
+        static string Read(string file) => ReadLinkTestFile(file);
 
         test.Run(() =>
         {
@@ -412,6 +412,16 @@ internal sealed partial class DawnScene
         Directory.CreateDirectory(Path.Combine(mine, "bin"));
         File.WriteAllText(Path.Combine(mine, "bin", "built.txt"), "Built here.\n");
         return null;
+    }
+
+    // Link's rename can still hold a handle with delete access as the new file becomes visible.
+    private static string ReadLinkTestFile(string file)
+    {
+        if (!File.Exists(file))
+            return "(no file)";
+        using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
     }
 
     // Git's objects are read-only, which keeps the tidy from deleting them on Windows

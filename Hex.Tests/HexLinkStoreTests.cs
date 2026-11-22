@@ -82,13 +82,50 @@ public sealed class HexLinkStoreTests : IDisposable
     }
 
     [Fact]
-    public void A_broken_identity_is_set_aside_and_a_new_one_made()
+    public void A_broken_identity_stays_in_place_until_an_explicit_reset()
+    {
+        using HexLinkIdentity original = HexLinkIdentity.LoadOrCreate(folder, "PC", fileOnly: true);
+        string path = Path.Combine(folder, HexLinkIdentity.FILE);
+        byte[] valid = File.ReadAllBytes(path);
+        byte[] broken = [1, 2, 3, 4, 5, 6];
+        File.WriteAllBytes(path, broken);
+        var failure = Assert.Throws<HexLinkIdentityLoadException>(() => HexLinkIdentity.LoadOrCreate(folder, "PC", fileOnly: true));
+        Assert.Equal(HexLinkIdentityProblem.Corrupt, failure.Failure.Problem);
+        Assert.Equal(broken, File.ReadAllBytes(path));
+
+        File.WriteAllBytes(path, valid);
+        using HexLinkIdentity restored = HexLinkIdentity.LoadOrCreate(folder, "PC", fileOnly: true);
+        Assert.Equal(original.Id, restored.Id);
+        string backup = HexLinkIdentity.Reset(folder);
+        Assert.StartsWith(path + ".backup-", backup);
+        Assert.Equal(valid, File.ReadAllBytes(backup));
+        using HexLinkIdentity next = HexLinkIdentity.LoadOrCreate(folder, "PC", fileOnly: true);
+        Assert.NotEqual(original.Id, next.Id);
+    }
+
+    [Fact]
+    public void A_key_that_needs_an_unavailable_store_is_left_in_place()
     {
         Directory.CreateDirectory(folder);
-        File.WriteAllBytes(Path.Combine(folder, HexLinkIdentity.FILE), [1, 2, 3, 4, 5, 6]);
-        using HexLinkIdentity made = HexLinkIdentity.LoadOrCreate(folder, "PC", fileOnly: true);
-        Assert.True(made.Made);
-        Assert.True(File.Exists(Path.Combine(folder, HexLinkIdentity.FILE + ".unreadable")));
+        string path = Path.Combine(folder, HexLinkIdentity.FILE);
+        byte[] locked = [.. "HXL1"u8, (byte)(OperatingSystem.IsMacOS() ? HexLinkProtection.Dpapi : HexLinkProtection.Keychain), 0];
+        File.WriteAllBytes(path, locked);
+        var failure = Assert.Throws<HexLinkIdentityLoadException>(() => HexLinkIdentity.LoadOrCreate(folder, "PC", fileOnly: true));
+        Assert.Equal(HexLinkIdentityProblem.Unavailable, failure.Failure.Problem);
+        Assert.Equal(locked, File.ReadAllBytes(path));
+    }
+
+    [Fact]
+    public void A_store_can_be_published_while_a_reader_still_has_its_old_version()
+    {
+        Directory.CreateDirectory(folder);
+        string path = Path.Combine(folder, "known");
+        HexLinkIdentity.WriteUserOnly(path, "old"u8.ToArray());
+        using var old = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+        using var reader = new StreamReader(old);
+        HexLinkIdentity.WriteUserOnly(path, "new"u8.ToArray());
+        Assert.Equal("new", File.ReadAllText(path));
+        Assert.Equal("old", reader.ReadToEnd());
     }
 
     [Fact]

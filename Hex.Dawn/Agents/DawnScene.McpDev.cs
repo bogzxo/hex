@@ -421,13 +421,14 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>
-    /// Every file under a folder that's in use moved aside out of a build's way, a running program's own files can't be
-    /// written over but can be renamed. Says what was moved where, to be put back.
+    /// Every file of the build in a folder that's in use moved aside out of a build's way, a running program's own files
+    /// can't be written over but can be renamed. Hex's state (data, settings and the like) is left alone: other builds
+    /// run from agents' scratch in data, and their files aren't this build's to move. Says what was moved where, to be put back.
     /// </summary>
     internal static List<(string From, string Aside)> MoveLockedAside(string folder)
     {
         var moved = new List<(string, string)>();
-        foreach (string file in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories))
+        foreach (string file in Hex.Core.HexDevBuilds.BuildFiles(folder))
         {
             if (file.EndsWith(DEV_ASIDE, StringComparison.OrdinalIgnoreCase) || !IsLocked(file))
                 continue;
@@ -457,12 +458,12 @@ internal sealed partial class DawnScene
         }
     }
 
-    /// <summary>The files an earlier Hex moved aside, gone once nothing has them open.</summary>
+    /// <summary>The files of the build an earlier Hex moved aside, gone once nothing has them open.</summary>
     internal static void CleanAside(string folder)
     {
         try
         {
-            foreach (string file in Directory.EnumerateFiles(folder, "*" + DEV_ASIDE, SearchOption.AllDirectories))
+            foreach (string file in Hex.Core.HexDevBuilds.BuildFiles(folder, "*" + DEV_ASIDE))
             {
                 try
                 {

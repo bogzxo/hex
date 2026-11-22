@@ -31,14 +31,14 @@ internal sealed partial class HexLinkSession
 
                 if (end >= 0 && line.WrittenCount == 0)
                 {
-                    Received(input.Buffered[..count]);
+                    await Received(input.BufferedMemory[..count]);
                 }
                 else
                 {
                     line.Write(input.Buffered[..count]);
                     if (end >= 0)
                     {
-                        Received(line.WrittenSpan);
+                        await Received(line.WrittenMemory);
                         // A big line's buffer is released rather than kept for the link's life.
                         if (line.Capacity > 1024 * 1024)
                             line = new ArrayBufferWriter<byte>(4096);
@@ -108,7 +108,8 @@ internal sealed partial class HexLinkSession
         private int from;
         private int end;
 
-        public ReadOnlySpan<byte> Buffered => buffer.AsSpan(from, end - from);
+        public ReadOnlyMemory<byte> BufferedMemory => buffer.AsMemory(from, end - from);
+        public ReadOnlySpan<byte> Buffered => BufferedMemory.Span;
 
         public void Consume(int count) => from += count;
 

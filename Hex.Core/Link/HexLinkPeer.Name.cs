@@ -14,7 +14,7 @@ internal sealed partial class HexLinkPeer
     public void SayName(string name)
     {
         if (HexLinkNames.Clean(name) is { } clean && !IsClosed)
-            session.Tell("link/name", new JsonObject { ["name"] = clean });
+            session.TellLatest("link/name", new JsonObject { ["name"] = clean });
     }
 
     // link/name heard: the other machine's new name taken, cleaned, and said

@@ -9,11 +9,7 @@ internal sealed partial class DawnScene
     private void LinkShareJoined(HexLinkPeer peer)
     {
         if (HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))
-        {
-            LinkSyncResume(peer);
-            if (LinkAutoSyncOwner(peer.Session.Connection.Dialled, peer.Session.Connection.Rights, peer.Granted))
-                LinkSyncStartSharedFolders(peer);
-        }
+            _ = LinkPrepareSharedWorkspace(peer);
         LinkFilesJoined(peer);
         LinkPresenceJoined(peer);
     }
@@ -38,7 +34,8 @@ internal sealed partial class DawnScene
             return;
 
         string[] common = [.. services.Workspace.Folders
-            .Where(local => peer.Workspace.Folders.Any(remote => PlatformPaths.Comparer.Equals(local.Name, remote.Name)))
+            .Where(local => !peer.ChosenSyncFolders.Contains(local.Name, PlatformPaths.Comparer)
+                && peer.Workspace.Folders.Any(remote => PlatformPaths.Comparer.Equals(local.Name, remote.Name)))
             .Select(local => local.Name)];
         if (common.Length == 0)
             return;

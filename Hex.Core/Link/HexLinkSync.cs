@@ -296,6 +296,7 @@ internal sealed partial class HexLinkSync : IDisposable
                 return;
             }
 
+            await peer.RefreshWorkspace(cancel);
             if (!peer.Workspace.Folders.Any(each => PlatformPaths.Comparer.Equals(each.Name, folder.Name)))
             {
                 Fail($"{peer.Device.Name} has no folder called {folder.Name} open");
@@ -326,7 +327,8 @@ internal sealed partial class HexLinkSync : IDisposable
                 return;
             }
 
-            if (!force && HexLinkTree.CommitsDiffer(mine, theirs) is { } difference)
+            missingRepositories = HexLinkMissingRepositories.Compare(mine, theirs);
+            if (!force && HexLinkTree.CommitsDiffer(mine, theirs, missingRepositories) is { } difference)
             {
                 await Unwatch();
                 lock (gate)
@@ -340,7 +342,7 @@ internal sealed partial class HexLinkSync : IDisposable
                 return;
             }
 
-            Load();
+            await Task.Run(() => Load(mine, theirs, cancel), cancel);
             Begin(mine, theirs, watch);
             watch = null;
         }
@@ -410,6 +412,8 @@ internal sealed partial class HexLinkSync : IDisposable
             remote.TryGetValue(path, out theirs);
         }
 
+        if (theirs?.Unavailable == true)
+            return "The other device cannot read this file yet.";
         if (conflict is null)
             return $"{path} isn't in conflict.";
         if (keep == HexLinkSyncKeep.Mine && !remoteCertified)
@@ -557,7 +561,7 @@ internal sealed partial class HexLinkSync : IDisposable
         try { stopping.Cancel(); } catch (ObjectDisposedException) { }
         peer.Session.Closed -= LinkClosed;
         watch?.Dispose();
-        _ = Unwatch();
+        stoppedWatching = Unwatch();
         waiting?.TrySetResult();
         if (was)
             Save();

@@ -17,6 +17,7 @@ internal sealed partial class DawnScene
 
     private IEnumerable<HexMcpTool> LinkTools() =>
     [
+        LinkAuthorityTool(),
         new(new McpTool("hex_link_devices", "Linked devices",
             "The other machines Hex Link joins this Hex to: those connected now, each with what it lets this machine do there (view, steer, edit), its workspace's folders and repositories and how many agents it has; and the paired ones that aren't connected. hex_link_call calls one's tools.",
             McpSchema.Empty(), ReadOnly: true),
@@ -42,13 +43,36 @@ internal sealed partial class DawnScene
             "Keep a workspace folder the same here and on another linked machine that has the same folder (the same repository) open, both ways, a file saved on one written on the other within a moment. start turns it on (and waits for the first comparison), flush returns once everything saved here is there, so you can then tell an agent there to build or test (hex_link_spawn, or hex_link_call with hex_agent_send) and what it changes comes back the same way. status lists every sync, its counts, its conflicts and the files that don't travel; resolve settles a file both sides changed (keep mine or theirs); stop turns it off. Files git ignores, .git and files over 8 MB never travel.",
             McpSchema.Object([
                 ("device", McpSchema.String("The device, its name or the start of its id.")),
-                ("action", McpSchema.OneOf("What to do, status by default.", "status", "start", "stop", "flush", "resolve")),
+                ("action", McpSchema.OneOf("What to do, status by default.", "status", "start", "stop", "flush", "resolve", "align")),
                 ("folder", McpSchema.String("The workspace folder by its name, the first one by default.")),
                 ("path", McpSchema.String("For resolve, the file in conflict as status names it (folder/relative/path).")),
                 ("keep", McpSchema.OneOf("For resolve, whose version stays.", "mine", "theirs")),
                 ("force", McpSchema.Flag("For start, go on when the two have different commits checked out."))], "device")),
-            null, RunAway: LinkSyncTool, NeedsEditor: false)
+            null, RunAway: LinkSyncTool, NeedsEditor: false),
+        new(new McpTool("hex_link_provision", "Get or share a linked workspace",
+            "Get a linked device's workspace from its Git objects and working files, then keep it synced here. The host must grant View. Share offers this workspace to a linked device you already grant View to.",
+            McpSchema.Object([
+                ("device", McpSchema.String("The device, its name or the start of its id.")),
+                ("action", McpSchema.OneOf("Get takes a copy here. Share sends an offer.", "get", "share")),
+                ("destination", McpSchema.String("Local destination for get. Defaults to the workspace name under ~/source/repos."))], "device", "action")),
+            null, RunAway: LinkProvisionTool, NeedsEditor: false)
     ];
+
+    private async Task<McpToolResult> LinkProvisionTool(JsonObject args, CancellationToken cancel)
+    {
+        if (!LinkOnForTools(out HexLink? links, out _))
+            return McpToolResult.Text(LINK_OFF_TOOL);
+        if (LinkPeerOf(links!.Peers, args.String("device") ?? string.Empty, out string? wrong) is not { } peer)
+            return McpToolResult.Error(wrong!);
+
+        if (args.String("action") == "share")
+            return await LinkShareWorkspace(peer.Device.Id, cancel) is { } shareError
+                ? McpToolResult.Error(shareError) : McpToolResult.Text($"Workspace offered to {peer.Device.Name}.");
+
+        string destination = args.String("destination") is { Length: > 0 } selected ? selected : LinkDefaultProvisionDestination(peer);
+        return await LinkGetWorkspace(peer.Device.Id, destination, cancel: cancel) is { } error
+            ? McpToolResult.Error(error) : McpToolResult.Text($"Workspace from {peer.Device.Name} downloaded to {destination} and sync started.");
+    }
 
     // What a tool says while Link is off
     private const string LINK_OFF_TOOL = "Link is off, no other machine is linked to this Hex. The person turns it on (Link: Turn On).";
@@ -233,6 +257,9 @@ internal sealed partial class DawnScene
                     ? $"Saved changes to syncable files in {folder} reached {peer.Device.Name} ({sync.Summary}). Tell the agent there to build or test them."
                     : $"{sync.Summary}. Saved changes to syncable files can now travel both ways. {LinkSpawnWhere(peer, folder!)}");
             }
+            case "align":
+                return await LinkAlignWorkspace(peer.Device.Id, folder!, cancel: cancel) is { } alignmentError
+                    ? McpToolResult.Error(alignmentError) : McpToolResult.Text($"{folder} aligned to {peer.Device.Name} and sync started.");
             case "stop":
                 return McpToolResult.Text(LinkSyncStop(peer.Device.Id, folder!)
                     ? $"{folder} is no longer synced with {peer.Device.Name}, and won't be when it links again."
@@ -298,6 +325,8 @@ internal sealed partial class DawnScene
     /// </summary>
     private static async Task<McpToolResult> LinkCall(HexLinkPeer peer, string tool, JsonObject arguments, CancellationToken cancel)
     {
+        if (HexLinkAllowed.RelayOrigin.Value is not null && HexLinkAllowed.IsRelayTool(tool))
+            return McpToolResult.Error("Link permits one relay hop. Call a tool on the destination device.");
         McpToolResult answered;
         try
         {

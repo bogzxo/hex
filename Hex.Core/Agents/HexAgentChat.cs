@@ -13,6 +13,11 @@ internal enum HexAgentToolState { Running, Done, Failed }
 /// </summary>
 internal sealed record HexAgentMail(long Seq, int? From, string FromName, string Kind, string Text, bool Directive)
 {
+    public const string PersonName = "the person watching";
+
+    /// <summary>Mail from the person, distinct from mail from an external agent with no panel chat.</summary>
+    public bool FromPerson => From is null && FromName == PersonName;
+
     /// <summary>The chat it's for, or one of the endpoints of HexMailLog (the person watching, Hex).</summary>
     public int To { get; init; }
 

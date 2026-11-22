@@ -51,6 +51,20 @@ internal sealed class HexAgentHub
     public HexHubSnapshot Snapshot => snapshot;
 
     private volatile HexHubSnapshot snapshot = HexHubSnapshot.Empty;
+    private readonly Lock snapshotGate = new();
+    private TaskCompletionSource? snapshotChanged;
+
+    /// <summary>Signals when a snapshot after the observed one is published, including all mail in that pump.</summary>
+    public Task ChangedAfter(HexHubSnapshot observed)
+    {
+        lock (snapshotGate)
+        {
+            if (!ReferenceEquals(snapshot, observed))
+                return Task.CompletedTask;
+
+            return (snapshotChanged ??= new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+        }
+    }
 
     /// <summary>An approval a chat's agent asked, for whoever decides them besides the person (the agent that started it).</summary>
     public Action<HexAgentChat, HexAgentEntry>? ApprovalAsked { get; set; }
@@ -138,7 +152,14 @@ internal sealed class HexAgentHub
                 rowsMade.Remove(gone);
         }
 
-        snapshot = new HexHubSnapshot(Version, rows);
+        TaskCompletionSource? changed;
+        lock (snapshotGate)
+        {
+            snapshot = new HexHubSnapshot(Version, rows);
+            changed = snapshotChanged;
+            snapshotChanged = null;
+        }
+        changed?.TrySetResult();
         return true;
     }
 

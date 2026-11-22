@@ -124,13 +124,15 @@ internal sealed partial class HexLinkTree
         }
     }
 
-    internal static string? CommitsDiffer(HexLinkManifest local, HexLinkManifest remote)
+    internal static string? CommitsDiffer(HexLinkManifest local, HexLinkManifest remote, HexLinkMissingRepositories? missing = null)
     {
         if (local.Head is { } here && remote.Head is { } there && !here.Equals(there, StringComparison.OrdinalIgnoreCase))
             return $"the folder is at {here[..10]} here and at {there[..10]} there";
 
         foreach (string path in (local.NestedHeads?.Keys ?? []).Union(remote.NestedHeads?.Keys ?? [], StringComparer.Ordinal))
         {
+            if (missing?.Covers(path) == true)
+                continue;
             if (local.NestedHeads is null || !local.NestedHeads.TryGetValue(path, out string? localHead))
                 return $"{path} is a repository on the other device and is missing here";
             if (remote.NestedHeads is null || !remote.NestedHeads.TryGetValue(path, out string? remoteHead))

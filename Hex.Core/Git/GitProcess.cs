@@ -46,8 +46,9 @@ internal static class GitProcess
     /// git that isn't there or never finishes comes back as an exit of -1 with the reason.
     /// </summary>
     public static GitResult Run(string folder, IReadOnlyList<string> arguments, string? input = null, TimeSpan? patience = null, bool unattended = false,
-        IReadOnlyDictionary<string, string>? environment = null)
+        IReadOnlyDictionary<string, string>? environment = null, CancellationToken cancel = default)
     {
+        cancel.ThrowIfCancellationRequested();
         var start = new ProcessStartInfo("git")
         {
             WorkingDirectory = folder,
@@ -103,6 +104,7 @@ internal static class GitProcess
             if (git is null)
                 return new GitResult(-1, string.Empty, "git didn't start");
 
+            using var cancellation = cancel.UnsafeRegister(static state => Kill((Process)state!), git);
             if (input is not null)
             {
                 // Without a BOM, git reads the first line of a blame's contents as having three bytes of nonsense in front
@@ -118,18 +120,27 @@ internal static class GitProcess
             Task<string> error = errorReader.ReadToEndAsync();
             if (!git.WaitForExit(patience ?? Patience))
             {
-                try { git.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+                Kill(git);
+                cancel.ThrowIfCancellationRequested();
 
                 // The reads end once git has gone, before their pipes are closed under them
                 try { Task.WaitAll([output, error], TimeSpan.FromSeconds(1)); } catch (AggregateException) { }
                 return new GitResult(-1, string.Empty, $"git {string.Join(' ', arguments)} took longer than {(patience ?? Patience).TotalSeconds:0} seconds");
             }
 
+            cancel.ThrowIfCancellationRequested();
             return new GitResult(git.ExitCode, output.Result, error.Result);
         }
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
         {
+            cancel.ThrowIfCancellationRequested();
             return new GitResult(-1, string.Empty, e.Message);
         }
+    }
+
+    private static void Kill(Process git)
+    {
+        try { git.Kill(entireProcessTree: true); }
+        catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { }
     }
 }

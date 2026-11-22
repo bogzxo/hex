@@ -63,6 +63,31 @@ public sealed class HexDevLoopTests : IDisposable
     }
 
     [Fact]
+    public void A_build_in_agents_scratch_under_data_is_neither_moved_aside_nor_cleaned_away()
+    {
+        string scratch = Path.Combine(folder, "data", "agents", "temp", "scratch", "worker", "bin");
+        Directory.CreateDirectory(scratch);
+        Directory.CreateDirectory(Path.Combine(folder, "runtimes"));
+        string theirs = Path.Combine(scratch, "Hex.dll"), theirsAside = Path.Combine(scratch, "Hex.Core.dll.7.hexold");
+        string mine = Path.Combine(folder, "runtimes", "native.dll");
+        File.WriteAllText(theirs, "a worker's build");
+        File.WriteAllText(theirsAside, "a worker's own");
+        File.WriteAllText(mine, "this build");
+
+        List<(string From, string Aside)> moved;
+        using (new FileStream(theirs, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete))
+        using (new FileStream(mine, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete))
+            moved = DawnScene.MoveLockedAside(folder);
+
+        Assert.Equal(mine, Assert.Single(moved).From);
+        Assert.True(File.Exists(theirs));
+        DawnScene.PutBack(moved);
+
+        DawnScene.CleanAside(folder);
+        Assert.True(File.Exists(theirsAside));
+    }
+
+    [Fact]
     public void The_good_build_is_copied_without_Hexs_state_and_only_what_differs()
     {
         string bin = Path.Combine(folder, "bin"), good = HexDevBuilds.GoodFolder(bin);

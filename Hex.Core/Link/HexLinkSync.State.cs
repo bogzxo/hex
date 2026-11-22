@@ -36,11 +36,13 @@ internal sealed partial class HexLinkSync
     /// copy put beside a file in conflict, a temp file of an atomic write on its way, the state file when it's kept in
     /// the folder.
     /// </summary>
-    public bool Ours(string wire)
+    public bool Ours(string wire) => Ours(wire, includeMissing: true);
+
+    private bool Ours(string wire, bool includeMissing)
     {
         if (!wire.StartsWith(folder.Name + "/", StringComparison.Ordinal))
             return true;
-        if (HexLinkTree.SyncArtifact(wire))
+        if (HexLinkTree.SyncArtifact(wire) || includeMissing && BlockedRepository(wire))
             return true;
         return StateWire is { } state && state.Equals(wire, StringComparison.OrdinalIgnoreCase);
     }
@@ -59,15 +61,19 @@ internal sealed partial class HexLinkSync
     private string Jailed(string wire)
     {
         string full = HexLinkFiles.Resolve([folder], wire);
-        if (PlatformPaths.Same(full, StateFile) || Ours(wire))
+        if (BlockedRepository(wire))
+            throw new HexLinkException(HexLinkErrors.NOT_ALLOWED, $"{wire} is in a repository missing on one device.");
+        if (PlatformPaths.Same(full, StateFile) || Ours(wire, includeMissing: false))
             throw new HexLinkException(HexLinkErrors.NOT_ALLOWED, $"{wire} is the sync's own and never travels.", new JsonObject { ["needs"] = "a path inside the workspace" });
         return full;
     }
 
     // The bases and the conflicts kept from last time read, when they're of this device and folder. A file that isn't
     // there or can't be read is no bases, everything compared afresh, which only ever costs conflicts, never a loss.
-    private void Load()
+    private void Load(HexLinkManifest mine, HexLinkManifest theirs, CancellationToken cancel)
     {
+        JsonObject agreement = AgreementOf(mine, theirs);
+        JsonObject? savedAgreement = null;
         var keptBases = new Dictionary<string, HexLinkSyncAgreed>(StringComparer.Ordinal);
         var keptConflicts = new Dictionary<string, HexLinkSyncConflict>(StringComparer.Ordinal);
         try
@@ -77,13 +83,14 @@ internal sealed partial class HexLinkSync
                 && HexLinkData.String(state, "device", 200) == peer.Device.Id
                 && HexLinkData.String(state, "folder", 200) == folder.Name)
             {
+                savedAgreement = HexLinkData.Object(state, "agreement");
                 if (HexLinkData.Object(state, "bases") is { } said)
                 {
                     foreach (var (path, kept) in said)
                     {
                         if (keptBases.Count >= MOST_BASES)
                             break;
-                        if (path.Length > HexLinkFiles.MOST_PATH || Ours(path))
+                        if (path.Length > HexLinkFiles.MOST_PATH || Ours(path, includeMissing: false))
                             continue;
                         // Version 1 kept one hash, the same bytes on both sides; version 2 each side's and their line ends
                         if (kept is JsonValue && HashIn(kept) is { } both)
@@ -101,7 +108,7 @@ internal sealed partial class HexLinkSync
 
                 foreach (JsonObject conflict in HexLinkData.Objects(state, "conflicts", MOST_SKIPPED))
                 {
-                    if (HexLinkData.String(conflict, "path", HexLinkFiles.MOST_PATH) is not { } path || Ours(path))
+                    if (HexLinkData.String(conflict, "path", HexLinkFiles.MOST_PATH) is not { } path || Ours(path, includeMissing: false))
                         continue;
                     keptConflicts[path] = new HexLinkSyncConflict(path, HexLinkData.String(conflict, "kind", 100) ?? "changed on both",
                         HexLinkData.String(conflict, "copy", HexLinkFiles.MOST_PATH), HexLinkData.String(conflict, "copy_hash", 64));
@@ -112,8 +119,18 @@ internal sealed partial class HexLinkSync
         {
         }
 
+        var stale = StaleTracked(savedAgreement, agreement, keptBases.Keys.Union(keptConflicts.Keys, StringComparer.Ordinal), cancel);
+        foreach (string path in stale)
+        {
+            keptBases.Remove(path);
+            if (keptConflicts.GetValueOrDefault(path)?.HasUnsavedChanges != true)
+                keptConflicts.Remove(path);
+        }
+
         lock (gate)
         {
+            baseAgreement = agreement;
+            staleTracked = stale;
             bases.Clear();
             conflicts.Clear();
             skipped.Clear();
@@ -186,6 +203,7 @@ internal sealed partial class HexLinkSync
                 ["version"] = STATE_VERSION,
                 ["device"] = peer.Device.Id,
                 ["folder"] = folder.Name,
+                ["agreement"] = baseAgreement?.DeepClone(),
                 ["bases"] = said,
                 ["conflicts"] = new JsonArray([.. conflicts.Values.OrderBy(each => each.Path, StringComparer.Ordinal).Select(conflict => (JsonNode)new JsonObject
                 {

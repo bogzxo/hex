@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 
 using Hex.Core;
 
@@ -8,6 +9,18 @@ namespace Hex.Tests;
 public sealed class HexLinkDiscoveryTests
 {
     private static readonly HexLinkAnnouncement MAC = HexLinkAnnouncement.Of("Bogdan's Mac.local", "ABCD1234" + new string('0', 56), 47833, [IPAddress.Parse("192.168.0.30"), IPAddress.Parse("10.0.0.5")]);
+
+    [Fact]
+    public void Starting_discovery_reports_a_socket_failure_without_opening_a_socket()
+    {
+        using var discovery = new HexLinkDiscovery
+        {
+            SocketFactory = () => throw new SocketException((int)SocketError.AddressAlreadyInUse)
+        };
+        Assert.False(discovery.Browse());
+        Assert.Contains("UDP port 5353", discovery.Off, StringComparison.Ordinal);
+        Assert.False(discovery.Announce("Mac", MAC.Id8, MAC.Port));
+    }
 
     [Fact]
     public void A_message_round_trips()
