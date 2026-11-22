@@ -79,7 +79,7 @@ internal sealed partial class DawnScene
 
         var menu = new Menu("shared session participants");
         foreach (LinkSessionPerson person in people)
-            menu.Add(Said("link.devices_session_follow_person", ("device", person.Name)), () => LinkFollow(person.Id), icon: "eye")
+            menu.Add(Said("link.devices_session_follow_person", ("device", person.Name)), () => LinkFollow(person.Id, person.Name), icon: "eye")
                 .IsChecked = () => linkFollowing == person.Id;
         if (linkFollowing is not null)
             menu.Add(Said("link.devices_session_unfollow"), () => LinkUnfollow(said: true), icon: "close");
