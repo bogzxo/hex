@@ -5,10 +5,21 @@ using Horizon.Graphics;
 
 namespace Hex.Tests;
 
+/// <summary>Skipped, saying why, on a machine with no Python Jupyter kernel installed.</summary>
+internal sealed class PythonKernelFactAttribute : FactAttribute
+{
+    public PythonKernelFactAttribute()
+    {
+        Timeout = 180_000;
+        if (!KernelSpecs.Find().Any(spec => spec.Language == "python"))
+            Skip = "No Python Jupyter kernel is installed (pip install ipykernel, then python -m ipykernel install --user).";
+    }
+}
+
 [Collection(Timed.NAME)]
 public class NotebookEngineeringTests
 {
-    [Fact(Timeout = 180_000)]
+    [PythonKernelFact]
     public async Task Engineering_notebook_executes_renders_and_roundtrips_in_a_real_kernel()
     {
         string path = Path.Combine(AppContext.BaseDirectory, "Assets", "hex", "notebooks", "engineering.ipynb");
