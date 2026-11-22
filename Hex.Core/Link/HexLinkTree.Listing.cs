@@ -29,8 +29,8 @@ internal sealed partial class HexLinkTree
         headAlreadyRead = null;
         HexLinkManifest? prior = PreviousManifest;
         string? previousHead = scope.Length == 0 ? prior?.Head : prior?.NestedHeads?.GetValueOrDefault(scope);
-        if (previousHead is not null && layout.Candidates is { } candidates &&
-            TrackedNow(directory, cachedOnly: true) is { } tracked)
+        if (previousHead is not null && prior?.GitIssues?.ContainsKey(scope) != true &&
+            layout.Candidates is { } candidates && TrackedNow(directory, cachedOnly: true) is { } tracked)
         {
             int prefix = scope.Length == 0 ? 0 : scope.Length + 1;
             if (candidates[scope].All(path => path.Length > prefix && tracked.Contains(path[prefix..])))
