@@ -35,16 +35,14 @@ internal sealed partial class HexLink(IHexLinkServices services) : IDisposable
     /// <summary>A link went, with the device and why, for the audit log and a notice.</summary>
     public Action<HexLinkDevice, string>? Closed { get; set; }
 
+    private IReadOnlyList<HexLinkPeer> peers = [];
+
     /// <summary>The other machines linked now, those that said hello.</summary>
-    public IReadOnlyList<HexLinkPeer> Peers
-    {
-        get
-        {
-            // Not one still saying hello, whose device, rights and workspace aren't known yet
-            lock (links)
-                return [.. links.Where(link => link.Hello).Select(link => link.Peer)];
-        }
-    }
+    public IReadOnlyList<HexLinkPeer> Peers => Volatile.Read(ref peers);
+
+    // Called under the links lock, only when the set of public peers changes.
+    private void PublishPeers() =>
+        Volatile.Write(ref peers, Array.AsReadOnly(links.Where(link => link.Hello).Select(link => link.Peer).ToArray()));
 
     /// <summary>The linked device of an id, null when it isn't linked.</summary>
     public HexLinkPeer? PeerOf(string deviceId)
@@ -101,7 +99,10 @@ internal sealed partial class HexLink(IHexLinkServices services) : IDisposable
         }
 
         lock (links)
+        {
             joined.Hello = true;
+            PublishPeers();
+        }
         Claims.Join(peer);
         Changed?.Invoke();
         return peer;
@@ -125,7 +126,10 @@ internal sealed partial class HexLink(IHexLinkServices services) : IDisposable
     private void Gone(Joined joined, string why)
     {
         lock (links)
-            links.Remove(joined);
+        {
+            if (links.Remove(joined) && joined.Hello)
+                PublishPeers();
+        }
         Claims.Left(joined.Peer);
         joined.Host.Dispose();
         joined.Peer.Dispose();

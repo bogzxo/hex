@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
 
 using Horizon.Rendering;
 using Horizon.UI;
@@ -27,7 +28,7 @@ internal sealed partial class DawnScene
     private readonly Dictionary<(string Device, int Id), HexAgentChat> linkStandIns = [];
     private readonly Dictionary<HexAgentChat, LinkRemoteCard> linkRemoteOf = [];
     private readonly HashSet<(string Device, int Id)> linkStartedHere = [];
-    private readonly Dictionary<string, (long Version, string Name)> linkStandInsAt = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, (long Version, string Name, IReadOnlyList<HexLinkRow> Rows)> linkStandInsAt = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Whether the cards carry the badge of the machine they run on, while any device is linked.</summary>
     private bool LinkBadgesShown => link is not null && LinkPeers.Count > 0;
@@ -37,7 +38,7 @@ internal sealed partial class DawnScene
         IReadOnlyList<HexLinkPeer> peers = LinkPeers;
         if (peers.Count == 0 && linkChatsLast.Count == 0 && linkChatFakes is not { Count: > 0 })
             return 0;
-        long key = 23 + (linkRemoteOpen is { } open ? string.GetHashCode(open.DeviceId, StringComparison.Ordinal) * 31L + open.Id : 0);
+        long key = (Skin is { } skin ? RuntimeHelpers.GetHashCode(skin) : 23) + (linkRemoteOpen is { } open ? string.GetHashCode(open.DeviceId, StringComparison.Ordinal) * 31L + open.Id : 0);
         for (int i = 0; i < peers.Count; i++)
         {
             HexLinkPeer peer = peers[i];
@@ -47,7 +48,9 @@ internal sealed partial class DawnScene
             key = key * 31 + (int)peer.Granted;
             key = key * 31 + (peer.IsClosed ? 1 : 0);
             key = key * 31 + peer.FleetVersion;
-            key = key * 31 + peer.Fleet.Count;
+            IReadOnlyList<HexLinkRow> fleet = peer.Fleet;
+            key = key * 31 + fleet.Count;
+            key = key * 31 + RuntimeHelpers.GetHashCode(fleet);
             key = key * 31 + string.GetHashCode(peer.Session.Connection.Address, StringComparison.Ordinal);
             key = key * 31 + (linkTrust?.Find(id)?.PreferredRoute?.GetHashCode() ?? 0);
             if (ShowsLinkChats(peer))
@@ -117,29 +120,36 @@ internal sealed partial class DawnScene
         return ordered;
     }
 
+    private void PrepareLinkStandIns(LinkChatDevice device)
+    {
+        // Refresh the stand-ins when a new fleet arrives or the device is shown by another name.
+        var now = (device.Version, device.Name, device.Rows);
+        if (linkStandInsAt.TryGetValue(device.Id, out var was) && was == now)
+            return;
+        RemoveLinkStandIns(device.Id);
+        linkStandInsAt[device.Id] = now;
+    }
+
+    private void RemoveLinkStandIns(string id)
+    {
+        foreach (var key in linkStandIns.Keys.Where(key => key.Device == id).ToArray())
+        {
+            HexAgentChat old = linkStandIns[key];
+            linkStandIns.Remove(key);
+            linkStartedHere.Remove(key);
+            if (old != agentChat)
+                linkRemoteOf.Remove(old);
+        }
+        linkStandInsAt.Remove(id);
+    }
+
     /// <summary>
     /// The stand-in chat a card of a device's fleet is drawn from, made again when the device's fleet moved: its name,
     /// agent and model, who started it, how it's doing (running, stopped, failed, done with its last reply) and what it
     /// cost, as the row says. Only ever drawn, never in the hub.
     /// </summary>
-    private HexAgentChat LinkStandIn(string device, string name, long version, HexLinkRow row)
+    private HexAgentChat LinkStandIn(string device, string name, HexLinkRow row)
     {
-        // Made again when its fleet moved or it's shown by another name now
-        var now = (version, name);
-        if (linkStandInsAt.GetValueOrDefault(device, (-1, string.Empty)) != now)
-        {
-            // A new version of the fleet, every stand-in of the device made again from it
-            foreach (var key in linkStandIns.Keys.Where(key => key.Device == device).ToList())
-            {
-                HexAgentChat old = linkStandIns[key];
-                linkStandIns.Remove(key);
-                if (old != agentChat)
-                    linkRemoteOf.Remove(old);
-            }
-
-            linkStandInsAt[device] = now;
-        }
-
         if (row.StartedByYou)
             linkStartedHere.Add((device, row.Id));
         else
@@ -168,7 +178,7 @@ internal sealed partial class DawnScene
         chat.MirrorHead(row.Name, running, row.Seconds);
         chat.Seen = chat.Version;
         linkStandIns[(device, row.Id)] = chat;
-        linkRemoteOf[chat] = new LinkRemoteCard(device, now.Item2, row.Id);
+        linkRemoteOf[chat] = new LinkRemoteCard(device, name, row.Id);
         return chat;
     }
 

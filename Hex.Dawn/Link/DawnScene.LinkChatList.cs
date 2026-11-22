@@ -100,6 +100,7 @@ internal sealed partial class DawnScene
                 continue;
             linkChatsLast.Remove(id);
             linkChatsSeenAt.Remove(id);
+            RemoveLinkStandIns(id);
             foreach (var key in linkRowStates.Keys.Where(key => key.Device == id).ToArray())
             {
                 linkRowStates.Remove(key);
@@ -201,53 +202,96 @@ internal sealed partial class DawnScene
         }
     }
 
+    private readonly record struct LinkChatGroupState(LinkChatDevice Device, HexLinkChatCounts Counts, bool Open,
+        bool RunningOpen, bool FinishedOpen, int SelectedChat, Horizon.UI.Skinning.UISkin? Skin);
+    private sealed record LinkChatGroupView(LinkChatGroupState State, StackPanel Root, float Height, Action<float> Refresh);
+    private readonly Dictionary<string, LinkChatGroupView> agentsLinkChatGroups = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, LinkChatGroupView> noonLinkChatGroups = new(StringComparer.Ordinal);
+
     /// <summary>Adds the linked devices after the local chats and returns the height they occupy.</summary>
     private float LinkFleetSections(StackPanel rows, List<Action<float>> refreshes, float inset = 10.0f)
     {
         float tall = 0.0f;
-        ScrollPanel scroll = rows == agentsListRows ? agentsListScroll : noonFleetScroll;
-        float trim = scroll.Padding.Total.X + scroll.BarWidth + scroll.BarGap
-            + (rows == agentsListRows ? agentsList.Padding.Total.X : -6.0f);
-        foreach (LinkChatDevice device in LinkChatDevices())
+        bool side = rows == agentsListRows;
+        ScrollPanel scroll = side ? agentsListScroll : noonFleetScroll;
+        float trim = scroll.Padding.Total.X + scroll.BarWidth + scroll.BarGap + (side ? agentsList.Padding.Total.X : -6.0f);
+        Dictionary<string, LinkChatGroupView> groups = side ? agentsLinkChatGroups : noonLinkChatGroups;
+        List<LinkChatDevice> devices = LinkChatDevices();
+        if (groups.Count > 0)
         {
-            bool FailedUnseen(HexLinkRow row) => linkFailedUnseen.Contains((device.Id, row.Id));
-            HexLinkChatCounts counts = HexLinkChatGroups.Count(device.Rows, FailedUnseen);
-            string key = HexLinkChatGroups.DeviceKey(device.Id);
-            bool open = LinkChatOpen(key, HexLinkChatGroups.DeviceUsuallyOpen(counts));
-            var (head, refresh) = LinkSectionHead(device, counts, inset, key, open);
-            rows.Add(head);
-            refreshes.Add(width => refresh(width - trim));
-            tall += LINK_CHAT_HEAD + rows.Spacing;
+            foreach (string id in groups.Keys.Where(id => !devices.Any(device => device.Id == id)).ToArray())
+                groups.Remove(id);
+        }
+        foreach (LinkChatDevice device in devices)
+        {
+            HexLinkChatCounts counts = HexLinkChatGroups.Count(device.Rows, row => LinkFailureUnseen(device, row));
+            bool open = LinkChatOpen(device.Id, HexLinkChatGroups.DeviceUsuallyOpen(counts));
+            bool running = counts.Running > 0 && LinkChatOpen(HexLinkChatGroups.SectionKey(device.Id, HexLinkChatSection.Running), true);
+            bool finished = counts.Finished > 0 && LinkChatOpen(HexLinkChatGroups.SectionKey(device.Id, HexLinkChatSection.Finished),
+                HexLinkChatGroups.SectionUsuallyOpen(HexLinkChatSection.Finished, counts.Finished));
+            int selected = linkRemoteOpen is { } picked && picked.DeviceId == device.Id ? picked.Id : 0;
+            var state = new LinkChatGroupState(device, counts, open, running, finished, selected, Skin);
+            if (!groups.TryGetValue(device.Id, out LinkChatGroupView? group) || group.State != state)
+                groups[device.Id] = group = MakeLinkChatGroup(state, rows.Spacing, inset, trim);
+            rows.Add(group.Root);
+            refreshes.Add(group.Refresh);
+            tall += group.Height;
+        }
+        return tall;
+    }
 
+    private bool LinkFailureUnseen(LinkChatDevice device, HexLinkRow row) => linkFailedUnseen.Contains((device.Id, row.Id));
+
+    private LinkChatGroupView MakeLinkChatGroup(LinkChatGroupState state, float spacing, float inset, float trim)
+    {
+        LinkChatDevice device = state.Device;
+        var block = new StackPanel { Fill = UIFill.Horizontal, Spacing = spacing };
+        var (head, fitHead) = LinkSectionHead(device, state.Counts, inset, device.Id, state.Open);
+        var fitRows = new List<Action<float>>();
+        block.Add(head);
+        float tall = LINK_CHAT_HEAD + spacing;
+        if (state.Open)
+        {
+            PrepareLinkStandIns(device);
             foreach (HexLinkChatSection section in linkChatSections)
             {
-                int count = section == HexLinkChatSection.Running ? counts.Running : counts.Finished;
+                bool running = section == HexLinkChatSection.Running;
+                int count = running ? state.Counts.Running : state.Counts.Finished;
                 if (count == 0)
                     continue;
                 string sectionKey = HexLinkChatGroups.SectionKey(device.Id, section);
-                bool sectionOpen = LinkChatOpen(sectionKey, HexLinkChatGroups.SectionUsuallyOpen(section, count));
-                if (!open)
-                    continue;
-                string title = Said(section == HexLinkChatSection.Running ? "link.chats_running_head" : "agents_panel.finished_head");
-                rows.Add(ListSectionHead(sectionKey, title, count, string.Empty, UIBadgeTone.Neutral, sectionOpen,
+                bool sectionOpen = running ? state.RunningOpen : state.FinishedOpen;
+                string title = Said(running ? "link.chats_running_head" : "agents_panel.finished_head");
+                block.Add(ListSectionHead(sectionKey, title, count, string.Empty, UIBadgeTone.Neutral, sectionOpen,
                     shown => SetLinkChatOpen(sectionKey, shown), menu: null, inset + 12.0f));
-                tall += FINISHED_HEAD + rows.Spacing;
+                tall += FINISHED_HEAD + spacing;
                 if (!sectionOpen)
                     continue;
 
                 foreach (var (row, step) in LinkFleetInOrder(HexLinkChatGroups.In(device.Rows, section)))
                 {
-                    HexAgentChat standIn = LinkStandIn(device.Id, device.Name, device.Version, row);
+                    HexAgentChat standIn = LinkStandIn(device.Id, device.Name, row);
                     var remote = new LinkRemoteCard(device.Id, device.Name, row.Id);
-                    AgentCard card = AgentCardOf(standIn, step, closable: false, quiet: !device.Online || section == HexLinkChatSection.Finished,
-                        rail: HexLinkChatGroups.NeedsYou(row, FailedUnseen), remote: remote, approval: row.Approvals.FirstOrDefault());
-                    rows.Add(card.Root);
-                    refreshes.Add(width => card.Refresh(width - trim));
-                    tall += AGENT_CARD + rows.Spacing;
+                    AgentCard card = AgentCardOf(standIn, step, closable: false, quiet: !device.Online || !running,
+                        rail: HexLinkChatGroups.NeedsYou(row, item => LinkFailureUnseen(device, item)), remote: remote, approval: row.Approvals.FirstOrDefault());
+                    block.Add(card.Root);
+                    fitRows.Add(card.Refresh);
+                    tall += AGENT_CARD + spacing;
                 }
             }
         }
-        return tall;
+
+        float fittedWidth = float.NaN;
+        void Refresh(float width)
+        {
+            if (width == fittedWidth)
+                return;
+            fittedWidth = width;
+            fitHead(width - trim);
+            foreach (Action<float> fit in fitRows)
+                fit(width - trim);
+        }
+        return new LinkChatGroupView(state, block, tall, Refresh);
     }
 
     private (Panel Head, Action<float> Refresh) LinkSectionHead(LinkChatDevice device, HexLinkChatCounts counts, float inset, string key, bool open)
