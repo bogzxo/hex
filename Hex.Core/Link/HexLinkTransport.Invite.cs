@@ -146,40 +146,72 @@ internal sealed partial class HexLinkTransport
 
         using var race = CancellationTokenSource.CreateLinkedTokenSource(stop);
         race.CancelAfter(TimeSpan.FromMilliseconds(Math.Min(HANDSHAKE_MS, remaining.TotalMilliseconds)));
-        List<Task<(SslStream Ssl, Socket Socket, string Pin, string Address)>> pending = [.. invite.Addresses.Select(address =>
-            Connect(address.ToString(), invite.Port, race.Token, pin => string.Equals(pin, invite.Pin, StringComparison.OrdinalIgnoreCase)))];
+        var pending = invite.Addresses.ToDictionary(address =>
+            Connect(address.ToString(), invite.Port, race.Token, pin => string.Equals(pin, invite.Pin, StringComparison.OrdinalIgnoreCase)),
+            HexLinkInvite.IsVpn);
         HexLinkRefused? failed = null;
-        while (pending.Count > 0)
+        try
         {
-            var ready = await Task.WhenAny(pending);
-            pending.Remove(ready);
-            if (ready.IsCompletedSuccessfully)
+            while (pending.Count > 0)
             {
-                race.Cancel();
-                foreach (var other in pending)
-                    _ = DisposeInviteLoser(other);
-                return await ready;
+                var ready = await Task.WhenAny(pending.Keys);
+                if (ready.IsCompletedSuccessfully)
+                {
+                    if (pending[ready])
+                        ready = await FindInviteLan(pending.Where(route => !route.Value).Select(route => route.Key),
+                            Task.Delay(TimeSpan.FromMilliseconds(300), race.Token)) ?? ready;
+                    stop.ThrowIfCancellationRequested();
+                    if (DateTimeOffset.UtcNow >= invite.Until)
+                        throw new HexLinkRefused("invite_expired", "the invitation expired");
+                    pending.Remove(ready);
+                    return await ready;
+                }
+
+                pending.Remove(ready);
+                try
+                {
+                    await ready;
+                }
+                catch (HexLinkRefused e)
+                {
+                    if (failed is null || failed.Reason == "unreachable")
+                        failed = e;
+                }
+                catch (OperationCanceledException)
+                {
+                    // A dial timed out or the whole race was cancelled.
+                }
             }
 
-            try
-            {
-                await ready;
-            }
-            catch (HexLinkRefused e)
-            {
-                if (failed is null || failed.Reason == "unreachable")
-                    failed = e;
-            }
-            catch (OperationCanceledException)
-            {
-                // A dial timed out or the whole race was cancelled.
-            }
+            stop.ThrowIfCancellationRequested();
+            if (DateTimeOffset.UtcNow >= invite.Until)
+                throw new HexLinkRefused("invite_expired", "the invitation expired");
+            throw failed ?? new HexLinkRefused("timeout", "no invitation address answered");
+        }
+        finally
+        {
+            race.Cancel();
+            foreach (var other in pending.Keys)
+                _ = DisposeInviteLoser(other);
+        }
+    }
+
+    // Dials authenticate TLS only. Until the winner is chosen, no endpoint sees an invitation proof.
+    internal static async Task<Task<T>?> FindInviteLan<T>(IEnumerable<Task<T>> routes, Task grace)
+    {
+        List<Task> pending = [.. routes];
+        pending.Add(grace);
+        while (pending.Count > 1)
+        {
+            Task ready = await Task.WhenAny(pending);
+            if (ready == grace)
+                break;
+            if (ready is Task<T> lan && lan.IsCompletedSuccessfully)
+                return lan;
+            pending.Remove(ready);
         }
 
-        stop.ThrowIfCancellationRequested();
-        if (DateTimeOffset.UtcNow >= invite.Until)
-            throw new HexLinkRefused("invite_expired", "the invitation expired");
-        throw failed ?? new HexLinkRefused("timeout", "no invitation address answered");
+        return null;
     }
 
     private static async Task DisposeInviteLoser(Task<(SslStream Ssl, Socket Socket, string Pin, string Address)> other)

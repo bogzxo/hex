@@ -28,6 +28,17 @@ internal sealed class HexLinkInvite
     public DateTimeOffset Until { get; }
     public IReadOnlyList<IPAddress> Addresses { get; }
 
+    // Tailscale uses a CGNAT IPv4 range and a dedicated IPv6 ULA prefix.
+    internal static bool IsVpn(IPAddress address)
+    {
+        Span<byte> bytes = stackalloc byte[16];
+        if (address.IsIPv4MappedToIPv6)
+            address = address.MapToIPv4();
+        address.TryWriteBytes(bytes, out int length);
+        return length == 4 ? bytes[0] == 100 && (bytes[1] & 0xC0) == 64
+            : bytes[..length].StartsWith((ReadOnlySpan<byte>)[0xfd, 0x7a, 0x11, 0x5c, 0xa1, 0xe0]);
+    }
+
     public static HexLinkInvite? Create(string pin, int port, DateTimeOffset until, IEnumerable<IPAddress> addresses)
     {
         IPAddress[] endpoints = [.. HexLinkAddresses.Preferred(addresses).Where(IsPortable).Take(MaxEndpoints)];
