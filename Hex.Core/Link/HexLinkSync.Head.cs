@@ -25,7 +25,10 @@ internal sealed partial class HexLinkSync
             return false;
         string relative = wire[(folder.Name.Length + 1)..];
         HeadRepository? repo = headRepositories.FirstOrDefault(scope => relative.StartsWith(scope.Prefix, StringComparison.Ordinal));
-        if (repo?.Head is not { } head)
+        if (repo is null)
+            return false;
+        string? head = followBase.GetValueOrDefault(repo.Prefix.TrimEnd('/')) ?? repo.Head;
+        if (head is null)
             return false;
         byte[]? baseline = await ReadHeadBlob(Path.Combine(tree.Root, repo.Prefix), head, relative[repo.Prefix.Length..], stop);
         if (baseline is null)

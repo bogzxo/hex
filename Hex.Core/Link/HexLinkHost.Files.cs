@@ -23,6 +23,7 @@ internal sealed partial class HexLinkHost
         string wire = HexLinkData.Need(parameters, "path", HexLinkFiles.MOST_PATH);
         string full = ResolveFile(wire);
         await using var lease = await HexLinkPublicationFence.ForRoot(full).EnterLive(cancel);
+        await EnsureGitFollowFile(full, cancel);
         Need(HexLinkRights.View, "fs/read");
         return HexLinkFiles.Read(full, wire);
     }
@@ -36,6 +37,7 @@ internal sealed partial class HexLinkHost
         string? baseHash = HexLinkData.String(parameters, "base", 64);
         byte[] bytes = BytesOf(parameters);
         await using var lease = await HexLinkPublicationFence.ForRoot(full).EnterLive(cancel);
+        await EnsureGitFollowFile(full, cancel);
         Need(HexLinkRights.Edit, "fs/write");
         services.Audit("edit", Device, $"fs/write {wire}, {bytes.Length} bytes");
 
@@ -50,6 +52,7 @@ internal sealed partial class HexLinkHost
         string full = ResolveFile(wire);
         string baseHash = HexLinkData.Need(parameters, "base", 64);
         await using var lease = await HexLinkPublicationFence.ForRoot(full).EnterLive(cancel);
+        await EnsureGitFollowFile(full, cancel);
         Need(HexLinkRights.Edit, "fs/delete");
         services.Audit("edit", Device, $"fs/delete {wire}");
         if (!File.Exists(full))

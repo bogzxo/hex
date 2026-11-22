@@ -162,7 +162,10 @@ internal sealed partial class DawnScene
                     ApplyLocal = LinkCompareAndReplace,
                     ApplyStream = LinkCompareAndReplaceStream,
                     RenameLocal = LinkRenameCase,
-                    Excludes = () => services.Excludes
+                    Excludes = () => services.Excludes,
+                    GitFollowEnabled = LinkGitFollowChoice(local, peer, !automatic),
+                    GitFollowData = linkData,
+                    GitFollowAudited = detail => services.Audit("git", peer.Device, detail)
                 };
                 sync.Changed = () => PostLink(() => LinkSyncMoved(entry));
                 entry.Sync = sync;

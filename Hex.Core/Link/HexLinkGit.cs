@@ -33,7 +33,7 @@ internal static class HexLinkGit
     /// this repository knows (the asker's, so only what's new goes). Null when there's nothing new; throws with git's
     /// reason when it fails. The file is the caller's to delete.
     /// </summary>
-    public static Made? Bundle(string repo, IReadOnlyList<string> have, CancellationToken cancel = default, bool includeHead = false)
+    public static Made? Bundle(string repo, IReadOnlyList<string> have, CancellationToken cancel = default, bool includeHead = false, bool onlyHead = false)
     {
         if (Why() is { } why)
             throw new InvalidOperationException(why);
@@ -41,8 +41,9 @@ internal static class HexLinkGit
         var arguments = new List<string> { "bundle", "create", "-q" };
         string file = Path.Combine(Path.GetTempPath(), $"hexlink-{Guid.NewGuid():N}.bundle");
         arguments.Add(file);
-        arguments.Add("--all");
-        if (includeHead)
+        if (!onlyHead)
+            arguments.Add("--all");
+        if (includeHead || onlyHead)
             arguments.Add("HEAD");
         foreach (string known in Known(repo, have, cancel))
             arguments.Add("^" + known);

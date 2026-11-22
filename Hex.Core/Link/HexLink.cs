@@ -62,6 +62,7 @@ internal sealed partial class HexLink(IHexLinkServices services) : IDisposable
         var session = new HexLinkSession(connection) { PingEvery = PingEvery };
         var host = new HexLinkHost(session, services) { WatchEvery = WatchEvery, ClaimExchange = Claims, ClaimChanged = () => Changed?.Invoke() };
         var peer = new HexLinkPeer(session, services.Device);
+        host.GitFollowPeer = peer;
         var joined = new Joined(session, host, peer);
         lock (links)
         {

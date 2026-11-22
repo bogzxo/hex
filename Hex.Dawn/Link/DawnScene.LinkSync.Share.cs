@@ -105,6 +105,7 @@ internal sealed partial class DawnScene
             commands.Add((Said("link.command_offer", ("device", device)), () => LinkOfferCommand(peer)));
         }
 
+        commands.AddRange(LinkGitFollowPaletteCommands());
         if (LinkConflicts.Count > 0)
             commands.Add((Said("link.command_conflicts"), LinkConflictsCommand));
         return commands;

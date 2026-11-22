@@ -4802,6 +4802,11 @@ let strings = {
             published: "Published the resolved merge of {path}.",
             unresolved: "Resolve the remaining conflict markers before publishing."
         },
+        git_follow: {
+            enable: "Link: Turn on Git state follows for {folder}",
+            disable: "Link: Turn off Git state follows for {folder}",
+            align: "Link: Align {folder} to {device}"
+        },
         provision: {
             get_title: "Link: Get Workspace from {device}",
             share_title: "Link: Share Workspace with {device}",

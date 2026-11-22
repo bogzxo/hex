@@ -20,7 +20,7 @@ internal sealed record HexLinkHeadMove(string? Backup, bool Rewrite, string? Why
 
 internal static class HexLinkGitFollow
 {
-    private const string JOURNAL = "hexlink-head-follow.json";
+    internal const string JOURNAL = "hexlink-head-follow.json";
     private const string BACKUPS = "refs/hexlink/backup/";
     private static readonly string disabledHooks = Path.Combine(Path.GetTempPath(), "hexlink-no-hooks-" + Guid.NewGuid().ToString("N"));
 
@@ -28,48 +28,80 @@ internal static class HexLinkGitFollow
         new(HexLinkProvision.ReadHead(repository, cancel) ?? throw new InvalidOperationException("The repository has no HEAD commit."),
             HexLinkProvision.ReadBranch(repository, cancel));
 
+    internal static HexLinkHeadTip ReadCheckout(string repository, CancellationToken cancel)
+    {
+        if (!PlatformPaths.Same(Git(repository, ["rev-parse", "--show-toplevel"], cancel).Trim(), repository))
+            throw HexLinkException.NotFound("The selected folder has no Git checkout of its own.");
+        return Read(repository, cancel);
+    }
+
+    internal static (string GitDirectory, string CommonDirectory) LocateCheckout(string repository, CancellationToken cancel)
+    {
+        string[] lines = Git(repository, ["rev-parse", "--path-format=absolute", "--show-toplevel",
+            "--absolute-git-dir", "--git-common-dir"], cancel).Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (lines.Length != 3 || !PlatformPaths.Same(lines[0], repository))
+            throw HexLinkException.NotFound("The selected folder has no Git checkout of its own.");
+        return (lines[1], lines[2]);
+    }
+
     internal static void Import(string repository, string bundle, CancellationToken cancel)
     {
         Git(repository, ["bundle", "verify", "-q", bundle], cancel);
         Git(repository, ["bundle", "unbundle", bundle], cancel);
     }
 
+    internal static async Task Fetch(HexLinkPeer peer, string wire, string root, HexLinkHeadTip current,
+        HexLinkHeadTip target, CancellationToken cancel)
+    {
+        bool has = await Task.Run(() => Run(root, ["cat-file", "-e", target.Head + "^{commit}"], cancel).Ok, cancel);
+        if (has)
+            return;
+        string? bundle = await peer.Bundle("HEAD", [current.Head], repo: root, cancel: cancel, followWire: wire, followHead: target.Head);
+        if (bundle is null)
+            throw new IOException("The requested Git commit is missing from the other device's bundle.");
+        try { await Task.Run(() => Import(root, bundle, cancel), cancel); }
+        finally { HexLinkGit.TryDelete(bundle); }
+    }
+
     // earlier is a previously agreed leader state, held by this device. A new remote claim alone cannot authorize a rewrite.
     internal static async Task<HexLinkHeadMove> Move(string repository, HexLinkHeadTip expected, HexLinkHeadTip target,
-        HexLinkHeadTip? earlier, CancellationToken cancel)
+        HexLinkHeadTip? earlier, CancellationToken cancel, Action? authorize = null)
     {
         var fence = HexLinkPublicationFence.ForRoot(repository);
-        string gitDirectory = await Task.Run(() =>
-        {
-            if (!PlatformPaths.Same(Git(repository, ["rev-parse", "--show-toplevel"], cancel).Trim(), repository))
-                throw new InvalidOperationException("The selected folder does not identify its own Git checkout.");
-            return Git(repository, ["rev-parse", "--absolute-git-dir"], cancel).Trim();
-        }, cancel);
-        string journal = Path.Combine(gitDirectory, JOURNAL);
-        JsonObject? pending = ReadJournal(journal);
-        Guid? recovery = null;
-        if (pending is not null)
-        {
-            if (!Guid.TryParseExact(HexLinkData.String(pending, "id", 33), "N", out Guid id))
-                throw new IOException("Hex Link's Git index recovery journal is damaged.");
-            fence.HoldRecovery(id, HexLinkFenceKind.GitFollow);
-            recovery = id;
-        }
-
-        await using var exclusive = await fence.EnterExclusive(HexLinkFenceKind.GitFollow, cancel, recovery: recovery);
+        string gitDirectory = (await Task.Run(() => LocateCheckout(repository, cancel), cancel)).GitDirectory;
+        await RecoverPending(repository, gitDirectory, cancel);
+        await using var exclusive = await fence.EnterExclusive(HexLinkFenceKind.GitFollow, cancel);
         return await Task.Run(() =>
         {
-            if (pending is not null)
-            {
-                Recover(repository, gitDirectory, journal, pending, exclusive.Stop);
-                fence.ReleaseRecovery(recovery!.Value);
-            }
-            return Change(repository, gitDirectory, journal, fence, expected, target, earlier, exclusive.Stop);
+            authorize?.Invoke();
+            return Change(repository, gitDirectory, Path.Combine(gitDirectory, JOURNAL), fence, expected, target, earlier, exclusive.Stop, authorize);
         }, exclusive.Stop);
     }
 
+    internal static async Task<bool> RecoverPending(string repository, string gitDirectory, CancellationToken cancel)
+    {
+        string journal = Path.Combine(gitDirectory, JOURNAL);
+        if (ReadJournal(journal) is not { } waiting)
+            return false;
+        if (!Guid.TryParseExact(HexLinkData.String(waiting, "id", 33), "N", out Guid id) || id == Guid.Empty)
+            throw new IOException("Hex Link's Git index recovery journal is damaged.");
+        var fence = HexLinkPublicationFence.ForRoot(repository);
+        await using var exclusive = await fence.EnterExclusive(HexLinkFenceKind.GitFollow, cancel, recovery: id);
+        await Task.Run(() =>
+        {
+            if (ReadJournal(journal) is { } pending)
+            {
+                if (HexLinkData.String(pending, "id", 33) != id.ToString("N"))
+                    throw new IOException("The Git index recovery journal changed while Link waited.");
+                Recover(repository, gitDirectory, journal, pending, exclusive.Stop);
+            }
+            fence.ReleaseRecovery(id);
+        }, exclusive.Stop);
+        return true;
+    }
+
     private static HexLinkHeadMove Change(string repository, string gitDirectory, string journal, HexLinkPublicationFence fence,
-        HexLinkHeadTip expected, HexLinkHeadTip target, HexLinkHeadTip? earlier, CancellationToken cancel)
+        HexLinkHeadTip expected, HexLinkHeadTip target, HexLinkHeadTip? earlier, CancellationToken cancel, Action? authorize)
     {
         if (!HexLinkGit.IsCommitId(expected.Head) || !HexLinkGit.IsCommitId(target.Head))
             throw HexLinkException.Invalid("HEAD follow needs both exact Git commits.");
@@ -96,7 +128,8 @@ internal static class HexLinkGitFollow
                 return new(null, false, "This device has commits the other device lacks.");
             if (BusyGit(gitDirectory))
                 return new(null, false, "A merge, rebase, or other Git operation is in progress.");
-            GitResult staged = Run(repository, ["diff", "--cached", "--quiet", "--no-ext-diff", "HEAD", "--"], cancel);
+            GitResult staged = Run(repository, ["diff", "--cached", "--quiet", "--no-ext-diff", "HEAD", "--"], cancel,
+                environment: new Dictionary<string, string> { ["GIT_INDEX_FILE"] = index });
             if (staged.Exit == 1)
                 return new(null, false, "The checkout has staged changes. Finish or unstage them before following HEAD.");
             Check(staged);
@@ -132,6 +165,7 @@ internal static class HexLinkGitFollow
             if (Read(repository, cancel) != actual)
                 return new(null, false, "HEAD changed here while Link prepared the index.");
 
+            authorize?.Invoke();
             HexLinkFiles.WriteAtomic(journal, Encoding.UTF8.GetBytes(new JsonObject
             {
                 ["id"] = id.ToString("N"), ["old"] = actual.ToJson(), ["next"] = target.ToJson(), ["sha256"] = checksum
@@ -159,6 +193,8 @@ internal static class HexLinkGitFollow
     private static void CommitRef(string repository, HexLinkHeadTip old, HexLinkHeadTip target, string? targetBefore, string backup)
     {
         var transaction = new StringBuilder("start\n");
+        string? symbolic = null;
+        string? separate = null;
         transaction.Append("create ").Append(backup).Append(' ').Append(old.Head).Append('\n');
         if (target.Ref is { } to)
         {
@@ -167,14 +203,35 @@ internal static class HexLinkGitFollow
             else
                 transaction.Append("update ").Append(to).Append(' ').Append(target.Head).Append(' ').Append(targetBefore).Append('\n');
             if (old.Ref != to)
+            {
+                symbolic = to;
+                separate = transaction.ToString();
                 transaction.Append("option no-deref\nsymref-update HEAD ").Append(to).Append(old.Ref is null ? " oid " : " ref ")
                     .Append(old.Ref ?? old.Head).Append('\n');
+            }
         }
         else
             transaction.Append("option no-deref\nupdate HEAD ").Append(target.Head).Append(' ').Append(old.Head).Append('\n');
 
-        transaction.Append("prepare\ncommit\n");
-        Git(repository, ["update-ref", "-m", "Hex Link HEAD follow", "--stdin"], CancellationToken.None, transaction.ToString());
+        const string finish = "prepare\ncommit\n";
+        string[] update = ["update-ref", "-m", "Hex Link HEAD follow", "--stdin"];
+        GitResult result = Run(repository, update, CancellationToken.None, transaction.Append(finish).ToString());
+        if (result.Ok)
+            return;
+        if (symbolic is null || separate is null || !result.Error.Contains("unknown command: symref-update", StringComparison.Ordinal))
+            Check(result);
+        else
+        {
+            // Git versions without symbolic transactions can still use the native ref lock while the index lock is held.
+            if (Read(repository, CancellationToken.None) != old)
+                throw new IOException("HEAD changed before Link could switch branches.");
+            Git(repository, update, CancellationToken.None, separate + finish);
+            if (Read(repository, CancellationToken.None) != old)
+                throw new IOException("HEAD changed before Link could attach the new branch.");
+            Git(repository, ["symbolic-ref", "-m", "Hex Link HEAD follow", "HEAD", symbolic], CancellationToken.None);
+            if (Read(repository, CancellationToken.None) != target)
+                throw new IOException("The target branch changed while Link attached it.");
+        }
     }
 
     private static JsonObject? ReadJournal(string path) =>

@@ -530,6 +530,7 @@ internal sealed partial class DawnScene
         ("link-files", "sharing the code over Hex Link with a second Hex: a folder synced both ways, a conflict kept and resolved, what git ignores left, hex_link_sync flush, a remote file opened and saved back, the repository cloned and fetched, pull-only, a patch offered", TestLinkFiles),
         ("link-worktree", "private Git worktree gate, merge, and publish receipts between two editors", TestLinkWorktree),
         ("link-provision", "a second editor gets a workspace with nested Git history and a submodule, then syncs both ways", TestLinkProvision),
+        ("link-git-follow", "two linked editors keep Git branches, commits, index and working files in sync", TestLinkGitFollow),
         ("link-missing-repository", "two editors sync common files while a nested checkout awaits its own Get", TestLinkMissingRepository),
         ("link-documents", "three linked editors share unsaved text, edit ownership, carets and saves", TestLinkDocuments),
         ("link-claims", "two linked editors coordinate claims, then merge disjoint edits and settle overlaps", TestLinkClaims),

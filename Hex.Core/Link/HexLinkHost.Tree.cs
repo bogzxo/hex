@@ -146,6 +146,7 @@ internal sealed partial class HexLinkHost
                 throw new HexLinkException(HexLinkErrors.NOT_ALLOWED, "Link cannot rename an ignored file.");
             string full = ResolveFile(from);
             await using var lease = await HexLinkPublicationFence.ForRoot(Path.GetDirectoryName(full)!).EnterLive(cancel);
+            await EnsureGitFollowFile(full, cancel);
             Need(HexLinkRights.Edit, "sync/rename");
             await services.RenameCase(full, ResolveFile(to), expected, cancel);
             tree.NoteCase(to[prefix.Length..]);
@@ -206,6 +207,7 @@ internal sealed partial class HexLinkHost
             manifests.Remove((name, true));
         if (treeWatches.TryRemove(name, out HexLinkTreeSubscription? watch))
             watch.Dispose();
+        StopGitFollowWatching(name);
         return [];
     }
 
