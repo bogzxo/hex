@@ -15,6 +15,7 @@ internal sealed partial class HexLinkDocumentRoom(string path, string text, HexD
     private readonly Dictionary<string, HexDocParticipant> members = new(StringComparer.Ordinal);
     private readonly HexLinkDocumentAuthority authority = new(text);
     private readonly Dictionary<string, object> online = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, TaskCompletionSource<bool>> revisionWaiters = new(StringComparer.Ordinal);
     private IReadOnlyList<HexDocParticipant>? roster, namesOnly;
     private long rosterVersion;
     private int lastAuthor;
@@ -44,13 +45,17 @@ internal sealed partial class HexLinkDocumentRoom(string path, string text, HexD
             online[scope] = connection;
             authority.Reconnect(participant.Author, resetAcknowledgement: joined);
             if (joined)
+            {
+                CancelRevisionWait(scope);
                 roster = null;
+            }
             return State(participant.Author, epoch, revision);
         }
     }
 
     public HexDocExchange Exchange(string scope, object connection, Guid epoch, long revision, IReadOnlyList<HexDocOperation> operations,
-        HexDocPoint? caret, HexDocPoint? anchor, HexDocPoint? pointer, bool checkpointReady, long? knownRoster = null)
+        HexDocPoint? caret, HexDocPoint? anchor, HexDocPoint? pointer, bool checkpointReady, long? knownRoster = null,
+        bool updatePresence = true)
     {
         lock (gate)
         {
@@ -62,15 +67,21 @@ internal sealed partial class HexLinkDocumentRoom(string path, string text, HexD
                 if (operations.Any(operation => operation.Id.Author != participant.Author))
                     throw new InvalidOperationException("A device may submit only its own edits.");
                 authority.Acknowledge(epoch, participant.Author, revision, checkpointReady: false);
+                bool notified = false;
                 foreach (HexDocOperation operation in operations)
                 {
                     HexDocReceipt receipt = authority.Submit(epoch, participant.Author, operation);
+                    if (!notified && receipt.Outcome == HexDocApply.Accepted)
+                    {
+                        SignalRevision(scope);
+                        notified = true;
+                    }
                     if (receipt.Outcome == HexDocApply.MissingDependency)
                         throw new InvalidOperationException("An earlier document operation is missing. Retry from the acknowledged revision.");
                 }
 
                 authority.Acknowledge(epoch, participant.Author, revision, checkpointReady && operations.Count == 0);
-                if ((participant.Caret, participant.Anchor, participant.Pointer) != (caret, anchor, pointer))
+                if (updatePresence && (participant.Caret, participant.Anchor, participant.Pointer) != (caret, anchor, pointer))
                 {
                     members[scope] = participant with { Caret = caret, Anchor = anchor, Pointer = pointer };
                     roster = null;
@@ -81,14 +92,62 @@ internal sealed partial class HexLinkDocumentRoom(string path, string text, HexD
                 {
                     if (saved is { } receipt && receipt.Revision == checkpoint.Revision)
                         saved = receipt with { Epoch = checkpoint.Epoch };
+                    SignalRevision(scope);
                     foreach (string member in members.Keys.ToArray())
                         members[member] = members[member] with { Caret = null, Anchor = null, Pointer = null };
                     roster = null;
                 }
             }
 
-            return State(participant.Author, epoch, revision, knownRoster, canSeeCarets: caret is not null || knownRoster is null);
+            return State(participant.Author, epoch, revision, knownRoster,
+                canSeeCarets: (updatePresence ? caret : participant.Caret) is not null || knownRoster is null);
         }
+    }
+
+    public async Task<HexDocExchange?> WaitForRevision(string scope, object connection, Guid epoch, long revision,
+        CancellationToken cancel, long? knownRoster = null)
+    {
+        TaskCompletionSource<bool> waiter;
+        lock (gate)
+        {
+            if (online.GetValueOrDefault(scope) != connection || !members.TryGetValue(scope, out var participant))
+                throw HexLinkException.NotFound("Join the shared document first.");
+            if (authority.Frontier != (epoch, revision))
+                return State(participant.Author, epoch, revision, knownRoster, participant.Caret is not null);
+
+            waiter = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            if (!revisionWaiters.TryAdd(scope, waiter))
+                throw new HexLinkException(HexLinkErrors.BUSY, "A document revision wait is already active.");
+        }
+
+        try
+        {
+            if (!await waiter.Task.WaitAsync(TimeSpan.FromSeconds(3), cancel).ConfigureAwait(false))
+                return null;
+            lock (gate)
+                return online.GetValueOrDefault(scope) == connection && members.TryGetValue(scope, out var participant)
+                    ? State(participant.Author, epoch, revision, knownRoster, participant.Caret is not null) : null;
+        }
+        catch (TimeoutException) { return null; }
+        finally
+        {
+            lock (gate)
+                if (revisionWaiters.GetValueOrDefault(scope) == waiter)
+                    revisionWaiters.Remove(scope);
+        }
+    }
+
+    private void SignalRevision(string editor)
+    {
+        foreach (var (scope, waiter) in revisionWaiters)
+            if (!StringComparer.Ordinal.Equals(scope, editor))
+                waiter.TrySetResult(true);
+    }
+
+    private void CancelRevisionWait(string scope)
+    {
+        if (revisionWaiters.Remove(scope, out var waiter))
+            waiter.TrySetResult(false);
     }
 
     public void Disconnect(string scope, object connection)
@@ -98,6 +157,7 @@ internal sealed partial class HexLinkDocumentRoom(string path, string text, HexD
             if (online.GetValueOrDefault(scope) != connection)
                 return;
             online.Remove(scope);
+            CancelRevisionWait(scope);
             roster = null;
             if (members.TryGetValue(scope, out var participant))
             {
@@ -123,6 +183,7 @@ internal sealed partial class HexLinkDocumentRoom(string path, string text, HexD
             if (online.GetValueOrDefault(scope) != connection)
                 return;
             online.Remove(scope);
+            CancelRevisionWait(scope);
             roster = null;
             agentUntil.Remove(scope);
             if (members.Remove(scope, out var participant))

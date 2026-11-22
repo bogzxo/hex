@@ -66,6 +66,7 @@ internal sealed partial class HexLinkDocumentRoom
                 if (edit.Removed.Length > 8192 || HexLinkDocumentAuthority.Estimate(edit) > HexLinkDocumentWire.Budget)
                     throw new ArgumentException("The agent edit is too large.");
                 authority.Submit(epoch, participant.Author, edit);
+                SignalRevision(scope);
                 var after = authority.View();
                 // Agent work highlights the edited location, then the author leaves without changing its operations.
                 var caret = after.PointAt(splice.Start + splice.Inserted.Length);

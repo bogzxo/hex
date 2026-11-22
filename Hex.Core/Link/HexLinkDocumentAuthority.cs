@@ -33,6 +33,7 @@ internal sealed class HexLinkDocumentAuthority
 
     private long Head => checkpoint.Revision + tail.Count;
     public long Clock { get { lock (gate) return sequence.Clock; } }
+    public (Guid Epoch, long Revision) Frontier { get { lock (gate) return (checkpoint.Epoch, Head); } }
 
     public bool CanOfferCheckpoint
     {

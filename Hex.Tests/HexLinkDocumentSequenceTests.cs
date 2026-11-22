@@ -153,9 +153,13 @@ public sealed class HexLinkDocumentSequenceTests
         HexDocEdit proposed = sender.View().Edit(new(1, guest.Author), 1, 1, "B");
         Assert.Equal(HexLinkErrors.NOT_ALLOWED, await CodeOf(pair.PeerA.ExchangeDocument(path, epoch, 0, [proposed], null, null, null, false)));
 
-        pair.BOnA |= HexLinkRights.Edit;
         HexDocEdit local = sender.View().Edit(new(1, host.Author), 1, 1, "A");
         room.Exchange(DeviceA.Id, localConnection, epoch, 0, [local], null, null, null, false);
+        var readerReplay = Assert.IsType<HexDocExchange>(await pair.PeerA.WaitForDocumentRevision(path, epoch, 0, default));
+        Assert.False(readerReplay.CanEdit);
+        Assert.Single(readerReplay.Replay.Operations);
+
+        pair.BOnA |= HexLinkRights.Edit;
         Assert.Equal(HexLinkErrors.CONFLICT, await CodeOf(pair.PeerA.ExchangeDocument(path, epoch, 0, [local], null, null, null, false)));
         HexDocPoint caret = new(proposed.Id, 1);
         HexDocExchange replay = await pair.PeerA.ExchangeDocument(path, epoch, 0, [proposed], caret, caret, null, false);
@@ -174,6 +178,42 @@ public sealed class HexLinkDocumentSequenceTests
             knownRoster: rosterOnly.RosterVersion);
         Assert.True(quiet.SameRoster);
         Assert.Empty(quiet.Participants);
+    }
+
+    [Fact]
+    public async Task Revision_wait_wakes_for_ordered_edits_without_losing_carets_or_waking_for_presence()
+    {
+        const string path = "work/note.txt";
+        using var pair = await LinkedPair.Up(HexLinkRights.View | HexLinkRights.Edit);
+        using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(WAIT_MS));
+        HexLinkDocumentRoom room = pair.A.Documents.Rooms.Open(path, "ab");
+        var connection = new object();
+        var host = new HexLinkDocumentReplica(room.Join(DeviceA.Id, connection, DeviceA));
+        var guest = new HexLinkDocumentReplica(await pair.PeerA.OpenDocument(path));
+        Guid epoch = host.Epoch;
+        var localCaret = host.View.PointAt(0);
+        host.Receive(room.Exchange(DeviceA.Id, connection, epoch, 0, [], localCaret, localCaret, null, false));
+        var hostWait = room.WaitForRevision(DeviceA.Id, connection, epoch, 0, cancel.Token);
+        Assert.Equal(HexLinkErrors.BUSY, await CodeOf(room.WaitForRevision(DeviceA.Id, connection, epoch, 0, cancel.Token)));
+        var caret = guest.View.PointAt(1);
+        guest.Receive(await pair.PeerA.ExchangeDocument(path, epoch, 0, [], caret, caret));
+        Assert.False(hostWait.IsCompleted);
+
+        guest.Capture(guest.View, "aBb");
+        guest.Receive(await pair.PeerA.ExchangeDocument(path, epoch, 0, guest.Batch(), updatePresence: false));
+        var caught = Assert.IsType<HexDocExchange>(await hostWait);
+        Assert.Equal(caret, caught.Participants.Single(person => person.Author == guest.Author).Caret);
+        host.Receive(caught);
+        Assert.Equal("aBb", host.View.Text);
+
+        var guestWait = pair.PeerA.WaitForDocumentRevision(path, epoch, 1, cancel.Token);
+        host.Capture(host.View, "AaBb");
+        host.Receive(room.Exchange(DeviceA.Id, connection, epoch, 1, host.Batch(), null, null, null, false));
+        var woke = Assert.IsType<HexDocExchange>(await guestWait);
+        var late = Assert.IsType<HexDocExchange>(await pair.PeerA.WaitForDocumentRevision(path, epoch, 1, cancel.Token));
+        Assert.Equal(woke.Replay.Head, late.Replay.Head);
+        guest.Receive(woke);
+        Assert.Equal(host.View.Text, guest.View.Text);
     }
 
     [Fact]

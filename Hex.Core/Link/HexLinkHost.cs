@@ -53,7 +53,7 @@ internal sealed partial class HexLinkHost : IDisposable
                 throw HexLinkException.Invalid("The Link relay identity or hop count is invalid.");
             string name = HexLinkNames.Clean(HexLinkData.String(relay, "name", 100)) ?? origin;
             string operation = method == "tools/call" ? $"tool {HexLinkData.String(parameters, "name", 100)}" : Cut(method, 60);
-            if (method != "doc2/exchange" || parameters["ops"] is JsonArray { Count: > 0 })
+            if (method != "doc2/wait" && (method != "doc2/exchange" || parameters["ops"] is JsonArray { Count: > 0 }))
                 services.Audit("relay", Device, $"{operation} for {name} ({origin}) via {Device.Name} ({Device.Id})");
         }
         return Dispatch(method, parameters, cancel);
@@ -70,7 +70,7 @@ internal sealed partial class HexLinkHost : IDisposable
         "tools/list" => Task.FromResult<JsonNode?>(ToolsList()),
         "tools/call" => ToolsCall(parameters, cancel),
         "doc/join" or "doc/poll" or "doc/edit" => Task.FromResult<JsonNode?>(DocumentRequest(method, parameters)),
-        "doc2/open" or "doc2/exchange" or "doc2/leave" or "doc2/save" or "doc2/agent" => Document2Request(method, parameters, cancel),
+        "doc2/open" or "doc2/exchange" or "doc2/leave" or "doc2/save" or "doc2/agent" or "doc2/wait" => Document2Request(method, parameters, cancel),
         "doc2/relay" => Document2Relay(parameters, cancel),
         "fs/list" => Task.FromResult<JsonNode?>(FsList(parameters)),
         "fs/read" => Task.FromResult<JsonNode?>(FsRead(parameters)),
