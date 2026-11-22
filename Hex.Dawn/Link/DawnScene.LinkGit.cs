@@ -52,6 +52,8 @@ internal sealed partial class DawnScene
     internal async Task<string> LinkFetch(string deviceId, string localRepository, string? repository = null, WorkContext? work = null, CancellationToken cancel = default)
     {
         HexLinkPeer peer = link?.PeerOf(deviceId) ?? throw new InvalidOperationException(Said("link.sync_not_linked", ("device", deviceId)));
+        if (repository is null)
+            await peer.RefreshWorkspace(cancel);
         string named = repository ?? LinkRepositoryThere(peer, localRepository) ?? throw new InvalidOperationException(Said("link.fetch_which", ("device", peer.Device.Name)));
         List<string> haves = await Task.Run(() => HexLinkGit.Haves(localRepository), cancel);
         string? bundle = await peer.Bundle(named, haves, LinkProgress(work, peer.Device.Name), localRepository, cancel);
