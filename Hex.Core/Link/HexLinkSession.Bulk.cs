@@ -110,15 +110,21 @@ internal sealed partial class HexLinkSession
             HexLinkData.String(parameters, "purpose", 81) is not { Length: > 0 and <= 80 } purpose)
             throw HexLinkException.Invalid("Invalid Link bulk open.");
 
-        if (!bulkReceivers.TryGetValue(purpose, out BulkReceiver receiver))
-            throw HexLinkException.NotFound("There is no receiver for this Link bulk purpose.");
-        RequireBulkRights(receiver.Rights);
-        if (!downloadSlots.Wait(0))
-            throw new HexLinkException(HexLinkErrors.BUSY, "Too many Link bulk downloads are already open.");
-
+        bool ordinary = bulkReceivers.TryGetValue(purpose, out BulkReceiver receiver);
         long id = HexLinkData.Long(parameters, "stream")!.Value;
         long length = HexLinkData.Long(parameters, "length")!.Value;
-        var download = new IncomingBulk(this, id, length, receiver);
+        BulkResponse? response = ordinary ? null : FindBulkResponse(purpose, length, HexLinkData.Object(parameters, "metadata"));
+        if (ordinary)
+            RequireBulkRights(receiver.Rights);
+        if (!downloadSlots.Wait(0))
+            throw new HexLinkException(HexLinkErrors.BUSY, "Too many Link bulk downloads are already open.");
+        if (response is not null && (!response.Allowed || !response.Claim()))
+        {
+            downloadSlots.Release();
+            throw RefuseBulkResponse("The Link bulk response expired or was already opened.");
+        }
+
+        var download = new IncomingBulk(this, id, length, receiver, response);
         if (!downloads.TryAdd(id, download))
         {
             download.DisposeReservation();
@@ -318,6 +324,7 @@ internal sealed partial class HexLinkSession
         private readonly long id;
         private readonly long length;
         private readonly BulkReceiver receiver;
+        private readonly BulkResponse? response;
         private readonly CancellationTokenSource stop;
         private readonly Channel<BulkFrame> frames = Bounded<BulkFrame>(HexLinkFrameHeader.Window);
         private readonly TaskCompletionSource<(JsonNode? Result, Exception? Error)> completed = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -326,13 +333,15 @@ internal sealed partial class HexLinkSession
         private int outstanding;
         private int ready;
         private string? expectedHash;
+        private int responseRevoked;
 
-        public IncomingBulk(HexLinkSession session, long id, long length, BulkReceiver receiver)
+        public IncomingBulk(HexLinkSession session, long id, long length, BulkReceiver receiver, BulkResponse? response)
         {
             this.session = session;
             this.id = id;
             this.length = length;
             this.receiver = receiver;
+            this.response = response;
             stop = CancellationTokenSource.CreateLinkedTokenSource(session.Closing);
             stop.CancelAfter(PATIENCE);
         }
@@ -343,7 +352,8 @@ internal sealed partial class HexLinkSession
             try
             {
                 stop.Token.ThrowIfCancellationRequested();
-                sink = await receiver.Open(length, metadata, stop.Token);
+                RequireReceiver();
+                sink = response is null ? await receiver.Open(length, metadata, stop.Token) : response.Open();
             }
             catch
             {
@@ -358,7 +368,9 @@ internal sealed partial class HexLinkSession
 
         public void CheckFrame(HexLinkFrameHeader header)
         {
-            if (Volatile.Read(ref ready) == 0 || !HexLinkAllowed.Has(session.Connection.Rights, receiver.Rights) ||
+            if (response is not null && !response.Allowed)
+                Volatile.Write(ref responseRevoked, 1);
+            if (Volatile.Read(ref ready) == 0 || (response is null && !HexLinkAllowed.Has(session.Connection.Rights, receiver.Rights)) ||
                 header.Sequence != sequence || sequence == uint.MaxValue ||
                 header.Length > length - received || Volatile.Read(ref outstanding) >= HexLinkFrameHeader.Window)
                 throw new InvalidDataException("Link bulk frame violates stream rights, sequence, length or credit.");
@@ -401,7 +413,8 @@ internal sealed partial class HexLinkSession
             JsonNode? result = null;
             try
             {
-                await using (sink)
+                IHexLinkBulkSink? staged = sink;
+                try
                 {
                     using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
                     using ZstandardDecoder? decoder = session.Connection.Bulk == HexLinkBulkSupport.Zstandard ? new(new ZstandardDecompressionOptions { MaxWindowLog2 = 18 }) : null;
@@ -410,12 +423,18 @@ internal sealed partial class HexLinkSession
                         try
                         {
                             if (failure is null)
-                                await WriteFrame(frame, sink, decoder, hash, cancel);
+                                await WriteFrame(frame, staged!, decoder, hash, cancel);
                         }
                         catch (Exception e) when (!cancel.IsCancellationRequested)
                         {
                             // Drain the remaining window in order. Completion returns the sink error to the sender.
                             failure = e;
+                            if (response is not null && e is HexLinkException { Code: HexLinkErrors.NOT_ALLOWED })
+                            {
+                                IHexLinkBulkSink discard = staged!;
+                                staged = null;
+                                await discard.DisposeAsync();
+                            }
                             if (e is not HexLinkException)
                                 session.AuditFault("bulk receive", e);
                         }
@@ -434,12 +453,19 @@ internal sealed partial class HexLinkSession
                     if (failure is null)
                     {
                         cancel.ThrowIfCancellationRequested();
-                        session.RequireBulkRights(receiver.Rights);
+                        RequireReceiver();
+                        if (response is not null && !string.Equals(response.Hash, expectedHash, StringComparison.OrdinalIgnoreCase))
+                            throw session.RefuseBulkResponse("The Link bulk response hash differs from its offer.");
                         if (!string.Equals(Convert.ToHexString(hash.GetHashAndReset()), expectedHash, StringComparison.OrdinalIgnoreCase))
                             throw HexLinkException.Invalid("The Link bulk hash did not match.");
-                        await sink.CommitAsync(cancel);
-                        result = sink.Result;
+                        await staged!.CommitAsync(cancel);
+                        result = staged.Result;
                     }
+                }
+                finally
+                {
+                    if (staged is not null)
+                        await staged.DisposeAsync();
                 }
             }
             catch (Exception e)
@@ -461,7 +487,7 @@ internal sealed partial class HexLinkSession
         private async ValueTask WriteFrame(BulkFrame frame, IHexLinkBulkSink sink, ZstandardDecoder? decoder,
             IncrementalHash hash, CancellationToken cancel)
         {
-            session.RequireBulkRights(receiver.Rights);
+            RequireReceiver();
             byte[]? decoded = null;
             try
             {
@@ -485,6 +511,14 @@ internal sealed partial class HexLinkSession
                 if (decoded is not null)
                     ArrayPool<byte>.Shared.Return(decoded);
             }
+        }
+
+        private void RequireReceiver()
+        {
+            if (response is null)
+                session.RequireBulkRights(receiver.Rights);
+            else if (Volatile.Read(ref responseRevoked) != 0 || !response.Allowed)
+                throw session.RefuseBulkResponse("The Link bulk response request expired or lost View.");
         }
 
         public void DisposeReservation()
