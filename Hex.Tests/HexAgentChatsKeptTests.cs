@@ -48,6 +48,69 @@ public sealed class HexAgentChatsKeptTests
     }
 
     [Fact]
+    public void DetachedBranchKeepsItsSessionsAndPersistsNewDepths()
+    {
+        string folder = Temp();
+        try
+        {
+            var lead = new HexAgentChat(1, "codex");
+            var branch = new HexAgentChat(2, "codex") { Parent = lead.Id, Depth = 1, Session = "branch-session" };
+            var child = new HexAgentChat(3, "codex") { Parent = branch.Id, Depth = 2 };
+            var leaf = new HexAgentChat(4, "codex") { Parent = child.Id, Depth = 3 };
+            var sibling = new HexAgentChat(5, "codex") { Parent = lead.Id, Depth = 1 };
+            branch.Ask("Active work");
+            child.Ask("Some child work");
+            child.Done();
+            child.Seen = child.Version;
+
+            HexAgentChat[] chats = [lead, branch, child, leaf, sibling];
+            var hub = new HexAgentHub();
+            foreach (HexAgentChat chat in chats)
+                hub.Add(chat);
+            HexAgentSession? session = hub.ById(branch.Id);
+            var branchMail = new HexAgentMail(hub.NextMailSeq(), child.Id, "Child", "finding", "Child result", false) { To = branch.Id };
+            var otherMail = new HexAgentMail(hub.NextMailSeq(), lead.Id, "Lead", "finding", "Sibling result", false) { To = sibling.Id };
+            branch.Post(branchMail);
+            HexMailLog original = hub.MailOf(lead);
+            original.Add(branchMail, HexMailRoute.Inbox);
+            original.Add(otherMail, HexMailRoute.Inbox);
+            var kept = new HexAgentChatsKept(folder);
+            kept.Keep(chats, new JsonObject());
+            kept.Flush();
+            hub.Pump(100);
+
+            Assert.True(hub.Detach(branch));
+            Assert.False(hub.Detach(branch));
+            Assert.Same(session, hub.ById(branch.Id));
+            Assert.Same(branch, hub.RootOf(leaf));
+            Assert.Equal([sibling], hub.Children(lead));
+            Assert.True(branch.Running);
+            Assert.False(child.Unread);
+            Assert.Equal(branchMail, Assert.Single(branch.UnreadMail()));
+            Assert.Equal(branchMail, Assert.Single(hub.MailOf(branch).All).Mail);
+            Assert.Equal(2, original.All.Count);
+            Assert.True(hub.Pump(100));
+            Assert.Null(hub.Snapshot.Rows[branch.Id].Parent);
+            Assert.Equal(2, hub.Snapshot.Rows[leaf.Id].Depth);
+
+            kept.Keep(chats, new JsonObject { ["open"] = branch.Id });
+            kept.Flush();
+            var (restored, state) = new HexAgentChatsKept(folder).Read();
+            Assert.Equal([(1, (int?)null, 0), (2, null, 0), (3, 2, 1), (4, 3, 2), (5, 1, 1)],
+                restored.Select(chat => (chat.Id, chat.Parent, chat.Depth)));
+            HexAgentChat restoredBranch = restored[1];
+            Assert.Equal(branch.Key, restoredBranch.Key);
+            Assert.Equal("branch-session", restoredBranch.Session);
+            Assert.Equal(branch.Id, state!["open"]!.GetValue<int>());
+        }
+        finally
+        {
+            if (Directory.Exists(folder))
+                Directory.Delete(folder, true);
+        }
+    }
+
+    [Fact]
     public void OnlyChatsThatMovedAreWrittenAndClosedOnesGo()
     {
         string folder = Temp();

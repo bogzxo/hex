@@ -4211,6 +4211,7 @@ let strings = {
         finished_settle_all: "Settle all finished",
         chat_open: "Open",
         chat_open_parent: "Go to parent chat",
+        chat_detach: "Detach from parent",
         chat_rename: "Rename…",
         chat_copy: "Copy last response",
         chat_stop: "Stop agent",

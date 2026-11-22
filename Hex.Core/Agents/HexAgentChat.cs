@@ -150,11 +150,27 @@ internal sealed partial class HexAgentChat(int id, string agent)
 
     public bool Running { get; private set; }
 
-    /// <summary>The chat whose agent started this one (hex_agent_spawn), null for one somebody started in the panel.</summary>
-    public int? Parent { get; init; }
+    private int? parent;
+    private int depth;
 
-    /// <summary>How many agents up it was started from, 0 for one somebody started.</summary>
-    public int Depth { get; init; }
+    /// <summary>The chat directly above this one, null for a top-level chat.</summary>
+    public int? Parent { get => parent; init => parent = value; }
+
+    /// <summary>The nesting depth used when this chat starts another agent. Detaching resets it to zero.</summary>
+    public int Depth { get => depth; init => depth = value; }
+
+    internal void SetFamilyPosition(int? newParent, int newDepth)
+    {
+        if (parent == newParent && depth == newDepth)
+            return;
+
+        bool seen = Seen == Version;
+        parent = newParent;
+        depth = newDepth;
+        Version++;
+        if (seen)
+            Seen = Version;
+    }
 
     /// <summary>
     /// What it was called by the agent that started it, or renamed to from its card, shown in place of what it was asked

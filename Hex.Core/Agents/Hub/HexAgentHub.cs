@@ -135,8 +135,44 @@ internal sealed class HexAgentHub
         return at;
     }
 
-    /// <summary>The chats a chat started, in the order they were.</summary>
+    /// <summary>The chats directly under a chat, in the order they were started.</summary>
     public IEnumerable<HexAgentChat> Children(HexAgentChat chat) => sessions.Where(session => session.Parent == chat.Id).Select(session => session.Chat);
+
+    /// <summary>Makes a chat the root of its own family, keeping its descendants and their sessions.</summary>
+    public bool Detach(HexAgentChat chat)
+    {
+        if (chat.Parent is null || ChatById(chat.Id) != chat)
+            return false;
+
+        int oldRoot = RootOf(chat).Id;
+        chat.SetFamilyPosition(null, 0);
+        var family = new HashSet<int> { chat.Id };
+        var pending = new Queue<HexAgentChat>();
+        pending.Enqueue(chat);
+        while (pending.TryDequeue(out HexAgentChat? parent))
+        {
+            foreach (HexAgentChat child in Children(parent))
+            {
+                if (!family.Add(child.Id))
+                    continue;
+                child.SetFamilyPosition(parent.Id, parent.Depth + 1);
+                pending.Enqueue(child);
+            }
+        }
+
+        // Keep the new family's conversation and the old family's historical record.
+        if (oldRoot != chat.Id && mail.TryGetValue(oldRoot, out HexMailLog? previous))
+        {
+            HexMailLog next = MailOf(chat);
+            foreach (HexMailEntry entry in previous.All)
+            {
+                if (family.Contains(entry.Mail.To) || (entry.Mail.From is { } from && family.Contains(from)))
+                    next.Add(entry.Mail, entry.Route);
+            }
+        }
+
+        return true;
+    }
 
     /// <summary>Whether a chat's agent is waiting in hex_agent_wait, which a message to it wakes.</summary>
     public bool IsWaiting(HexAgentChat chat) => Waiting.TryGetValue(chat.Id, out int count) && count > 0;

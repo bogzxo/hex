@@ -412,8 +412,12 @@ internal sealed partial class DawnScene
             menu.Add(Said("agents_panel.chat_open_side"), () => { ShowFace(HexFace.Dawn); ShowAgentsPanel(); OpenAgentChat(chat); }, icon: "layout-sidebar-left");
         else
             menu.Add(Said("agents_panel.chat_open_noon"), () => { ShowFace(HexFace.Noon); OpenAgentChat(chat); }, icon: "robot");
-        if (chat.Parent is { } parent && ChatById(parent) is { } starter)
-            menu.Add(Said("agents_panel.chat_open_parent"), () => OpenAgentChat(starter), icon: "arrow-up");
+        if (chat.Parent is { } parent)
+        {
+            if (ChatById(parent) is { } starter)
+                menu.Add(Said("agents_panel.chat_open_parent"), () => OpenAgentChat(starter), icon: "arrow-up");
+            menu.Add(Said("agents_panel.chat_detach"), () => DetachAgentChat(chat), icon: "debug-disconnect");
+        }
         menu.AddSeparator();
         menu.Add(Said("agents_panel.chat_rename"), () => RenameAgentChat(chat), icon: "edit");
         menu.Add(Said("agents_panel.chat_copy"), () =>
@@ -559,6 +563,19 @@ internal sealed partial class DawnScene
             if (answer == yes && agentChats.Contains(chat))
                 CloseAgentChat(chat);
         }, risky: yes);
+    }
+
+    private void DetachAgentChat(HexAgentChat chat)
+    {
+        if (!hub.Detach(chat))
+            return;
+
+        agentsListDrawn = noonFleetDrawn = NOT_DRAWN;
+        noonContextDrawn = CONTEXT_NOT_DRAWN;
+        familyFiltersStale = true;
+        agentsWait = noonWait = 0.0f;
+        PublishAgentStatuses();
+        Engine.WindowManager.RequestFrames();
     }
 
     /// <summary>A chat closed, its agent stopped, and the agents it started closed with it.</summary>
