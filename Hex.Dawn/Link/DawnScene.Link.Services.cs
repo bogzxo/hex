@@ -32,11 +32,19 @@ internal sealed partial class DawnScene
         public void RepositoryReady(HexLinkDevice device, string folder, string path) => hex.LinkRepositoryReady(device, folder, path);
 
         public HexLinkDocuments Documents { get; } = new();
+        public bool LegacyDocumentFixture => hex.linkByTest;
 
         public Task<HexLinkDocumentRoom> OpenSharedDocument(string path, string full, HexLinkDevice caller, bool automatic,
             CancellationToken cancel) => hex.LinkLiveOpenRoom(this, path, full, caller, automatic, cancel);
 
         public HexLinkPeer? SharedDocumentPeer(string id) => hex.link?.PeerOf(id);
+
+        public bool OwnsSharedDocument(string wire)
+        {
+            int slash = wire.IndexOf('/');
+            var folder = slash > 0 ? Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, wire[..slash])) : null;
+            return folder?.Authority is not { } authority || authority.DeviceId == Device.Id;
+        }
 
         public HexHubSnapshot Fleet => hex.hub.Snapshot;
 

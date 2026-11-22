@@ -310,30 +310,30 @@ In the code: `HexLinkHost.Predict.cs`, `HexLinkPeer.Predict.cs` (`ServesPredicti
 
 ### 5.7 Editing a shared document
 
-Pair and connect the devices first. The host grants **Edit** to each guest who will work in the document. A peer
-with **View** may read the shared buffer, including unsaved changes. Grant **View** in both directions to see each
-other's presence.
+Open the same text file on connected devices with its folder synced. Hex joins a shared session at that folder's
+persisted authority. **View** can join and read unsaved text. **Edit** can also change and save it. The command
+palette can host or join a shared workspace path explicitly, and **Leave** keeps the tab's current text. The
+folder authority stays pinned when it is unreachable. An allowed one-hop relay can reach it, with rights checked
+at both links.
 
-1. On the host, open a local workspace text file and choose **Link: Host shared document {path}** in the command
-   palette. Give guests the displayed path, such as `project/src/App.cs`.
-2. On a guest, choose **Link: Join shared document on {device}** and enter that path. Hex opens a local working copy.
-   Both tabs exchange unsaved edits. The host saves the original file from the host tab. A guest save writes the
-   local copy.
-3. Use **Link: Leave shared document {path}** to stop. The host ends the session for everyone. A guest detaches
-   its tab and keeps its text.
+Each participant sees the others' named carets, selections and pointers. Tabs show who is in the file and
+**Follow** can track a participant's caret. Updates are sampled at most 20 times per second. Agent edits from
+`hex_edit`, `hex_write` and `hex_edit_symbol` enter the shared buffer as edits by the named agent.
 
-The caret carries the device name and colour, and the selection uses the same colour. The mouse pointer appears
-as a small triangle at the nearest text position and disappears when it leaves the text editor. Changes to these
-indicators are sent at most twice a second.
+`doc2` carries operations over immutable text runs. Each operation has an author and a stable atom range. The
+authority acknowledges a single ordered tail for replay, while concurrent overlapping inserts and deletes
+converge deterministically. Undo and Redo only change the visibility of that author's edits. An acknowledged
+checkpoint compacts idle replicas, resets their undo history and gives new participants a snapshot and bounded
+tail. A room accepts up to 64 remote devices and a checkpoint can contain up to 2,097,152 UTF-16 code units.
 
-If overlapping edits conflict, Hex keeps the local draft open and pauses sharing from that tab. Choose
-**Link: Compare shared version with my draft**, reconcile the draft in the editing tab, then choose
-**Link: Resume with my edited draft**. You can also leave and keep the draft. The host orders simultaneous
-insertions at the same position by acceptance order.
+When an authority disconnects, existing editors can continue locally. Reconnecting to the same epoch replays
+the missing tail and retries unsent edits. If a new epoch cannot accept the local operations, Hex keeps the
+draft open for comparison with the shared text.
 
-Each Hex editor can host or join one shared text buffer at a time. A buffer may contain up to 131,072 UTF-16 code
-units. The host keeps the last 32 revisions for merging. A draft based on an older revision can require manual
-reconciliation.
+A save by an editor goes to the authority after its own edits have been acknowledged. The authority compares
+the file's original disk hash before publishing the shared buffer with its existing encoding and line endings.
+Working-tree sync carries the saved bytes. The save receipt identifies those bytes, so syncing a shared save
+does not overwrite a newer unsaved buffer.
 
 ## 6. UI
 

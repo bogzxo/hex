@@ -24,8 +24,10 @@ internal sealed partial class DawnScene
         public HexDocSaved? Saved;
         public readonly Queue<HexDocSaved> ConfirmedWrites = new();
         public readonly Queue<LinkLiveAgentWork> AgentEdits = new();
+        public readonly Queue<bool> UndoRequests = new();
         public bool OriginalReadOnly = tab.Editor.ReadOnly;
         public float Wait;
+        public long LastLocalChange = Environment.TickCount64;
     }
 
     private sealed record ScopedDocumentDraft(string SharedText, string Reason);
@@ -34,7 +36,9 @@ internal sealed partial class DawnScene
     private readonly Dictionary<HexDocument, LinkLiveDocument> linkLiveDocuments = [];
     private readonly HashSet<string> linkLiveJoining = new(PlatformPaths.Comparer);
     private readonly HashSet<string> linkLivePaused = new(PlatformPaths.Comparer);
+    private readonly Dictionary<string, long> linkLiveRetry = new(PlatformPaths.Comparer);
     private float linkLiveScan;
+    private uint linkLiveRelayCursor;
 
     private void LinkLiveDocumentCommands(List<(string Text, Action Picked)> commands)
     {
@@ -74,8 +78,7 @@ internal sealed partial class DawnScene
                 return;
             }
 
-            if (explicitly)
-                pin = services.FolderAuthorities.Bind(folder, pin);
+            pin = services.FolderAuthorities.Bind(folder, pin);
             linkLivePaused.Remove(wire);
             var room = services.Documents.Rooms.Open(wire, tab.Editor.Text,
                 new HexDocFileBasis(tab.DiskText, tab.DiskEncoding, tab.SavedCrLf));
@@ -159,7 +162,8 @@ internal sealed partial class DawnScene
             return direct;
         if (preferred is { IsClosed: false } && HexLinkAllowed.Has(preferred.Granted, HexLinkRights.Steer))
             return preferred;
-        return LinkPeers.FirstOrDefault(peer => !peer.IsClosed && HexLinkAllowed.Has(peer.Granted, HexLinkRights.Steer));
+        HexLinkPeer[] relays = [.. LinkPeers.Where(peer => !peer.IsClosed && HexLinkAllowed.Has(peer.Granted, HexLinkRights.Steer))];
+        return relays.Length == 0 ? null : relays[(int)(linkLiveRelayCursor++ % (uint)relays.Length)];
     }
 
     private static string? LinkLiveRelay(HexLinkAuthority pin, HexLinkPeer peer) =>
@@ -205,6 +209,17 @@ internal sealed partial class DawnScene
                 }
                 if (!documents.Contains(tab) || linkLiveDocuments.ContainsKey(tab))
                     return;
+                if (LiveFolder(wire) is { } localFolder && linkServices is { } services)
+                {
+                    try { services.FolderAuthorities.Bind(localFolder, pin); }
+                    catch (HexLinkException e)
+                    {
+                        if (explicitly)
+                            Say(e.Message, error: true);
+                        _ = LinkLiveLeave(peer, wire, relay);
+                        return;
+                    }
+                }
                 LinkLiveAttach(tab, wire, pin, replica, null, peer);
                 if (explicitly)
                     Say(Said("link.doc_joined", ("path", wire), ("device", peer.Device.Name)));
@@ -226,6 +241,13 @@ internal sealed partial class DawnScene
     {
         var shared = new LinkLiveDocument(tab, wire, pin, replica, room) { Connection = peer };
         linkLiveDocuments.Add(tab, shared);
+        tab.Editor.Document.SharedUndo = redo =>
+        {
+            if (tab.Editor.ReadOnly || shared.Draft is not null || shared.UndoRequests.Count >= 32)
+                return;
+            shared.UndoRequests.Enqueue(redo);
+            shared.Wait = 0;
+        };
         if (tab.Editor.Text != shared.Shown.Text)
         {
             if (tab.Modified || tab.Editor.Text != tab.SavedCode)
@@ -250,6 +272,9 @@ internal sealed partial class DawnScene
     private void LinkLiveDraft(LinkLiveDocument shared, string reason)
     {
         shared.Draft = new(shared.Replica.View.Text, reason);
+        while (shared.AgentEdits.TryDequeue(out var request))
+            request.Done.TrySetResult(reason);
+        shared.Tab.Editor.Document.SharedUndo = null;
         shared.Tab.Editor.ReadOnly = shared.OriginalReadOnly;
         shared.Tab.Editor.RemoteCarets = [];
         tabsDirty = true;
@@ -268,10 +293,12 @@ internal sealed partial class DawnScene
         if (shared.Room is { } room)
         {
             room.Leave(shared.Authority.DeviceId, shared.Tab);
-            linkServices?.Documents.Rooms.Close(shared.Wire);
+            if (explicitly)
+                linkServices?.Documents.Rooms.Close(shared.Wire);
         }
         else if (shared.Connection is { IsClosed: false } peer)
             _ = LinkLiveLeave(peer, shared.Wire, LinkLiveRelay(shared.Authority, peer));
+        shared.Tab.Editor.Document.SharedUndo = null;
         shared.Tab.Editor.ReadOnly = shared.OriginalReadOnly;
         shared.Tab.Editor.RemoteCarets = [];
         linkPresenceDrawnKey = string.Empty;
@@ -290,6 +317,7 @@ internal sealed partial class DawnScene
             LinkLiveDocumentClose(shared, false);
         linkLivePaused.Clear();
         linkLiveJoining.Clear();
+        linkLiveRetry.Clear();
     }
 
     private void UpdateLinkLiveDocuments(float dt)
@@ -299,7 +327,8 @@ internal sealed partial class DawnScene
         if ((linkLiveScan -= dt) <= 0)
         {
             linkLiveScan = 0.25f;
-            LinkLiveAutoOpen(services);
+            foreach (HexDocument tab in documents)
+                LinkLiveAutoOpen(services, tab);
         }
         foreach (var shared in linkLiveDocuments.Values.ToArray())
         {
@@ -325,6 +354,8 @@ internal sealed partial class DawnScene
                 if (!shared.Offline)
                 {
                     shared.Offline = true;
+                    while (shared.AgentEdits.TryDequeue(out var request))
+                        request.Done.TrySetResult("The shared document's owner is offline.");
                     shared.Tab.Editor.RemoteCarets = [];
                     tabsDirty = true;
                     Say(Said("link.doc_offline", ("path", shared.Wire)));
@@ -333,13 +364,16 @@ internal sealed partial class DawnScene
                     shared.Tab.Editor.ReadOnly = true;
                 shared.Connection = null;
                 peer = null;
-                if (shared.Version == shared.Tab.Editor.Document.Version)
+                if (shared.Version == shared.Tab.Editor.Document.Version && shared.UndoRequests.Count == 0)
                     continue;
             }
 
             LinkLiveReadRights(shared, peer);
             var buffer = shared.Tab.Editor.Document;
-            string local = shared.Version == buffer.Version ? shared.Shown.Text : buffer.Text;
+            bool changed = shared.Version != buffer.Version;
+            if (changed)
+                shared.LastLocalChange = Environment.TickCount64;
+            string local = changed ? buffer.Text : shared.Shown.Text;
             var cursor = document == shared.Tab ? (buffer.Caret, buffer.Anchor, shared.Tab.Editor.PointerTextPosition) :
                 ((UITextPosition, UITextPosition, UITextPosition?)?)null;
             bool editable = !shared.Tab.Editor.ReadOnly;
@@ -348,39 +382,47 @@ internal sealed partial class DawnScene
         }
     }
 
-    private void LinkLiveAutoOpen(LinkServices services)
+    private void LinkLiveAutoOpen(LinkServices services, HexDocument tab)
     {
-        if (document is not { IsText: true, Path: { } path, DiffOf: null } tab || linkRemote.ContainsKey(path)
+        if (tab is not { IsText: true, Path: { } path, DiffOf: null } || linkRemote.ContainsKey(path)
             || linkLiveDocuments.ContainsKey(tab) || linkDocument?.Tab == tab || LinkWireOf(path) is not { } wire
-            || linkLivePaused.Contains(wire) || LiveFolder(wire) is not { } folder)
+            || linkLivePaused.Contains(wire) || linkLiveJoining.Contains(wire) || LiveFolder(wire) is not { } folder)
             return;
 
-        var atFile = linkPresence.Values.Where(each => each.Presence?.File == wire)
-            .Select(each => link?.PeerOf(each.Device.Id)).OfType<HexLinkPeer>()
-            .Where(peer => LinkLiveSynced(peer, folder.Name)).ToArray();
         var pin = services.FolderAuthorities.Of(folder);
-        if (atFile.Length == 0 && (pin is null || !linkPresence.Values.Any(each => each.Presence?.File == wire)
-            || !LinkPeers.Any(peer => LinkLiveSynced(peer, folder.Name))))
-            return;
         if (pin is null)
         {
-            if (atFile.Length != 1)
+            HexLinkPeer[] common = [.. LinkPeers.Where(peer =>
+                peer.Workspace.Folders.Any(each => PlatformPaths.Comparer.Equals(each.Name, folder.Name)))];
+            if (common.Length != 1)
                 return;
-            var peer = atFile[0];
-            pin = peer.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, folder.Name))?.Authority;
+            var peer = common[0];
+            pin = peer.Workspace.Folders.First(each => PlatformPaths.Comparer.Equals(each.Name, folder.Name)).Authority;
             pin ??= new HexLinkAuthority(LinkAutoSyncOwner(peer.Session.Connection.Dialled, peer.Session.Connection.Rights, peer.Granted)
                 ? services.Device.Id : peer.Device.Id, 1);
         }
+
         if (pin.DeviceId == services.Device.Id)
-            LinkLiveDocumentHost(tab, wire, explicitly: false);
-        else if (LinkLiveRoute(pin) is { } owner)
-            LinkLiveJoin(owner, wire, pin, tab, explicitly: false);
+        {
+            if (linkPresence.Values.Any(each => each.Presence?.File == wire) && LinkPeers.Any(peer => LinkLiveSynced(peer, folder.Name)))
+                LinkLiveDocumentHost(tab, wire, explicitly: false);
+        }
+        else if (LinkLiveRoute(pin) is { } owner && Environment.TickCount64 >= linkLiveRetry.GetValueOrDefault(wire))
+        {
+            linkLiveRetry[wire] = Environment.TickCount64 + 1500;
+            try
+            {
+                if (PlatformPaths.Same(HexLinkFiles.Resolve([folder], wire, services.Excludes), path))
+                    LinkLiveJoin(owner, wire, pin, tab, explicitly: false);
+            }
+            catch (HexLinkException) { }
+        }
     }
 
     private bool LinkLiveSynced(HexLinkPeer peer, string name)
     {
         lock (linkSyncGate)
-            return linkSyncs.TryGetValue(LinkSyncKey(peer.Device.Id, name), out var entry) && entry.Sync is { State: not HexLinkSyncState.Off }
+            return linkSyncs.TryGetValue(LinkSyncKey(peer.Device.Id, name), out var entry) && entry.Sync is { State: HexLinkSyncState.Syncing or HexLinkSyncState.Idle or HexLinkSyncState.PullOnly }
                 || peer.ChosenSyncFolders.Contains(name, PlatformPaths.Comparer);
     }
 
@@ -392,9 +434,14 @@ internal sealed partial class DawnScene
         Guid epoch = shared.Replica.Epoch;
         Exception? error = null;
         IReadOnlyList<UICodeRemoteCaret>? carets = null;
+        IReadOnlyList<UITextEdit>? patches = null;
         HexDocSaved? save = null;
+        string? saveError = null;
         bool saveRequested = shared.SaveRequested;
         shared.AgentEdits.TryPeek(out var agent);
+        bool idle = Environment.TickCount64 - shared.LastLocalChange > 2000;
+        bool[] undo = [.. shared.UndoRequests];
+        shared.UndoRequests.Clear();
         bool agentAttempted = false;
         string? agentError = null;
         string? localPath = shared.Tab.Path;
@@ -409,6 +456,9 @@ internal sealed partial class DawnScene
                     throw new InvalidOperationException("Edit permission changed while the tab had local edits.");
                 if (!editable && replica.HasPending)
                     throw new InvalidOperationException("Edit permission changed while edits were awaiting acknowledgement.");
+                if (editable)
+                    foreach (bool redo in undo)
+                        replica.ChangeUndo(redo);
 
                 HexDocPoint? caret = null, anchor = null, pointer = null;
                 if (cursor is { } here)
@@ -421,17 +471,19 @@ internal sealed partial class DawnScene
                 if (shared.Room is null && peer is null)
                     return;
 
+                bool ready = idle && undo.Length == 0 && !saveRequested && agent is null &&
+                    replica.CheckpointSuggested && !replica.HasPending && replica.Revision == replica.Head;
                 HexDocExchange response;
                 if (shared.Room is { } room)
                     response = room.Exchange(shared.Authority.DeviceId, shared.Tab, replica.Epoch, replica.Revision,
-                        replica.Batch(), caret, anchor, pointer, false);
+                        replica.Batch(), caret, anchor, pointer, ready, replica.RosterVersion);
                 else if (peer != shared.Connection)
                     response = await peer!.OpenDocument(shared.Wire, replica.Epoch, replica.Revision, cancel,
                         relayTo: LinkLiveRelay(shared.Authority, peer)).ConfigureAwait(false);
                 else
                     response = await peer!.ExchangeDocument(shared.Wire, replica.Epoch, replica.Revision,
-                        replica.Batch(), caret, anchor, pointer, cancel: cancel,
-                        relayTo: LinkLiveRelay(shared.Authority, peer)).ConfigureAwait(false);
+                        replica.Batch(), caret, anchor, pointer, checkpointReady: ready, cancel: cancel,
+                        relayTo: LinkLiveRelay(shared.Authority, peer), knownRoster: replica.RosterVersion).ConfigureAwait(false);
 
                 replica.Receive(response);
                 if (agent is not null && editable && replica.CanEdit && !replica.HasPending && replica.Revision == replica.Head)
@@ -451,11 +503,24 @@ internal sealed partial class DawnScene
                     catch (Exception e) { agentError = e.Message; }
                 }
                 if (saveRequested && editable && replica.CanEdit && !replica.HasPending && replica.Revision == replica.Head)
-                    save = shared.Room is { } owned
-                        ? await owned.Save(shared.Authority.DeviceId, shared.Tab, localPath!, replica.Epoch, replica.Revision, cancel).ConfigureAwait(false)
-                        : await peer!.SaveDocument(shared.Wire, replica.Epoch, replica.Revision, cancel,
-                            relayTo: LinkLiveRelay(shared.Authority, peer)).ConfigureAwait(false);
-                carets = LiveCarets(replica.View, replica.Participants, replica.Author);
+                {
+                    try
+                    {
+                        save = shared.Room is { } owned
+                            ? await owned.Save(shared.Authority.DeviceId, shared.Tab, localPath!, replica.Epoch, replica.Revision, cancel).ConfigureAwait(false)
+                            : await peer!.SaveDocument(shared.Wire, replica.Epoch, replica.Revision, cancel,
+                                relayTo: LinkLiveRelay(shared.Authority, peer)).ConfigureAwait(false);
+                    }
+                    catch (Exception e) when (e is IOException or HexLinkException or UnauthorizedAccessException)
+                    {
+                        saveError = e.Message;
+                    }
+                }
+                var updated = replica.View;
+                if (epoch == replica.Epoch)
+                    patches = [.. captured.PatchesTo(updated).Select(splice => new UITextEdit(
+                        LivePosition(captured, splice.Start), LivePosition(captured, splice.Start + splice.Length), splice.Inserted))];
+                carets = LiveCarets(updated, replica.Participants, replica.Author);
             }, cancel).ConfigureAwait(false);
         }
         catch (Exception e) { error = e; }
@@ -491,11 +556,16 @@ internal sealed partial class DawnScene
             }
 
             if (shared.Room is null && peer is null)
+            {
+                if (undo.Length > 0 && shared.Tab.Editor.Document.Version == version)
+                    LinkLiveApply(shared, shared.Replica.View, captured);
                 return;
-            if (save is not null)
+            }
+            if (save is not null || saveError is not null)
             {
                 shared.SaveRequested = false;
-                Say(Said("documents.saved", ("path", shared.Wire)));
+                Say(saveError is null ? Said("documents.saved", ("path", shared.Wire)) :
+                    Said("documents.save_failed", ("path", shared.Wire), ("error", saveError)), error: saveError is not null);
             }
             LinkLiveRememberSaved(shared, save ?? shared.Replica.Saved);
             if (shared.Offline || !LiveSamePeople(shared.Participants, shared.Replica.Participants))
@@ -510,19 +580,19 @@ internal sealed partial class DawnScene
                     LinkLiveDraft(shared, "The shared document restarted while this tab was changing.");
                 return;
             }
-            LinkLiveApply(shared, shared.Replica.View, epoch == shared.Replica.Epoch ? captured : null);
+            LinkLiveApply(shared, shared.Replica.View, epoch == shared.Replica.Epoch ? captured : null, patches);
             LinkLiveMarkSaved(shared);
             if (carets is not null && !shared.Tab.Editor.RemoteCarets.SequenceEqual(carets))
                 shared.Tab.Editor.RemoteCarets = carets;
         });
     }
 
-    private void LinkLiveApply(LinkLiveDocument shared, HexDocView view, HexDocView? previous)
+    private void LinkLiveApply(LinkLiveDocument shared, HexDocView view, HexDocView? previous, IReadOnlyList<UITextEdit>? patches = null)
     {
         var buffer = shared.Tab.Editor.Document;
         bool following = linkFollowDocument == shared.Tab && linkFollowVersion == buffer.Version && linkFollowCaret == buffer.Caret;
         shared.Tab.Editor.ApplySharedText(view.Text, (basis, draft, changed) => HexLinkDocuments.TryMerge(basis, draft, changed, out string merged) ? merged : null,
-            previous is null ? null : point => view.OffsetOf(LivePoint(previous, point)) is { } offset ? LivePosition(view, offset) : point);
+            previous is null ? null : point => view.OffsetOf(LivePoint(previous, point)) is { } offset ? LivePosition(view, offset) : point, patches);
         shared.Shown = view;
         shared.Version = buffer.Version;
         if (following)

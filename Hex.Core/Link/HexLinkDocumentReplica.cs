@@ -30,14 +30,17 @@ internal readonly record struct HexDocSplice(int Start, int Length, string Inser
 internal sealed class HexLinkDocumentReplica
 {
     private readonly List<HexDocOperation> pending = [];
+    private readonly Stack<HexDocId> undo = new(), redo = new();
     private HexLinkDocumentSequence sequence = null!;
 
     public Guid Epoch { get; private set; }
     public int Author { get; private set; }
     public bool CanEdit { get; private set; }
+    public bool CheckpointSuggested { get; private set; }
     public HexDocSaved? Saved { get; private set; }
     public long Revision { get; private set; }
     public long Head { get; private set; }
+    public long RosterVersion { get; private set; }
     public IReadOnlyList<HexDocParticipant> Participants { get; private set; } = [];
     public bool HasPending => pending.Count != 0;
     public HexDocView View => sequence.View();
@@ -54,7 +57,21 @@ internal sealed class HexLinkDocumentReplica
         if (HexLinkDocumentAuthority.Estimate(operation) > HexLinkDocumentWire.Budget || operation.Removed.Length > 8192)
             throw new InvalidOperationException("The local edit is too large to send as one shared operation.");
         Queue(operation);
+        undo.Push(operation.Id);
+        redo.Clear();
         return presented.WithEdit(change, operation.Id, current);
+    }
+
+    public bool ChangeUndo(bool restoring)
+    {
+        var from = restoring ? redo : undo;
+        var to = restoring ? undo : redo;
+        if (!from.TryPeek(out HexDocId earlier))
+            return false;
+        Queue(new HexDocVisibility(new HexDocId(sequence.Clock + 1, Author), earlier, restoring));
+        from.Pop();
+        to.Push(earlier);
+        return true;
     }
 
     public HexDocOperation[] Batch()
@@ -79,6 +96,8 @@ internal sealed class HexLinkDocumentReplica
         {
             if (HasPending)
                 throw new InvalidOperationException("The shared document changed its checkpoint. Local edits remain in a draft.");
+            undo.Clear();
+            redo.Clear();
             Epoch = checkpoint.Epoch;
             Revision = checkpoint.Revision;
             Author = response.Author;
@@ -96,8 +115,11 @@ internal sealed class HexLinkDocumentReplica
             Revision++;
         }
         Head = replay.Head;
-        Participants = response.Participants;
+        if (!response.SameRoster)
+            Participants = response.Participants;
+        RosterVersion = response.RosterVersion;
         CanEdit = response.CanEdit;
+        CheckpointSuggested = response.CheckpointSuggested;
         Saved = response.Saved;
     }
 

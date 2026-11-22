@@ -41,6 +41,8 @@ internal sealed partial class HexLinkHost
         Need(HexLinkRights.View, method);
         string path = HexLinkDocumentProtocol.Field(parameters, "path", HexLinkFiles.MOST_PATH);
         string full = ResolveFile(path);
+        if (!services.OwnsSharedDocument(path))
+            throw HexLinkException.NotFound("This device no longer owns the shared folder.");
         var rooms = services.Documents?.Rooms ?? throw HexLinkException.NotFound("No documents are shared.");
         bool canEdit = HexLinkAllowed.Has(Rights, HexLinkRights.Edit);
         HexLinkDocumentRoom room = method == "doc2/open"
@@ -91,7 +93,8 @@ internal sealed partial class HexLinkHost
                 Need(HexLinkRights.Edit, method);
             return HexLinkDocumentWire.Encode(room.Exchange(scope, this, epoch.Value, revision, operations,
                 HexLinkDocumentWire.DecodePoint(parameters["caret"]), HexLinkDocumentWire.DecodePoint(parameters["anchor"]),
-                HexLinkDocumentWire.DecodePoint(parameters["pointer"]), HexLinkData.Bool(parameters, "ready") == true) with { CanEdit = canEdit });
+                HexLinkDocumentWire.DecodePoint(parameters["pointer"]), HexLinkData.Bool(parameters, "ready") == true,
+                HexLinkData.Long(parameters, "roster")) with { CanEdit = canEdit });
         }
         catch (ArgumentException e)
         {
@@ -140,6 +143,8 @@ internal sealed partial class HexLinkHost
 
     private JsonObject DocumentRequest(string method, JsonObject parameters)
     {
+        if (!services.LegacyDocumentFixture)
+            throw new HexLinkException(HexLinkErrors.METHOD_NOT_FOUND, "Use the current shared document protocol.");
         bool edit = method == "doc/edit";
         Need(edit ? HexLinkRights.Edit : HexLinkRights.View, method);
         var documents = services.Documents ?? throw new HexLinkException(HexLinkErrors.NOT_FOUND, "No documents are shared.");
@@ -173,9 +178,12 @@ internal sealed partial class HexLinkPeer
 
     public async Task<HexDocExchange> ExchangeDocument(string path, Guid epoch, long revision, IReadOnlyList<HexDocOperation> operations,
         HexDocPoint? caret = null, HexDocPoint? anchor = null, HexDocPoint? pointer = null, bool checkpointReady = false,
-        CancellationToken cancel = default, string? relayTo = null) =>
-        HexLinkDocumentWire.Decode(await ForwardDocument("doc2/exchange",
-            HexLinkDocumentWire.Exchange(path, epoch, revision, operations, caret, anchor, pointer, checkpointReady), cancel, relayTo));
+        CancellationToken cancel = default, string? relayTo = null, long? knownRoster = null)
+    {
+        var request = HexLinkDocumentWire.Exchange(path, epoch, revision, operations, caret, anchor, pointer, checkpointReady);
+        request["roster"] = knownRoster;
+        return HexLinkDocumentWire.Decode(await ForwardDocument("doc2/exchange", request, cancel, relayTo));
+    }
 
     public async Task<HexDocSaved> SaveDocument(string path, Guid epoch, long revision, CancellationToken cancel = default,
         string? relayTo = null) => HexDocSaved.Decode(await ForwardDocument("doc2/save",

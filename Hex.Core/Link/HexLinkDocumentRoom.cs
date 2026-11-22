@@ -5,7 +5,7 @@ namespace Hex.Core;
 internal sealed record HexDocParticipant(int Author, string Device, string Name, HexDocPoint? Caret = null,
     HexDocPoint? Anchor = null, HexDocPoint? Pointer = null);
 internal sealed record HexDocExchange(int Author, HexDocReplay Replay, IReadOnlyList<HexDocParticipant> Participants,
-    bool CanEdit = true, HexDocSaved? Saved = null);
+    bool CanEdit = true, HexDocSaved? Saved = null, bool CheckpointSuggested = false, long RosterVersion = 0, bool SameRoster = false);
 
 /// <summary>One document and the authenticated members who may exchange operations with its authority.</summary>
 internal sealed partial class HexLinkDocumentRoom(string path, string text, HexDocFileBasis? initialFile = null)
@@ -15,12 +15,18 @@ internal sealed partial class HexLinkDocumentRoom(string path, string text, HexD
     private readonly Dictionary<string, HexDocParticipant> members = new(StringComparer.Ordinal);
     private readonly HexLinkDocumentAuthority authority = new(text);
     private readonly Dictionary<string, object> online = new(StringComparer.Ordinal);
-    private IReadOnlyList<HexDocParticipant>? roster;
+    private IReadOnlyList<HexDocParticipant>? roster, namesOnly;
+    private long rosterVersion;
     private int lastAuthor;
     private HexDocFileBasis? fileBasis = initialFile;
     public string Path { get; } = path;
 
     public HexDocView View() => authority.View();
+
+    public bool IsVacant
+    {
+        get { lock (gate) return members.Count == 0; }
+    }
 
     public HexDocExchange Join(string scope, object connection, HexLinkDevice device, Guid? epoch = null, long revision = 0)
     {
@@ -44,7 +50,7 @@ internal sealed partial class HexLinkDocumentRoom(string path, string text, HexD
     }
 
     public HexDocExchange Exchange(string scope, object connection, Guid epoch, long revision, IReadOnlyList<HexDocOperation> operations,
-        HexDocPoint? caret, HexDocPoint? anchor, HexDocPoint? pointer, bool checkpointReady)
+        HexDocPoint? caret, HexDocPoint? anchor, HexDocPoint? pointer, bool checkpointReady, long? knownRoster = null)
     {
         lock (gate)
         {
@@ -69,7 +75,7 @@ internal sealed partial class HexLinkDocumentRoom(string path, string text, HexD
                     members[scope] = participant with { Caret = caret, Anchor = anchor, Pointer = pointer };
                     roster = null;
                 }
-                if (checkpointReady && revision - authority.Checkpoint.Revision >= 2048
+                if (checkpointReady && authority.CanOfferCheckpoint
                     && authority.View().Text.Length <= HexLinkDocumentWire.MaxText
                     && authority.Compact() is { } checkpoint)
                 {
@@ -81,7 +87,7 @@ internal sealed partial class HexLinkDocumentRoom(string path, string text, HexD
                 }
             }
 
-            return State(participant.Author, epoch, revision);
+            return State(participant.Author, epoch, revision, knownRoster, canSeeCarets: caret is not null || knownRoster is null);
         }
     }
 
@@ -124,11 +130,21 @@ internal sealed partial class HexLinkDocumentRoom(string path, string text, HexD
         }
     }
 
-    private HexDocExchange State(int author, Guid? epoch, long revision)
+    private HexDocExchange State(int author, Guid? epoch, long revision, long? knownRoster = null, bool canSeeCarets = true)
     {
         ExpireAgents();
-        return new(author, authority.Replay(epoch, revision, budget: HexLinkDocumentWire.Budget),
-            roster ??= [.. online.Keys.Select(scope => members[scope]).OrderBy(each => each.Author)], Saved: saved);
+        if (roster is null)
+        {
+            roster = [.. online.Keys.Select(scope => members[scope]).OrderBy(each => each.Author)];
+            namesOnly = null;
+            rosterVersion++;
+        }
+        long version = rosterVersion * 2 + (canSeeCarets ? 1 : 0);
+        bool unchanged = version == knownRoster;
+        IReadOnlyList<HexDocParticipant> people = unchanged ? [] : canSeeCarets ? roster :
+            (namesOnly ??= [.. roster.Select(each => each with { Caret = null, Anchor = null, Pointer = null })]);
+        return new(author, authority.Replay(epoch, revision, budget: HexLinkDocumentWire.Budget), people, Saved: saved,
+            CheckpointSuggested: authority.CanOfferCheckpoint, RosterVersion: version, SameRoster: unchanged);
     }
 }
 
@@ -147,7 +163,12 @@ internal sealed class HexLinkDocumentRooms
             if (rooms.TryGetValue(path, out var existing))
                 return existing;
             if (rooms.Count >= MaxRooms)
-                throw new InvalidOperationException("Too many shared documents are open.");
+            {
+                string? empty = rooms.FirstOrDefault(pair => pair.Value.IsVacant).Key;
+                if (empty is null)
+                    throw new InvalidOperationException("Too many shared documents are open.");
+                rooms.Remove(empty);
+            }
             var room = new HexLinkDocumentRoom(path, seed, file);
             rooms.Add(path, room);
             return room;
@@ -207,8 +228,9 @@ internal static class HexLinkDocumentWire
             ["author"] = reply.Author, ["epoch"] = replay.Epoch.ToString("N"), ["revision"] = replay.Since,
             ["head"] = replay.Head, ["checkpoint"] = replay.Checkpoint?.Text,
             ["ops"] = new JsonArray([.. replay.Operations.Select(EncodeOperation)]),
-            ["participants"] = new JsonArray([.. reply.Participants.Select(EncodeParticipant)]), ["editable"] = reply.CanEdit,
-            ["saved"] = reply.Saved?.Encode()
+            ["participants"] = reply.SameRoster ? null : new JsonArray([.. reply.Participants.Select(EncodeParticipant)]),
+            ["roster"] = reply.RosterVersion, ["editable"] = reply.CanEdit,
+            ["saved"] = reply.Saved?.Encode(), ["prepare"] = reply.CheckpointSuggested
         };
     }
 
@@ -224,11 +246,14 @@ internal static class HexLinkDocumentWire
         HexDocCheckpoint? checkpoint = message["checkpoint"] is not null
             ? new HexDocCheckpoint(epoch, since, HexLinkDocumentProtocol.Field(message, "checkpoint", MaxText))
             : null;
-        HexDocParticipant[] participants = [.. BoundedArray(message, "participants", MaxPeople)
+        bool sameRoster = message["participants"] is null;
+        HexDocParticipant[] participants = sameRoster ? [] : [.. BoundedArray(message, "participants", MaxPeople)
             .Select(node => DecodeParticipant(node as JsonObject ?? throw HexLinkException.Invalid("Invalid document participant.")))];
         return new HexDocExchange(author, new HexDocReplay(epoch, since, head, checkpoint, ops), participants,
             HexLinkData.Bool(message, "editable") == true,
-            HexLinkData.Object(message, "saved") is { } saved ? HexDocSaved.Decode(saved) : null);
+            HexLinkData.Object(message, "saved") is { } saved ? HexDocSaved.Decode(saved) : null,
+            HexLinkData.Bool(message, "prepare") == true,
+            HexLinkData.Long(message, "roster") ?? 0, sameRoster);
     }
 
     internal static Guid? Epoch(JsonObject message)

@@ -33,6 +33,23 @@ public sealed class HexLinkDocumentSequenceTests
     }
 
     [Fact]
+    public void The_authority_can_hold_one_site_for_every_linked_device()
+    {
+        var room = new HexLinkDocumentRoom("work/note.txt", "seed");
+        room.Join(DeviceA.Id, new object(), DeviceA);
+        HexDocExchange? last = null;
+        for (int device = 0; device < HexLink.MOST; device++)
+        {
+            string id = device.ToString("X64", System.Globalization.CultureInfo.InvariantCulture);
+            last = room.Join(id, new object(), new HexLinkDevice(id, $"Device {device + 1}"));
+        }
+        Assert.Equal(64, HexLink.MOST);
+        Assert.Equal(65, last!.Participants.Count);
+        Assert.Equal(65, last.Participants.Select(participant => participant.Author).Distinct().Count());
+        Assert.Throws<InvalidOperationException>(() => room.Join(DeviceC.Id, new object(), DeviceC));
+    }
+
+    [Fact]
     public void A_megabyte_seed_uses_one_run_and_rejects_split_surrogates()
     {
         string seed = new string('x', 1_048_576) + "🚀";
@@ -45,6 +62,19 @@ public sealed class HexLinkDocumentSequenceTests
         Assert.Equal(2, replica.RunCount);
         Assert.Equal(2, replica.View().Spans.Count);
         Assert.EndsWith("🏠", replica.View().Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Distant_remote_edits_patch_only_the_changed_ranges_and_keep_a_caret_between_them()
+    {
+        var shared = new HexLinkDocumentSequence("prefix\n" + new string('x', 1_048_576) + "\nsuffix");
+        var original = shared.View();
+        var held = original.PointAt(10);
+        shared.Apply(original.Edit(new(1, 1), 0, 1, "P"));
+        shared.Apply(original.Edit(new(1, 2), original.Text.Length - 1, 1, "X"));
+        var changed = shared.View();
+        Assert.Equal(new HexDocSplice[] { new(0, 1, "P"), new(original.Text.Length - 1, 1, "X") }, original.PatchesTo(changed));
+        Assert.Equal(10, changed.OffsetOf(held));
     }
 
     [Fact]
@@ -136,10 +166,18 @@ public sealed class HexLinkDocumentSequenceTests
             sender.Apply(operation);
         Assert.Equal("aBA", sender.View().Text);
         Assert.Equal(room.View().Text, sender.View().Text);
+        HexDocExchange rosterOnly = await pair.PeerA.ExchangeDocument(path, epoch, replay.Replay.Head, [],
+            knownRoster: replay.RosterVersion);
+        Assert.False(rosterOnly.SameRoster);
+        Assert.All(rosterOnly.Participants, participant => Assert.Null(participant.Caret));
+        HexDocExchange quiet = await pair.PeerA.ExchangeDocument(path, epoch, replay.Replay.Head, [],
+            knownRoster: rosterOnly.RosterVersion);
+        Assert.True(quiet.SameRoster);
+        Assert.Empty(quiet.Participants);
     }
 
     [Fact]
-    public async Task An_agent_edits_as_its_own_site()
+    public async Task An_agent_edits_as_its_own_site_and_human_undo_leaves_its_change()
     {
         const string wire = "work/note.txt";
         using var pair = await LinkedPair.Up(HexLinkRights.Edit | HexLinkRights.View);
@@ -156,7 +194,13 @@ public sealed class HexLinkDocumentSequenceTests
         Assert.Equal(new HexDocPoint(applied.Replay.Operations[^1].Id, 1), agent.Caret);
         Assert.Equal("Hseed!", actor.View.Text);
 
-        Assert.Equal("Hseed!", room.View().Text);
+        Assert.True(actor.ChangeUndo(restoring: false));
+        actor.Receive(await pair.PeerA.ExchangeDocument(wire, actor.Epoch, actor.Revision, actor.Batch()));
+        Assert.Equal("seed!", actor.View.Text);
+        Assert.Equal("seed!", room.View().Text);
+        Assert.True(actor.ChangeUndo(restoring: true));
+        actor.Receive(await pair.PeerA.ExchangeDocument(wire, actor.Epoch, actor.Revision, actor.Batch()));
+        Assert.Equal("Hseed!", actor.View.Text);
     }
 
     [Fact]

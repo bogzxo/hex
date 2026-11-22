@@ -34,6 +34,11 @@ internal sealed class HexLinkDocumentAuthority
     private long Head => checkpoint.Revision + tail.Count;
     public long Clock { get { lock (gate) return sequence.Clock; } }
 
+    public bool CanOfferCheckpoint
+    {
+        get { lock (gate) return (tail.Count >= 2048 || sequence.StoredUnits >= 6 * 1024 * 1024) && participants.Values.All(each => each.Connected); }
+    }
+
     public HexDocCheckpoint Checkpoint
     {
         get { lock (gate) return checkpoint; }

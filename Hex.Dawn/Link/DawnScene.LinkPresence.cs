@@ -112,7 +112,7 @@ internal sealed partial class DawnScene
             return;
         linkPresenceSampled = now;
         HexLinkPresence? mine = LinkPresenceHere();
-        if (mine is not null && document.Editor.PointerTextPosition is { } pointer)
+        if (mine is not null && LinkLiveOf(document) is null && document.Editor.PointerTextPosition is { } pointer)
             mine = mine with { PointerLine = pointer.Line, PointerColumn = pointer.Column };
         string key = mine is null ? "-" : $"{mine.File}:{mine.Line}:{mine.Column}:{mine.ToLine}:{mine.ToColumn}:{mine.PointerLine}:{mine.PointerColumn}";
         if (key == linkPresenceSent)
@@ -130,6 +130,8 @@ internal sealed partial class DawnScene
     {
         if (document is not { IsText: true, Path: { } path, DiffOf: null } || LinkWireOf(path) is not { } wire)
             return null;
+        if (LinkLiveOf(document) is not null)
+            return new HexLinkPresence(wire, 0, 0);
         UITextPosition caret = document.Editor.Document.Caret, anchor = document.Editor.Document.Anchor;
         return caret == anchor
             ? new HexLinkPresence(wire, caret.Line, caret.Column, null, null)

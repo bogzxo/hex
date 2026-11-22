@@ -61,6 +61,7 @@ internal sealed class HexLinkDocumentSequence
 
     public long Clock { get; private set; }
     public int RunCount => runs.Count;
+    public int StoredUnits => storedUnits;
     public int OperationCount => operations.Count;
 
     public HexDocApply Apply(HexDocOperation operation)
@@ -396,6 +397,62 @@ internal sealed class HexDocView(string text, HexDocSpan[] spans, HexDocPosition
                     result.Add(new HexDocSpan(span.Run, span.Start + from - offset, to - from));
                 offset += span.Length;
             }
+        }
+    }
+
+    // Shared atom IDs stay ordered. Preserve their common ranges and patch only the gaps between them.
+    public HexDocSplice[] PatchesTo(HexDocView next)
+    {
+        if (Text == next.Text)
+            return [];
+        var lookup = new Dictionary<HexDocId, List<(HexDocSpan Span, int Offset)>>();
+        int offset = 0;
+        foreach (HexDocSpan span in next.Spans)
+        {
+            if (!lookup.TryGetValue(span.Run, out var mapped))
+                lookup.Add(span.Run, mapped = []);
+            mapped.Add((span, offset));
+            offset += span.Length;
+        }
+
+        var patches = new List<HexDocSplice>();
+        var consumed = new Dictionary<HexDocId, int>();
+        int oldAt = 0, newAt = 0, start = 0;
+        foreach (HexDocSpan span in spans)
+        {
+            if (lookup.TryGetValue(span.Run, out var mapped))
+            {
+                int at = consumed.GetValueOrDefault(span.Run);
+                while (at < mapped.Count && mapped[at].Span.Start + mapped[at].Span.Length <= span.Start)
+                    at++;
+                consumed[span.Run] = at;
+                for (; at < mapped.Count && mapped[at].Span.Start < span.Start + span.Length; at++)
+                {
+                    var (common, nextOffset) = mapped[at];
+                    int first = Math.Max(span.Start, common.Start);
+                    int end = Math.Min(span.Start + span.Length, common.Start + common.Length);
+                    if (first >= end)
+                        continue;
+
+                    int oldStart = start + first - span.Start;
+                    int newStart = nextOffset + first - common.Start;
+                    if (oldStart < oldAt || newStart < newAt)
+                        throw new InvalidOperationException("Shared document atoms appeared out of order.");
+                    AddGap(oldStart, newStart);
+                    oldAt = oldStart + end - first;
+                    newAt = newStart + end - first;
+                }
+            }
+
+            start += span.Length;
+        }
+        AddGap(Text.Length, next.Text.Length);
+        return [.. patches];
+
+        void AddGap(int oldEnd, int newEnd)
+        {
+            if (!Text.AsSpan(oldAt, oldEnd - oldAt).SequenceEqual(next.Text.AsSpan(newAt, newEnd - newAt)))
+                patches.Add(new HexDocSplice(oldAt, oldEnd - oldAt, next.Text[newAt..newEnd]));
         }
     }
 
