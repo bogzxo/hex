@@ -372,8 +372,26 @@ internal static partial class HexLinkFiles
     /// hash it has now, when it isn't. A null base is a new file, which conflicts with one that's there. The bytes are
     /// written as they came, so whatever encoding and mark they were in stays. Hands back the new hash.
     /// </summary>
-    public static async Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes,
-        CancellationToken cancel, bool? executable = null)
+    public static Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes,
+        CancellationToken cancel, bool? executable = null) =>
+        CompareAndReplace(full, wire, baseHash, bytes, cancel, executable, directories: null);
+
+    internal sealed class PackDirectories
+    {
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<DirectoryInfo>> created = new(PlatformPaths.Comparer);
+
+        public void Ensure(string directory) =>
+            _ = created.GetOrAdd(directory, static path => new Lazy<DirectoryInfo>(() => MakeDirectory(path))).Value;
+    }
+
+    private static DirectoryInfo MakeDirectory(string directory)
+    {
+        using var timing = HexLinkSyncTiming.Measure("cas.create-directory");
+        return Directory.CreateDirectory(directory);
+    }
+
+    internal static async Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes,
+        CancellationToken cancel, bool? executable, PackDirectories? directories)
     {
         using var duration = HexLinkSyncTiming.Measure("cas.small-total");
         if (bytes is { Length: > MOST_READ })
@@ -389,21 +407,30 @@ internal static partial class HexLinkFiles
             if (bytes is not null)
             {
                 string folder = Path.GetDirectoryName(full)!;
-                using (HexLinkSyncTiming.Measure("cas.create-directory"))
-                    Directory.CreateDirectory(folder);
+                if (directories is null)
+                    MakeDirectory(folder);
+                else
+                    directories.Ensure(folder);
                 temp = Path.Combine(folder, $".{Path.GetFileName(full)}.{Guid.NewGuid():N}.hexlink");
+                bool asyncIo = directories is null || bytes.Length > 64 * 1024;
                 FileStream staged;
                 using (HexLinkSyncTiming.Measure("cas.open-stage"))
-                    staged = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+                    staged = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, useAsync: asyncIo);
                 try
                 {
                     using var write = HexLinkSyncTiming.Measure("cas.write-stage", bytes.Length);
-                    await staged.WriteAsync(bytes, cancel).ConfigureAwait(false);
+                    if (asyncIo)
+                        await staged.WriteAsync(bytes, cancel).ConfigureAwait(false);
+                    else
+                        staged.Write(bytes);
                 }
                 finally
                 {
                     using var close = HexLinkSyncTiming.Measure("cas.close-stage");
-                    await staged.DisposeAsync().ConfigureAwait(false);
+                    if (asyncIo)
+                        await staged.DisposeAsync().ConfigureAwait(false);
+                    else
+                        staged.Dispose();
                 }
             }
 

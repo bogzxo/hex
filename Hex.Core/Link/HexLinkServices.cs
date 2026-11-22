@@ -67,6 +67,10 @@ internal interface IHexLinkServices
     Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes, CancellationToken cancel, bool? executable = null) =>
         HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel, executable);
 
+    Task<string?> CompareAndReplacePacked(string full, string wire, string? baseHash, byte[] bytes,
+        CancellationToken cancel, bool? executable, HexLinkFiles.PackDirectories directories) =>
+        CompareAndReplace(full, wire, baseHash, bytes, cancel, executable);
+
     /// <summary>Folders this device is already responsible for syncing with this peer.</summary>
     IReadOnlyList<string> ChosenSyncFolders(string deviceId) => [];
 

@@ -217,6 +217,10 @@ internal sealed class LinkServices : IHexLinkServices, IDisposable
         return Task.FromResult(true);
     }
 
+    public Task<string?> CompareAndReplacePacked(string full, string wire, string? baseHash, byte[] bytes,
+        CancellationToken cancel, bool? executable, HexLinkFiles.PackDirectories directories) =>
+        HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel, executable, directories);
+
     public void Presence(HexLinkDevice device, HexLinkPresence? presence) => Presences.Enqueue((device, presence));
 
     public Task<string> PatchOffered(HexLinkDevice device, string title, string diff)

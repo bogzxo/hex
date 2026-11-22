@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 using Hex.Core;
 using Hex.Core.Git;
@@ -10,7 +11,7 @@ using Xunit.Abstractions;
 namespace Hex.Tests;
 
 /// <summary>Opt-in working-tree benchmark. The two fixture workspaces are private clones, linked over pinned loopback TLS.</summary>
-public sealed class HexLinkSyncTlsBenchmark(ITestOutputHelper output)
+public sealed partial class HexLinkSyncTlsBenchmark(ITestOutputHelper output)
 {
     private static readonly HexLinkRights Rights = HexLinkRights.View | HexLinkRights.Edit;
     private static readonly string[] Candidates = [".", "hex", "horizon", "dusk", "Fighter2D", "hidl", "hex/hex-extensions", "horizon/Horizon.HIDL"];
@@ -110,12 +111,13 @@ public sealed class HexLinkSyncTlsBenchmark(ITestOutputHelper output)
                     bytes = sync.BytesTotal;
             };
             BeginProfile();
+            var cpu = SampleCpu();
             var elapsed = Stopwatch.StartNew();
             await sync.Start(force: true, cancel: stop);
             await Idle(sync, stop, () => Write($"{label} cold progress: {sync.Sent} sent, {sync.FilesDone}/{sync.FilesTotal} complete, {sync.Summary}"));
             Assert.Empty(sync.Conflicts);
             Write($"{label} cold: {elapsed.Elapsed.TotalSeconds:F3} s, {files} files compared for transfer, " +
-                $"{bytes / 1_000_000d:F1} MB, {sync.Sent} files sent, {sync.Skipped.Count} skipped.");
+                $"{bytes / 1_000_000d:F1} MB, {sync.Sent} files sent, {sync.Skipped.Count} skipped.{CpuLoad(cpu)}");
             EndProfile("cold");
             foreach (HexLinkSyncSkipped skipped in sync.Skipped)
                 Write($"{label} skipped {skipped.Path}: {skipped.Why}");
@@ -139,27 +141,30 @@ public sealed class HexLinkSyncTlsBenchmark(ITestOutputHelper output)
             HexLinkPeer peer = await transport.Start(stop);
             using var sync = new HexLinkSync(peer, here.Workspace.Folders[0], state);
             BeginProfile();
+            var cpu = SampleCpu();
             var elapsed = Stopwatch.StartNew();
             await sync.Start(cancel: stop);
             await Idle(sync, stop);
-            Write($"{label} warm restart: {elapsed.Elapsed.TotalSeconds:F3} s, {sync.Sent + sync.Received} files transferred.");
+            Write($"{label} warm restart: {elapsed.Elapsed.TotalSeconds:F3} s, {sync.Sent + sync.Received} files transferred.{CpuLoad(cpu)}");
             EndProfile("warm restart");
             Assert.Equal(0, sync.Sent + sync.Received);
 
             string remoteLive = Path.Combine(there.Work, "hexlink-benchmark-live.txt");
             BeginProfile();
+            cpu = SampleCpu();
             elapsed.Restart();
             File.WriteAllText(Path.Combine(here.Work, "hexlink-benchmark-live.txt"), "one saved file\n");
             await Until(() => Read(remoteLive) == "one saved file\n", stop);
-            Write($"{label} one saved file: {elapsed.Elapsed.TotalSeconds:F3} s.");
+            Write($"{label} one saved file: {elapsed.Elapsed.TotalSeconds:F3} s.{CpuLoad(cpu)}");
             EndProfile("one save");
 
             BeginProfile();
+            cpu = SampleCpu();
             elapsed.Restart();
             Git(here.Work, "checkout", "--detach", switched);
             await Until(() => Enumerable.Range(0, 500).All(i =>
                 Read(Path.Combine(there.Work, branchFiles, $"{i:0000}.txt")) == $"switched {i}\n"), stop);
-            Write($"{label} branch switch, 500 paths: {elapsed.Elapsed.TotalSeconds:F3} s.");
+            Write($"{label} branch switch, 500 paths: {elapsed.Elapsed.TotalSeconds:F3} s.{CpuLoad(cpu)}");
             EndProfile("branch switch");
 
             const int size = 200 * 1024 * 1024;
@@ -173,6 +178,7 @@ public sealed class HexLinkSyncTlsBenchmark(ITestOutputHelper output)
             }
             string large = Path.Combine(there.Work, "hexlink-benchmark-big.bin");
             BeginProfile();
+            cpu = SampleCpu();
             elapsed.Restart();
             File.Move(next, Path.Combine(here.Work, Path.GetFileName(large)));
             if (capability == HexLinkBulkSupport.None)
@@ -184,11 +190,27 @@ public sealed class HexLinkSyncTlsBenchmark(ITestOutputHelper output)
             {
                 await Until(() => File.Exists(large), stop);
                 Assert.Equal(size, new FileInfo(large).Length);
-                Write($"{label} 200 MiB: {elapsed.Elapsed.TotalSeconds:F3} s.");
+                Write($"{label} 200 MiB: {elapsed.Elapsed.TotalSeconds:F3} s.{CpuLoad(cpu)}");
             }
             EndProfile("200 MiB");
         }
     }
+
+    private static (long Idle, long BusyAndIdle)? SampleCpu() =>
+        OperatingSystem.IsWindows() && GetSystemTimes(out long idle, out long kernel, out long user)
+            ? (idle, kernel + user) : null;
+
+    private static string CpuLoad((long Idle, long BusyAndIdle)? before)
+    {
+        if (before is not { } earlier || SampleCpu() is not { } after || after.BusyAndIdle <= earlier.BusyAndIdle)
+            return "";
+        double share = 1 - (after.Idle - earlier.Idle) / (double)(after.BusyAndIdle - earlier.BusyAndIdle);
+        return $" System CPU {Math.Clamp(share, 0, 1):P0}.";
+    }
+
+    [LibraryImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetSystemTimes(out long idle, out long kernel, out long user);
 
     private static List<(string Relative, string Full, string Commit)> Repositories(string source)
     {

@@ -707,7 +707,9 @@ internal sealed partial class HexLinkSync
             else
             {
                 using (HexLinkSyncTiming.Measure("reconcile.read-source"))
-                    localBytes = await HexLinkFiles.ReadSharedAsync(full, stop);
+                    localBytes = peer.Session.SupportsBulk && info.Length <= 64 * 1024
+                        ? HexLinkFiles.ReadShared(full)
+                        : await HexLinkFiles.ReadSharedAsync(full, stop);
                 TextInfo text = TextOf(localBytes);
                 mine = new HexLinkTreeFile(wire, HexLinkFiles.Hash(localBytes), localBytes.LongLength, text.Norm, EolWord(text.Eol), tree.Mode(full));
             }
