@@ -259,7 +259,7 @@ internal sealed partial class DawnScene
         }
         LinkLiveReadRights(shared, peer);
         linkPresenceDrawnKey = string.Empty;
-        shared.Tab.Editor.RemoteCarets = LiveCarets(shared.Shown, shared.Participants, shared.Replica.Author);
+        shared.Tab.Editor.RemoteCarets = LinkCaretsForShared(shared, LiveCarets(shared.Shown, shared.Participants, shared.Replica.Author));
         tabsDirty = true;
     }
 
@@ -272,6 +272,7 @@ internal sealed partial class DawnScene
     private void LinkLiveDraft(LinkLiveDocument shared, string reason, string? authorityText = null)
     {
         shared.Draft = new(authorityText ?? shared.Replica.View.Text, reason);
+        linkPresenceDrawnKey = string.Empty;
         while (shared.AgentEdits.TryDequeue(out var request))
             request.Done.TrySetResult(reason);
         shared.Tab.Editor.Document.SharedUndo = null;
@@ -354,6 +355,7 @@ internal sealed partial class DawnScene
                 if (!shared.Offline)
                 {
                     shared.Offline = true;
+                    linkPresenceDrawnKey = string.Empty;
                     while (shared.AgentEdits.TryDequeue(out var request))
                         request.Done.TrySetResult("The shared document's owner is offline.");
                     shared.Tab.Editor.RemoteCarets = [];
@@ -582,8 +584,12 @@ internal sealed partial class DawnScene
             }
             LinkLiveApply(shared, shared.Replica.View, epoch == shared.Replica.Epoch ? captured : null, patches);
             LinkLiveMarkSaved(shared);
-            if (carets is not null && !shared.Tab.Editor.RemoteCarets.SequenceEqual(carets))
-                shared.Tab.Editor.RemoteCarets = carets;
+            if (carets is not null)
+            {
+                var visible = LinkCaretsForShared(shared, carets);
+                if (!shared.Tab.Editor.RemoteCarets.SequenceEqual(visible))
+                    shared.Tab.Editor.RemoteCarets = visible;
+            }
         });
     }
 

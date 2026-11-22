@@ -137,7 +137,7 @@ internal sealed partial class HexLinkHost : IDisposable
         return new HexLinkPresence(file, Math.Max(0, HexLinkData.Int(said, "line") ?? 0), Math.Max(0, HexLinkData.Int(said, "column") ?? 0),
             HexLinkData.Int(selection, "line") is { } toLine && toLine >= 0 ? toLine : null,
             HexLinkData.Int(selection, "column") is { } toColumn && toColumn >= 0 ? toColumn : null,
-            pointerLine, pointerColumn);
+            pointerLine, pointerColumn, SharedDocument: HexLinkData.Bool(said, "sharedDocument") == true);
     }
 
     /// <summary>A presence as the wire says it.</summary>
@@ -146,6 +146,11 @@ internal sealed partial class HexLinkHost : IDisposable
         var said = new JsonObject { ["file"] = presence?.File };
         if (presence is null)
             return said;
+        if (presence.SharedDocument)
+        {
+            said["sharedDocument"] = true;
+            return said;
+        }
         said["line"] = presence.Line;
         said["column"] = presence.Column;
         if (presence.ToLine is { } toLine && presence.ToColumn is { } toColumn)
