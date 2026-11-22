@@ -11,7 +11,7 @@ namespace Hex.Core;
 internal sealed partial class HexLink(IHexLinkServices services) : IDisposable
 {
     /// <summary>The most links at once.</summary>
-    public const int MOST = 8;
+    public const int MOST = 64;
 
     // A link up, its session and its two halves, and whether hello has been said both ways (Peers lists it from then)
     private sealed record Joined(HexLinkSession Session, HexLinkHost Host, HexLinkPeer Peer)
