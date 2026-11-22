@@ -1,3 +1,4 @@
+using System.IO.Enumeration;
 using System.Text.Json.Nodes;
 using Hex.Core.Git;
 
@@ -22,35 +23,60 @@ internal sealed partial class HexLinkTree
         return false;
     }
 
-    // Look for .git markers even in ignored directories. A workspace repository often ignores its nested checkouts.
-    internal static List<string> FindNestedRepositories(string root, CancellationToken cancel = default)
+    // Read .git markers and directory names together, including below directories ignored by the outer repo.
+    internal static List<string> FindNestedRepositories(string root, CancellationToken cancel = default,
+        Action<string, string>? unavailable = null)
     {
+        using var timing = HexLinkSyncTiming.Measure("tree.discover-repositories");
         var repositories = new List<string>();
         var pending = new Stack<string>();
+        var children = new List<string>();
         pending.Push(root);
-        var options = new EnumerationOptions { IgnoreInaccessible = false, AttributesToSkip = FileAttributes.ReparsePoint };
+        var options = new EnumerationOptions { IgnoreInaccessible = false, AttributesToSkip = 0 };
 
         while (pending.TryPop(out string? parent))
         {
             cancel.ThrowIfCancellationRequested();
-            foreach (string directory in Directory.EnumerateDirectories(parent, "*", options))
+            children.Clear();
+            bool marker = false, linked = false;
+            try
             {
-                string name = Path.GetFileName(directory);
-                if (SKIPPED.Contains(name) || name is ".vs" or ".venv")
-                    continue;
-
-                string marker = Path.Combine(directory, ".git");
-                if (File.Exists(marker) || Directory.Exists(marker))
+                var entries = new FileSystemEnumerable<(string? Directory, bool Link)>(parent, static (ref FileSystemEntry entry) =>
+                    entry.FileName.Equals(".git", PlatformPaths.Comparison)
+                        ? (null, (entry.Attributes & FileAttributes.ReparsePoint) != 0) : (entry.ToFullPath(), false), options)
                 {
-                    // A junction or symlink to another repository is outside this workspace.
-                    if ((File.GetAttributes(marker) & FileAttributes.ReparsePoint) != 0)
-                        continue;
-                    if (repositories.Count == MOST_REPOS)
-                        throw new IOException($"A workspace has more than {MOST_REPOS} nested repositories.");
-                    repositories.Add(Path.GetRelativePath(root, directory).Replace(Path.DirectorySeparatorChar, '/'));
+                    ShouldIncludePredicate = static (ref FileSystemEntry entry) => entry.FileName.Equals(".git", PlatformPaths.Comparison)
+                        || (entry.IsDirectory && (entry.Attributes & FileAttributes.ReparsePoint) == 0
+                            && !SKIPPED.Contains(entry.FileName.ToString()) && !entry.FileName.SequenceEqual(".vs") && !entry.FileName.SequenceEqual(".venv"))
+                };
+                foreach (var (directory, link) in entries)
+                {
+                    if (directory is null)
+                    {
+                        marker = true;
+                        linked = link;
+                    }
+                    else
+                        children.Add(directory);
                 }
-                pending.Push(directory);
             }
+            catch (Exception error) when (unavailable is not null && parent != root && error is IOException or UnauthorizedAccessException)
+            {
+                unavailable(Path.GetRelativePath(root, parent).Replace(Path.DirectorySeparatorChar, '/'), error.Message);
+                continue;
+            }
+
+            if (parent != root && marker)
+            {
+                // A junction or symlink to another repository is outside this workspace.
+                if (linked)
+                    continue;
+                if (repositories.Count == MOST_REPOS)
+                    throw new IOException($"A workspace has more than {MOST_REPOS} nested repositories.");
+                repositories.Add(Path.GetRelativePath(root, parent).Replace(Path.DirectorySeparatorChar, '/'));
+            }
+            foreach (string directory in children)
+                pending.Push(directory);
         }
 
         return repositories;
@@ -61,11 +87,16 @@ internal sealed partial class HexLinkTree
         if (HexLinkGit.Why() is not null)
             return null;
 
-        string[] repositories = [.. FindNestedRepositories(Root).Where(path => !Hidden(path, folder: true)).OrderByDescending(path => path.Length)];
+        string[] repositories = [.. FindNestedRepositories(Root, unavailable: (path, why) =>
+            issues[path] = new HexLinkGitIssue(OneLine(why), Unavailable: true))
+            .Where(path => !Hidden(path, folder: true)).OrderByDescending(path => path.Length)];
+        string[] unknown = [.. issues.Where(each => each.Value.Unavailable).Select(each => each.Key)];
+        if (unknown.Length != 0)
+            relative.RemoveAll(path => unknown.Any(scope => HexLinkMissingRepositories.Under(path, scope)));
         if (repositories.Length == 0)
         {
             nestedRepositories = [];
-            unavailableRepositories = [];
+            unavailableRepositories = [.. issues.Where(each => each.Value.Unavailable).Select(each => each.Key)];
             return null;
         }
 
@@ -80,7 +111,9 @@ internal sealed partial class HexLinkTree
             {
                 string path = repositories[i];
                 string directory = HexLinkFiles.Resolve(folders, Folder.Name + "/" + path);
-                GitResult listed = GitProcess.Run(directory, ["ls-files", "-co", "--exclude-standard", "-z"], patience: TimeSpan.FromSeconds(15));
+                GitResult listed;
+                using (HexLinkSyncTiming.Measure("tree.list-nested-git"))
+                    listed = GitProcess.Run(directory, ["ls-files", "-co", "--exclude-standard", "-z"], patience: TimeSpan.FromSeconds(15));
                 if (!listed.Ok)
                 {
                     scans[i] = ("", null, null, OneLine(listed.Why));

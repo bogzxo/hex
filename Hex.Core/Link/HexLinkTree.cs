@@ -117,7 +117,9 @@ internal sealed partial class HexLinkTree
         var issues = new Dictionary<string, HexLinkGitIssue>(StringComparer.Ordinal);
         if (HexLinkGit.Why() is null)
         {
-            GitResult listed = GitProcess.Run(Root, ["ls-files", "-co", "--exclude-standard", "-z"], patience: TimeSpan.FromMinutes(2));
+            GitResult listed;
+            using (HexLinkSyncTiming.Measure("tree.list-root-git"))
+                listed = GitProcess.Run(Root, ["ls-files", "-co", "--exclude-standard", "-z"], patience: TimeSpan.FromMinutes(2));
             if (listed.Ok)
             {
                 RecordGitWarning(issues, string.Empty, listed.Error);
