@@ -1,0 +1,35 @@
+// The right-hand chat for the people on Link, added to the editor when Link is on.
+#define layout
+
+let link_talk = compositor.panel({ clip: true, radius: 6 });
+
+let link_talk_title = compositor.label({
+    parent: link_talk, anchor: "top_left", pivot: "top_left", pos: vec(12, -12),
+    text: "@link.talk.title", bold: true
+});
+
+let link_talk_close = compositor.button({
+    parent: link_talk, anchor: "top_right", pivot: "top_right", pos: vec(-7, -7), size: vec(26, 26),
+    icon: "close", style: "button_flat", animated: false, tooltip: "@link.talk.close"
+});
+
+let link_talk_empty = compositor.label({
+    parent: link_talk, anchor: "top", pivot: "top", pos: vec(0, -53),
+    text: "@link.talk.empty", dim: true
+});
+
+let link_talk_compose = compositor.panel({
+    parent: link_talk, anchor: "bottom", pivot: "bottom", pos: vec(0, 37), size: vec(0, 57),
+    radius: 4, clip: true
+});
+
+let link_talk_placeholder = compositor.label({
+    parent: link_talk_compose, anchor: "top_left", pivot: "top_left", pos: vec(7, -7),
+    text: "@link.talk.placeholder", dim: true, text_scale: 0.14
+});
+
+let link_talk_send = compositor.button({
+    parent: link_talk, anchor: "bottom_right", pivot: "bottom_right", pos: vec(-10, 7), size: vec(0, 25),
+    icon: "send", label: "@link.talk.send", lbl_scale: 0.14, primary: true, animated: false,
+    tooltip: "@link.talk.compose_tip"
+});

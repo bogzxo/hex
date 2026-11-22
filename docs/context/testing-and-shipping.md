@@ -154,6 +154,7 @@ Run these from the build output of a disposable checkout. Give each process a fr
 | `link-git-follow` | Authority branch and commit follow, file sync after Git moves, and the reverse path |
 | `link-ui` | Devices, invites, connection state, workspace offers and remote approval UI |
 | `link-editor-notices` | Claim and shared-session notices, named collaborators, Follow and narrow/scale layout |
+| `link-talk` | Loopback chat, automatic docking, unread messages, the palette and multiline keyboard input |
 
 `link-peer` is primarily a companion process. `link-cross` and `link-nearby` need two explicit invocations and use a real network route unless the cross test is configured for loopback. `HEX_LINK_TEST_WORKTREE=1` with `link-cross` runs the older paired working-tree **sync** fixture. Use `link-worktree` for private drafts and checked publication. The old cross-document fixture exercises the legacy protocol. Use `link-documents` for the current CRDT.
 

@@ -41,6 +41,18 @@ requests and send notifications, regardless of who dialled. Each endpoint applie
 workspace rules and feature availability. Network and disk work run off the editor thread. The editor applies
 posted changes and updates its UI. The local MCP pipe remains a separate entry point.
 
+### Chat between linked people
+
+Link Chat opens beside the editor when another device connects and there is room. The close button hides it,
+and the status bar and **Link: Chat** command open it again. On a narrow window an opened chat floats along
+the right edge, where it can be closed to give the editor its full width. Enter sends, and Shift+Enter adds a
+line. The transcript and unread count are held in memory until Link stops.
+
+The `talk/say` notification carries a message id, text and a Unix timestamp in milliseconds. The receiver
+takes the sender from the authenticated connection. A receiver can relay the message to its other linked
+viewers once, with the sender's device id and name. A relay ends at that hop. Incoming notifications require
+View, with a 2,000-character text limit, a rate limit and room for 4,096 accepted messages per Link session.
+
 ## 2. Devices and routes
 
 Link is opt-in in this installation's settings. A repository cannot turn it on. The listener defaults to TCP

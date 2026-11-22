@@ -251,6 +251,7 @@ internal sealed partial class DawnScene
         // Between the title bar with the menus on top and the status bar at the bottom
         float height = screen.Height - root.Padding.Total.Y - top.Bounds.Height - statusBar.Bounds.Height;
         var (leftWidth, centerWidth, rightWidth) = ColumnWidths(screen.Width);
+        centerWidth -= FitLinkTalk(centerWidth, height);
 
         // What a column needs for everything in it that isn't given its height here, as it was last laid out. One part
         // given its height a column, a params array and a sum of it made garbage every tick

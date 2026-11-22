@@ -19,6 +19,7 @@ internal sealed partial class HexLink(IHexLinkServices services) : IDisposable
     private sealed record Joined(HexLinkSession Session, HexLinkHost Host, HexLinkPeer Peer)
     {
         public bool Hello { get; set; }
+        public TalkRate TalkRate { get; } = new();
     }
 
     private readonly List<Joined> links = [];
@@ -76,8 +77,9 @@ internal sealed partial class HexLink(IHexLinkServices services) : IDisposable
         }
 
         session.Requested = host.Handle;
-        session.ToldAsync = (method, parameters) =>
-            host.Told(method, parameters) ? ValueTask.CompletedTask : peer.ToldAsync(method, parameters);
+        session.ToldAsync = (method, parameters) => method == HexLinkTalk.METHOD
+            ? HearTalk(joined, parameters)
+            : host.Told(method, parameters) ? ValueTask.CompletedTask : peer.ToldAsync(method, parameters);
         host.DirectlyLinked = id =>
         {
             lock (links)

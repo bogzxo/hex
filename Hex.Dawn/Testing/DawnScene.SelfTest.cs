@@ -542,6 +542,7 @@ internal sealed partial class DawnScene
         ("link-public", "public connection controls and router consent with a loopback listener and simulated router", TestLinkPublic),
         ("link-public-invites", "public invite creation and pinned join override using loopback fixtures", TestLinkPublicInvites),
         ("link-editor-notices", "claim marks, shared document notices and Follow in the editor", TestLinkEditorNotices),
+        ("link-talk", "messages between two Link peers, the editor's chat panel, unread count and keyboard", TestLinkTalk),
         ("link-claims", "two linked editors coordinate claims, then merge disjoint edits and settle overlaps", TestLinkClaims),
         ("merge-editor", "three-way conflict resolution, manual edits, undo, cancellation, and binary choices", TestMergeEditor),
         ("link-peer", "the other end of the link part, or a Hex to link to from another machine (HEX_LINK_TEST_DIAL or HEX_LINK_TEST_LISTEN)", TestLinkPeer),
