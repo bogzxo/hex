@@ -1,52 +1,151 @@
 # Hex Link test evidence
 
-The rollout and integration runs below are different gates. On 2026-11-22 the three deployed devices ran Hex
-`9ee5f55`, Horizon `0e01c6c`, HIDL `bf0f436` and hex-extensions `0305852`. Wave 2 integration and
-feature-branch checks were run in isolated worktrees. A grouped self-test total is the total printed by that
-run. Companion checks are shown separately where the runner reported them. A dash indicates a breakdown the
-recorded run did not provide.
+The tables separate isolated tests, deployed probes and benchmarks. Each row names the Hex revision it
+actually ran. The three live devices used Hex `223dd02` with Horizon `0e01c6c` for the final shared-save
+probe. The isolated device gates used Horizon `0e01c6c`, HIDL `bf0f436` and hex-extensions `0305852`.
+`0d9d2e2` is the documentation baseline. The device gates below record their tested revisions separately.
 
 ## BOGZPC · Windows
 
 | Run | Hex commit | Result | Notes |
 | --- | --- | ---: | --- |
-| All Hex.Tests | `9ee5f55` | 1,851/1,851 | Rollout gate |
+| All Hex.Tests | `0a2feb9` | 1,927/1,927 | Wave 2 integration gate, recorded in `fbbd05c` |
+| Combined native Link suites | `0a2feb9` | 238/238 | Ten suites at the Wave 2 integration gate |
+| Shared-save regression build | `2d76bd5` | 20/20 focused unit tests, 47/47 `link-documents` checks | Four isolated Hexes on loopback, including an authority without the file open and a one-hop replica. The patch merged as `63d8081`. |
+| All Hex.Tests | `9ee5f55` | 1,851/1,851 | Earlier rollout gate |
 | Horizon.Tests | Horizon `0e01c6c` | 2,047/2,047 | Matching engine |
-| Combined native Link suites | `9ee5f55` rollout | 162/162 | Deputy's combined gate. Per-suite counts are not available from this summary. |
+| Combined native Link suites | `9ee5f55` | 162/162 | Earlier combined gate |
 | `link-files`, `link-provision`, `link-missing-repository` | `9ee5f55` | 50/50 | Separate grouped repeat |
-| Earlier combined native Link gate | `66eef98` | 151/151 | `link`, `link-files`, `link-documents`, `link-provision`, `link-missing-repository` and `link-ui` |
-| Live sync with BOGROG | `66eef98` rollout, idle at `9ee5f55` | 5/5 probe locations each way | Arrived within 2.7 s in the smoke run. Deletes propagated. Sync was idle with zero conflicts on the recorded rollout. |
+| Earlier combined native Link gate | `66eef98` | 151/151 | `link`, `link-files`, `link-documents`, `link-provision`, `link-missing-repository`, `link-ui` |
+| Live LAN sync with BOGROG | `66eef98` | 5/5 probe locations each way | Reads observed within 2.7 s, including SSH polling. Deletions propagated. |
 
-The probes covered the workspace root, Hex docs, the Horizon engine, hex-extensions and Horizon.HIDL. These are
-write-and-observe smoke measurements. The BOGROG side was checked by SSH polling, so the number includes
-observation delay.
+The LAN smoke probes covered the workspace root, Hex docs, Horizon, hex-extensions and Horizon.HIDL.
+The working-tree benchmark below is a separate measurement.
 
-## BOGROG · Windows
+## BOGROG · Windows x64
 
 | Run | Hex commit | Result | Notes |
 | --- | --- | ---: | --- |
-| In-tree Hex.Tests | Rollout around `679cd89` | 1,821/1,823 | Exact tested HEAD was not recorded. Listener probe failure was fixed in the later rollout. The other failure needed a real notebook kernel. |
-| Native self tests | Same tester run around `679cd89` | 70/70 | Per-suite counts were not recorded in the handoff. |
-| Build | Same tester run around `679cd89` | Passed, 40 s | In-tree build |
-| Live sync with BOGZPC | `9ee5f55` deployed | Idle | Both working trees were checked before aligning Git HEADs manually. This was before automatic HEAD follow on these devices. |
-| Release bulk/JSON benchmark | `043b0d3` | [Measurements below](#working-tree-benchmark) | Two private fixture workspaces on BOGROG over pinned loopback TLS |
+| Isolated build | `5a27611` | Passed in 96.40 s | Five warnings |
+| All Hex.Tests | `5a27611` | 1,937/1,939 | Two failures, zero skipped, 156 s |
+| Eleven native Link suites | `5a27611` | 238/244 | Six failures, about 230 s. Child fixtures passed 42/42 separately. |
+| Isolated rebuild | `223dd02` | Passed in 51.7 s | Two warnings |
+| `link-git-follow` and `link-claims` rerun | `223dd02` | 18/18 parent, 14/14 child | 41.3 s for the gate. The full managed suite was not repeated at this revision. |
+| Release bulk/JSON benchmark | `043b0d3` | [Measurements below](#working-tree-benchmark) | Two private workspaces over pinned loopback TLS |
+
+| Native suite | `5a27611` parent checks | Time | `223dd02` parent + child |
+| --- | ---: | ---: | --- |
+| `link` | 23/23 | 6.5 s | — |
+| `link-files` | 33/33 | 19.0 s | — |
+| `link-documents` | 38/38 | 12.8 s | — |
+| `link-provision` | 17/17 | 33.2 s | — |
+| `link-missing-repository` | 6/6 | 16.6 s | — |
+| `link-git-follow` | 3/5 | 18.2 s | 5/5 + 3/3, 20.3 s |
+| `link-claims` | 9/13 | 34.3 s | 13/13 + 11/11, 15.9 s |
+| `link-worktree` | 8/8 | 28.6 s | — |
+| `link-editor-notices` | 12/12 | 2.6 s | — |
+| `link-ui` | 83/83 | 37.9 s | — |
+| `link-sync-upgrade` | 6/6 | 8.5 s | — |
+
+At `5a27611`, the bundle incremental-fetch test `A_bundle_clones_on_the_other_side_and_a_second_fetch_brings_only_whats_new`
+failed its empty-collection assertion. The real-kernel notebook test
+`Engineering_notebook_executes_renders_and_roundtrips_in_a_real_kernel` failed its non-null assertion.
+The Git-follow fixture missed the joiner's commit and working file returning, and agreement between history,
+index and checkout. The claims fixture missed disjoint convergence and three checks in the overlapping-edit
+scenario, covering preserved originals, the diff3 preview and the accepted resolution. The two native reruns at
+`223dd02` passed after the fixture and Git handling updates. BOGROG did not have Tailscale.
 
 ## bogz-mac · Apple M1
 
 | Run | Hex commit | Result | Notes |
 | --- | --- | ---: | --- |
-| In-tree Hex.Tests | `679cd89` | 1,832/1,835 | Two Git alternates cases fixed in the later rollout and one notebook environment failure |
-| Native Link self tests | `679cd89` | 87/87 | Grouped run through `link-missing-repository`. |
-| Get workspace from BOGZPC | `9ee5f55` | 9 repos at source HEADs | About 413 MB of Git bundles, 170–224 s end to end, 1.29 GB on disk. Oversized tar and the uninitialized nested Horizon.HIDL checkout were skipped. |
-| Build in provisioned tree | `9ee5f55` | Passed, 50 s | Zero build errors |
+| Get workspace from BOGZPC | `9ee5f55` | 9 repos at source HEADs | About 413 MB of Git bundles, 170–224 s end to end, 1.29 GB on disk. Skipped an oversized tar file and the uninitialized nested Horizon.HIDL checkout. |
+| Build in provisioned tree | `9ee5f55` | Passed in 50 s | Zero build errors |
 | HexLink filter in provisioned tree | `9ee5f55` | 348/348 | File keystore |
-| Live sync with BOGZPC | `9ee5f55` deployed | Idle | 3,322 line-ending-only differences. Five mixed-EOL tracked files appeared modified from the older Get. The later provisioning correction applies to future Gets. |
+| Live sync with BOGZPC | `9ee5f55` | Idle | 3,322 line-ending-only differences. Five mixed-EOL tracked files appeared modified after the older Get. The later provisioning correction applies to future Gets. |
+| Isolated device gate | `5a27611` | 1,928/1,939 Hex.Tests, partial GUI 78 passed and 7 failed | The first launch could neither bind the unit test listener nor open an SDL display. The GUI retry was stopped for rollout before completing all suites. |
+| Isolated rebuild | `223dd02` | Passed in 26.20 s | Fourteen warnings |
+| All Hex.Tests | `223dd02` | 1,944/1,946 | Two failures, zero skipped, 131.27 s |
+| Eleven native Link suites | `223dd02` | 255/255 | 200.79 s in the logged-in Aqua session, with the default Darwin temp path |
 
-The Mac paired via Tailscale and redialled via LAN. That establishes invite pairing over the VPN. A
-Tailscale-only working-tree run after redial is pending. The Get time includes Git object transfer, checkout and
-working-file hydration. The BOGROG benchmark measures working-tree sync. The recorded Mac handoff does not
-give completed probe timings. Codex was available on the Mac and the Claude CLI was not logged in during this
-rollout.
+| Native suite at `223dd02` | Checks passed | Time |
+| --- | ---: | ---: |
+| `link` | 23/23 | 10.2 s |
+| `link-files` | 33/33 | 15.4 s |
+| `link-documents` | 47/47 | 34.8 s |
+| `link-provision` | 19/19 | 18.5 s |
+| `link-missing-repository` | 6/6 | 11.5 s |
+| `link-git-follow` | 5/5 | 13.7 s |
+| `link-claims` | 13/13 | 14.9 s |
+| `link-worktree` | 8/8 | 16.1 s |
+| `link-editor-notices` | 12/12 | 4.0 s |
+| `link-ui` | 83/83 | 48.6 s |
+| `link-sync-upgrade` | 6/6 | 10.1 s |
+
+Eight Git-follow unit tests failed at `5a27611` because the tests could not resolve the selected Git checkout.
+The checkout-root fix in `223dd02` cleared those failures. Two managed failures remained at `223dd02`.
+`HexLinkSyncTests.A_hostile_peer_can_never_make_this_side_write_outside_the_folder_into_git_or_over_the_state`
+saw an extra temporary sync-state file in its snapshot. The real-kernel notebook test again failed its non-null
+assertion. Codex was available. The Mac's Claude CLI was signed out.
+
+## Deployed device probes
+
+The timings below use operator observations, command replies or local reflogs as noted. They are smoke
+measurements. The [working-tree benchmark](#working-tree-benchmark) uses a controlled fixture.
+
+| Probe | Build | What the devices showed |
+| --- | --- | --- |
+| Sync after restart | `7ba581f` | After BOGZPC restarted, the Mac resumed without a manual start and reported `horizon managed by BOGZPC [idle]: 0 sent, 0 received, 0 conflicts, 0 skipped`. After the later `223dd02` rebuilds and restarts, both remotes relinked on LAN and sync was idle with zero conflicts. |
+| Tailscale-only file sync | `7ba581f` | Used `hex_link_route` to pin the Mac endpoint `100.80.122.37:47833` on BOGZPC and the BOGZPC endpoint `100.81.32.118:47833` on the Mac. Polling confirmed reads in both directions within 8.6 s. Deletions propagated. Both ends returned to Automatic and reconnected on LAN. |
+| HEAD follow | `5a27611` | Local reflogs recorded the authority at 07:08:15 +02, the Mac at 07:08:17 +02 and BOGROG at 07:08:19 +02, apparent delays of 2 s and 4 s. Clock skew was not measured. BOGROG was clean. The Mac retained only the five known EOL-only changes. |
+| Shared save | `223dd02` | Two Mac profiles, one relayed through the other, and BOGROG edited together while the authority had no tab open. A single Mac save cleared all three modified indicators and updated every disk. Both links were idle with zero conflicts. |
+| Private worktree spawn | `223dd02` | The real request returned in 30 ms with “Preparing its private worktree; the agent runs when it is ready.” The reply measures acknowledgement, before checkout preparation completes. |
+| Private worktree Publish | `223dd02` | Pending. The first live attempt stopped before the compile gate with “Files changed outside the exact gate candidate. Retry the publication.” The comparison used authority byte hashes for the replica's files, which can have different line endings. A real gate refusal followed by successful publication still needs verification. |
+
+### Claims, remote approval and steering
+
+The BOGZPC–BOGROG agent checks used a `7ba581f`-era build. The operator recorded the following replies.
+
+- **Claim refusal.** BOGROG chat #31's edit returned in 37 ms with “Claimed file horizon/hex/docs/_linkpass/claimed.md
+  by #133 '#133 Impl D: Devices window' on BOGZPC (planned, claimed 22 s ago). ETA 06:44:18.” The reply offered
+  waiting for release, contacting the holder with `hex_agent_message` or using a private worktree. It said
+  “Use override_claim=true only after coordination. Overrides are audited.” The holder received “Can you let
+  me know when this file is free?” on BOGZPC. After release, the edit succeeded in 57 ms and reported one edit
+  at `claimed.md:1`. BOGZPC read `link-pass from BOGROG`.
+- **Remote approval.** BOGZPC started BOGROG Claude chat #32 with default permissions. Within 9.5 s it saw
+  “A chat you started on BOGROG, #32, asks leave: Bash wants to run (request 1).” The approval reply was
+  “#32's request 1 allowed: Bash wants to run”. The shell marker reached BOGZPC and the chat finished by 12.4 s.
+  A request to pre-approve the exact Bash rule was refused with “Remote starters may pre-approve edits here.
+  This device does not allow that allow rule.”
+- **Steering stop.** BOGROG #31 acknowledged the follow-up. “Stopped #31.” appeared at 14.5 s and the agent
+  readback showed it stopped at 15.1 s.
+
+### Shared-save byte checks
+
+Overlapping inserts in `shared.md` converged to `oMTverlap`. BOGZPC and the Mac stored LF
+(SHA-256 `d5218b3097ba52111149668c1a33f1d3e3c9e981131aa9e61fb3d554867b6d82`). BOGROG stored CRLF
+(`ff125b773bf63fde84583e911fd24d3eb8e2722121db0edb011596736f0485d9`). A second probe in `shared-bytes.md`
+started from the seven-byte, newline-free `overlap`. After further overlapping inserts and one Mac save, all
+three disks held the same nine bytes, `oTMverlap`, with SHA-256
+`7cc700197344e2e83e189a3ee62422f9a912e8a2b0ccc51287851bba21d4ec13`. All editors were clean. The readback
+includes agent reporting delay, so it gives no save-latency measurement.
+
+## Found only on real machines
+
+| What the existing suites missed | Fix or follow-up |
+| --- | --- |
+| A live upgrade could retain an elected authority and a persisted stop, leaving sync off after reconnect. | `5af4f78` restores sync choices and lets explicit Start override an old stop. Verified in the `7ba581f` rollout and upgrade fixture. |
+| A replica installed before folder authority could reconnect without a pin and fail to resume sync. | The `7ba581f` rollout includes authority migration from `5af4f78` and the trusted legacy-source check in `f85cded`. The Mac resumed automatically after the authority restarted. |
+| A live room could save on the authority and Mac while BOGROG treated the CRLF/LF difference as unsaved editor changes. The authority had no tab open. | `63d8081` verifies the saved revision by content across line endings and updates each replica's disk baseline. The four-process fixture and the three-machine save now cover this topology. |
+| Publish could not scope the compile gate to the authority's selected project. | The range `ed31f4f` through `5a27611` added an authority-owned scoped gate and local timeout handling. The end-to-end live Publish remains pending. |
+| Private worktree preparation took 83.05 s for 4,292 files and 223 MiB, past the 30 s spawn timeout. | `19bcd46` acknowledges spawn while preparing and reuses required repositories. A nine-repository scratch clone measured 19.945 s cold and 0.869 s reused, opening four repositories and preparing 3,066 files and 47.2 MiB. |
+| Approvals could be invisible to the device that started a remote agent. | `957170c` corrected the stored starter chat number. The live Claude prompt and approval then reached the starter. |
+| Redial picked LAN even when the operator needed to test a VPN-only route. | `7d1a3d8` added a remembered route choice. The Tailscale-only probe used it on both ends. |
+| One unavailable repository or oversized file could abort the entire Get. | `6342e01` and `7d720da` let provisioning continue with a skip reason for individual repositories or paths. |
+| A commit could arrive as working-file edits while the remote HEAD stayed behind. | `fb8933a` and `433b08d` added Git ref and index follow alongside file sync. The series ends at `3c2c9d1`, which closes the reverse-follow fixture timing gap. The live reflogs confirmed movement on both replicas. |
+| Slower devices exposed fixtures that checked before sync, Git or the editor had finished. | `223dd02` improves the waits and Git diagnostics. The two BOGROG reruns and all eleven Mac suites passed. |
+| Dev builds collided with DLLs held by running agent bridge helpers. | `0d9d2e2` gives each build's move-aside files unique names. |
+| Concurrent agent worktrees filled the build disk. | Operational follow-up. Remove generated `bin` and `obj` contents from merged scratch worktrees and stop work below 15 GB free. |
 
 ## Wave 2 feature and integration suites
 
@@ -140,7 +239,7 @@ transfers. These are working-tree measurements. The cold Mac Get above also prov
 | 500 changed paths | 15.728 s | **5.989 s** |
 | 200 MiB file | Skipped by legacy limit | **2.466 s** |
 
-The two modes use the same fixture shape and exact-byte checks. A controlled real-LAN repeat and the same-HEAD
+The two modes use the same fixture shape and exact-byte checks. A controlled real-LAN repeat, the 1 GB benchmark and the same-HEAD
 blob ID shortcut are pending.
 
 ## Rerun
@@ -167,7 +266,7 @@ a disposable Unix profile that should avoid the system key store. Use the built 
 ```
 
 Substitute `link`, `link-files`, `link-provision`, `link-missing-repository`, `link-claims`,
-`link-worktree`, `link-git-follow`, `link-ui`, `link-editor-notices` or `conflicts` for the corresponding
+`link-worktree`, `link-git-follow`, `link-ui`, `link-editor-notices`, `link-sync-upgrade` or `conflicts` for the corresponding
 row. Use `--scale 1.5` for the editor-notice preview. The local Link suites create their own disposable peers
 and exercise IPv4 loopback with discovery off. Collect the parent total, companion totals and exit code
 separately. The command catalogue is in [testing and shipping](context/testing-and-shipping.md#hex-link-suites).
@@ -204,6 +303,18 @@ HexLink filter. Time probes from both ends in the root, a nested repo and a subm
 line endings, then remove the fixture probes and confirm deletion convergence. Record the route for pairing
 **and** for the subsequent transfer.
 
+To repeat the Tailscale-only probe, use `hex_link_devices` to find each VPN endpoint and set it on the opposite
+device with `hex_link_route` using `{"device":"peer-name","address":"vpn-ip:port"}`. Check the active route
+before writing and deleting a probe file in each direction. Record polling bounds separately from transfer
+timings. Restore the route with `{"device":"peer-name","address":"automatic"}`.
+
+For a real shared-save repeat, leave the authority's tab closed and open the fixture file in three participants,
+including one relayed through another. Type overlapping changes, save once, then check clean indicators, conflict
+counts and each disk. Record both the line-ending-preserving case and the exact-byte case without a newline.
+For private Publish, use a disposable candidate with a gate scoped by the authority. Verify that a failing build
+leaves every live copy unchanged, then fix it and verify the same approved revision on all three disks.
+
 The historical report at `9ee5f55` (`git show 9ee5f55:docs/hex-link-test-evidence.md`) covers the original
-LAN/Tailscale tests, wire inspection and real-agent probes. Wave 2 still needs an isolated Tailscale-only sync
-leg, a real-LAN performance run, native keystore validation and measured UI contrast.
+pairing, wire inspection and agent probes. Native Keychain and `secret-tool` acceptance, measured native UI
+contrast, a controlled real-LAN throughput run and the 1 GB benchmark remain pending. Linked prediction was
+not rerun on the real devices during Wave 2.

@@ -9,13 +9,15 @@ integration gates.
 
 - **What ships in Wave 2.** Devices and invite pairing, folder authority, checked working-tree sync and bulk
   transfers, workspace provisioning, HEAD follow, claims and clean text merges, shared documents, private
-  worktrees and checked publication, remote agent approvals.
-- **Known limits.** One relay may forward permitted control RPC. Bulk publication needs a direct link to the
-  authority. Handle case-only directory renames manually. Native Keychain and `secret-tool` paths and native UI
-  colour contrast have no recorded acceptance runs. Shared editing meets the 50 ms loopback target in the fast
-  run and misses it at CPU saturation.
-- **Not done.** A current Tailscale-only sync run, a controlled real-LAN throughput benchmark, and a live
-  64-device GUI load test. The recorded throughput comparison uses pinned loopback TLS.
+  worktrees and checked publication, and remote agent approvals. Real-device checks covered workspace Get,
+  automatic reconnect and sync resumption, LAN and Tailscale file probes, HEAD follow, agent coordination
+  and a three-editor save with the authority's tab closed.
+- **Known limits.** One hop can relay permitted control RPC. Bulk publication requires a direct link to the
+  authority. Handle case-only directory renames manually. BOGROG had no Tailscale, and the Mac's Claude CLI
+  was signed out. Shared editing can exceed the 50 ms loopback target under CPU saturation.
+- **Not done.** The live private-worktree Publish gate retest, a controlled real-LAN throughput run, the 1 GB
+  benchmark and a live 64-device GUI load test are pending. Native Keychain and `secret-tool` validation
+  and measured native UI contrast are pending. Linked prediction was not rerun on the real devices in Wave 2.
 
 ## 1. Architecture
 
