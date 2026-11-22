@@ -4205,6 +4205,7 @@ let strings = {
         chat_close_all: "Close chat and sub-agents",
         permission_tip: "What the agent may do without asking: {mode}. Applies to the next message.",
         waiting_approval: "Wants permission: {what}",
+        waiting_approval_short: "Asks leave",
         waiting_question: "Asked you: {what}",
         waiting_others: "{count} more waiting",
         waiting_answer: "Answer",

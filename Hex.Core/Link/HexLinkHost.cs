@@ -265,7 +265,9 @@ internal sealed partial class HexLinkHost : IDisposable
                 ["seconds"] = row.Seconds,
                 ["cost"] = row.Cost,
                 ["version"] = row.Version,
-                ["waiting"] = extra?.Waiting ?? false,
+                ["waiting"] = row.Approvals.Count > 0 || extra?.Waiting == true,
+                ["approvals"] = row.Approvals.Count > 0 ? new JsonArray([.. row.Approvals.Select(approval => (JsonNode)new JsonObject
+                    { ["request"] = approval.Number, ["title"] = approval.Title, ["detail"] = approval.Detail })]) : null,
                 ["plan_step"] = extra?.PlanStep
             });
         }

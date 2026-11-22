@@ -99,7 +99,7 @@ internal sealed partial class DawnScene
             {
                 HexAgentChat standIn = LinkStandIn(peer, row);
                 var remote = new LinkRemoteCard(peer.Device.Id, LinkNameOf(peer.Device.Id, peer.Device.Name), row.Id);
-                AgentCard card = AgentCardOf(standIn, step, closable: false, rail: row.Waiting, remote: remote);
+                AgentCard card = AgentCardOf(standIn, step, closable: false, rail: row.Waiting, remote: remote, approval: row.Approvals.FirstOrDefault());
                 rows.Add(card.Root);
                 refreshes.Add(card.Refresh);
                 tall += AGENT_CARD + rows.Spacing;

@@ -59,7 +59,7 @@ internal sealed partial class DawnScene
     /// <param name="quiet">Its name dimmed, a finished chat's in a list where the working ones should read first.</param>
     /// <param name="rail">A rail of the warning colour down its left, a chat waiting on the person, the one thing in the list meant to catch the eye.</param>
     /// <param name="remote">The chat of another device the card is, its stand-in drawn and picking it opens that (DawnScene.LinkFleet).</param>
-    private AgentCard AgentCardOf(HexAgentChat chat, int step, bool closable, bool quiet = false, bool rail = false, LinkRemoteCard? remote = null)
+    private AgentCard AgentCardOf(HexAgentChat chat, int step, bool closable, bool quiet = false, bool rail = false, LinkRemoteCard? remote = null, HexAgentApprovalStatus? approval = null)
     {
         UISkin? skin = Skin;
         float indent = step * CHAT_STEP;
@@ -140,7 +140,7 @@ internal sealed partial class DawnScene
             // Who it's run by over its name, the agent system, and the chat that started it first for one an agent started.
             // The model goes with what it used under its name, where the model and what it cost read together
             string starter = remote is not null ? LinkStarterOf(remote, chat, system) : chat.Parent is { } parent ? $"{ChatName(parent)} · {system}" : system;
-            ShowAgentStatus(state, chat);
+            ShowAgentStatus(state, chat, approval);
 
             // As much of it as fits beside the state, measured in the font, which a count of letters guessed at short
             float stateWidth = (Skin?.Font.Measure(state.Text, state.TextScale, markup: false).X ?? 100.0f) + 40.0f;
@@ -162,7 +162,12 @@ internal sealed partial class DawnScene
             string mail = unread > 0 ? $" · $(mail) {unread}" : string.Empty;
             float mailWidth = mail.Length > 0 ? 40.0f : 0.0f;
             // The model stays in front of what it's doing, it was gone from the card for as long as a tool ran
-            if (doing is not null)
+            if (approval is not null)
+            {
+                said = UIRichText.Literal(FitText(approval.Summary, under.TextScale, room - 24));
+                under.Tooltip = approval.Detail.Length > 0 ? approval.Summary + "\n" + approval.Detail : approval.Summary;
+            }
+            else if (doing is not null)
                 said = UIRichText.Literal(FitText(model is { Length: > 0 } ? $"{model} · {doing}" : doing, under.TextScale, room - 24));
             else
             {
@@ -216,10 +221,12 @@ internal sealed partial class DawnScene
 
     // How an agent is doing in a word or two and its time, on its badge in the tone of it: working in blue with a beating
     // dot, failed in red, done and unseen in the accent with a dot, stopped, done and new quiet. In the texts, not English here
-    private static void ShowAgentStatus(Badge badge, HexAgentChat chat)
+    private static void ShowAgentStatus(Badge badge, HexAgentChat chat, HexAgentApprovalStatus? approval = null)
     {
         string time = Took(chat.TurnSeconds);
-        (string text, UIBadgeTone tone, string icon, bool dot) = chat.Running ? (Said("agents_panel.card_working", ("time", time)), UIBadgeTone.Info, "", true)
+        (string text, UIBadgeTone tone, string icon, bool dot) = approval is not null
+            ? (Said("agents_panel.waiting_approval_short"), UIBadgeTone.Warning, "shield", false)
+            : chat.Running ? (Said("agents_panel.card_working", ("time", time)), UIBadgeTone.Info, "", true)
             // Its turn over but its program still going, on a build or a wait of its own: not done, and said so
             : chat.RunGoing ? (Said("agents_panel.card_waiting"), UIBadgeTone.Warning, "watch", false)
             : chat.Failed ? (Said("agents_panel.card_failed"), UIBadgeTone.Danger, "error", false)
@@ -230,7 +237,7 @@ internal sealed partial class DawnScene
         badge.Tone = tone;
         badge.Icon = icon;
         badge.Dot = dot;
-        badge.Pulse = chat.Running;
+        badge.Pulse = chat.Running && approval is null;
         badge.Opacity = tone == UIBadgeTone.Neutral && !chat.Stopped ? 0.7f : 1.0f;
     }
 

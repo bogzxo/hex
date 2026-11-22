@@ -69,19 +69,7 @@ internal sealed partial class DawnScene
 
     // A request's number in its chat, counted over the approvals among the rows it keeps, so an answer names the one it
     // means. One waiting is always recent, never among the rows let go of
-    private static int RequestNumber(HexAgentChat chat, HexAgentEntry asked)
-    {
-        int number = 0;
-        foreach (HexAgentEntry entry in chat.Entries)
-        {
-            if (entry.Kind == HexAgentEntryKind.Approval)
-                number++;
-            if (ReferenceEquals(entry, asked))
-                return number;
-        }
-
-        return number;
-    }
+    private static int RequestNumber(HexAgentChat chat, HexAgentEntry asked) => HexAgentHub.RequestNumber(chat, asked);
 
     private IEnumerable<McpToolResult?> AgentApprove(JsonObject args)
     {

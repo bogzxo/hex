@@ -73,6 +73,29 @@ internal sealed class HexAgentHub
     public static IEnumerable<HexAgentEntry> Approvals(HexAgentChat chat) =>
         chat.Pending.Where(entry => entry.Kind == HexAgentEntryKind.Approval);
 
+    internal static int RequestNumber(HexAgentChat chat, HexAgentEntry asked)
+    {
+        int number = 0;
+        foreach (HexAgentEntry entry in chat.Entries)
+        {
+            if (entry.Kind == HexAgentEntryKind.Approval)
+                number++;
+            if (ReferenceEquals(entry, asked))
+                return number;
+        }
+        return number;
+    }
+
+    private static HexAgentApprovalStatus ApprovalStatus(HexAgentChat chat, HexAgentEntry entry) =>
+        new(RequestNumber(chat, entry), ApprovalLine(entry.Text, 300),
+            ApprovalLine(HexAgentRows.Readable(entry.Input ?? string.Empty), 600));
+
+    private static string ApprovalLine(string text, int most)
+    {
+        string line = text.ReplaceLineEndings(" ").Trim();
+        return line.Length > most ? line[..(most - 1)] + "…" : line;
+    }
+
     /// <summary>Where the rows chats no longer keep in memory go, null for nowhere (they're let go of).</summary>
     public HexAgentHistory? History { get; set; }
 
@@ -172,7 +195,10 @@ internal sealed class HexAgentHub
         chat.Model is { Length: > 0 } running ? running : chat.Options.GetValueOrDefault("model"), chat.Parent, chat.Depth, StateWord(chat),
         chat.Running ? string.Empty : chat.LastReply(reply), chat.TurnSeconds, chat.Cost, chat.Version, chat,
         // Nothing unread is the usual, a row is made again for every line an agent streams
-        chat.UnreadMailCount() > 0 ? chat.UnreadMail() : []);
+        chat.UnreadMailCount() > 0 ? chat.UnreadMail() : [])
+        {
+            Approvals = chat.HasPending ? [.. Approvals(chat).Take(16).Select(entry => ApprovalStatus(chat, entry))] : []
+        };
 
     /// <summary>A chat's state in a word, as the tools say it.</summary>
     public static string StateWord(HexAgentChat chat) =>

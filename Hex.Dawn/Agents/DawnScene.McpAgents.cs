@@ -134,6 +134,7 @@ internal sealed partial class DawnScene
         + (status.Seconds > 0 ? $" {status.Seconds.ToString("0.#", CultureInfo.InvariantCulture)}s" : string.Empty)
         + (status.Cost > 0 ? $" ${status.Cost.ToString("0.000", CultureInfo.InvariantCulture)}" : string.Empty)
         + (status.Parent is { } parent ? $" (started by #{parent})" : string.Empty)
+        + (status.Approvals.Count > 0 ? $" · {string.Join(" · ", status.Approvals.Select(approval => approval.Summary))}" : string.Empty)
         + (status.Unread.Length is > 0 and var unread ? $", {unread} unread message{(unread == 1 ? string.Empty : "s")}" : string.Empty);
 
     private static readonly (string Id, string Name, string Program)[] CatalogAgents =
@@ -348,14 +349,15 @@ internal sealed partial class DawnScene
                 HexHubRow[] those = [.. ids.Select(id => now.GetValueOrDefault(id)).OfType<HexHubRow>()];
                 int done = those.Count(status => !status.State.StartsWith("running", StringComparison.Ordinal));
                 bool over = any ? done > 0 : done == those.Length;
+                bool needsApproval = those.Any(status => status.Approvals.Count > 0);
                 long remaining = deadline - System.Environment.TickCount64;
                 bool late = remaining <= 0;
                 HexHubRow? receiver = caller is { } me ? now.GetValueOrDefault(me) : null;
                 HexAgentMail[] mail = receiver?.UnreadForWait(wakes, over || late) ?? [];
-                if (over || late || mail.Length > 0)
+                if (over || needsApproval || late || mail.Length > 0)
                 {
                     // What came for it is read with the report, the waiting one steering the others on it
-                    string report = WaitReport(those, late && !over);
+                    string report = WaitReport(those, late && !over && !needsApproval);
                     if (mail.Length == 0)
                         return McpToolResult.Text(report);
 
@@ -394,7 +396,13 @@ internal sealed partial class DawnScene
         foreach (HexHubRow status in those.OrderBy(status => status.State.StartsWith("running", StringComparison.Ordinal)))
         {
             said.Append(StatusLine(status)).Append('\n');
-            if (!status.State.StartsWith("running", StringComparison.Ordinal))
+            if (status.Approvals.Count > 0)
+            {
+                foreach (HexAgentApprovalStatus approval in status.Approvals)
+                    if (approval.Detail.Length > 0)
+                        said.Append(approval.Detail).Append('\n');
+            }
+            else if (!status.State.StartsWith("running", StringComparison.Ordinal))
                 said.Append(status.Reply.Length > 0 ? status.Reply : "(it said nothing)").Append("\n\n");
         }
 
@@ -411,9 +419,16 @@ internal sealed partial class DawnScene
         }
 
         PublishAgentStatuses();
-        string head = StatusLine(agentStatuses[chat.Id]);
+        HexHubRow status = agentStatuses[chat.Id];
+        string head = StatusLine(status);
         if (!args.Flag("full"))
         {
+            if (status.Approvals.Count > 0)
+            {
+                string details = string.Join("\n", status.Approvals.Select(approval => approval.Detail).Where(detail => detail.Length > 0));
+                yield return McpToolResult.Text(details.Length > 0 ? head + "\n" + details[..Math.Min(most, details.Length)] : head);
+                yield break;
+            }
             string reply = chat.LastReply(most);
             yield return McpToolResult.Text($"{head}\n{(reply.Length > 0 ? reply : chat.Running ? "(working, nothing said yet)" : "(it said nothing)")}");
             yield break;

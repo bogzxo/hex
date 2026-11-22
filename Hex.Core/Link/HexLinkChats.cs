@@ -67,10 +67,7 @@ internal static class HexLinkChats
         if (entry.Kind == HexAgentEntryKind.Approval)
         {
             // Its number as hex_agent_approve counts it, the approvals among the rows kept up to it
-            int number = 0;
-            for (int i = 0; i <= index && i < chat.Entries.Count; i++)
-                number += chat.Entries[i].Kind == HexAgentEntryKind.Approval ? 1 : 0;
-            row["request"] = number;
+            row["request"] = HexAgentHub.RequestNumber(chat, entry);
         }
 
         return row;
