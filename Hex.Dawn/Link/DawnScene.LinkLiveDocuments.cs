@@ -864,6 +864,7 @@ internal sealed partial class DawnScene
             yield break;
         }
 
+        bool wasClean = !shared.Tab.Modified;
         int? caller = McpServer.CallingChat.Value;
         string name = caller is { } id ? ChatById(id)?.Shown ?? $"#{id}" : "MCP";
         var outcome = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -877,7 +878,23 @@ internal sealed partial class DawnScene
             yield return McpToolResult.Error(error);
             yield break;
         }
-        foreach (var step in McpThenCheck(args, shared.Tab.Path!, said + " Changed the shared buffer. It will reach disk when saved."))
+        // An open tab with nothing unsaved is saved with the edit, an agent's build reads the disk. One with unsaved
+        // changes of the person's keeps them, the edit is in the editor and says so
+        string where;
+        if (wasClean)
+        {
+            shared.SaveRequested = true;
+            LinkLiveFlush(shared, urgent: true);
+            long until = System.Environment.TickCount64 + 8000;
+            while (shared.Tab.Modified && System.Environment.TickCount64 < until)
+                yield return null;
+            where = shared.Tab.Modified
+                ? " Changed the shared buffer, saving it to disk didn't finish, it is NOT on disk yet."
+                : " Changed the shared buffer and saved it to disk.";
+        }
+        else
+            where = " Changed the shared buffer, the tab had unsaved changes, so this is in the editor only and NOT on disk until it is saved.";
+        foreach (var step in McpThenCheck(args, shared.Tab.Path!, said + where))
             yield return step;
     }
 
