@@ -93,6 +93,7 @@ internal sealed partial class HexLinkDocumentRoom
             HexDocFileBasis basis;
             lock (gate)
             {
+                RequireCurrentRoom();
                 if (online.GetValueOrDefault(scope) != connection)
                     throw HexLinkException.NotFound("Join the shared document before saving.");
                 HexDocReplay current = authority.Replay(epoch, minimumRevision, limit: 1);

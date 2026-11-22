@@ -89,7 +89,8 @@ internal sealed partial class HexLinkHost
                           : new(entry.Path, null, HexLinkHoldReply.HeldOn(services.Device.Name));
                       return;
                   }
-                  string? hash = await services.CompareAndReplacePacked(full, entry.Path, entry.Base, entry.Bytes, stop, entry.Executable, directories);
+                  string? hash = await ApplyHeldSubmission(full, entry.Path, entry.Base, entry.Bytes, stop,
+                    entry.HeldSubmission, entry.Executable, directories);
                 tree.RememberMode(full, entry.Executable);
                 results[i] = new(entry.Path, hash);
             }

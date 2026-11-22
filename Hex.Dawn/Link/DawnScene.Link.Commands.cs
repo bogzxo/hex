@@ -31,6 +31,7 @@ internal sealed partial class DawnScene
         commands.AddRange(LinkSharePaletteCommands());
         commands.AddRange(LinkProvisionPaletteCommands());
         LinkLiveDocumentCommands(commands);
+        LinkHoldPaletteCommands(commands);
         return commands;
     }
 

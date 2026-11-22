@@ -12,6 +12,7 @@ integration gates.
   worktrees and checked publication, and remote agent approvals. Real-device checks covered workspace Get,
   automatic reconnect and sync resumption, LAN and Tailscale file probes, HEAD follow, agent coordination
   and a three-editor save with the authority's tab closed.
+  - [Held changes](hex-link-held-changes.md) keep working edits local until submission. Held changes and Git conflicts use the shared merge editor.
 - **Managing another device's agents.** A linked device stops, restarts, renames, clears and deletes chats of the
   Agents panel on the device that has them (`hex_agent_stop`, `hex_agent_restart`, `hex_agent_rename`,
   `hex_agent_close`, or `HexLinkPeer.AgentAction`; rows say `started_by_you`). The device that has the chats decides.

@@ -79,13 +79,32 @@ internal sealed partial class DawnScene
                     await session.Complete(result);
                 PostLink(() => CloseMergeTab(tab));
             }
+            catch (MergeCheckFailed failed)
+            {
+                PostLink(() => UIDialog.Show(chrome, "Submit check failed", failed.Message,
+                    new DialogChoice("Submit anyway", () => _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await failed.OverrideCheck();
+                            PostLink(() => CloseMergeTab(tab));
+                        }
+                        catch (Exception error)
+                        {
+                            PostLink(() => Failed(error));
+                        }
+                    }), Risky: true),
+                    new DialogChoice("Cancel", () => merge.SetBusy(false))));
+            }
             catch (Exception error)
             {
-                PostLink(() =>
-                {
-                    merge.SetBusy(false);
-                    Say(error.Message, error: true);
-                });
+                PostLink(() => Failed(error));
+            }
+
+            void Failed(Exception error)
+            {
+                merge.SetBusy(false);
+                Say(error.Message, error: true);
             }
         });
     }

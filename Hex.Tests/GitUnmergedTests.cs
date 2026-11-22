@@ -89,6 +89,7 @@ public sealed class GitUnmergedTests : IDisposable
         GitUnmergedFile index = Assert.Single(GitUnmerged.List(repository));
         Assert.Null(index.Theirs);
         MergeSession session = Assert.IsType<MergeSession>(await GitUnmerged.Open(repository, PathOfFile));
+        Assert.True(session.IsBinary);
         MergeSideChoices sides = Assert.IsType<MergeSideChoices>(session.SideChoices);
         Assert.False(sides.MineDeleted);
         Assert.True(sides.TheirsDeleted);

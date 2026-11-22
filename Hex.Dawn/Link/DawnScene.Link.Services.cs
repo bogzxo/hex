@@ -12,7 +12,7 @@ internal sealed partial class DawnScene
     /// and what has to touch the editor (a chat read, a question answered, a file written into an open tab) is posted to
     /// the editor's thread and handed back when it's run.
     /// </summary>
-    private sealed class LinkServices(DawnScene hex) : IHexLinkServices, IHexLinkProvisionOffers, IHexLinkRepositoryReady, IHexLinkGitFollowing, IHexLinkSyncActivation
+    private sealed class LinkServices(DawnScene hex) : IHexLinkServices, IHexLinkProvisionOffers, IHexLinkRepositoryReady, IHexLinkGitFollowing, IHexLinkSyncActivation, IHexLinkHeldSubmission
     {
         public Task<HexLinkSyncReport?> ActivateSync(HexLinkPeer peer, HexLinkFolder folder, string action, bool resume, CancellationToken cancel) =>
             hex.LinkReceiveSyncActivation(peer, folder, action, resume, cancel);
@@ -48,7 +48,14 @@ internal sealed partial class DawnScene
             lock (holdStoresGate)
             {
                 if (!holdStores.TryGetValue(key, out HexLinkHoldStore? store))
-                    holdStores.Add(key, store = new HexLinkHoldStore(folder, Path.Combine(hex.linkData, LINK_SYNC_STATES)));
+                {
+                    store = new HexLinkHoldStore(folder, Path.Combine(hex.linkData, LINK_SYNC_STATES));
+                    holdStores.Add(key, store);
+                    HexLinkHoldStore observed = store;
+                    store.Changed += () => hex.PostLink(() => hex.LinkHoldMoved(this, folder, observed));
+                    if (store.Count > 0)
+                        hex.PostLink(() => hex.LinkHoldMoved(this, folder, observed));
+                }
                 return store;
             }
         }
@@ -137,6 +144,10 @@ internal sealed partial class DawnScene
 
         public Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes, CancellationToken cancel, bool? executable = null) =>
             hex.LinkCompareAndReplace(full, wire, baseHash, bytes, cancel, executable);
+
+        public Task<string?> ApplyHeldSubmission(string full, string wire, string? basis, byte[]? bytes,
+            CancellationToken cancel, bool? executable, HexLinkFiles.PackDirectories? directories) =>
+            hex.LinkApplyHeldSubmission(this, full, wire, basis, bytes, cancel, executable, directories);
 
         public Task<string?> CompareAndReplacePacked(string full, string wire, string? baseHash, byte[] bytes,
             CancellationToken cancel, bool? executable, HexLinkFiles.PackDirectories directories) =>

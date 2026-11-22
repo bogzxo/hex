@@ -65,12 +65,16 @@ internal sealed partial class HexLinkPeer
     /// file), its new hash back. A conflict throws a <see cref="HexLinkException"/> of <see cref="HexLinkErrors.CONFLICT"/>,
     /// <see cref="ConflictHash"/> says the hash it has now. The bytes go as they are, so the file's encoding stays.
     /// </summary>
-    public async Task<string> Write(string path, string? baseHash, byte[] bytes, CancellationToken cancel = default)
+    public async Task<string> Write(string path, string? baseHash, byte[] bytes, CancellationToken cancel = default,
+        bool heldSubmission = false)
     {
-        JsonObject said = await AskObject("fs/write", new JsonObject
+        var request = new JsonObject
         {
             ["path"] = path, ["base"] = baseHash, ["base64"] = Convert.ToBase64String(bytes), ["accept_held"] = true,
-        }, cancel);
+        };
+        if (heldSubmission)
+            request["held_submission"] = true;
+        JsonObject said = await AskObject("fs/write", request, cancel);
         HexLinkHoldReply.Check(said, Device);
         return HexLinkData.String(said, "hash", 64) ?? HexLinkFiles.Hash(bytes);
     }
