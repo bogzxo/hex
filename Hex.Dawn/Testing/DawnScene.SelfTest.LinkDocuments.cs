@@ -96,6 +96,8 @@ internal sealed partial class DawnScene
         long[] sent = new long[4];
         HexAgentChat? named = null;
         Task<McpToolResult>? agentEdit = null;
+        Task<string?>? syncing = null;
+        bool SyncReady(HexLinkPeer peer) => LinkSyncOf(peer.Device.Id, "shared")?.State is HexLinkSyncState.Idle or HexLinkSyncState.PullOnly;
         bool Flag(string work, string name) => File.Exists(Path.Combine(work, name));
         void Signal(string work, string name) => File.WriteAllText(Path.Combine(work, name), "");
         void Await(string label, Func<bool> check)
@@ -130,6 +132,13 @@ internal sealed partial class DawnScene
         Await("two devices paired on isolated loopback", () => LinkTestBoundOnlyToLoopback && LinkPeers.Count == 1);
         test.Run(() =>
         {
+            if (LinkPeers.SingleOrDefault() is { } editor)
+                syncing = LinkSyncStart(editor.Device.Id, "shared", remember: false);
+        });
+        Await("the editor's plain folder is synced", () =>
+            syncing is { IsCompletedSuccessfully: true, Result: null } && LinkPeers.SingleOrDefault() is { } editor && SyncReady(editor));
+        test.Run(() =>
+        {
             Open(path);
             Rewrite(document, "seed");
             Signal(peerWork, "open");
@@ -142,8 +151,10 @@ internal sealed partial class DawnScene
             int number = sample;
             test.Run(() =>
             {
+                document.Editor.Focus();
+                document.Editor.Document.Select(new(0, 4), new(0, document.Editor.Text.Length));
                 sent[number - 1] = Stopwatch.GetTimestamp();
-                Rewrite(document, $"seed{number}");
+                Engine.Input.Post(Horizon.Input.InputEvent.Typed(number.ToString(CultureInfo.InvariantCulture)));
             });
             Await($"live edit {number} reached the second editor", () => Flag(peerWork, $"latency{number}"));
         }
@@ -176,6 +187,13 @@ internal sealed partial class DawnScene
         test.WaitFor(() => LinkPairingPending is { IsDecided: false }, 90);
         test.Run(() => LinkPairingPending?.Decide(HexLinkRights.View));
         Await("a third device joined the link as a reader", () => LinkPeers.Count == 2);
+        test.Run(() =>
+        {
+            if (LinkPeers.FirstOrDefault(peer => !HexLinkAllowed.Has(peer.Session.Connection.Rights, HexLinkRights.Edit)) is { } reader)
+                syncing = LinkSyncStart(reader.Device.Id, "shared", remember: false);
+        });
+        Await("the reader's plain folder is synced", () =>
+            syncing is { IsCompletedSuccessfully: true, Result: null } && LinkPeers.Count(SyncReady) == 2);
         test.Run(() => Signal(readerWork, "open"));
         Await("the third editor received the same buffer read-only", () => Flag(readerWork, "read") && LinkLiveOf(document)?.Participants.Count == 3);
 
