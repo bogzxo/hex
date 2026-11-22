@@ -55,7 +55,7 @@ internal sealed partial class HexLinkTree
     private readonly ConcurrentDictionary<string, HashStamp> hashes = new(StringComparer.Ordinal);
 
     private readonly Func<HexExcludes> excludes;
-    private readonly bool streamLarge;
+    private volatile bool streamLarge;
     private readonly ConcurrentDictionary<string, string> movedCase = new(StringComparer.OrdinalIgnoreCase);
 
     public HexLinkTree(HexLinkFolder folder, Func<HexExcludes>? excludes = null, string? cacheDirectory = null, bool streamLarge = false)

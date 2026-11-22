@@ -3,7 +3,7 @@ namespace Hex.Core;
 internal sealed partial class HexLinkTree
 {
     private static readonly Lock sharedTrees = new();
-    private static readonly Dictionary<(string Root, string Name, string? Cache, HexExcludes Rules, bool Large), WeakReference<HexLinkTree>> trees = [];
+    private static readonly Dictionary<(string Root, string Name, string? Cache, HexExcludes Rules), WeakReference<HexLinkTree>> trees = [];
     private bool shareFreshScans;
     private long scanVersion, lastScanVersion, scannedAt;
     private HexLinkManifest? lastScan;
@@ -34,11 +34,18 @@ internal sealed partial class HexLinkTree
     {
         string full = Path.GetFullPath(folder.Path);
         string keyRoot = PlatformPaths.Comparison == StringComparison.OrdinalIgnoreCase ? full.ToUpperInvariant() : full;
-        var key = (keyRoot, folder.Name, cacheDirectory is null ? null : Path.GetFullPath(cacheDirectory), excludes(), streamLarge);
+        var key = (keyRoot, folder.Name, cacheDirectory is null ? null : Path.GetFullPath(cacheDirectory), excludes());
         lock (sharedTrees)
         {
             if (trees.TryGetValue(key, out WeakReference<HexLinkTree>? known) && known.TryGetTarget(out HexLinkTree? tree))
+            {
+                if (streamLarge && !tree.streamLarge)
+                {
+                    tree.streamLarge = true;
+                    tree.InvalidateSnapshot();
+                }
                 return tree;
+            }
 
             if (trees.Count > 128)
             {
@@ -53,6 +60,21 @@ internal sealed partial class HexLinkTree
     }
 
     internal void InvalidateSnapshot() => Interlocked.Increment(ref scanVersion);
+
+    internal static HexLinkManifest ForLegacy(HexLinkManifest manifest) =>
+        manifest.Files.Any(file => file.Size > HexLinkFiles.MOST_READ && !file.Big)
+            ? manifest with
+            {
+                Files = [.. manifest.Files.Select(file => file.Size > HexLinkFiles.MOST_READ
+                    ? file with { Hash = null, Text = null, Eol = null, Executable = null }
+                    : file)]
+            }
+            : manifest;
+
+    internal static HexLinkTreeChange ForLegacy(HexLinkTreeChange change) =>
+        change.Size > HexLinkFiles.MOST_READ
+            ? change with { Hash = null, Text = null, Eol = null, Executable = null }
+            : change;
 }
 
 /// <summary>One watcher for a local tree and an ordered subscription per sync or linked device.</summary>

@@ -27,6 +27,8 @@ internal sealed partial class HexLinkHost
         bool paged = HexLinkData.Bool(parameters, "paged") == true;
         HexLinkAuthority? authority = Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, manifest.Folder))?.Authority;
         manifest = manifest with { Authority = authority };
+        if (!session.SupportsBulk)
+            manifest = HexLinkTree.ForLegacy(manifest);
         int fullCount = manifest.Files.Count;
         var (changed, equal) = HexLinkDirectoryDigests.Select(manifest, parameters);
         manifest = changed;
@@ -218,7 +220,7 @@ internal sealed partial class HexLinkHost
             return;
         var said = new JsonArray();
         foreach (HexLinkTreeChange change in changes)
-            said.Add((JsonNode)HexLinkTree.ChangeJson(change));
+            said.Add((JsonNode)HexLinkTree.ChangeJson(session.SupportsBulk ? change : HexLinkTree.ForLegacy(change)));
 
         session.Tell("sync/changed", new JsonObject { ["folder"] = folder, ["changes"] = said });
     }

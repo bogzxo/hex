@@ -127,6 +127,24 @@ public sealed class HexLinkTreeCacheTests
     }
 
     [Fact]
+    public void Legacy_and_bulk_links_share_one_tree_and_keep_the_legacy_size_limit()
+    {
+        using var site = new LinkServices(HexLinkTestKit.DeviceA);
+        HexLinkFolder folder = site.Workspace.Folders[0];
+        using (FileStream stream = File.Create(Path.Combine(folder.Path, "big.bin")))
+            stream.SetLength(HexLinkFiles.MOST_READ + 1);
+
+        HexLinkTree legacy = HexLinkTree.Shared(folder, () => HexExcludes.Usual, cacheDirectory: null, streamLarge: false);
+        Assert.True(Assert.Single(legacy.Manifest().Files).Big);
+        Assert.Same(legacy, HexLinkTree.Shared(folder, () => HexExcludes.Usual, cacheDirectory: null, streamLarge: true));
+        HexLinkManifest bulk = legacy.Manifest();
+        HexLinkTreeFile file = Assert.Single(bulk.Files);
+        Assert.NotNull(file.Hash);
+        Assert.True(Assert.Single(HexLinkTree.ForLegacy(bulk).Files).Big);
+        Assert.Null(HexLinkTree.ForLegacy(new HexLinkTreeChange(file.Path, file.Hash, Size: file.Size)).Hash);
+    }
+
+    [Fact]
     public void Reconnecting_after_the_last_watcher_stops_reads_a_new_manifest()
     {
         using var site = new LinkServices(HexLinkTestKit.DeviceA);

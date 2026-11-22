@@ -335,7 +335,8 @@ internal sealed partial class HexLinkSync : IDisposable
                 () => peer.WatchTree(folder.Name, Heard, cancel, previous));
             try { await Task.WhenAll(scanMine, scanTheirs); }
             finally { remoteWatched = scanTheirs.IsCompletedSuccessfully; }
-            HexLinkManifest mine = (await scanMine) with { Authority = folder.Authority };
+            HexLinkManifest actual = (await scanMine) with { Authority = folder.Authority };
+            HexLinkManifest mine = peer.Session.SupportsBulk ? actual : HexLinkTree.ForLegacy(actual);
             HexLinkManifest theirs = await scanTheirs;
             LocalHead = mine.Head;
             RemoteHead = theirs.Head;
@@ -371,7 +372,7 @@ internal sealed partial class HexLinkSync : IDisposable
             }
 
             await Task.Run(() => Load(mine, theirs, cancel), cancel);
-            Begin(mine, theirs, watch);
+            Begin(mine, theirs, watch, actual);
             watch = null;
         }
         catch (Exception e) when (e is HexLinkException or IOException or UnauthorizedAccessException or OperationCanceledException or InvalidOperationException)

@@ -40,7 +40,7 @@ internal sealed partial class HexLinkSync
     private TaskCompletionSource? drained;
 
     // The first comparison done: what differs queued, both trees watched from now on
-    private void Begin(HexLinkManifest mine, HexLinkManifest theirs, HexLinkTreeSubscription watch)
+    private void Begin(HexLinkManifest mine, HexLinkManifest theirs, HexLinkTreeSubscription watch, HexLinkManifest actual)
     {
         var here = new Dictionary<string, HexLinkTreeFile>(StringComparer.Ordinal);
         foreach (HexLinkTreeFile file in mine.Files)
@@ -156,7 +156,7 @@ internal sealed partial class HexLinkSync
             Why = pullOnly ? $"{peer.Device.Name} doesn't let this device write there (Edit)" : null;
         }
 
-        watch.Seed(mine);
+        watch.Seed(actual);
         Notify();
         _ = Task.Run(() => Work(stop));
         if (differ.Count > 0)
