@@ -26,20 +26,49 @@ internal sealed partial class DawnScene
         if (linkServices is not { } services)
             return McpToolResult.Error("Hex Link is off.");
         string? requested = args.String("folder");
-        HexLinkFolder? folder = requested is null ? services.Workspace.Folders.FirstOrDefault() :
-            services.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, requested));
-        if (folder is null)
-            return McpToolResult.Error($"There is no shared folder{(requested is null ? "." : $" named {requested}.")}");
+        string[] named = args["paths"] is JsonArray asked ? [.. asked.Select(node => node!.GetValue<string>())] : [];
+        HexLinkFolder? folder;
+        if (requested is not null)
+        {
+            folder = services.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, requested));
+            if (folder is null)
+                return McpToolResult.Error($"There is no shared folder named {requested}.");
+        }
+        else if (named.Length == 0)
+        {
+            folder = services.Workspace.Folders.FirstOrDefault();
+            if (folder is null)
+                return McpToolResult.Error("There is no shared folder.");
+        }
+        else if (LinkHoldFolderFor(services, named, out string? unplaced) is not { } placed)
+            return McpToolResult.Error(unplaced!);
+        else
+            folder = placed;
 
         string action = args.String("action") ?? "list";
         try
         {
             HexLinkHoldService service = LinkHoldServiceFor(folder);
-            string[]? paths = args["paths"] is JsonArray list ? [.. list.Select(node => LinkHoldWire(folder, node!.GetValue<string>()))] : null;
+            string[]? paths = args["paths"] is JsonArray ? [.. named.Select(path => LinkHoldWire(folder, path))] : null;
+            string[] notHeld = [];
+            if (paths is { Length: > 0 } && action is "plan" or "submit" or "update" or "discard")
+            {
+                // The held ones go on, the others are said, one that wasn't held (sent already) doesn't fail the rest
+                var heldNow = service.List().Select(entry => entry.Path).ToHashSet(PlatformPaths.Comparer);
+                notHeld = [.. paths.Where(path => !heldNow.Contains(path)).Distinct(PlatformPaths.Comparer)];
+                paths = [.. paths.Where(heldNow.Contains)];
+                if (paths.Length == 0)
+                    return McpToolResult.Error($"None of these is held: {string.Join(", ", notHeld)}.");
+            }
             if (action == "hold")
             {
                 if (paths is not { Length: > 0 })
                     return McpToolResult.Error("Say which files to hold.");
+                foreach (string path in paths)
+                {
+                    if (!File.Exists(HexLinkFiles.Resolve([folder], path, services.Excludes)))
+                        return McpToolResult.Error($"{path} doesn't exist in {folder.Name} ({folder.Path}), nothing was held. Name a file that is there.");
+                }
                 var held = new List<HexLinkHold>();
                 foreach (string path in paths.Distinct(PlatformPaths.Comparer))
                     held.Add(await LinkHoldDocument(service, path, cancel));
@@ -50,7 +79,7 @@ internal sealed partial class DawnScene
                     paths.Contains(held.Path, PlatformPaths.Comparer)).Select(HeldJson)]) });
 
             if (action == "plan")
-                return AsJson(new() { ["files"] = new JsonArray([.. (await service.Plan(paths, cancel)).Select(PlanJson)]) });
+                return AsJson(new() { ["files"] = new JsonArray([.. (await service.Plan(paths, cancel)).Select(PlanJson)]), ["not_held"] = NotHeldJson(notHeld) });
 
             if (action == "conflicts")
                 return AsJson(new() { ["conflicts"] = new JsonArray([.. service.PendingConflicts(paths).Select(LinkHoldConflictJson)]) });
@@ -83,6 +112,8 @@ internal sealed partial class DawnScene
                 ["paths"] = new JsonArray([.. result.Paths.Select(path => (JsonNode?)JsonValue.Create(path))]),
                 ["needs_merge_editor"] = new JsonArray([.. result.NeedsMerge.Select(PlanJson)]),
             };
+            if (notHeld.Length > 0)
+                said["not_held"] = NotHeldJson(notHeld);
             if (result.NeedsMerge.Count > 0)
                 said["next"] = "Without a merge editor: action conflicts shows the regions, action resolve settles a file with resolution mine, theirs or merged (text is the whole merged file).";
             if (result.Gate is { } gate)
@@ -97,13 +128,15 @@ internal sealed partial class DawnScene
         }
 
         static McpToolResult AsJson(JsonObject json) => McpToolResult.Text(json.ToJsonString());
+        static JsonArray NotHeldJson(string[] paths) => new([.. paths.Select(path => (JsonNode?)JsonValue.Create(path))]);
         static JsonObject HeldJson(HexLinkHold held) => new()
         {
-            ["path"] = held.Path, ["state"] = "Held", ["held_at"] = held.HeldAt,
+            ["path"] = held.Path, ["state"] = "Held", ["held_at"] = LocalTime(held.HeldAt),
             ["base_hash"] = held.BaseHash, ["base_source"] = held.BaseSource.ToString().ToLowerInvariant(),
             ["incoming"] = held.HasIncoming, ["incoming_deleted"] = held.IncomingDeleted,
-            ["incoming_from"] = held.IncomingFrom, ["incoming_at"] = held.IncomingAt,
+            ["incoming_from"] = held.IncomingFrom, ["incoming_at"] = held.IncomingAt is { } at ? LocalTime(at) : null,
         };
+        static string LocalTime(DateTimeOffset time) => time.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz", System.Globalization.CultureInfo.InvariantCulture);
         static JsonObject PlanJson(HexLinkHoldPlanEntry plan) => new()
         {
             ["path"] = plan.Path, ["outcome"] = LinkHoldOutcome(plan.Outcome),
@@ -155,10 +188,68 @@ internal sealed partial class DawnScene
             new([.. (lines ?? []).Select((text, at) => (JsonNode?)new JsonObject { ["line"] = from + at, ["text"] = text })]);
     }
 
+    // The folder of the workspace the paths are in: the one a path names first, or holds a file of that name, or has
+    // it held; null with what's wrong (no folder has it, two do, or the paths are in different folders) when it isn't one.
+    private static HexLinkFolder? LinkHoldFolderFor(LinkServices services, IReadOnlyList<string> paths, out string? why) =>
+        LinkHoldFolderFor(services.Workspace, folder => services.Holds(folder), paths, out why);
+
+    internal static HexLinkFolder? LinkHoldFolderFor(HexLinkWorkspace workspace, Func<HexLinkFolder, HexLinkHoldStore?> holds,
+        IReadOnlyList<string> paths, out string? why)
+    {
+        why = null;
+        var folders = new List<HexLinkFolder>();
+        foreach (string path in paths)
+        {
+            string normalized = path.Replace('\\', '/').Trim();
+            HexLinkFolder[] candidates;
+            if (Path.IsPathFullyQualified(normalized))
+                candidates = [.. workspace.Folders.Where(folder => PlatformPaths.IsUnder(Path.GetFullPath(normalized), folder.Path)
+                    && !PlatformPaths.Same(Path.GetFullPath(normalized), folder.Path)).OrderByDescending(folder => folder.Path.Length).Take(1)];
+            else
+            {
+                string first = normalized.Split('/')[0];
+                HexLinkFolder? named = workspace.Folders.FirstOrDefault(folder => PlatformPaths.Comparer.Equals(folder.Name, first));
+                if (named is not null && normalized.Contains('/'))
+                    candidates = [named];
+                else
+                    candidates = [.. workspace.Folders.Where(folder =>
+                    {
+                        try
+                        {
+                            return File.Exists(Path.Combine(folder.Path, normalized))
+                                || holds(folder)?.IsHeld(folder.Name + "/" + normalized) == true;
+                        }
+                        catch (Exception e) when (e is ArgumentException or NotSupportedException or IOException) { return false; }
+                    })];
+            }
+
+            if (candidates.Length == 0)
+            {
+                why = $"{path} is in none of the workspace's folders ({string.Join(", ", workspace.Folders.Select(folder => $"{folder.Name} = {folder.Path}"))}), nothing was held. Name a file that is there.";
+                return null;
+            }
+            if (candidates.Length > 1)
+            {
+                why = $"{path} is in more than one folder ({string.Join(", ", candidates.Select(folder => folder.Name))}), say which with folder or start the path with its name.";
+                return null;
+            }
+            folders.Add(candidates[0]);
+        }
+
+        if (folders.Select(folder => folder.Name).Distinct(PlatformPaths.Comparer).Count() > 1)
+        {
+            why = $"The paths are in different folders ({string.Join(", ", folders.Select(folder => folder.Name).Distinct(PlatformPaths.Comparer))}), one call takes one folder.";
+            return null;
+        }
+        return folders[0];
+    }
+
     private string LinkHoldWire(HexLinkFolder folder, string path)
     {
         string prefix = folder.Name + "/";
         string normalized = path.Replace('\\', '/');
+        if (Path.IsPathFullyQualified(normalized))
+            normalized = Path.GetRelativePath(folder.Path, normalized).Replace('\\', '/');
         string wire = normalized.StartsWith(prefix, PlatformPaths.Comparison) ? normalized : prefix + normalized;
         string full = HexLinkFiles.Resolve([folder], wire, linkServices?.Excludes);
         if (Directory.Exists(full))

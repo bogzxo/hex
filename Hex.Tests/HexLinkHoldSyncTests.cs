@@ -66,6 +66,24 @@ public sealed class HexLinkHoldSyncTests
         Assert.Equal(HexLinkErrors.NOT_ALLOWED, await CodeOf(pair.PeerA.Call("hex_link_hold", new() { ["action"] = "list" })));
     }
 
+    [Fact]
+    public async Task A_file_held_again_straight_after_a_submit_starts_from_what_was_submitted()
+    {
+        using var pair = await LinkedPair.Up(Edit, Edit);
+        Both(pair, Baseline);
+        HexLinkHoldStore holds = EnableHolds(pair.A);
+        using var sync = Sync(pair.A, pair.PeerB);
+        await Ready(sync);
+        var service = new HexLinkHoldService(pair.A.Workspace.Folders[0], holds) { AgreedBasis = sync.HoldBasis };
+        string before = (await service.Hold(Wire)).BaseHash!;
+        File.WriteAllText(Local(pair.A), Private);
+        Assert.Equal(Wire, Assert.Single((await service.Submit(check: false)).Paths));
+
+        var again = await service.Hold(Wire);
+        Assert.NotEqual(before, again.BaseHash);
+        Assert.Equal(HexLinkFiles.Hash(Bytes(Private)), again.BaseHash);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

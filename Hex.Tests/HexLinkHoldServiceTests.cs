@@ -110,6 +110,27 @@ public sealed class HexLinkHoldServiceTests : IDisposable
     }
 
     [Fact]
+    public void A_relative_path_is_placed_in_the_folder_that_has_the_file_never_the_first()
+    {
+        string first = Directory.CreateDirectory(Path.Combine(root, "first")).FullName, second = Directory.CreateDirectory(Path.Combine(root, "second", "UI")).FullName;
+        File.WriteAllText(Path.Combine(second, "Hud.cs"), "x");
+        File.WriteAllText(Path.Combine(first, "Both.cs"), "x");
+        File.WriteAllText(Path.Combine(Path.GetDirectoryName(second)!, "Both.cs"), "x");
+        var workspace = new HexLinkWorkspace("Test", [new("first", first), new("second", Path.GetDirectoryName(second)!)], []);
+
+        Assert.Equal("second", Hex.Dawn.DawnScene.LinkHoldFolderFor(workspace, _ => null, ["UI/Hud.cs"], out _)!.Name);
+        Assert.Equal("second", Hex.Dawn.DawnScene.LinkHoldFolderFor(workspace, _ => null, ["second/UI/Hud.cs"], out _)!.Name);
+        Assert.Equal("second", Hex.Dawn.DawnScene.LinkHoldFolderFor(workspace, _ => null, [Path.Combine(second, "Hud.cs")], out _)!.Name);
+
+        Assert.Null(Hex.Dawn.DawnScene.LinkHoldFolderFor(workspace, _ => null, ["Missing.cs"], out string? missing));
+        Assert.Contains("none of the workspace's folders", missing);
+        Assert.Null(Hex.Dawn.DawnScene.LinkHoldFolderFor(workspace, _ => null, ["Both.cs"], out string? ambiguous));
+        Assert.Contains("first, second", ambiguous);
+        Assert.Null(Hex.Dawn.DawnScene.LinkHoldFolderFor(workspace, _ => null, ["UI/Hud.cs", "first/Both.cs"], out string? apart));
+        Assert.Contains("different folders", apart);
+    }
+
+    [Fact]
     public async Task Plan_distinguishes_deletion_from_empty_bytes_and_accepts_deletion_as_a_side()
     {
         PutHeld(A, "base\n", "mine\n");
