@@ -89,7 +89,7 @@ internal sealed partial class HexLinkSync
             paths.UnionWith(conflicts.Keys);
             foreach (string path in paths)
             {
-                if (conflicts.GetValueOrDefault(path)?.HasUnsavedChanges == true)
+                if (BlockedRepository(path) || conflicts.GetValueOrDefault(path)?.HasUnsavedChanges == true)
                     continue;
                 if (CaseDiffers(path))
                 {
@@ -649,6 +649,8 @@ internal sealed partial class HexLinkSync
     // A path looked at as it is on both sides now against its base, and whatever that calls for done
     private async Task Reconcile(string wire, bool ignored, CancellationToken stop)
     {
+        if (BlockedRepository(wire))
+            return;
         string full;
         try
         {

@@ -44,7 +44,7 @@ internal static class HexLinkWorkspaces
     }
 
     /// <summary>Builds a checkout plan for the actual repositories inside the folders a peer may see.</summary>
-    internal static HexLinkHostedProvision Provision(HexLinkWorkspace workspace, string? only, CancellationToken cancel)
+    internal static HexLinkHostedProvision Provision(HexLinkWorkspace workspace, string? only, CancellationToken cancel, string? onlyRepository = null)
     {
         if (HexLinkGit.Why() is { } why)
             throw new InvalidOperationException(why);
@@ -64,6 +64,10 @@ internal static class HexLinkWorkspaces
             folders.Add(new HexLinkProvisionFolder(folder.Name, Under(prefix, real[root.Name], real[folder.Name])));
         }
 
+        if (onlyRepository is not null && (only is null || onlyRepository.Length == 0))
+            throw HexLinkException.Invalid("A missing repository must be nested inside a named folder.");
+
+        var repoScope = new HashSet<string>(StringComparer.Ordinal);
         var repos = new List<HexLinkProvisionRepository>();
         var wirePaths = new Dictionary<string, string>(StringComparer.Ordinal);
         var gitlinks = new Dictionary<string, (string Parent, string Head)>(StringComparer.Ordinal);
@@ -89,6 +93,11 @@ internal static class HexLinkWorkspaces
                 if (repos.Count == HexLinkTree.MOST_REPOS)
                     throw HexLinkException.Invalid("The workspace has too many repositories to provision.");
                 string path = Under(prefix, rootPath, directory);
+                bool inScope = path == onlyRepository || gitlinks.TryGetValue(path, out var moduleLink) && repoScope.Contains(moduleLink.Parent);
+                if (onlyRepository is not null && !inScope && !HexLinkProvisionPlan.Inside(onlyRepository, path))
+                    continue;
+                if (inScope)
+                    repoScope.Add(path);
                 if (HexLinkProvision.Run(directory, ["rev-parse", "--show-prefix"], cancel).Trim().Length > 0)
                     throw new InvalidOperationException($"The Git metadata in {path} does not identify its own checkout.");
                 string head = HexLinkProvision.ReadHead(directory, cancel)
@@ -109,7 +118,7 @@ internal static class HexLinkWorkspaces
                 repos.Add(new HexLinkProvisionRepository(id, path, head, parent is null ? HexLinkProvision.ReadBranch(directory, cancel) : null,
                     origin.Ok ? origin.Output.TrimEnd('\r', '\n') : null, parent));
                 wirePaths.Add(id, wire);
-                if (only is null)
+                if (only is null || inScope)
                     ProvisionChanges(directory, path, deleted, largeChanges, cancel);
                 foreach (var (module, commit) in Submodules(directory, cancel))
                 {
@@ -120,12 +129,15 @@ internal static class HexLinkWorkspaces
         }
 
         var repoPaths = repos.Select(repo => repo.Path).ToHashSet(StringComparer.Ordinal);
-        foreach (string path in gitlinks.Keys)
+        if (onlyRepository is not null && !repoScope.Contains(onlyRepository))
+            throw HexLinkException.NotFound($"The workspace has no nested repository at {onlyRepository}.");
+
+        foreach (var (path, link) in gitlinks)
         {
-            if (!repoPaths.Contains(path))
+            if ((onlyRepository is null || repoScope.Contains(link.Parent)) && !repoPaths.Contains(path))
                 throw new InvalidOperationException($"Submodule {path} is uninitialized on the host. Initialize it there before sharing this workspace.");
         }
-        return new HexLinkHostedProvision(new HexLinkProvisionPlan(folders, repos, deleted, largeChanges), wirePaths);
+        return new HexLinkHostedProvision(new HexLinkProvisionPlan(folders, repos, deleted, largeChanges, onlyRepository), wirePaths);
     }
 
     private static void ProvisionChanges(string directory, string repositoryPath, List<string> deleted, List<string> largeChanges, CancellationToken cancel)

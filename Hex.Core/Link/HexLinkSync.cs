@@ -316,7 +316,8 @@ internal sealed partial class HexLinkSync : IDisposable
                 return;
             }
 
-            if (!force && HexLinkTree.CommitsDiffer(mine, theirs) is { } difference)
+            missingRepositories = HexLinkMissingRepositories.Compare(mine, theirs);
+            if (!force && HexLinkTree.CommitsDiffer(mine, theirs, missingRepositories) is { } difference)
             {
                 await Unwatch();
                 lock (gate)
@@ -549,7 +550,7 @@ internal sealed partial class HexLinkSync : IDisposable
         try { stopping.Cancel(); } catch (ObjectDisposedException) { }
         peer.Session.Closed -= LinkClosed;
         watch?.Dispose();
-        _ = Unwatch();
+        stoppedWatching = Unwatch();
         waiting?.TrySetResult();
         if (was)
             Save();

@@ -158,6 +158,98 @@ public sealed class HexLinkProvisionTests
         Git(path, "config", "core.autocrlf", "false");
     }
 
+    [Fact]
+    public async Task One_sided_repositories_wait_while_common_files_sync_and_get_only_installs_the_requested_repo()
+    {
+        if (HexLinkGit.Why() is not null)
+            return;
+
+        var edit = HexLinkRights.View | HexLinkRights.Edit;
+        using var pair = await LinkedPair.Up(edit, edit);
+        string host = pair.A.Work, guest = pair.B.Work;
+        string chosen = Path.Combine(host, "chosen"), target = Path.Combine(guest, "chosen");
+        MakeRepo(host, "/chosen/\n/other/\n/guest-only/\n");
+        Git(pair.B.Root, "clone", "-q", host, guest);
+        MakeRepo(chosen, "/independent/\n");
+        MakeRepo(Path.Combine(chosen, "independent"));
+        MakeRepo(Path.Combine(host, "other"));
+        MakeRepo(Path.Combine(guest, "guest-only"));
+        string source = Path.Combine(pair.A.Root, "module-source");
+        MakeRepo(source);
+        Git(chosen, "remote", "add", "origin", "https://invalid.example/chosen.git");
+        Git(chosen, "-c", "protocol.file.allow=always", "submodule", "add", "-q", source, "module");
+        Git(chosen, "commit", "-qam", "Add module");
+        File.Delete(Path.Combine(chosen, "tracked.txt"));
+        File.WriteAllText(Path.Combine(chosen, "new.txt"), "only in chosen\n");
+        File.WriteAllText(Path.Combine(chosen, "module", "new.txt"), "only in module\n");
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+        CancellationToken stop = timeout.Token;
+        using var sync = new HexLinkSync(pair.PeerB, pair.A.Workspace.Folders[0], Path.Combine(pair.A.Root, "sync"));
+        await sync.Start(cancel: stop);
+        await sync.Flush(stop);
+        Assert.Equal(HexLinkSyncState.Idle, sync.State);
+        Assert.Equal(["guest-only"], sync.MissingRepositories.Here);
+        Assert.Equal(["chosen", "chosen/independent", "chosen/module", "other"], sync.MissingRepositories.There);
+
+        File.WriteAllText(Path.Combine(host, "top.txt"), "sync this\n");
+        File.WriteAllText(Path.Combine(chosen, "watch.txt"), "withhold this\n");
+        await sync.Flush(stop);
+        Assert.Equal("sync this", File.ReadAllText(Path.Combine(guest, "top.txt")).Trim());
+        Assert.False(Directory.Exists(target));
+        Assert.False(Directory.Exists(Path.Combine(host, "guest-only")));
+        Assert.True(File.Exists(Path.Combine(guest, "guest-only", "tracked.txt")));
+
+        Directory.CreateDirectory(target);
+        string placeholder = Path.Combine(target, "keep.txt");
+        File.WriteAllText(placeholder, "guest work\n");
+        string journal = Path.Combine(pair.B.Root, "state", "chosen.json");
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            HexLinkProvision.GetMissingRepository(pair.PeerA, pair.B.Workspace.Folders[0], "chosen", journal, null, stop));
+        Assert.Equal("guest work", File.ReadAllText(placeholder).Trim());
+        File.Delete(placeholder);
+
+        await HexLinkProvision.GetMissingRepository(pair.PeerA, pair.B.Workspace.Folders[0], "chosen", journal, null, stop);
+        Assert.Equal(Head(chosen), Head(target));
+        Assert.Equal("https://invalid.example/chosen.git", Git(target, "remote", "get-url", "origin"));
+        Assert.Equal(Head(Path.Combine(chosen, "module")), Head(Path.Combine(target, "module")));
+        Assert.Equal("only in module", File.ReadAllText(Path.Combine(target, "module", "new.txt")).Trim());
+        Assert.Equal("only in chosen", File.ReadAllText(Path.Combine(target, "new.txt")).Trim());
+        Assert.False(File.Exists(Path.Combine(target, "tracked.txt")));
+        Assert.False(Directory.Exists(Path.Combine(target, "independent")));
+        Assert.False(Directory.Exists(Path.Combine(guest, "other")));
+
+        await sync.StopForRepositoryRefresh();
+        await sync.Start(cancel: stop);
+        File.WriteAllText(Path.Combine(target, "watch.txt"), "sync this after the get\n");
+        await sync.Flush(stop);
+        Assert.Equal("sync this after the get", File.ReadAllText(Path.Combine(chosen, "watch.txt")).Trim());
+        Assert.Equal(["chosen/independent", "other"], sync.MissingRepositories.There);
+
+        await sync.StopForRepositoryRefresh();
+        Directory.Move(target, Path.Combine(pair.B.Root, "parked-checkout"));
+        await sync.Start(cancel: stop);
+        await sync.Flush(stop);
+        Assert.True(File.Exists(Path.Combine(chosen, "watch.txt")));
+        Assert.False(Directory.Exists(target));
+    }
+
+    [Fact]
+    public void A_missing_submodule_does_not_hide_a_head_mismatch_in_its_parent()
+    {
+        string first = new('a', 40), second = new('b', 40);
+        var here = new HexLinkManifest("work", first, [], first,
+            NestedHeads: new Dictionary<string, string?> { ["nested"] = first, ["nested/sub"] = first });
+        var there = new HexLinkManifest("work", first, [], first,
+            NestedHeads: new Dictionary<string, string?> { ["nested"] = second });
+        var missing = HexLinkMissingRepositories.Compare(here, there);
+
+        Assert.True(missing.Blocks("nested/sub/file"));
+        Assert.True(missing.Blocks("nested"));
+        Assert.False(missing.Blocks("nested/main.txt"));
+        Assert.StartsWith("nested is at ", HexLinkTree.CommitsDiffer(here, there, missing));
+    }
+
     private static string Head(string folder) => Git(folder, "rev-parse", "HEAD");
 
     private static string Git(string folder, params string[] args)

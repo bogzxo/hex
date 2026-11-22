@@ -21,6 +21,8 @@ internal sealed partial class HexLinkHost
             return OfferProvision(parameters);
 
         Need(HexLinkRights.View, "git/bundle");
+        if (operation == "repository_ready")
+            return RepositoryReady(parameters);
         string id = HexLinkData.Need(parameters, "id", 64);
         if (id.Length == 0 || !id.All(c => char.IsAsciiLetterOrDigit(c) || c == '-'))
             throw HexLinkException.Invalid("A bundle's id is letters, digits and dashes.");
@@ -31,8 +33,9 @@ internal sealed partial class HexLinkHost
             if (operation == "plan")
             {
                 string? folder = HexLinkData.String(parameters, "folder", 200);
+                string? repositoryPath = HexLinkData.String(parameters, "repository_path", HexLinkFiles.MOST_PATH + 1);
                 HexLinkWorkspace workspace = services.Workspace;
-                HexLinkHostedProvision hosted = await Task.Run(() => HexLinkWorkspaces.Provision(workspace, folder, transfer.Token), transfer.Token);
+                HexLinkHostedProvision hosted = await Task.Run(() => HexLinkWorkspaces.Provision(workspace, folder, transfer.Token, repositoryPath), transfer.Token);
                 hostedProvision = hosted;
                 return hosted.Plan.ToJson();
             }

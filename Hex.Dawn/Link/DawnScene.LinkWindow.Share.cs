@@ -97,6 +97,7 @@ internal sealed partial class DawnScene
         string said = sync?.Why ?? string.Empty;
         if (said.Length > 0)
             holder.Add(new Label { Text = UIRichText.Literal(said), TextScale = LINK_SMALL, Dim = true, Wrap = true, Align = Origin.Left, Fill = UIFill.Horizontal, Padding = new UIEdges(18, 0, 0, 0) });
+        LinkMissingRepositoryRow(holder, peer, folder, state);
         return holder;
     }
 

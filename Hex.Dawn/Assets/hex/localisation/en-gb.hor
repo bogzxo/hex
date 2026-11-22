@@ -4799,7 +4799,14 @@ let strings = {
             phase_repositories: "Repository {repo} of {repos}, {bytes} of {bytes_total}",
             phase_files: "Files {files} of {files_total}, {bytes} of {bytes_total}",
             phase_sync: "Starting workspace sync",
-            phase_complete: "Workspace ready"
+            phase_complete: "Workspace ready",
+            get_repository: "Get Missing Repository",
+            get_repository_title: "Get {path}",
+            get_repository_pick: "Choose a repository to get from {device}.",
+            repositories_missing_there: "Repositories missing on {device}: {paths}",
+            no_missing_repositories: "No repositories are missing here.",
+            repository_unsaved: "Save the open changes in {path} before getting this repository.",
+            repository_ready: "Downloaded {path}."
         },
         patch_kept: "{device} offered changes, \"{title}\", kept as {file}"
     },

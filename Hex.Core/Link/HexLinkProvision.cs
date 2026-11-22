@@ -21,7 +21,7 @@ internal sealed record HexLinkProvisionRepository(string Id, string Path, string
     string? ParentRepository = null);
 
 internal sealed record HexLinkProvisionPlan(IReadOnlyList<HexLinkProvisionFolder> Folders, IReadOnlyList<HexLinkProvisionRepository> Repositories,
-    IReadOnlyList<string>? Deleted = null, IReadOnlyList<string>? LargeChanges = null)
+    IReadOnlyList<string>? Deleted = null, IReadOnlyList<string>? LargeChanges = null, string? RepositoryPath = null)
 {
     internal const string BUNDLE_PREFIX = "provision-";
 
@@ -38,7 +38,8 @@ internal sealed record HexLinkProvisionPlan(IReadOnlyList<HexLinkProvisionFolder
             ["branch"] = repo.Branch, ["origin"] = repo.Origin, ["parent"] = repo.ParentRepository
         })]),
         ["deleted"] = new JsonArray([.. (Deleted ?? []).Select(path => (JsonNode)path)]),
-        ["largeChanges"] = new JsonArray([.. (LargeChanges ?? []).Select(path => (JsonNode)path)])
+        ["largeChanges"] = new JsonArray([.. (LargeChanges ?? []).Select(path => (JsonNode)path)]),
+        ["repository_path"] = RepositoryPath
     };
 
     public static HexLinkProvisionPlan FromJson(JsonObject json)
@@ -82,7 +83,7 @@ internal sealed record HexLinkProvisionPlan(IReadOnlyList<HexLinkProvisionFolder
                 throw HexLinkException.Invalid("A repository in the plan is outside its folder or its submodule parent.");
         }
 
-        return new HexLinkProvisionPlan(folders, repositories, Paths("deleted"), Paths("largeChanges"));
+        return new HexLinkProvisionPlan(folders, repositories, Paths("deleted"), Paths("largeChanges"), HexLinkData.String(json, "repository_path", HexLinkFiles.MOST_PATH + 1));
 
         List<string>? Paths(string field)
         {
@@ -115,13 +116,13 @@ internal interface IHexLinkProvisionOffers
 
 internal sealed partial class HexLinkPeer : IHexLinkBundleSource
 {
-    internal async Task<HexLinkProvisionPlan> GetProvisionPlan(string? folder, CancellationToken cancel)
+    internal async Task<HexLinkProvisionPlan> GetProvisionPlan(string? folder, CancellationToken cancel, string? repositoryPath = null)
     {
         string id = Guid.NewGuid().ToString("N");
         try
         {
             JsonObject response = await AskObject("git/bundle",
-                new JsonObject { ["operation"] = "plan", ["folder"] = folder, ["id"] = id }, cancel, TimeSpan.FromMinutes(5));
+                new JsonObject { ["operation"] = "plan", ["folder"] = folder, ["repository_path"] = repositoryPath, ["id"] = id }, cancel, TimeSpan.FromMinutes(5));
             return HexLinkProvisionPlan.FromJson(response);
         }
         catch (Exception e) when (e is OperationCanceledException or HexLinkException { Code: HexLinkErrors.TIMED_OUT })
@@ -138,7 +139,7 @@ internal sealed partial class HexLinkPeer : IHexLinkBundleSource
         Bundle(repository, have, progress, verifyIn, cancel);
 }
 
-internal static class HexLinkProvision
+internal static partial class HexLinkProvision
 {
     private static readonly TimeSpan GIT_PATIENCE = TimeSpan.FromMinutes(10);
 
@@ -192,7 +193,7 @@ internal static class HexLinkProvision
     }
 
     private static async Task CopyWorkingTrees(HexLinkPeer peer, HexLinkProvisionPlan plan, IReadOnlyList<HexLinkFolder> folders,
-        string destination, string journal, IProgress<HexLinkProvisionProgress>? progress, CancellationToken cancel)
+        string destination, string journal, IProgress<HexLinkProvisionProgress>? progress, CancellationToken cancel, IReadOnlySet<string>? repos = null)
     {
         JsonObject previous = File.Exists(journal) ? JsonNode.Parse(File.ReadAllBytes(journal)) as JsonObject
             ?? throw new IOException("The workspace transfer journal is damaged.") : [];
@@ -212,15 +213,18 @@ internal static class HexLinkProvision
             if (remote.Folder != folder.Name)
                 throw HexLinkException.Invalid("A manifest names the wrong workspace folder.");
             HexLinkManifest local = new HexLinkTree(folder).Manifest();
-            if (HexLinkTree.CommitsDiffer(local, remote) is { } why)
+            if ((repos is null ? HexLinkTree.CommitsDiffer(local, remote) : CheckRepositoryHeads(plan, local, remote)) is { } why)
                 throw new InvalidOperationException($"The host changed while the workspace was being transferred. {why}. Retry with a new plan.");
 
             string prefix = plan.Folders[i].Path;
             var remotePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var localFiles = local.Files.ToDictionary(file => UnderFolder(file.Path, folder), StringComparer.Ordinal);
+            var localFiles = local.Files.Where(file => InRepositoryScope(UnderFolder(file.Path, folder), local.NestedHeads, repos))
+                .ToDictionary(file => UnderFolder(file.Path, folder), StringComparer.Ordinal);
             foreach (HexLinkTreeFile file in remote.Files)
             {
                 string within = UnderFolder(file.Path, folder);
+                if (!InRepositoryScope(within, remote.NestedHeads, repos))
+                    continue;
                 string relative = Relative(prefix, within);
                 Resolve(destination, relative);
                 if (!remotePaths.Add(within) || paths.TryGetValue(relative, out string? oldCase) && oldCase != relative)
