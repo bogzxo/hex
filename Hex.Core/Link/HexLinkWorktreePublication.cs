@@ -43,7 +43,7 @@ internal sealed class HexLinkWorktreePublication : IHexLinkPublicationService
     // Call before starting the live engines. An interrupted transaction keeps its scope until replay.
     public async Task Restore(CancellationToken cancel)
     {
-        replica.Restore(set => Folder(set.Folder));
+        replica.Restore(set => services.Workspace.Folders.FirstOrDefault(folder => folder.Name == set.Folder));
         foreach (var folder in services.Workspace.Folders)
         {
             if (Pinned(folder) is not { } pin || pin.DeviceId != services.Device.Id)
@@ -51,8 +51,14 @@ internal sealed class HexLinkWorktreePublication : IHexLinkPublicationService
             if (!HasOwnerStore(folder, pin.Epoch))
                 continue;
             HexLinkPublishJournal owner = await Owner(folder, pin.Epoch, cancel);
-            if (await owner.PendingProjection(cancel) is { } id)
-                Fence(folder).HoldRecovery(id, HexLinkFenceKind.Publication);
+            if (await owner.PendingProjection(cancel) is not { } id)
+                continue;
+            Fence(folder).HoldRecovery(id, HexLinkFenceKind.Publication);
+            try { await owner.RecoverCurrent(cancel); }
+            catch (HexLinkException error) when (error.Code is HexLinkErrors.BUSY or HexLinkErrors.CONFLICT)
+            {
+                services.Audit("publish-recovery", services.Device, $"{folder.Name} {id:N}: {error.Message}");
+            }
         }
     }
 

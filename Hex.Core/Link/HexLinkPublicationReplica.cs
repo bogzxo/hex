@@ -7,16 +7,17 @@ internal sealed class HexLinkPublicationReplica(HexLinkCommittedSets receipts,
     Func<HexLinkFolder, HexLinkCommittedSet, CancellationToken, Task> installBaseline,
     Action<HexLinkCommittedSet>? committed = null)
 {
-    public void Restore(Func<HexLinkCommittedSet, HexLinkFolder> folder)
+    public void Restore(Func<HexLinkCommittedSet, HexLinkFolder?> folder)
     {
         foreach (HexLinkCommittedSet set in receipts.UnfinishedIncoming())
-            Scope(folder(set), set).HoldRecovery(set.Id, set.Kind);
+            if (folder(set) is { } present)
+                Scope(present, set).HoldRecovery(set.Id, set.Kind);
     }
 
     public async Task<HexLinkCommittedAck> Receive(HexLinkFolder folder, HexLinkCommittedSet set,
         IReadOnlyList<HexLinkPublishEdit> edits, CancellationToken cancel)
     {
-        if (set.Folder != folder.Name || edits.Count != set.Files.Count)
+        if (set.Folder != folder.Name || edits.Count != set.Files.Count || set.Files.Any(file => file.Executable is not null))
             throw HexLinkException.Invalid("The publication does not match this folder.");
         var fence = Scope(folder, set);
         await using var exclusive = await fence.EnterExclusive(set.Kind, cancel, recovery: set.Id);

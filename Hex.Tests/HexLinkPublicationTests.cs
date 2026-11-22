@@ -133,6 +133,50 @@ public sealed class HexLinkPublicationTests
     }
 
     [Fact]
+    public async Task Restart_finishes_an_authority_projection_without_another_request()
+    {
+        if (HexLinkGit.Why() is not null)
+            return;
+        using var services = new LinkServices(DeviceA);
+        var folder = services.Workspace.Folders[0] with { Authority = new HexLinkAuthority(DeviceA.Id, 1) };
+        services.Workspace = services.Workspace with { Folders = [folder] };
+        string storage = Path.Combine(Path.GetTempPath(), "hrec-" + Guid.NewGuid().ToString("N")[..12]);
+        Guid id = Guid.NewGuid();
+        var fence = HexLinkPublicationFence.ForRoot(folder.Path);
+        var edits = new HexLinkPublishEdit[] { new("work/file.txt", null, "published"u8.ToArray()) };
+        using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        try
+        {
+            var initial = new HexLinkWorktreePublication(services, storage, _ => [DeviceB.Id],
+                (_, _, _, _) => throw new IOException("Interrupted before publishing the notice."),
+                (_, _, _, _) => Task.CompletedTask, (_, _, _) => Task.CompletedTask);
+            await Assert.ThrowsAsync<IOException>(() => initial.Route(folder, null)!.Send(id, edits, false, stop.Token));
+            Assert.Equal(new HexLinkFenceStatus(HexLinkFenceKind.Publication, true), fence.Status);
+            Assert.Equal("published", File.ReadAllText(Path.Combine(folder.Path, "file.txt")));
+            fence.ReleaseRecovery(id); // A fresh process has no in-memory lease or recovery marker.
+
+            int projected = 0;
+            var reopened = new HexLinkWorktreePublication(services, storage, _ => [DeviceB.Id],
+                (_, set, _, _) => { Assert.Equal(id, set.Id); projected++; return Task.CompletedTask; },
+                (_, _, _, _) => Task.CompletedTask, (_, _, _) => Task.CompletedTask);
+            await reopened.Restore(stop.Token);
+            Assert.Null(fence.Status);
+            Assert.Equal(1, projected);
+            Assert.Equal(id, Assert.Single(reopened.Pending(DeviceB.Id)).Id);
+        }
+        finally
+        {
+            fence.ReleaseRecovery(id);
+            if (Directory.Exists(storage))
+            {
+                foreach (string file in Directory.EnumerateFiles(storage, "*", SearchOption.AllDirectories))
+                    File.SetAttributes(file, File.GetAttributes(file) & ~FileAttributes.ReadOnly);
+                Directory.Delete(storage, true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task Manifest_hash_rejects_a_different_blob_even_inside_an_intact_stream()
     {
         byte[] bytes = [1, 2, 3];
