@@ -279,6 +279,7 @@ internal sealed partial class DawnScene
             TestCompletion(test);
             TestParity(test);
         }),
+        ("merge-result-lsp", "Pyright keeps the pathless merge Result independent and closes it on Cancel and Complete", TestMergeResultLanguageServer),
         ("reload-integrity", "failed layout reloads preserve the open document", TestReloadIntegrity),
         ("workspace", "folders, the explorer, copying, moving and renaming files in it, closing tabs, the help windows, the conveniences, files changed on the disk", test =>
         {
@@ -529,6 +530,7 @@ internal sealed partial class DawnScene
         ("mcp-check", "the check after hex_edit through csharp-ls, timed, one after another and three at once, when csharp-ls is on this machine", TestMcpCheck),
         ("link", "Hex Link between this Hex and a second one it starts: pairing by code, hello, the fleet and a chat mirrored, tools, an approval, a file written, conflicted and read, rights taken away, a stranger refused, the hex_link tools, forgetting", TestLink),
         ("link-files", "sharing the code over Hex Link with a second Hex: a folder synced both ways, a conflict kept and resolved, what git ignores left, hex_link_sync flush, a remote file opened and saved back, the repository cloned and fetched, pull-only, a patch offered", TestLinkFiles),
+        ("link-hold", "hold, update, resolve and submit, or discard from an ordinary linked editor tab", TestLinkHeldChanges),
         ("link-worktree", "private Git worktree gate, merge, and publish receipts between two editors", TestLinkWorktree),
         ("link-provision", "a second editor gets a workspace with nested Git history and a submodule, then syncs both ways", TestLinkProvision),
         ("link-sync-upgrade", "an older Get profile recovers its source and explicitly resumes both sides", TestLinkSyncUpgrade),
@@ -573,7 +575,7 @@ internal sealed partial class DawnScene
     {
         // OS input tests take the foreground briefly, so they only run when explicitly named, and so does dusk-noon, the
         // window having Dusk in it only when it's named
-        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts" or "titlebar-targets" or "repository" or "dusk-noon" or "face-switch" or "webshots" or "link" or "link-files" or "link-worktree" or "link-claims" or "link-provision" or "link-missing-repository" or "link-documents" or "link-editor-notices" or "link-peer" or "link-cross" or "link-nearby" or "link-ui" or DawnProgram.NO_AI_SUITE)).Select(suite => suite.Name)];
+        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts" or "titlebar-targets" or "repository" or "dusk-noon" or "face-switch" or "webshots" or "link" or "link-files" or "link-hold" or "link-worktree" or "link-claims" or "link-provision" or "link-missing-repository" or "link-documents" or "link-editor-notices" or "link-peer" or "link-cross" or "link-nearby" or "link-ui" or DawnProgram.NO_AI_SUITE)).Select(suite => suite.Name)];
         string[] unknown = [.. asked.Where(name => !SelfTestSuites.Any(suite => suite.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))];
         if (unknown.Length == 0)
             return true;

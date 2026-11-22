@@ -354,13 +354,20 @@ internal sealed partial class HexLinkHost : IDisposable
 
         var fileRule = HexLinkAllowed.RemoteFileAllowed;
         Func<string, bool>? previousFile = fileRule.Value;
+        var heldRead = HexLinkAllowed.RemoteHeldRead;
+        var previousHeldRead = heldRead.Value;
         var relayOrigin = HexLinkAllowed.RelayOrigin;
         HexLinkDevice? previousOrigin = relayOrigin.Value;
         try
         {
             fileRule.Value = CanReachToolFile;
+            heldRead.Value = name == "hex_read" && Folders.Any(folder => services.Holds(folder)?.Count > 0) ? ReadHeldBase : null;
             HexLinkAllowed.SetEditorFileRule(arguments, CanReachToolFile);
             HexLinkClaimCaller.Bind(arguments, Device);
+            if (name == "hex_read" && HexLinkData.String(arguments, "path", HexLinkFiles.MOST_PATH) is { } readPath &&
+                readPath.IndexOf('/') > 0 && HoldOf(readPath) is not null)
+                arguments["path"] = ResolveToolFile(readPath);
+
             if (name is "hex_edit" or "hex_write" or "hex_edit_symbol" or "hex_rename" or "hex_git_diff")
             {
                 string? path = HexLinkData.String(arguments, "path", HexLinkFiles.MOST_PATH + 1);
@@ -402,6 +409,7 @@ internal sealed partial class HexLinkHost : IDisposable
         }
         finally
         {
+            heldRead.Value = previousHeldRead;
             fileRule.Value = previousFile;
             relayOrigin.Value = previousOrigin;
         }

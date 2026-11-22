@@ -62,7 +62,7 @@ internal sealed class GitUnmerged
         byte[] mine = ReadBlob(repository, stages.Mine, cancel);
         byte[] theirs = ReadBlob(repository, stages.Theirs, cancel);
         bool missingSide = stages.Mine is null || stages.Theirs is null;
-        MergeModel model = missingSide ? MergeModel.FromTwo(mine, theirs) :
+        MergeModel model = missingSide ? MergeModel.Binary(basis, mine, theirs) :
             await MergeModel.FromThree(basis, mine, theirs, cancel).ConfigureAwait(false);
         return new(title, mineLabel, theirsLabel, "Base", model,
             bytes => edit.Complete(bytes, Executable(stages.Mine), cancel), static () => { }, full)

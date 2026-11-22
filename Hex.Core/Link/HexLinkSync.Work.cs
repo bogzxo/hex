@@ -1013,6 +1013,7 @@ internal sealed partial class HexLinkSync
             return;
         }
 
+        bool heldSubmission = IsSubmittedHold(wire, expectedLocal);
         try
         {
             if (bytes is null)
@@ -1021,7 +1022,7 @@ internal sealed partial class HexLinkSync
                 {
                     try
                     {
-                        await Asked(() => peer.Delete(wire, theirs, stop), stop);
+                        await Asked(() => peer.Delete(wire, theirs, stop, heldSubmission), stop);
                     }
                     catch (HexLinkException e) when (e.Code == HexLinkErrors.NOT_FOUND)
                     {
@@ -1111,11 +1112,13 @@ internal sealed partial class HexLinkSync
                 }
 
                 byte[] sending = Converted(bytes, info, there);
-                await PushPacked(wire, theirs, sending, tree.Mode(full), stop);
+                await PushPacked(wire, theirs, sending, tree.Mode(full), stop, heldSubmission);
                 lock (gate)
                     SetBase(wire, AgreedOf(bytes, sending) with { Executable = tree.Mode(full) });
             }
 
+            if (heldSubmission)
+                ForgetHeldSubmission(wire, expectedLocal);
             Interlocked.Increment(ref sent);
             Notify();
         }

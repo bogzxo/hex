@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Text;
 using System.Security.Cryptography;
+using Hex.Core.Git;
 using Hex.Core.Merge;
 using Horizon.Rendering;
 
@@ -33,7 +34,7 @@ internal sealed class MergeEditor
     private int selected;
     private readonly int[] mineLines, theirLines, baseLines;
 
-    private sealed record Block(MergeRegion Region, string Text, bool Resolved)
+    private sealed record Block(MergeRegion Region, string Text, bool Resolved, int[]? MarkerOffsets = null)
     {
         public bool IsConflict => Region is MergeRegion.Conflict;
     }
@@ -64,6 +65,7 @@ internal sealed class MergeEditor
 
             foreach (MergeRegion region in session.Model.Regions)
                 blocks.Add(new(region, Lines(Initial(region)), region is MergeRegion.Clean));
+            selected = Math.Max(0, blocks.FindIndex(block => block.IsConflict));
         }
 
         this.complete = AddButton("Complete merge", "Write the resolved result and close the merge editor.", 124, requestComplete);
@@ -252,7 +254,7 @@ internal sealed class MergeEditor
             MergeChoice.BothTheirsFirst => [.. conflict.TheirsLines, .. conflict.MineLines],
             _ => conflict.MarkedLines,
         };
-        blocks[block] = blocks[block] with { Text = Lines(lines), Resolved = choice != MergeChoice.Unresolved };
+        blocks[block] = blocks[block] with { Text = Lines(lines), Resolved = choice != MergeChoice.Unresolved, MarkerOffsets = null };
         selected = block;
         WriteBlocks();
         result.GoTo(Math.Min(ResultStarts()[block], result.Document.LineCount - 1));
@@ -362,9 +364,9 @@ internal sealed class MergeEditor
             if (owner || from < to)
             {
                 string edited = block.Text[..from] + (owner ? inserted : "") + block.Text[to..];
-                if (!block.Resolved && block.Region is MergeRegion.Conflict conflict)
-                    edited = ManualResult(conflict, block.Text[..from].Count(ch => ch == '\n'), edited);
-                blocks[i] = block with { Text = edited, Resolved = true };
+                blocks[i] = block.IsConflict && !block.Resolved
+                    ? EditConflict(block, from, to, edited)
+                    : block with { Text = edited };
                 if (block.IsConflict)
                     selected = i;
                 placed |= owner;
@@ -373,18 +375,42 @@ internal sealed class MergeEditor
         }
     }
 
-    private static string ManualResult(MergeRegion.Conflict original, int editedLine, string edited)
+    private static Block EditConflict(Block block, int from, int to, string edited)
     {
-        MergeModel parsed = MergeModel.FromMarkers(edited);
-        if (parsed.Conflicts.Count != 1)
-            return edited;
-        var remaining = parsed.Conflicts[0];
-        int theirStart = original.MarkedLines.Count - original.TheirsLines.Count - 1;
-        int baseStart = original.MineLines.Count + 2;
-        remaining.Resolution = editedLine >= theirStart ? new(MergeChoice.Theirs) :
-            remaining.BaseLines is { } baseContent && editedLine >= baseStart && editedLine < baseStart + baseContent.Count
-                ? new(MergeChoice.Custom, baseContent) : new(MergeChoice.Mine);
-        return parsed.ToText();
+        string[] lines = block.Text.Split('\n');
+        var conflicts = GitConflicts.Find(lines);
+        MergeModel next = MergeModel.FromMarkers(edited);
+        int[] offsets = block.MarkerOffsets ?? [];
+        if (conflicts.Count == 1)
+        {
+            var conflict = conflicts[0];
+            int first = block.Text.AsSpan(0, from).Count('\n');
+            int last = first + block.Text.AsSpan(from, to - from).Count('\n');
+            MergeChoice choice = first > conflict.Start && last < conflict.CurrentEnd ? MergeChoice.Mine :
+                first > conflict.Middle && last < conflict.End ? MergeChoice.Theirs :
+                conflict.Base >= 0 && first > conflict.Base && last < conflict.Middle ? MergeChoice.Custom : MergeChoice.Unresolved;
+            if (choice != MergeChoice.Unresolved && next.Conflicts.Count == 1)
+            {
+                var side = next.Conflicts[0];
+                side.Resolution = new(choice, side.BaseLines);
+                return block with { Text = next.ToText(), Resolved = true, MarkerOffsets = null };
+            }
+
+            // Track only characters belonging to actual delimiter tokens. Literal underlines in user text are valid.
+            var markers = new List<int>();
+            int position = 0;
+            for (int i = 0; i <= conflict.End; i++)
+            {
+                if (i == conflict.Start || i == conflict.Base || i == conflict.Middle || i == conflict.End)
+                    markers.AddRange(Enumerable.Range(position, 7));
+                position += lines[i].Length + 1;
+            }
+            offsets = [.. markers];
+        }
+
+        int delta = edited.Length - block.Text.Length;
+        int[] remaining = offsets.Where(p => p < from || p >= to).Select(p => p < from ? p : p + delta).ToArray();
+        return block with { Text = edited, Resolved = remaining.Length == 0 && next.ConflictCount == 0, MarkerOffsets = remaining };
     }
 
     private void Remember(string? key = null)

@@ -10,6 +10,11 @@ internal sealed record MergeSession(string Title, string MineLabel, string Their
     public DateTimeOffset? TheirsModified { get; init; }
 }
 
+internal sealed class MergeCheckFailed(string output, Func<Task> overrideCheck) : IOException(output)
+{
+    public Func<Task> OverrideCheck { get; } = overrideCheck;
+}
+
 internal enum MergeSide { Mine, Theirs }
 
 internal sealed record MergeSideChoices(bool MineDeleted, bool TheirsDeleted, Func<MergeSide, Task> Complete);

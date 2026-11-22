@@ -21,6 +21,37 @@ internal sealed partial class HexLinkHost
         return null;
     }
 
+    private Task<string?> ApplyHeldSubmission(string full, string wire, string? basis, byte[]? bytes,
+        CancellationToken cancel, bool submitted, bool? executable = null, HexLinkFiles.PackDirectories? directories = null)
+    {
+        if (submitted && services is IHexLinkHeldSubmission editor)
+            return editor.ApplyHeldSubmission(full, wire, basis, bytes, cancel, executable, directories);
+        return bytes is not null && directories is not null
+            ? services.CompareAndReplacePacked(full, wire, basis, bytes, cancel, executable, directories)
+            : services.CompareAndReplace(full, wire, basis, bytes, cancel, executable);
+    }
+
+    private HexLinkAllowed.HeldRead? ReadHeldBase(string full)
+    {
+        foreach (HexLinkFolder folder in Folders.Where(folder => PlatformPaths.IsUnder(full, folder.Path)))
+        {
+            if (services.Holds(folder) is not { Count: > 0 } store || store.WireFromFullPath(full) is not { } wire ||
+                store.Get(wire) is not { } held)
+                continue;
+
+            string note = $"held on {services.Device.Name}: showing the last shared version";
+            if (held.BaseDeleted)
+                return new(note, null, Absent: true);
+
+            // Open the shared blob by the captured hash. Failure must not fall through to the private working file.
+            string blob = store.BaseFile(held);
+            string? text = new FileInfo(blob).Length <= HexLinkFiles.MOST_READ
+                ? HexLinkFiles.Decode(File.ReadAllBytes(blob))?.Text : null;
+            return new(note, text, Absent: false);
+        }
+        return null;
+    }
+
     // All Link reads use the same published version, including when only the other device is running sync.
     private string PublishedFile(string wire, string full) =>
         HoldOf(wire, full) switch

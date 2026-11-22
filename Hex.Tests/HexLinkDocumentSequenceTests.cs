@@ -50,6 +50,34 @@ public sealed class HexLinkDocumentSequenceTests
     }
 
     [Fact]
+    public void Retiring_a_saved_room_rejects_an_active_participants_late_frame()
+    {
+        var room = new HexLinkDocumentRoom("work/note.txt", "saved");
+        object connection = new();
+        var joined = room.Join(DeviceB.Id, connection, DeviceB);
+        var edit = room.View().Edit(new(1, joined.Author), 0, 5, "unsaved");
+
+        Assert.True(room.TryRetireForSubmission("saved"));
+        var failure = Assert.Throws<HexLinkException>(() => room.Exchange(DeviceB.Id, connection,
+            joined.Replay.Epoch, joined.Replay.Head, [edit], null, null, null, checkpointReady: false));
+        Assert.Equal(HexLinkErrors.DOCUMENT_HELD, failure.Code);
+        Assert.Equal("saved", room.View().Text);
+    }
+
+    [Fact]
+    public void A_room_with_an_accepted_unsaved_participant_edit_cannot_retire()
+    {
+        var room = new HexLinkDocumentRoom("work/note.txt", "saved");
+        object connection = new();
+        var joined = room.Join(DeviceB.Id, connection, DeviceB);
+        var edit = room.View().Edit(new(1, joined.Author), 0, 5, "unsaved");
+        room.Exchange(DeviceB.Id, connection, joined.Replay.Epoch, joined.Replay.Head, [edit], null, null, null, checkpointReady: false);
+
+        Assert.False(room.TryRetireForSubmission("saved"));
+        Assert.Equal("unsaved", room.View().Text);
+    }
+
+    [Fact]
     public void A_megabyte_seed_uses_one_run_and_rejects_split_surrogates()
     {
         string seed = new string('x', 1_048_576) + "🚀";
@@ -241,6 +269,28 @@ public sealed class HexLinkDocumentSequenceTests
         Assert.True(actor.ChangeUndo(restoring: true));
         actor.Receive(await pair.PeerA.ExchangeDocument(wire, actor.Epoch, actor.Revision, actor.Batch()));
         Assert.Equal("Hseed!", actor.View.Text);
+    }
+
+    [Fact]
+    public async Task A_held_file_refuses_existing_room_edits_saves_and_automatic_joins()
+    {
+        const string wire = "work/note.txt";
+        using var pair = await LinkedPair.Up(HexLinkRights.View | HexLinkRights.Edit);
+        string full = Path.Combine(pair.A.Work, "note.txt");
+        File.WriteAllText(full, "shared");
+        var basis = new HexDocFileBasis("shared", new UTF8Encoding(false), false);
+        pair.A.Documents.Rooms.Open(wire, "shared", basis);
+        var remote = new HexLinkDocumentReplica(await pair.PeerA.OpenDocument(wire));
+        pair.A.HoldStore = new(pair.A.Workspace.Folders[0], Path.Combine(pair.A.Root, "hold-state"));
+        await new HexLinkHoldService(pair.A.Workspace.Folders[0], pair.A.HoldStore).Hold(wire);
+        File.WriteAllText(full, "private");
+
+        remote.Capture(remote.View, "peer edit");
+        Assert.Equal(HexLinkErrors.DOCUMENT_HELD, await CodeOf(pair.PeerA.ExchangeDocument(wire, remote.Epoch, remote.Revision, remote.Batch())));
+        Assert.Equal(HexLinkErrors.DOCUMENT_HELD, await CodeOf(pair.PeerA.SaveDocument(wire, remote.Epoch, remote.Revision)));
+        Assert.Equal(HexLinkErrors.DOCUMENT_HELD, await CodeOf(pair.PeerA.OpenDocument(wire, automatic: true)));
+        Assert.Equal("private", File.ReadAllText(full));
+        Assert.Equal("shared", pair.A.Documents.Rooms.Find(wire).View().Text);
     }
 
     [Fact]
