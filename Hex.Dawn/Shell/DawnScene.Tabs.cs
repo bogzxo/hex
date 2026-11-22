@@ -66,6 +66,7 @@ internal sealed partial class DawnScene
 
     private void RebuildTabs()
     {
+        MarkLinkEditorNotices();
         tabButtons.Clear();
         MarkLinkEditorNotices();
 

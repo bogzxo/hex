@@ -57,6 +57,8 @@ internal sealed class HexLinkClaims
     private readonly Lock gate = new();
     private readonly Dictionary<(HexLinkClaimScope Scope, string Origin), Feed> feeds = [];
     private readonly Dictionary<HexLinkClaimScope, Dictionary<string, HexLinkClaim[]>> byPath = [];
+    private long revision;
+    internal long Revision => Volatile.Read(ref revision);
 
     public HexLinkClaimReceipt Receive(HexLinkClaimFrame frame, string via, long now)
     {
@@ -151,6 +153,8 @@ internal sealed class HexLinkClaims
                 feeds.Remove(key);
                 byPath.Remove(key.Scope);
             }
+            if (expired.Length > 0)
+                Interlocked.Increment(ref revision);
             return expired.Length > 0;
         }
     }
@@ -212,6 +216,7 @@ internal sealed class HexLinkClaims
     private HexLinkClaimReceipt Invalidate(HexLinkClaimScope scope)
     {
         byPath.Remove(scope);
+        Interlocked.Increment(ref revision);
         return HexLinkClaimReceipt.Changed;
     }
 

@@ -21,16 +21,13 @@ internal sealed partial class DawnScene
         LinkChanged += LinkEditorNoticesChanged;
     }
 
-    private bool linkEditorHadLink;
-
     private void LinkEditorNoticesChanged()
     {
         MarkLinkEditorNotices();
-        bool on = LinkOn;
-        if (linkEditorHadLink && !on)
-            LinkClaimSurfacesChanged();
-        linkEditorHadLink = on;
+        LinkRefreshClaimSurfaces();
     }
+
+    partial void LinkRefreshClaimSurfaces();
 
     private void MarkLinkEditorNotices() => linkEditorNoticesDirty = true;
 

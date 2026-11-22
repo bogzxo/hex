@@ -533,6 +533,7 @@ internal sealed partial class DawnScene
         ("link-git-follow", "two linked editors keep Git branches, commits, index and working files in sync", TestLinkGitFollow),
         ("link-missing-repository", "two editors sync common files while a nested checkout awaits its own Get", TestLinkMissingRepository),
         ("link-documents", "three linked editors share unsaved text, edit ownership, carets and saves", TestLinkDocuments),
+        ("link-editor-notices", "claim marks, shared document notices and Follow in the editor", TestLinkEditorNotices),
         ("link-claims", "two linked editors coordinate claims, then merge disjoint edits and settle overlaps", TestLinkClaims),
         ("link-peer", "the other end of the link part, or a Hex to link to from another machine (HEX_LINK_TEST_DIAL or HEX_LINK_TEST_LISTEN)", TestLinkPeer),
         ("link-cross", "Hex Link across two machines, one command a side (HEX_LINK_TEST_LISTEN on one, HEX_LINK_TEST_DIAL on the other): each pairs, watches and steers the other, writes into its workspace, has its rights dropped, and the listener forgets the dialler", TestLinkCross),
@@ -569,7 +570,7 @@ internal sealed partial class DawnScene
     {
         // OS input tests take the foreground briefly, so they only run when explicitly named, and so does dusk-noon, the
         // window having Dusk in it only when it's named
-        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts" or "titlebar-targets" or "repository" or "dusk-noon" or "face-switch" or "webshots" or "link" or "link-files" or "link-worktree" or "link-claims" or "link-provision" or "link-missing-repository" or "link-documents" or "link-peer" or "link-cross" or "link-nearby" or "link-ui" or DawnProgram.NO_AI_SUITE)).Select(suite => suite.Name)];
+        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts" or "titlebar-targets" or "repository" or "dusk-noon" or "face-switch" or "webshots" or "link" or "link-files" or "link-worktree" or "link-claims" or "link-provision" or "link-missing-repository" or "link-documents" or "link-editor-notices" or "link-peer" or "link-cross" or "link-nearby" or "link-ui" or DawnProgram.NO_AI_SUITE)).Select(suite => suite.Name)];
         string[] unknown = [.. asked.Where(name => !SelfTestSuites.Any(suite => suite.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))];
         if (unknown.Length == 0)
             return true;

@@ -288,8 +288,12 @@ internal sealed partial class DawnScene
 
     private void LinkLiveReadRights(LinkLiveDocument shared, HexLinkPeer? peer)
     {
-        if (peer is not null)
-            shared.Tab.Editor.ReadOnly = shared.OriginalReadOnly || !shared.Replica.CanEdit || !HexLinkAllowed.Has(peer.Granted, HexLinkRights.Edit);
+        if (peer is null)
+            return;
+        bool wasReadOnly = shared.Tab.Editor.ReadOnly;
+        shared.Tab.Editor.ReadOnly = shared.OriginalReadOnly || !shared.Replica.CanEdit || !HexLinkAllowed.Has(peer.Granted, HexLinkRights.Edit);
+        if (wasReadOnly != shared.Tab.Editor.ReadOnly)
+            MarkLinkEditorNotices();
     }
 
     private void LinkLiveDraft(LinkLiveDocument shared, string reason, string? authorityText = null)
@@ -681,6 +685,7 @@ internal sealed partial class DawnScene
                 if (!shared.Offline)
                 {
                     shared.Offline = true;
+                    tabsDirty = true;
                     Say(Said("link.doc_offline", ("path", shared.Wire)));
                 }
                 return;
