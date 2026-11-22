@@ -1,82 +1,209 @@
-using System.Collections.Concurrent;
-
 namespace Hex.Core;
 
-/// <summary>Lets live reads and writes run concurrently between exclusive publication decisions for one root.</summary>
+internal enum HexLinkFenceKind { Publication, GitFollow, BulkApply }
+
+internal readonly record struct HexLinkFenceStatus(HexLinkFenceKind Kind, bool Recovering);
+
+/// <summary>Shared Link leases for absolute filesystem scopes. An exclusive lease covers its entire subtree.</summary>
 internal sealed class HexLinkPublicationFence
 {
-    private static readonly ConcurrentDictionary<string, HexLinkPublicationFence> Folders = new(PlatformPaths.Comparer);
+    private static readonly Lock Gate = new();
+    private static readonly List<Lease> Active = [];
+    private static readonly List<Request> Waiting = [];
+    private static readonly Dictionary<(string Scope, Guid Id), HexLinkFenceKind> Recovery = [];
+    private static TaskCompletionSource? changed;
+    private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
+    private readonly string scope;
 
-    private readonly SemaphoreSlim turn = new(1), room = new(1), counting = new(1);
-    private int readers, recoveryPending;
+    private HexLinkPublicationFence(string scope) => this.scope = scope;
 
     public static HexLinkPublicationFence ForRoot(string root) =>
-        Folders.GetOrAdd(Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)), static _ => new HexLinkPublicationFence());
+        new(Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)));
 
-    public void BlockLiveForRecovery(bool pending) => Volatile.Write(ref recoveryPending, pending ? 1 : 0);
-
-    public async ValueTask<LiveLease> EnterLive(CancellationToken cancel)
+    public HexLinkFenceStatus? Status
     {
-        await turn.WaitAsync(cancel);
-        turn.Release();
-        await counting.WaitAsync(cancel);
-        try
+        get
         {
-            if (readers == 0)
-                await room.WaitAsync(cancel);
-            if (Volatile.Read(ref recoveryPending) != 0)
+            lock (Gate)
             {
-                if (readers == 0)
-                    room.Release();
-                throw new HexLinkException(HexLinkErrors.BUSY, "The folder is recovering an interrupted publication.");
+                foreach (var (key, kind) in Recovery)
+                    if (Overlaps(scope, key.Scope))
+                        return new(kind, true);
+                foreach (Lease lease in Active)
+                    if (lease.Request.Kind is { } kind && Overlaps(scope, lease.Request.Scope))
+                        return new(kind, false);
+                foreach (Request request in Waiting)
+                    if (request.Kind is { } kind && Overlaps(scope, request.Scope))
+                        return new(kind, false);
+                return null;
             }
-            readers++;
-            return new LiveLease(this);
-        }
-        finally
-        {
-            counting.Release();
         }
     }
 
-    public async ValueTask<IAsyncDisposable> EnterPublish(CancellationToken cancel)
+    // Restore durable incomplete work before starting live sync. Clear only after projection and its receipt are durable.
+    public void HoldRecovery(Guid id, HexLinkFenceKind kind)
     {
-        await turn.WaitAsync(cancel);
+        if (id == Guid.Empty)
+            throw new ArgumentException("A recovery needs a transaction ID.", nameof(id));
+        lock (Gate)
+        {
+            RemoveRecovery(id);
+            Recovery[(scope, id)] = kind;
+            Signal();
+        }
+    }
+
+    public void ReleaseRecovery(Guid id)
+    {
+        lock (Gate)
+        {
+            if (RemoveRecovery(id))
+                Signal();
+        }
+    }
+
+    private bool RemoveRecovery(Guid id)
+    {
+        foreach (var key in Recovery.Keys)
+            if (key.Id == id && PlatformPaths.Comparer.Equals(key.Scope, scope))
+                return Recovery.Remove(key);
+        return false;
+    }
+
+    public ValueTask<Lease> EnterLive(CancellationToken cancel) =>
+        Enter(new Request(scope, null, null), DefaultTimeout, cancel);
+
+    public ValueTask<Lease> EnterExclusive(HexLinkFenceKind kind, CancellationToken cancel,
+        TimeSpan? timeout = null, Guid? recovery = null) =>
+        Enter(new Request(scope, kind, recovery), timeout ?? DefaultTimeout, cancel);
+
+    private static ValueTask<Lease> Enter(Request request, TimeSpan timeout, CancellationToken cancel)
+    {
+        cancel.ThrowIfCancellationRequested();
+        if (timeout <= TimeSpan.Zero || timeout > TimeSpan.FromMinutes(10))
+            throw new ArgumentOutOfRangeException(nameof(timeout));
+        lock (Gate)
+        {
+            if (CanEnter(request))
+                return ValueTask.FromResult(Grant(request, timeout, cancel));
+            Waiting.Add(request);
+        }
+        return Wait(request, timeout, cancel);
+    }
+
+    private static async ValueTask<Lease> Wait(Request request, TimeSpan timeout, CancellationToken cancel)
+    {
+        using var until = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+        until.CancelAfter(timeout);
         try
         {
-            await room.WaitAsync(cancel);
-            return new PublishLease(room);
+            while (true)
+            {
+                until.Token.ThrowIfCancellationRequested();
+                Task wake;
+                lock (Gate)
+                {
+                    if (CanEnter(request))
+                        return Grant(request, timeout, cancel);
+                    changed ??= new(TaskCreationOptions.RunContinuationsAsynchronously);
+                    wake = changed.Task;
+                }
+                await wake.WaitAsync(until.Token);
+            }
+        }
+        catch (OperationCanceledException) when (!cancel.IsCancellationRequested)
+        {
+            throw new HexLinkException(HexLinkErrors.BUSY, "Link is waiting for another change in this folder.");
         }
         finally
         {
-            turn.Release();
+            lock (Gate)
+            {
+                Waiting.Remove(request);
+                Signal();
+            }
         }
     }
 
-    private async ValueTask LeaveLive()
+    private static bool CanEnter(Request request)
     {
-        await counting.WaitAsync();
-        try
+        bool recovering = false;
+        foreach (var (key, kind) in Recovery)
         {
-            if (--readers == 0)
-                room.Release();
+            if (!Overlaps(request.Scope, key.Scope))
+                continue;
+            if (request.Kind != kind || request.Recovery != key.Id || !PlatformPaths.Comparer.Equals(request.Scope, key.Scope))
+                return false;
+            recovering = true;
         }
-        finally
+        foreach (Lease active in Active)
         {
-            counting.Release();
+            if ((request.Kind is not null || active.Request.Kind is not null) && Overlaps(request.Scope, active.Request.Scope))
+                return false;
         }
+        foreach (Request earlier in Waiting)
+        {
+            if (ReferenceEquals(earlier, request))
+                break;
+            if (earlier.Kind is not null && Overlaps(earlier.Scope, request.Scope) &&
+                (!recovering || earlier.Recovery == request.Recovery))
+                return false;
+        }
+        return true;
     }
 
-    internal readonly struct LiveLease(HexLinkPublicationFence owner) : IAsyncDisposable
+    private static Lease Grant(Request request, TimeSpan timeout, CancellationToken cancel)
     {
-        public ValueTask DisposeAsync() => owner.LeaveLive();
+        var lease = new Lease(request, timeout, cancel);
+        Active.Add(lease);
+        return lease;
     }
 
-    private sealed class PublishLease(SemaphoreSlim room) : IAsyncDisposable
+    private static bool Overlaps(string first, string second) =>
+        Contains(first, second) || Contains(second, first);
+
+    private static bool Contains(string parent, string child) => child.StartsWith(parent, PlatformPaths.Comparison) &&
+        (child.Length == parent.Length || Path.EndsInDirectorySeparator(parent) || child[parent.Length] == Path.DirectorySeparatorChar);
+
+    private static void Signal()
     {
+        changed?.TrySetResult();
+        changed = null;
+    }
+
+    internal sealed class Request(string scope, HexLinkFenceKind? kind, Guid? recovery)
+    {
+        public string Scope { get; } = scope;
+        public HexLinkFenceKind? Kind { get; } = kind;
+        public Guid? Recovery { get; } = recovery;
+    }
+
+    internal sealed class Lease : IAsyncDisposable
+    {
+        private readonly CancellationTokenSource? deadline;
+        internal Request Request { get; }
+        public CancellationToken Stop { get; }
+
+        internal Lease(Request request, TimeSpan timeout, CancellationToken cancel)
+        {
+            Request = request;
+            if (request.Kind is not null)
+            {
+                deadline = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+                deadline.CancelAfter(timeout);
+            }
+            Stop = deadline?.Token ?? cancel;
+        }
+
         public ValueTask DisposeAsync()
         {
-            room.Release();
+            lock (Gate)
+            {
+                if (!Active.Remove(this))
+                    return ValueTask.CompletedTask;
+                Signal();
+            }
+            deadline?.Dispose();
             return ValueTask.CompletedTask;
         }
     }
