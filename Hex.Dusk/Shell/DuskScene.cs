@@ -67,7 +67,7 @@ internal sealed partial class DuskScene : Scene
         ActiveCamera = camera;
 
         // The theme is wanted before there is a host to read it, so the file is read for it on its own first
-        string beside = AppContext.BaseDirectory;
+        string beside = Hex.Core.HexHost.ProgramFolder;
         var early = new TerminalSettings(TerminalFiles.Settings(options.SelfTest ? null : beside));
         compositor = AddComponent(new UICompositor(camera, SKIN_DIRECTORY, SKIN_FILE, ThemeOrUsual(early.Theme)));
 

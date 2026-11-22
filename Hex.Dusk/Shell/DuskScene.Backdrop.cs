@@ -51,7 +51,7 @@ internal sealed partial class DuskScene
     /// <summary>The picture the settings say, loaded once a file, null for one that isn't there.</summary>
     private Texture? BackdropPicture(HexSettings settings)
     {
-        string path = settings.BackdropImage.Length > 0 ? settings.BackdropImage : Path.Combine(AppContext.BaseDirectory, USUAL_BACKDROP);
+        string path = settings.BackdropImage.Length > 0 ? settings.BackdropImage : Path.Combine(Hex.Core.HexHost.ProgramFolder, USUAL_BACKDROP);
         if (!File.Exists(path))
             return null;
 
