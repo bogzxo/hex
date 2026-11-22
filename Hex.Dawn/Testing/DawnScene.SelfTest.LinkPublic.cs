@@ -74,6 +74,7 @@ internal sealed partial class DawnScene
         test.WaitFor(() => linkPublicStatus?.Text.Contains("49123", StringComparison.Ordinal) == true, 5);
         test.Check("link-public: consent displays the assigned external port", () =>
             settings.LinkMapPublicPort && LinkMappedPort == 49123 && router.Requests == 1);
+        test.Settle(0.4f);
         Capture("public-mapped.png");
         Click("link.public_switch");
         test.WaitFor(() => router.Releases == 1, 5);

@@ -94,14 +94,15 @@ internal sealed partial class DawnScene
         linkPublicSwitch.State = settings.LinkAllowPublic;
         linkMapSwitch.Visible = HexHost.Listens && settings.LinkAllowPublic;
         linkMapSwitch.State = settings.LinkMapPublicPort;
+        var mapping = linkPortMapping?.Status;
         string key = !settings.LinkAllowPublic ? "link.public_private"
             : !HexHost.Listens ? "link.public_dial_only"
             : LinkPort == 0 ? "link.public_wait"
             : !settings.LinkMapPublicPort ? "link.public_manual"
-            : LinkMappedEndPoint is not null ? "link.public_mapped"
-            : linkPortMapping?.Status.Unavailable == true ? "link.public_unavailable"
+            : mapping?.Endpoint is not null ? "link.public_mapped"
+            : mapping?.Unavailable == true ? "link.public_unavailable"
             : "link.public_requesting";
         linkPublicStatus.Text = Said(key, ("port", LinkPort.ToString(CultureInfo.InvariantCulture)),
-            ("endpoint", LinkMappedEndPoint?.ToString() ?? string.Empty));
+            ("endpoint", mapping?.Endpoint?.ToString() ?? string.Empty));
     }
 }
