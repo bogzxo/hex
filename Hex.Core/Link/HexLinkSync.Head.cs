@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using Hex.Core.Git;
 
 namespace Hex.Core;
 
@@ -21,7 +22,7 @@ internal sealed partial class HexLinkSync
     private async Task<bool> ReconcileFromHead(string wire, string full, HexLinkTreeFile? mine, HexLinkTreeFile? theirs,
         byte[]? localBytes, CancellationToken stop)
     {
-        if (!remoteCertified)
+        if (!remoteCertified || !GitProcess.Enabled)
             return false;
         string relative = wire[(folder.Name.Length + 1)..];
         HeadRepository? repo = headRepositories.FirstOrDefault(scope => relative.StartsWith(scope.Prefix, StringComparison.Ordinal));
@@ -132,7 +133,13 @@ internal sealed partial class HexLinkSync
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancel);
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
         CancellationToken stop = timeout.Token;
-        using Process git = Process.Start(start) ?? throw new IOException("Git did not start.");
+        using Process? git = GitProcess.StartEnabled(start);
+        if (git is null)
+        {
+            if (!GitProcess.Enabled)
+                return null;
+            throw new IOException("Git did not start.");
+        }
         Task<string> errors = git.StandardError.ReadToEndAsync(stop);
         try
         {

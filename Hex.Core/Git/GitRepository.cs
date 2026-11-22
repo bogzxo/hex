@@ -17,6 +17,8 @@ internal sealed partial class GitRepository
     /// </summary>
     public static GitRepository? Find(string path)
     {
+        if (!GitProcess.Enabled)
+            return null;
         string? at = Directory.Exists(path) ? Path.GetFullPath(path) : Path.GetDirectoryName(Path.GetFullPath(path));
         while (at is not null)
         {

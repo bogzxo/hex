@@ -41,6 +41,8 @@ internal sealed partial class HexGit
     /// <summary>Inline blame on or off from the palette, the same as its row in the settings and kept the same way.</summary>
     internal void ToggleBlame()
     {
+        if (!Enabled)
+            return;
         HexSettings settings = context.Settings.Values;
         settings.GitBlame = !settings.GitBlame;
         context.Settings.Save();

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using Hex.Core.Git;
 
 namespace Hex.Core;
 
@@ -16,6 +17,8 @@ internal sealed class HexLinkWorktreeGit
 
     public static async Task<HexLinkWorktreeGit> Open(string path, CancellationToken cancel)
     {
+        if (!GitProcess.Enabled)
+            throw new IOException(GitProcess.DisabledReason);
         string full = Path.GetFullPath(path);
         Directory.CreateDirectory(full);
         var git = new HexLinkWorktreeGit(full);
@@ -176,7 +179,8 @@ internal sealed class HexLinkWorktreeGit
             start.ArgumentList.Add(argument);
 
         cancel.ThrowIfCancellationRequested();
-        using Process process = Process.Start(start) ?? throw new IOException("Git did not start.");
+        using Process process = GitProcess.StartEnabled(start)
+            ?? throw new IOException(GitProcess.Enabled ? "Git did not start." : GitProcess.DisabledReason);
         using var bytes = new MemoryStream();
         Task output = process.StandardOutput.BaseStream.CopyToAsync(bytes, cancel);
         Task<string> error = process.StandardError.ReadToEndAsync(cancel);

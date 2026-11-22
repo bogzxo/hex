@@ -486,6 +486,7 @@ internal sealed partial class DawnScene
             testExplorer.TestSingleTargetFrameworkRetry(test, Path.Combine(testFolder, "single-target-retry"), OpenTests);
         }),
         ("test-workspace", "Test Explorer replaces discovery and ignores old results when the workspace changes", test => testExplorer.TestWorkspaceSwitch(test, Path.Combine(testFolder, "test-workspaces"), explorer.OpenFolder)),
+        ("git-support", "Git settings disable repository discovery and controls until enabled again", TestGitSupport),
         ("git", "git in a repository made for it, what changed coloured in the explorer and the tabs, and taken off again by a commit", TestGit),
         ("conflicts", "a real merge conflict settled by a click on its lens and staged from the card, the Accept commands greyed out without one, the words a diff changed and a diff that says nothing is wrong", TestConflicts),
         ("recent", "the commands and files picked last over the rest, a closed file brought back, a save tidying, saving by itself, the glass sliders", TestRecentAndTidy),

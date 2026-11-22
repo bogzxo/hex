@@ -208,6 +208,9 @@ internal sealed partial class HexSettings
     /// <summary>Whether the line the caret is on says faintly at its end who last changed it and when, git blame.</summary>
     public bool GitBlame = true;
 
+    /// <summary>Whether Hex uses its Git integration and background repository checks.</summary>
+    public bool GitEnabled = true;
+
     /// <summary>Whether the code is drawn small down the right of the editor, a slider over what's in sight.</summary>
     public bool Minimap = true;
 

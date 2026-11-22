@@ -33,6 +33,7 @@ internal sealed partial class HexGit
     public HexGit(DawnContext context)
     {
         this.context = context;
+        GitProcess.SetEnabled(context.Settings.Values.GitEnabled);
         FollowDocuments();
         FollowForBlame();
         BuildSourceControl();
@@ -40,22 +41,69 @@ internal sealed partial class HexGit
         BuildStash();
         BuildMerge();
         BuildActive();
-        context.Workspace.FilesChanged += files =>
-        {
-            foreach (var (path, change) in files)
-            {
-                if (RepositoryOf(path) is { } repository)
-                    repository.Dirty();
-
-                // Something made can be a clone or a folder git init is about to make a repository of, looked down from soon,
-                // and something deleted can be a repository's folder
-                LookDownAfter(path, change);
-            }
-        };
+        if (Enabled)
+            StartFollowing();
     }
 
-    /// <summary>Whether git can be asked at all, there being a git on the PATH.</summary>
-    public static bool Available => GitProcess.InstalledNow == true;
+    public bool Enabled => GitProcess.Enabled;
+    public bool Available => Enabled && GitProcess.InstalledNow == true;
+
+    private void StartFollowing()
+    {
+        context.Workspace.FilesChanged += WorkspaceFilesChanged;
+        _ = GitProcess.InstalledNow;
+    }
+
+    private void WorkspaceFilesChanged(IReadOnlyList<(string Path, LanguageServerFileChange Change)> files)
+    {
+        foreach (var (path, change) in files)
+        {
+            RepositoryOf(path)?.Dirty();
+            LookDownAfter(path, change);
+        }
+    }
+
+    internal void ApplyEnabled()
+    {
+        bool enable = context.Settings.Values.GitEnabled;
+        if (Enabled == enable)
+            return;
+
+        GitProcess.SetEnabled(enable);
+        lookIn = 0;
+        if (enable)
+            StartFollowing();
+        else
+        {
+            context.Workspace.FilesChanged -= WorkspaceFilesChanged;
+            StopLookingDown();
+            foreach (Repository repository in repositories.Values)
+                repository.Gone = true;
+            repositories.Clear();
+            foundFor.Clear();
+            foundForPath.Clear();
+            wouldBe.Clear();
+            listed.Clear();
+            listedDirty = true;
+            chosen = null;
+            followed = null;
+
+            foreach (HexDocument document in tracked.Keys)
+            {
+                document.Editor.LineChanges = [];
+                document.Editor.OnChangePressed = null;
+            }
+            tracked.Clear();
+            foreach (HexDocument document in blamed.Keys)
+                document.Editor.LineNote = null;
+            blamed.Clear();
+        }
+
+        FollowOperation();
+        Version++;
+        Changed?.Invoke();
+        context.Redraw();
+    }
 
     /// <summary>The repository a file or a folder is in, null for none.</summary>
     public GitRepository? RepositoryFor(string path) => RepositoryOf(path)?.Git;
@@ -72,6 +120,8 @@ internal sealed partial class HexGit
     /// <summary>Has git asked again about every repository, and every folder that had none looked at again for one.</summary>
     public void RefreshAll()
     {
+        if (!Enabled)
+            return;
         ForgetNone();
         LookDown(again: true);
         foreach (Repository repository in repositories.Values)
@@ -325,7 +375,7 @@ internal sealed partial class HexGit
             }, found =>
             {
                 asking = false;
-                if (found.Status is not { } status)
+                if (Gone || !owner.Enabled || found.Status is not { } status)
                     return;
 
                 Status = status;

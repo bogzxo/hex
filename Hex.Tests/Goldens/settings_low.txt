@@ -52,6 +52,7 @@ link_port = 1024
 link_name = ""
 link_discoverable = true
 link_system_file_folders = []
+git_enabled = true
 git_autofetch = true
 git_autofetch_interval = 1
 git_pull_mode = "default"

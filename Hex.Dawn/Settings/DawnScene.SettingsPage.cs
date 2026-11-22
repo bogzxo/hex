@@ -77,6 +77,8 @@ internal sealed partial class DawnScene
         // editor's rows a little over the rest. Reset all settings asks first
         settingsView.Page.HomePart = EDITOR_PART;
         settingsView.Page.Common = CommonSettings;
+        settingsView.Page.DisabledReasonOf = key => !settings.GitEnabled && EditorSettingsCatalog.RequiresGit(key)
+            ? Said("settings_catalog.git_required") : null;
 
         // The page is drawn at the interface size like everything else. It zoomed itself back up when a size under the one
         // the window's height suggested was picked, so the setting that made every word smaller made these bigger
@@ -298,6 +300,7 @@ internal sealed partial class DawnScene
             "code_zoom" => new NumberValue(hex.settings.CodeZoom),
             "code_font" => new StringValue(hex.settings.CodeFont),
             "wrap_code" => Values.Bool(hex.settings.WrapCode),
+            EditorSettingsCatalog.GIT_ENABLED => Values.Bool(hex.settings.GitEnabled),
             "git_blame" => Values.Bool(hex.settings.GitBlame),
             "minimap" => Values.Bool(hex.settings.Minimap),
             "spell_check" => Values.Bool(hex.settings.SpellCheck),
@@ -439,6 +442,11 @@ internal sealed partial class DawnScene
                     settings.WrapCode = wrap.Value;
                     foreach (HexDocument open in hex.documents)
                         open.Editor.WordWrap = wrap.Value;
+                    break;
+                case (EditorSettingsCatalog.GIT_ENABLED, BooleanValue enabled):
+                    settings.GitEnabled = enabled.Value;
+                    hex.git.ApplyEnabled();
+                    hex.SettingsPage?.Refresh();
                     break;
                 case ("git_blame", BooleanValue blame):
                     settings.GitBlame = blame.Value;

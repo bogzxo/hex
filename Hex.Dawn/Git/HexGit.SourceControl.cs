@@ -35,6 +35,11 @@ internal sealed partial class HexGit
     private List<UITreeItem> SourceControlSide()
     {
         var items = new List<UITreeItem>();
+        if (!Enabled)
+        {
+            items.Add(Note(context.Strings.Said("git.support_off")));
+            return items;
+        }
         foreach (string root in context.Workspace.Roots)
             RepositoryOf(root);
         List<Repository> shown = [.. WorkspaceRepositories()];
