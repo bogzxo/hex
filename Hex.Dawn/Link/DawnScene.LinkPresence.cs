@@ -66,9 +66,9 @@ internal sealed partial class DawnScene
         linkFollowDocument = null;
         linkFollowSeen = string.Empty;
         string name = shownName ?? LinkPeers.FirstOrDefault(peer => peer.Device.Id == deviceId)?.Device.Name ?? deviceId;
-        Say(linkPresence.TryGetValue(deviceId, out LinkPresenceSeen? seen) && seen.Presence is not null
-            ? Said("link.following", ("device", name))
-            : Said("link.following_nowhere", ("device", name)));
+        string status = shownName is not null ? "link.devices_session_following"
+            : linkPresence.TryGetValue(deviceId, out LinkPresenceSeen? seen) && seen.Presence is not null ? "link.following" : "link.following_nowhere";
+        Say(Said(status, ("device", name)));
         linkDirty = true;
     }
 
