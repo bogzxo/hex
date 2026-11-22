@@ -259,13 +259,16 @@ public sealed class HexLinkDocumentSequenceTests
         pair.BOnA |= HexLinkRights.Edit;
         remote.Capture(remote.View, "shared\n");
         remote.Receive(await pair.PeerA.ExchangeDocument(wire, remote.Epoch, remote.Revision, remote.Batch()));
-        HexDocSaved[] receipts = await Task.WhenAll(
-            room.Save(DeviceA.Id, owner, local, remote.Epoch, remote.Revision, default),
-            pair.PeerA.SaveDocument(wire, remote.Epoch, remote.Revision));
-        Assert.Equal(receipts[0], receipts[1]);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(WAIT_MS));
+        var waiting = pair.PeerA.WaitForDocumentRevision(wire, remote.Epoch, remote.Revision, timeout.Token, knownSaved: -1);
+        HexDocSaved receipt = await room.Save(DeviceA.Id, owner, local, remote.Epoch, remote.Revision, timeout.Token);
+        Assert.Equal(receipt, (await waiting)?.Saved);
+        Assert.Equal(receipt, await pair.PeerA.SaveDocument(wire, remote.Epoch, remote.Revision));
+        Assert.True(receipt.Matches(HexLinkFiles.Hash(Encoding.UTF8.GetBytes("shared\n")), HexDocSaved.TextDigest("shared\n")));
+        Assert.False(receipt.Matches(HexLinkFiles.Hash(Encoding.UTF8.GetBytes("outside\n")), HexDocSaved.TextDigest("outside\n")));
         Assert.Equal(disk.Bytes("shared\r\n"), await File.ReadAllBytesAsync(local));
         remote.Receive(await pair.PeerA.ExchangeDocument(wire, remote.Epoch, remote.Revision, []));
-        Assert.Equal(receipts[0], remote.Saved);
+        Assert.Equal(receipt, remote.Saved);
 
         await File.WriteAllTextAsync(local, "outside");
         remote.Capture(remote.View, "yet newer\n");
@@ -283,7 +286,10 @@ public sealed class HexLinkDocumentSequenceTests
         using var tablet = new LinkServices(DeviceC);
         using var fromTablet = new HexLink(tablet);
         first.B.DocumentRoute = first.LinkB.PeerOf;
-        first.A.Documents.Rooms.Open(wire, "draft");
+        string path = Path.Combine(first.A.Work, "note.txt");
+        var basis = new HexDocFileBasis("draft\r\n", new UTF8Encoding(false, true), true);
+        await File.WriteAllBytesAsync(path, basis.Bytes(basis.Text!));
+        var room = first.A.Documents.Rooms.Open(wire, "draft\n", basis);
         var (b, c) = Pair();
         HexLinkRights fromC = HexLinkRights.View | HexLinkRights.Edit;
         var tabletAtB = first.LinkB.Add(new HexLinkConnection(b, DeviceC, "memory", true, () => fromC));
@@ -296,13 +302,27 @@ public sealed class HexLinkDocumentSequenceTests
         Assert.False(opened.CanEdit);
         Assert.Equal(DeviceC.Id, Assert.Single(opened.Participants).Device);
         var replica = new HexLinkDocumentReplica(opened);
-        replica.Capture(replica.View, "draft!");
+        replica.Capture(replica.View, "draft!\n");
         Assert.Equal(HexLinkErrors.NOT_ALLOWED,
             await CodeOf(relay.ExchangeDocument(wire, replica.Epoch, replica.Revision, replica.Batch(), relayTo: DeviceA.Id)));
 
         first.BOnA |= HexLinkRights.Edit;
         replica.Receive(await relay.ExchangeDocument(wire, replica.Epoch, replica.Revision, replica.Batch(), relayTo: DeviceA.Id));
-        Assert.Equal("draft!", replica.View.Text);
+        Assert.Equal("draft!\n", replica.View.Text);
+        HexDocSaved saved = await relay.SaveDocument(wire, replica.Epoch, replica.Revision, relayTo: DeviceA.Id);
+        Assert.Equal(basis.Bytes("draft!\r\n"), await File.ReadAllBytesAsync(path));
+        Assert.DoesNotContain((await relay.OpenDocument(wire, relayTo: DeviceA.Id)).Participants, person => person.Device == DeviceA.Id);
+
+        replica.Capture(replica.View, "newer\n");
+        replica.Receive(await relay.ExchangeDocument(wire, replica.Epoch, replica.Revision, replica.Batch(), relayTo: DeviceA.Id));
+        Assert.Equal("newer\n", room.View().Text);
+        fromC &= ~HexLinkRights.Edit;
+        var unchangedSave = Assert.IsType<HexDocSavedSnapshot>(
+            await relay.ReadSavedDocument(wire, includeText: true, default, relayTo: DeviceA.Id));
+        Assert.Equal(saved, unchangedSave.Receipt);
+        Assert.Equal("draft!\n", unchangedSave.Text);
+        fromC &= ~HexLinkRights.Steer;
+        Assert.Equal(HexLinkErrors.NOT_ALLOWED, await CodeOf(relay.ReadSavedDocument(wire, includeText: true, default, relayTo: DeviceA.Id)));
         Assert.Contains(first.B.Audited, item => item.What == "relay" && item.Detail.Contains(DeviceC.Id, StringComparison.Ordinal));
         Assert.Contains(first.A.Audited, item => item.What == "relay" && item.Detail.Contains(DeviceC.Id, StringComparison.Ordinal));
     }

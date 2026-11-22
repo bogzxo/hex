@@ -153,26 +153,23 @@ internal sealed partial class DawnScene
     private async Task<string?> LinkCompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes,
         CancellationToken cancel, bool? executable, HexLinkFiles.PackDirectories? directories)
     {
-        var (before, inRoom) = await OnEditorForLink(() =>
+        var (before, shared) = await OnEditorForLink(() =>
         {
             LinkTabStamp stamp = LinkTabBeforeWrite(full);
-            return (stamp, stamp.Document is { } tab && linkLiveDocuments.ContainsKey(tab));
+            return (stamp, LinkLiveOf(stamp.Document));
         }).WaitAsync(cancel);
-        if (inRoom)
+        if (shared is not null)
         {
-            if (bytes is not null && HexLinkFiles.Decode(bytes) is { } incoming &&
-                await LinkLiveKnownSyncSave(before.Document, HexLinkFiles.Hash(bytes), cancel).ConfigureAwait(false))
+            if (bytes is not null && HexLinkFiles.Decode(bytes) is { } incoming)
             {
-                string? saved = await HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel, executable, directories).ConfigureAwait(false);
-                PostLink(() =>
-                {
-                    if (before.Document is { } tab && Context.Documents.Find(full) == tab && tab.DiskText == before.DiskText)
-                        tab.DiskText = incoming.Text;
-                });
-                return saved;
+                string incomingHash = HexLinkFiles.Hash(bytes);
+                var receipt = await LinkLiveKnownSyncSave(shared, full, incomingHash, HexDocSaved.TextDigest(incoming.Text), cancel).ConfigureAwait(false);
+                if (receipt is not null)
+                    return await LinkLiveWriteSaved(shared, receipt, full, wire, baseHash, bytes, incomingHash,
+                        incoming.Text, before.DiskText, HexDocFileBasis.EncodingOf(incoming.Encoding),
+                        cancel, executable, directories).ConfigureAwait(false);
             }
-            throw new HexLinkException(HexLinkErrors.CONFLICT, $"{wire} is open in a shared document.",
-                new JsonObject { ["hash"] = HexLinkFiles.HashOf(full), ["editor_dirty"] = true });
+            throw LinkLiveSaveConflict(full, wire);
         }
         if (before.Dirty)
             throw new HexLinkException(HexLinkErrors.CONFLICT, $"{wire} has unsaved changes in the editor.",

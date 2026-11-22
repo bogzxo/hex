@@ -27,18 +27,26 @@ internal sealed partial class DawnScene
     private void LinkDocumentTestPeer(string work)
     {
         string? role = System.Environment.GetEnvironmentVariable(LINK_DOC_TEST);
-        if (role is not ("editor" or "reader") || linkServices is not { } services
-            || LinkPeers.FirstOrDefault() is not { } host
-            || host.Device.Id != System.Environment.GetEnvironmentVariable(LINK_DOC_OWNER)
+        if (role is not ("editor" or "reader" or "relay") || linkServices is not { } services
+            || System.Environment.GetEnvironmentVariable(LINK_DOC_OWNER) is not { } owner
             || System.Environment.GetEnvironmentVariable(LINK_TEST_FOLDER) is not { } folder)
+            return;
+        string? hostId = role == "relay" ? System.Environment.GetEnvironmentVariable(LINK_DOC_RELAY) : owner;
+        var host = hostId is null ? null : LinkPeerOf(hostId);
+        if (!linkDocAuthorityReady && host is null)
             return;
         bool Flag(string name) => File.Exists(Path.Combine(work, name));
         void Signal(string name, string contents = "") => File.WriteAllText(Path.Combine(work, name), contents);
         if (!linkDocAuthorityReady)
         {
-            services.FolderAuthorities.Bind(new HexLinkFolder("shared", folder), new HexLinkAuthority(host.Device.Id, 1));
+            services.FolderAuthorities.Bind(new HexLinkFolder("shared", folder), new HexLinkAuthority(owner, 1));
             Signal("authority-ready");
             linkDocAuthorityReady = true;
+        }
+        if (Flag("headless-open"))
+        {
+            LinkDocumentSaveTestPeer(work, folder, role, hostId!, host);
+            return;
         }
         if (linkDocTestStage == 0 && Flag("open"))
         {
@@ -129,6 +137,7 @@ internal sealed partial class DawnScene
         string home = LinkTestFolder("hex-link-doc-a-", test);
         string peerHome = LinkTestFolder("hex-link-doc-b-", test);
         string readerHome = LinkTestFolder("hex-link-doc-c-", test);
+        string relayHome = LinkTestFolder("hex-link-doc-d-", test);
         string folder = Path.Combine(home, "shared"), path = Path.Combine(folder, "note.txt");
         string peerFolder = Path.Combine(peerHome, "shared"), readerFolder = Path.Combine(readerHome, "shared");
         string peerWork = Path.Combine(peerHome, LINK_PEER_FOLDER), readerWork = Path.Combine(readerHome, LINK_PEER_FOLDER);
@@ -170,6 +179,12 @@ internal sealed partial class DawnScene
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(file)!);
                 File.WriteAllText(file, "disk");
+            }
+            foreach (string root in new[] { folder, peerFolder, readerFolder, Path.Combine(relayHome, "shared") })
+            {
+                Directory.CreateDirectory(root);
+                File.WriteAllText(Path.Combine(root, LINK_DOC_HEADLESS_FILE),
+                    root == folder ? "overlap\nlast\n" : "overlap\r\nlast\r\n");
             }
             StopLink();
             linkTestExtraFolders = [folder];
@@ -321,6 +336,7 @@ internal sealed partial class DawnScene
         });
         Await("a save by B wrote the authority buffer and synced the same bytes", () =>
             files.All(file => ReadLinkTestFile(file) == "named"));
+        TestLinkDocumentSave(test, folder, peerWork, readerWork, relayHome);
         test.Run(() =>
         {
             foreach (var peer in LinkPeers.ToArray())

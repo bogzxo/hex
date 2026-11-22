@@ -22,8 +22,10 @@ internal sealed partial class DawnScene
         public int Version = tab.Editor.Document.Version;
         public bool Busy, Offline;
         public bool SaveRequested;
-        public HexDocSaved? Saved;
-        public readonly Queue<HexDocSaved> ConfirmedWrites = new();
+        public HexDocSaved? Saved, DiskSave;
+        public long DiskSaveRetryAt;
+        public int DiskSaveInFlight;
+        public bool CheckingObservedSave;
         public readonly Queue<LinkLiveAgentWork> AgentEdits = new();
         public readonly Queue<bool> UndoRequests = new();
         public bool OriginalReadOnly = tab.Editor.ReadOnly;
@@ -37,6 +39,7 @@ internal sealed partial class DawnScene
         public CancellationTokenSource? RevisionWait;
         public HexLinkPeer? RevisionWaitUnsupported;
         public Action<LinkLiveTiming, string, long>? TestTiming;
+        public Action? TestBeforeDiskSave;
     }
 
     private enum LinkLiveTiming { LocalChange, Dispatch, WorkerStart, WireReplay, Prepared }
@@ -452,7 +455,8 @@ internal sealed partial class DawnScene
             return;
         var lifetime = CancellationTokenSource.CreateLinkedTokenSource(linkCancel?.Token ?? default);
         shared.RevisionWait = lifetime;
-        _ = LinkLiveWaitForRevision(shared, peer, shared.Replica.Epoch, shared.Replica.Revision, shared.Replica.RosterVersion, lifetime);
+        _ = LinkLiveWaitForRevision(shared, peer, shared.Replica.Epoch, shared.Replica.Revision, shared.Replica.RosterVersion,
+            shared.Saved?.Revision ?? -1, lifetime);
     }
 
     private static void LinkLiveStopRevisionWait(LinkLiveDocument shared)
@@ -464,7 +468,7 @@ internal sealed partial class DawnScene
     }
 
     private async Task LinkLiveWaitForRevision(LinkLiveDocument shared, HexLinkPeer? peer, Guid epoch, long revision,
-        long roster, CancellationTokenSource lifetime)
+        long roster, long knownSaved, CancellationTokenSource lifetime)
     {
         HexDocExchange? reply = null;
         bool timedOut = false, unsupported = false;
@@ -473,9 +477,9 @@ internal sealed partial class DawnScene
         {
             reply = shared.Room is { } room
                 ? await Task.Run(() => room.WaitForRevision(shared.Authority.DeviceId, shared.Tab, epoch, revision,
-                    lifetime.Token, roster), lifetime.Token).ConfigureAwait(false)
+                    lifetime.Token, roster, knownSaved), lifetime.Token).ConfigureAwait(false)
                 : await peer!.WaitForDocumentRevision(shared.Wire, epoch, revision, lifetime.Token,
-                    LinkLiveRelay(shared.Authority, peer), roster).ConfigureAwait(false);
+                    LinkLiveRelay(shared.Authority, peer), roster, knownSaved).ConfigureAwait(false);
             timedOut = reply is null;
             if (reply is not null && shared.TestTiming is not null)
                 arrived = Stopwatch.GetTimestamp();
@@ -565,6 +569,14 @@ internal sealed partial class DawnScene
         bool agentAttempted = false;
         string? agentError = null;
         string? localPath = shared.Tab.Path;
+        string? diskText = shared.Tab.DiskText;
+        HexDocSaved? diskSave = shared.DiskSave;
+        bool retryRelayedSave = peer is not null && LinkLiveRelay(shared.Authority, peer) is not null
+            && localPath is not null && shared.DiskSaveRetryAt <= Environment.TickCount64;
+        var diskEncoding = shared.Tab.DiskEncoding;
+        bool diskCrLf = shared.Tab.SavedCrLf;
+        HexDocSavedSnapshot? written = null;
+        bool retryDiskSave = false;
         try
         {
             await Task.Run(async () =>
@@ -639,6 +651,26 @@ internal sealed partial class DawnScene
                         saveError = e.Message;
                     }
                 }
+                HexDocSaved? receipt = save ?? replica.Saved;
+                if (receipt is not null && receipt != diskSave)
+                {
+                    if (shared.Room is { } authority)
+                        written = authority.SavedOnDisk();
+                    else if (retryRelayedSave)
+                    {
+                        try
+                        {
+                            var relayBasis = new HexDocFileBasis(diskText, diskEncoding, diskCrLf);
+                            retryDiskSave = !await LinkLiveSaveRelayed(shared, peer!, localPath!, relayBasis, receipt, cancel).ConfigureAwait(false);
+                        }
+                        catch (Exception e) when (e is IOException or HexLinkException or UnauthorizedAccessException or TimeoutException)
+                        {
+                            retryDiskSave = true;
+                            if (save is not null)
+                                saveError ??= e.Message;
+                        }
+                    }
+                }
                 var updated = replica.View;
                 if (shared.TestTiming is { } trace)
                 {
@@ -700,6 +732,10 @@ internal sealed partial class DawnScene
                     Said("documents.save_failed", ("path", shared.Wire), ("error", saveError)), error: saveError is not null);
             }
             LinkLiveRememberSaved(shared, save ?? shared.Replica.Saved);
+            if (written is { Text: { } raw })
+                LinkLiveSetDiskSave(shared, written.Receipt, raw, diskText);
+            if (retryDiskSave)
+                shared.DiskSaveRetryAt = Environment.TickCount64 + 2000;
             if (shared.Offline || !LiveSamePeople(shared.Participants, shared.Replica.Participants))
                 tabsDirty = true;
             shared.Offline = false;
@@ -722,7 +758,8 @@ internal sealed partial class DawnScene
                 return;
             }
             LinkLiveApply(shared, shared.Replica.View, epoch == shared.Replica.Epoch ? captured : null, patches);
-            LinkLiveMarkSaved(shared);
+            if (shared.DiskSave is not null)
+                shared.Tab.Modified = HasChanges(shared.Tab);
             if (carets is not null)
             {
                 var visible = LinkCaretsForShared(shared, carets);
@@ -802,48 +839,6 @@ internal sealed partial class DawnScene
         shared.SaveRequested = true;
         LinkLiveFlush(shared, urgent: true);
         return true;
-    }
-
-    private static void LinkLiveRememberSaved(LinkLiveDocument shared, HexDocSaved? saved)
-    {
-        if (saved is null || shared.Saved == saved)
-            return;
-        shared.Saved = saved;
-        shared.ConfirmedWrites.Enqueue(saved);
-        if (shared.ConfirmedWrites.Count > 8)
-            shared.ConfirmedWrites.Dequeue();
-    }
-
-    private void LinkLiveMarkSaved(LinkLiveDocument shared)
-    {
-        var replica = shared.Replica;
-        if (shared.Saved is not { } saved || saved.Epoch != replica.Epoch || saved.Revision != replica.Revision || replica.HasPending)
-            return;
-        var tab = shared.Tab;
-        if (tab.SavedCode == shared.Shown.Text)
-            return;
-        if (shared.Room is not null)
-            tab.DiskText = DocumentFile.WithLineEndings(shared.Shown.Text, tab.DiskText, tab.SavedCrLf, tab.SavedCrLf);
-        tab.SavedCode = shared.Shown.Text;
-        tab.Modified = false;
-        tabsDirty = true;
-    }
-
-    private async Task<bool> LinkLiveKnownSyncSave(HexDocument? tab, string hash, CancellationToken cancel)
-    {
-        if (tab is null)
-            return false;
-        for (int wait = 0; wait < 16; wait++)
-        {
-            bool? matched = await OnEditorForLink<bool?>(() =>
-                linkLiveDocuments.TryGetValue(tab, out var shared) && shared.Draft is null
-                    ? shared.ConfirmedWrites.Any(save => string.Equals(save.Hash, hash, StringComparison.OrdinalIgnoreCase)) : null)
-                .WaitAsync(cancel).ConfigureAwait(false);
-            if (matched is null || matched.Value)
-                return matched == true;
-            await Task.Delay(50, cancel).ConfigureAwait(false);
-        }
-        return false;
     }
 
     private static bool LiveSamePeople(IReadOnlyList<HexDocParticipant> before, IReadOnlyList<HexDocParticipant> after)

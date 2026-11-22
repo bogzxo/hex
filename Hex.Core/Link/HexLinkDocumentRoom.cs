@@ -105,14 +105,14 @@ internal sealed partial class HexLinkDocumentRoom(string path, string text, HexD
     }
 
     public async Task<HexDocExchange?> WaitForRevision(string scope, object connection, Guid epoch, long revision,
-        CancellationToken cancel, long? knownRoster = null)
+        CancellationToken cancel, long? knownRoster = null, long? knownSaved = null)
     {
         TaskCompletionSource<bool> waiter;
         lock (gate)
         {
             if (online.GetValueOrDefault(scope) != connection || !members.TryGetValue(scope, out var participant))
                 throw HexLinkException.NotFound("Join the shared document first.");
-            if (authority.Frontier != (epoch, revision))
+            if (authority.Frontier != (epoch, revision) || knownSaved is { } seen && seen != (saved?.Revision ?? -1))
                 return State(participant.Author, epoch, revision, knownRoster, participant.Caret is not null);
 
             waiter = new(TaskCreationOptions.RunContinuationsAsynchronously);
