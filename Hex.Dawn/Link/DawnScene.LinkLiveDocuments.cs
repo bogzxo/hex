@@ -38,6 +38,7 @@ internal sealed partial class DawnScene
         public bool HoldEditsForTest, ApplyingRemote;
         public Action? TextChanged;
         public CancellationTokenSource? RevisionWait;
+        public long RevisionWaitRetryAt;
         public HexLinkPeer? RevisionWaitUnsupported;
         public Action<LinkLiveTiming, string, long>? TestTiming;
         public Action? TestBeforeDiskSave;
@@ -484,7 +485,7 @@ internal sealed partial class DawnScene
     private void LinkLiveStartRevisionWait(LinkLiveDocument shared)
     {
         var peer = shared.Connection;
-        if (shared.RevisionWait is not null || shared.Room is null &&
+        if (shared.RevisionWait is not null || shared.RevisionWaitRetryAt > Environment.TickCount64 || shared.Room is null &&
             (peer is null || peer == shared.RevisionWaitUnsupported || !HexLinkAllowed.Has(peer.Granted, HexLinkRights.View)))
             return;
         var lifetime = CancellationTokenSource.CreateLinkedTokenSource(linkCancel?.Token ?? default);
@@ -505,7 +506,7 @@ internal sealed partial class DawnScene
         long roster, long knownSaved, CancellationTokenSource lifetime)
     {
         HexDocExchange? reply = null;
-        bool timedOut = false, unsupported = false;
+        bool timedOut = false, unsupported = false, failed = false;
         long arrived = 0;
         try
         {
@@ -519,7 +520,10 @@ internal sealed partial class DawnScene
                 arrived = Stopwatch.GetTimestamp();
         }
         catch (HexLinkException error) when (error.Code == HexLinkErrors.METHOD_NOT_FOUND) { unsupported = true; }
-        catch (Exception error) when (error is IOException or HexLinkException or OperationCanceledException) { }
+        catch (Exception error) when (error is IOException or HexLinkException or OperationCanceledException)
+        {
+            failed = !lifetime.IsCancellationRequested;
+        }
         PostLink(() =>
         {
             lifetime.Dispose();
@@ -528,6 +532,9 @@ internal sealed partial class DawnScene
             shared.RevisionWait = null;
             if (unsupported)
                 shared.RevisionWaitUnsupported = peer;
+            // A refused wait can finish immediately while the editor is still reacquiring its room.
+            if (failed)
+                shared.RevisionWaitRetryAt = Environment.TickCount64 + 1000;
             if (reply is not null)
             {
                 shared.RevisionReply = new(epoch, revision, reply, arrived);

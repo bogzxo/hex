@@ -1,3 +1,5 @@
+using Horizon.UI.Components;
+
 namespace Hex.Dawn;
 
 internal sealed partial class DawnScene
@@ -8,6 +10,7 @@ internal sealed partial class DawnScene
     private HexLinkHoldStore? linkDocPeerStore;
     private Task<HexLinkHold>? linkDocPeerHolding;
     private Task<HexLinkHoldOperation>? linkDocPeerDiscarding;
+    private bool linkDocPeerSawHoldEdit;
 
     private void TestLinkDocumentHold(HexPointerScript test, string folder, string peerWork, string peerFolder)
     {
@@ -17,6 +20,7 @@ internal sealed partial class DawnScene
         Task<HexLinkHold>? starting = null;
         Task<HexLinkHoldOperation>? submitting = null;
         Task? completing = null;
+        bool peerEditObserved = false;
 
         static string Snapshot(string path)
         {
@@ -45,6 +49,7 @@ internal sealed partial class DawnScene
             });
         }
 
+        TestLinkDocumentWaitBackoff(test);
         test.Run(() =>
         {
             var shared = new HexLinkFolder("shared", folder);
@@ -57,14 +62,18 @@ internal sealed partial class DawnScene
         test.Run(() =>
         {
             Rewrite(document, HeldDraftSample);
-            SaveTo(file);
+            SaveLinkDocumentHoldFixture(HeldDraftSample, "the authority's private draft");
             File.WriteAllText(Path.Combine(peerWork, "held-peer-edit"), "");
         });
         Check("the peer saw the last shared text and could edit and save while the authority held its file", () =>
-            ReadLinkTestFile(file) == HeldDraftSample && document.Editor.Text == HeldDraftSample &&
+            peerEditObserved = ReadLinkTestFile(file) == HeldDraftSample && document.Editor.Text == HeldDraftSample &&
             ReadLinkTestFile(peerFile) == HeldPeerSample && store!.Read(LINK_DOC_WIRE)?.IncomingBytes is { } bytes &&
-            System.Text.Encoding.UTF8.GetString(bytes) == HeldPeerSample);
-        test.Run(() => submitting = service!.Submit());
+            System.Text.Encoding.UTF8.GetString(bytes) == HeldPeerSample, traceParticipant: true);
+        test.Run(() =>
+        {
+            if (peerEditObserved)
+                submitting = service!.Submit();
+        });
         Check("submitting both edits keeps the file held until resolved", () =>
             submitting is { IsCompletedSuccessfully: true } && submitting.Result.NeedsMerge.Count == 1 && store!.IsHeld(LINK_DOC_WIRE));
         test.Run(() =>
@@ -129,13 +138,54 @@ internal sealed partial class DawnScene
         });
     }
 
+    private void TestLinkDocumentWaitBackoff(HexPointerScript test)
+    {
+        LinkLiveDocument? stale = null;
+        bool refusedWaitWasThrottled = false;
+        test.Run(() =>
+        {
+            if (linkServices is not { } services)
+                return;
+            var room = new HexLinkDocumentRoom(LINK_DOC_WIRE, "named");
+            HexDocExchange joined = room.Join(services.Device.Id, new object(), services.Device);
+            // The previous room member is no longer this tab. Its next revision wait is refused.
+            stale = new LinkLiveDocument(document, LINK_DOC_WIRE, new HexLinkAuthority(services.Device.Id, 1),
+                new HexLinkDocumentReplica(joined), room);
+            LinkLiveStartRevisionWait(stale);
+        });
+        test.WaitFor(() =>
+        {
+            if (stale is not { RevisionWait: null })
+                return false;
+            LinkLiveStartRevisionWait(stale);
+            refusedWaitWasThrottled = stale.RevisionWait is null;
+            LinkLiveStopRevisionWait(stale);
+            return true;
+        }, 5);
+        test.Check("link-documents: a refused wait for a stale shared room cannot immediately retry",
+            () => refusedWaitWasThrottled);
+    }
+
     private void LinkDocumentHoldTestPeer(string work)
     {
-        if (linkDocTestStage == 7 && File.Exists(Path.Combine(work, "held-peer-edit")) &&
-            LinkLiveOf(document) is null && document.Editor.Text == "named")
+        if (linkDocTestStage == 7 && File.Exists(Path.Combine(work, "held-peer-edit")))
         {
+            var active = LinkLiveOf(document);
+            if (!linkDocPeerSawHoldEdit)
+            {
+                linkDocPeerSawHoldEdit = true;
+                Console.WriteLine($"[Hex self-test] peer saw authority hold: room={active is not null}, draft={active?.Draft}, " +
+                    $"joining={linkLiveJoining.Contains(LINK_DOC_WIRE)}, editor={document.Editor.Text}, disk={document.DiskText}");
+            }
+            if (active is not null || document.Editor.Text != "named")
+                return;
+
             Rewrite(document, HeldPeerSample);
-            SaveTo(document.Path!);
+            if (!SaveLinkDocumentHoldFixture(HeldPeerSample, "the peer's edit while the authority held"))
+            {
+                linkDocTestStage = -1;
+                return;
+            }
             linkDocTestStage++;
         }
         if (linkDocTestStage == 8 && LinkLiveOf(document) is { Draft: null } && document.Editor.Text == HeldDraftSample)
@@ -158,8 +208,11 @@ internal sealed partial class DawnScene
         if (linkDocTestStage == 10 && linkDocPeerHolding is { IsCompletedSuccessfully: true } && LinkLiveOf(document) is null)
         {
             Rewrite(document, HeldPeerSample);
-            SaveTo(document.Path!);
-            Console.WriteLine($"[Hex self-test] participant saved: held={linkDocPeerStore!.IsHeld(LINK_DOC_WIRE)}, editor={document.Editor.Text}, disk={ReadLinkTestFile(document.Path!)}");
+            if (!SaveLinkDocumentHoldFixture(HeldPeerSample, "the participant's private edit"))
+            {
+                linkDocTestStage = -1;
+                return;
+            }
             File.WriteAllText(Path.Combine(work, "participant-saved"), "");
             linkDocTestStage++;
         }
@@ -175,5 +228,21 @@ internal sealed partial class DawnScene
             File.WriteAllText(Path.Combine(work, "participant-rejoined"), "");
             linkDocTestStage++;
         }
+    }
+
+    private bool SaveLinkDocumentHoldFixture(string expected, string stage)
+    {
+        var previousNotice = toasts.Cards.LastOrDefault();
+        SaveTo(document.Path!);
+        if (document.DiskText == expected && !document.Modified)
+            return true;
+
+        var notice = toasts.Cards.LastOrDefault();
+        bool overwritePrompt = chrome.Root.Children.OfType<UIDialog>().Any(dialog => dialog.IsOpen &&
+            dialog.Buttons.Any(button => button.Label == Said("disk_changes.save_over")));
+        Console.WriteLine($"[Hex self-test] could not save {stage}: readOnly={document.Editor.ReadOnly}, " +
+            $"editor={document.Editor.Text}, disk={document.DiskText}, overwritePrompt={overwritePrompt}, " +
+            $"notice={(notice != previousNotice ? notice?.Text : null)}");
+        return false;
     }
 }
