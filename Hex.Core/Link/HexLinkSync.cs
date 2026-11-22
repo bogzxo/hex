@@ -218,6 +218,21 @@ internal sealed partial class HexLinkSync : IDisposable
     }
     public string? Detail => Volatile.Read(ref retryDetail) ?? Volatile.Read(ref detail);
 
+    private volatile string? gitIssue;
+
+    private string? DescribeGitIssue(HexLinkManifest here, HexLinkManifest there)
+    {
+        var issues = (here.GitIssues?.Select(entry => (entry.Key, entry.Value, Side: "here")) ?? [])
+            .Concat(there.GitIssues?.Select(entry => (entry.Key, entry.Value, Side: peer.Device.Name)) ?? [])
+            .OrderByDescending(entry => entry.Value.Unavailable).ToArray();
+        if (issues.Length == 0)
+            return null;
+        var (path, issue, side) = issues[0];
+        string kind = issue.Unavailable ? "Git skipped" : "Git warning in";
+        return $"{kind} {(path.Length == 0 ? folder.Name : path)} on {side} ({issue.Message})"
+            + (issues.Length > 1 ? $", {issues.Length - 1} more Git notices" : "");
+    }
+
     /// <summary>Where it is in a line, for a status item or a tool's answer.</summary>
     public string Summary
     {
@@ -235,6 +250,8 @@ internal sealed partial class HexLinkSync : IDisposable
                 + (EolOnly > 0 ? $", {EolOnly} only differing in line ends" : string.Empty);
             if (Queued is > 0 and var retryCount)
                 counts += $", {retryCount} retrying";
+            if (gitIssue is { } issue)
+                counts += $". {issue}";
             return State switch
             {
                 HexLinkSyncState.Comparing => $"Comparing {with}",
@@ -317,6 +334,7 @@ internal sealed partial class HexLinkSync : IDisposable
                 return;
             }
 
+            gitIssue = DescribeGitIssue(mine, theirs);
             missingRepositories = HexLinkMissingRepositories.Compare(mine, theirs);
             if (!force && HexLinkTree.CommitsDiffer(mine, theirs, missingRepositories) is { } difference)
             {

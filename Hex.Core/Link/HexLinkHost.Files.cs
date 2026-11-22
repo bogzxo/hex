@@ -9,7 +9,7 @@ internal sealed partial class HexLinkHost
 
     private IReadOnlyList<HexLinkFolder> Folders => services.Workspace.Folders;
 
-    private string ResolveFile(string wire) => HexLinkFiles.Resolve(Folders, wire, services.Excludes);
+    private string ResolveFile(string wire) => ResolveUsableTreeFile(wire);
 
     private JsonObject FsList(JsonObject parameters)
     {

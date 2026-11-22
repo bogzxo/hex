@@ -25,7 +25,7 @@ internal sealed record HexLinkTreeFile(string Path, string? Hash, long Size, str
 /// </summary>
 internal sealed record HexLinkManifest(string Folder, string? Head, IReadOnlyList<HexLinkTreeFile> Files, string? Root = null,
     bool Certified = true, IReadOnlyDictionary<string, string?>? NestedHeads = null, bool? CaseSensitive = null,
-    string? Checkout = null, HexLinkAuthority? Authority = null);
+    string? Checkout = null, HexLinkAuthority? Authority = null, IReadOnlyDictionary<string, HexLinkGitIssue>? GitIssues = null);
 
 /// <summary>
 /// A file of a watched tree that changed, its new hash (null with <see cref="Deleted"/> when it went, or when it's too
@@ -81,18 +81,21 @@ internal sealed partial class HexLinkTree
         RequireRoot();
         string? head = null, root = null;
         List<string>? relative = null;
+        var issues = new Dictionary<string, HexLinkGitIssue>(StringComparer.Ordinal);
         if (HexLinkGit.Why() is null)
         {
             GitResult listed = GitProcess.Run(Root, ["ls-files", "-co", "--exclude-standard", "-z"], patience: TimeSpan.FromMinutes(2));
-            if (listed.Ok && string.IsNullOrWhiteSpace(listed.Error))
+            if (listed.Ok)
             {
+                RecordGitWarning(issues, string.Empty, listed.Error);
                 InRepository = true;
                 relative = [.. listed.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.Ordinal).Take(MOST_FILES + 1)];
                 GitResult at = GitProcess.Run(Root, ["rev-parse", "--verify", "--quiet", "HEAD"]);
                 if (at.Exit != 1 && (!at.Ok || !HexLinkGit.IsCommitId(at.Output.Trim())))
                     throw new IOException($"Git could not read HEAD in {Folder.Name}: {at.Why}");
+                RecordGitWarning(issues, string.Empty, at.Error);
                 head = at.Ok ? at.Output.Trim() : null;
-                root = head is null ? null : RootOf(head);
+                root = head is null ? null : RootOf(head, issues);
             }
             else if (InRepository || !listed.Why.StartsWith("fatal: not a git repository (or any of the parent directories)", StringComparison.Ordinal))
             {
@@ -108,7 +111,7 @@ internal sealed partial class HexLinkTree
         relative ??= Walk();
         // Detect a capped root listing before nested repositories replace any of its entries.
         CheckCount(relative.Count);
-        var nested = AddNestedGitFiles(relative);
+        var nested = AddNestedGitFiles(relative, issues);
         CheckCount(relative.Count);
         var files = new List<HexLinkTreeFile>(relative.Count);
         HashSet<string>? actual = movedCase.IsEmpty ? null : new(StringComparer.Ordinal);
@@ -136,7 +139,7 @@ internal sealed partial class HexLinkTree
         string location = PlatformPaths.Comparison == StringComparison.Ordinal ? Root : Root.ToUpperInvariant();
         string checkout = HexLinkFiles.Hash(Encoding.UTF8.GetBytes(FormattableString.Invariant($"{location}\n{Directory.GetCreationTimeUtc(Root).Ticks}")));
         return new HexLinkManifest(Folder.Name, head, files, root, NestedHeads: nested,
-            CaseSensitive: PlatformPaths.Comparison == StringComparison.Ordinal, Checkout: checkout, Authority: Folder.Authority);
+            CaseSensitive: PlatformPaths.Comparison == StringComparison.Ordinal, Checkout: checkout, Authority: Folder.Authority, GitIssues: issues.Count == 0 ? null : issues);
     }
 
     // The first commit of the repository, worked out once per head (it only moves if history is rewritten). A history
@@ -146,13 +149,14 @@ internal sealed partial class HexLinkTree
 
     private volatile RootKnown? rootKnown;
 
-    private string? RootOf(string head)
+    private string? RootOf(string head, Dictionary<string, HexLinkGitIssue> issues)
     {
         if (rootKnown is { } known && known.Head == head)
             return known.Root;
         GitResult roots = GitProcess.Run(Root, ["rev-list", "--max-parents=0", head]);
         if (!roots.Ok)
             throw new IOException($"Git could not list the first commits of {Folder.Name}: {roots.Why}");
+        RecordGitWarning(issues, string.Empty, roots.Error);
         string? root = roots.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(HexLinkGit.IsCommitId).Order(StringComparer.Ordinal).FirstOrDefault();
         rootKnown = new RootKnown(head, root);
@@ -162,7 +166,7 @@ internal sealed partial class HexLinkTree
     /// <summary>A file of the tree, with unreadable paths represented explicitly.</summary>
     public HexLinkTreeFile? FileOf(string relative)
     {
-        if (!Plain(relative) || SyncArtifact(relative) || Hidden(relative))
+        if (!Plain(relative) || SyncArtifact(relative) || Hidden(relative) || RepositoryUnavailable(relative))
             return null;
         string wire = Folder.Name + "/" + relative;
         if (wire.Length > HexLinkFiles.MOST_PATH)
@@ -215,7 +219,7 @@ internal sealed partial class HexLinkTree
 
     internal bool Gone(string relative)
     {
-        if (!Plain(relative) || Hidden(relative))
+        if (!Plain(relative) || Hidden(relative) || RepositoryUnavailable(relative))
             return false;
         string full = Path.Combine(Root, relative.Replace('/', Path.DirectorySeparatorChar));
         try
@@ -389,7 +393,7 @@ internal sealed partial class HexLinkTree
         var ignored = new HashSet<string>(StringComparer.Ordinal);
         foreach (string each in relative)
         {
-            if (!Plain(each) || SyncArtifact(each) || Hidden(each))
+            if (!Plain(each) || SyncArtifact(each) || Hidden(each) || RepositoryUnavailable(each))
                 ignored.Add(each);
         }
 
@@ -424,6 +428,8 @@ internal sealed partial class HexLinkTree
             said["authority"] = authority.ToJson();
         if (NestedHeadsJson(manifest.NestedHeads) is { } heads)
             said["repositories"] = heads;
+        if (manifest.GitIssues is { Count: > 0 } issues)
+            said["git_issues"] = GitIssuesJson(issues);
         return said;
     }
 
@@ -469,7 +475,7 @@ internal sealed partial class HexLinkTree
             checkout = null;
         return new HexLinkManifest(folder, head is not null && HexLinkGit.IsCommitId(head) ? head : null, files,
             root is not null && HexLinkGit.IsCommitId(root) ? root : null, certified, NestedHeadsOf(said),
-            HexLinkData.Bool(said, "case_sensitive"), checkout, HexLinkAuthority.Of(HexLinkData.Object(said, "authority")));
+            HexLinkData.Bool(said, "case_sensitive"), checkout, HexLinkAuthority.Of(HexLinkData.Object(said, "authority")), GitIssuesOf(said));
     }
 
     // A file's text hash and line ends said beside its hash, when it has them; a peer from before they were said sends
