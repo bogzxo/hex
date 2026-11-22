@@ -29,11 +29,24 @@ public sealed class HexLinkPortMappingTests
         Assert.True(mapper.Second.Released);
     }
 
+    [Fact]
+    public async Task Failed_renewal_releases_the_lease_and_clears_the_displayed_endpoint()
+    {
+        var mapper = new DelayedMapper();
+        var mapping = new HexLinkPortMapping(mapper, () => { });
+        mapper.FirstGranted.SetResult(mapper.First);
+        await mapping.SetPort(40000).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(mapper.First.Renewed);
+        Assert.True(mapper.First.Released);
+        Assert.Null(mapping.Status.Endpoint);
+        Assert.True(mapping.Status.Unavailable);
+    }
+
     private sealed class DelayedMapper : IHexRouterPortMapper
     {
         public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource<IHexRouterPortLease?> FirstGranted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public Lease First { get; } = new(41000);
+        public Lease First { get; } = new(41000, renewalFails: true);
         public Lease Second { get; } = new(41001);
         public bool ReleasedBeforeReplacement { get; private set; }
 
@@ -49,12 +62,17 @@ public sealed class HexLinkPortMappingTests
         }
     }
 
-    private sealed class Lease(int port) : IHexRouterPortLease
+    private sealed class Lease(int port, bool renewalFails = false) : IHexRouterPortLease
     {
         public IPEndPoint PublicEndPoint { get; } = new(IPAddress.Parse("203.0.113.10"), port);
-        public DateTimeOffset ExpiresAt => DateTimeOffset.UtcNow.AddHours(1);
+        public DateTimeOffset ExpiresAt => DateTimeOffset.UtcNow.Add(renewalFails ? TimeSpan.FromMilliseconds(100) : TimeSpan.FromHours(1));
         public bool Released { get; private set; }
-        public Task<bool> RenewAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public bool Renewed { get; private set; }
+        public Task<bool> RenewAsync(CancellationToken cancellationToken = default)
+        {
+            Renewed = true;
+            return Task.FromResult(!renewalFails);
+        }
         public ValueTask DisposeAsync()
         {
             Released = true;
