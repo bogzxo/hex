@@ -114,8 +114,17 @@ internal sealed partial class HexLinkTree
         }
     }
 
-    private HexLinkManifest Scan(bool verify, bool provision)
+    internal HexLinkManifest PrivateManifest(
+        Func<IReadOnlyDictionary<string, string?>?, Func<string, bool>> select, CancellationToken cancel)
     {
+        lock (scan)
+            return Scan(verify: false, provision: false, select, cancel);
+    }
+
+    private HexLinkManifest Scan(bool verify, bool provision,
+        Func<IReadOnlyDictionary<string, string?>?, Func<string, bool>>? select = null, CancellationToken cancel = default)
+    {
+        cancel.ThrowIfCancellationRequested();
         RequireRoot();
         string? head = null, root = null;
         List<string>? relative = null;
@@ -154,6 +163,12 @@ internal sealed partial class HexLinkTree
         CheckCount(relative.Count);
         var nested = layout is not null ? AddNestedGitFiles(relative, issues, provision, layout) : null;
         CheckCount(relative.Count);
+        if (select is not null)
+        {
+            var includes = select(nested);
+            relative.RemoveAll(path => !includes(path));
+        }
+        cancel.ThrowIfCancellationRequested();
         var actual = new HashSet<string>(StringComparer.Ordinal);
         var paths = new List<string>(relative.Count);
         List<HexLinkProvisionSkip>? fileIssues = provision ? [] : null;
@@ -180,11 +195,18 @@ internal sealed partial class HexLinkTree
         if (paths.Count < 48)
         {
             for (int i = 0; i < paths.Count; i++)
+            {
+                cancel.ThrowIfCancellationRequested();
                 found[i] = FileOf(paths[i], verify);
+            }
         }
         else
         {
-            var options = new ParallelOptions { MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount - 1, 1, 8) };
+            var options = new ParallelOptions
+            {
+                MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount - 1, 1, 8),
+                CancellationToken = cancel
+            };
             try
             {
                 Parallel.For(0, paths.Count, options, i => found[i] = FileOf(paths[i], verify));

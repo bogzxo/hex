@@ -10,7 +10,8 @@ internal sealed partial class DawnScene
     private HexMcpTool LinkPublishTool() => new(new McpTool("hex_link_publish", "Publish private worktree changes",
         "Check an agent's private worktree, build and publish its changes, or discard the draft.",
         McpSchema.Object([
-            ("action", McpSchema.OneOf("Check, publish or discard this agent's private worktree.", "status", "publish", "discard")),
+            ("action", McpSchema.OneOf("Check, publish, open a repository or discard this agent's private worktree.", "status", "publish", "materialize", "discard")),
+            ("path", McpSchema.String("Private worktree-relative repository or file path to open.")),
             ("anyway", McpSchema.Flag("Explicitly publish without the build gate. The authority audits the override.")),
             ("test_filter", McpSchema.String("Optional dotnet test filter to run after the workspace build."))])),
         null, RunAway: LinkPublishAgentTool, NeedsEditor: false, TakesCaller: true);
@@ -21,11 +22,30 @@ internal sealed partial class DawnScene
         if (id is not { } draft)
             return McpToolResult.Error("This chat has no private worktree.");
         string action = args.String("action") ?? "status";
+        if (action == "materialize")
+            return await LinkOpenPrivateRepositoryTool(draft, args.String("path"), cancel);
         bool bypass = action == "publish" && args.Flag("anyway");
         if (bypass && !await LinkConfirmWorktreeGate("Publish anyway",
             "Publish this agent's private worktree without its build gate? The authority records the override.", cancel))
             return McpToolResult.Error("Publish anyway was declined.");
         return await LinkDraftAction(draft, action, bypass, args.String("test_filter"), cancel);
+    }
+
+    private async Task<McpToolResult> LinkOpenPrivateRepositoryTool(Guid id, string? path, CancellationToken cancel)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return McpToolResult.Error("Supply a private worktree-relative repository or file path.");
+            var draft = await LinkOpenStoredDraft(id, cancel);
+            string full = HexLinkFiles.Resolve([new HexLinkFolder("work", draft.Root)], "work/" + path);
+            await LinkMaterializePrivatePath(draft, Path.GetRelativePath(draft.Root, full).Replace('\\', '/'), cancel);
+            return McpToolResult.Text($"Private repository ready for {path}.");
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or HexLinkException)
+        {
+            return McpToolResult.Error(error.Message);
+        }
     }
 
     private async Task<McpToolResult> LinkDraftAction(Guid id, string action, bool bypass, string? tests, CancellationToken cancel)
@@ -47,8 +67,14 @@ internal sealed partial class DawnScene
                     {
                         plannedGate = error.Message;
                     }
-                    return McpToolResult.Text($"{status.Files} unpublished files ({status.Bytes} bytes) in {draft.Root}.\n{string.Join('\n', status.Paths)}\nGate: {plannedGate}");
+                    string repos = string.Join(", ", draft.MaterializedRepositories.Select(path => path.Length == 0 ? "root" : path));
+                    string first = draft.FirstGate ? "\nThe first gate runs a full build in this private tree." : "";
+                    return McpToolResult.Text($"{status.Files} unpublished files ({status.Bytes} bytes) in {draft.Root}.\n{string.Join('\n', status.Paths)}" +
+                        $"\nPrivate repositories: {repos}\nGate: {plannedGate}{first}");
                 case "discard":
+                    bool inUse = await OnEditorForLink(() => agentChats.Count(chat => chat.LinkDraft == id && chat.Running) > 1).WaitAsync(cancel);
+                    if (inUse)
+                        return McpToolResult.Error("Stop the other agents using this private worktree before discarding it.");
                     await draft.Discard(cancel);
                     linkPrivateDrafts.TryRemove(id, out _);
                     return McpToolResult.Text("Private worktree discarded.");

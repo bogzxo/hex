@@ -26,34 +26,101 @@ internal sealed partial class DawnScene
         if (LinkPrivateStoragePath is not { } storage)
             return null;
         string root = Path.Combine(storage, "drafts", id.ToString("N"), "tree");
-        if (!File.Exists(Path.Combine(root, ".git")))
+        if (!File.Exists(Path.Combine(root, ".git")) || !File.Exists(Path.Combine(Path.GetDirectoryName(root)!, "state.json")))
             return null;
         privateAgentRoots[chat.Id] = root;
         return root;
     }
 
-    private IEnumerable<McpToolResult?> LinkPrivateAgentStartup(HexAgentChat chat, JsonObject args)
+    private sealed record LinkPrivateAgentStart(string? Folder, Guid? Inherited, string Family, string[] Repositories);
+    private readonly Dictionary<HexAgentChat, CancellationTokenSource> privateAgentStarting = [];
+
+    private string? LinkPrivateAgentRequest(JsonObject args, out LinkPrivateAgentStart? prepare)
     {
+        prepare = null;
         string? mode = args.String("worktree");
         Guid? parentDraft = CallerOf(args) is { } caller ? ChatById(caller)?.LinkDraft : null;
         if (mode != "private" && (mode == "live" || parentDraft is null))
-            yield break;
-
+            return null;
         if (LinkPrivateStoragePath is not { } storage)
-        {
-            yield return McpToolResult.Error(LINK_PRIVATE_STORAGE_UNAVAILABLE);
-            yield break;
-        }
+            return LINK_PRIVATE_STORAGE_UNAVAILABLE;
+
         string? folder = args.String("folder") ?? (parentDraft is { } inherited
             ? HexLinkPrivateWorktree.RecordedFolder(storage, inherited)?.Name : null);
-        Task<string?> setup = LinkCreateAgentDraft(chat, folder, linkCancel?.Token ?? CancellationToken.None);
-        while (!setup.IsCompleted)
-            yield return null;
-        if (setup.GetAwaiter().GetResult() is { } why)
-            yield return McpToolResult.Error(why);
+        if (args["repositories"] is { } extra && (extra is not JsonArray rows || rows.Count > 64 ||
+            rows.Any(row => row is not JsonValue value || !value.TryGetValue(out string? path) || string.IsNullOrWhiteSpace(path))))
+            return "List up to 64 shared repository paths to add to the private worktree.";
+        string[] chosen = args["repositories"] is JsonArray repos
+            ? [.. repos.Select(repo => repo!.GetValue<string>().TrimEnd('/'))] : [];
+        string family = HexLinkAllowed.AgentCall(args) is { } remote
+            ? $"device:{remote.Device.Id}:{remote.Chat?.ToString() ?? args.String("agent") ?? "default"}"
+            : $"local:{CallerOf(args)?.ToString() ?? args.String("agent") ?? "default"}";
+        prepare = new LinkPrivateAgentStart(folder, parentDraft, family, chosen);
+        return null;
     }
 
-    private async Task<string?> LinkCreateAgentDraft(HexAgentChat chat, string? folder, CancellationToken cancel)
+    private void LinkPrepareAgent(HexAgentChat chat, LinkPrivateAgentStart request, Action launch)
+    {
+        var stop = CancellationTokenSource.CreateLinkedTokenSource(linkCancel?.Token ?? CancellationToken.None);
+        privateAgentStarting.Add(chat, stop);
+        chat.LinkDraft = Guid.NewGuid(); // A failed or stopped private setup must never launch in the live workspace.
+        chat.LinkPreparation = "preparing private worktree";
+        chat.Note("Preparing private worktree. The first gate in a fresh tree runs a full build.");
+        _ = Prepare();
+
+        async Task Prepare()
+        {
+            string? failure;
+            try
+            {
+                failure = await LinkCreateAgentDraft(chat, request.Folder, stop.Token, request, progress =>
+                    PostLink(() =>
+                    {
+                        if (!stop.IsCancellationRequested && agentsStarting.Contains(chat))
+                        {
+                            chat.LinkPreparation = progress.Describe();
+                            chat.Note(char.ToUpperInvariant(chat.LinkPreparation[0]) + chat.LinkPreparation[1..]);
+                            PublishAgentStatuses();
+                        }
+                    }));
+            }
+            catch (Exception error)
+            {
+                failure = error.Message;
+            }
+            PostLink(() =>
+            {
+                privateAgentStarting.Remove(chat);
+                bool cancelled = stop.IsCancellationRequested;
+                stop.Dispose();
+                chat.LinkPreparation = null;
+                if (!agentsStarting.Contains(chat))
+                    return;
+                if (failure is null && !cancelled)
+                    launch();
+                else
+                {
+                    agentsStarting.Remove(chat);
+                    chat.Error(cancelled ? "Private worktree preparation was cancelled." : failure!);
+                    chat.Done();
+                }
+                PublishAgentStatuses();
+            });
+        }
+    }
+
+    private void LinkStopAgentPreparation(HexAgentChat chat)
+    {
+        if (privateAgentStarting.TryGetValue(chat, out var stop))
+        {
+            stop.Cancel();
+            chat.LinkPreparation = null;
+            chat.Note("Private worktree preparation stopped.");
+        }
+    }
+
+    private async Task<string?> LinkCreateAgentDraft(HexAgentChat chat, string? folder, CancellationToken cancel,
+        LinkPrivateAgentStart? request = null, Action<HexLinkWorktreeProgress>? progress = null)
     {
         if (linkServices is not { } services)
             return Said("link.off");
@@ -63,18 +130,62 @@ internal sealed partial class DawnScene
         if (shared is null)
             return "Select a shared Git folder for the private worktree.";
 
-        Guid id = Guid.NewGuid();
+        string storage = LinkPrivateStorage;
+        Guid id = chat.LinkDraft ?? Guid.NewGuid();
+        if (request is not null)
+        {
+            if (request.Inherited is { } inherited &&
+                HexLinkPrivateWorktree.RecordedFolder(storage, inherited) is { } original &&
+                PlatformPaths.Same(original.Path, shared.Path))
+                id = inherited;
+            else
+            {
+                string identity = Path.TrimEndingDirectorySeparator(Path.GetFullPath(shared.Path));
+                if (PlatformPaths.Comparison == StringComparison.OrdinalIgnoreCase)
+                    identity = identity.ToUpperInvariant();
+                byte[] key = System.Text.Encoding.UTF8.GetBytes(request.Family + "\n" + identity);
+                id = new Guid(System.Security.Cryptography.SHA256.HashData(key).AsSpan(0, 16));
+            }
+        }
+        chat.LinkDraft = id;
         try
         {
-            HexLinkPrivateWorktree draft = await LinkStartPrivateWorktree(services, shared, id, cancel);
-            linkPrivateDrafts[id] = draft;
-            chat.LinkDraft = id;
+            HexLinkPrivateWorktree draft = await LinkStartPrivateWorktree(services, shared, id, cancel,
+                request?.Repositories, progress);
+            cancel.ThrowIfCancellationRequested();
             privateAgentRoots[chat.Id] = draft.Root;
             return null;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or HexLinkException or OperationCanceledException)
         {
             return error.Message;
+        }
+    }
+
+    internal Task<string?>? LinkPreparePrivateAgentPath(int caller, string tool, JsonObject arguments, CancellationToken cancel)
+    {
+        if (tool is not ("hex_edit" or "hex_write" or "hex_open" or "hex_read") ||
+            !privateAgentRoots.TryGetValue(caller, out string? root) || arguments.String("path") is not { } absolute ||
+            !Guid.TryParseExact(Path.GetFileName(Path.GetDirectoryName(root)), "N", out Guid id))
+            return null;
+        string path = Path.GetRelativePath(root, absolute).Replace('\\', '/');
+        if (linkPrivateDrafts.TryGetValue(id, out var draft) && PrivateRepositoryPresent(draft, path))
+            return null;
+
+        return Prepare();
+
+        async Task<string?> Prepare()
+        {
+            try
+            {
+                var opened = await LinkOpenStoredDraft(id, cancel);
+                await LinkMaterializePrivatePath(opened, path, cancel);
+                return null;
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or HexLinkException)
+            {
+                return error.Message;
+            }
         }
     }
 

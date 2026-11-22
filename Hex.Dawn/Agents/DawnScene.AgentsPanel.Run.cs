@@ -118,7 +118,8 @@ internal sealed partial class DawnScene
     /// </summary>
     private bool AgentRunBusy(HexAgentChat chat) => agentsStarting.Contains(chat) || agentRuns.Any(each => each.Chat == chat);
 
-    private void StartAgent(HexAgentChat chat, HexExtension extension, ObjectValue run, string prompt, string asked, string? contextLocation = null)
+    private void StartAgent(HexAgentChat chat, HexExtension extension, ObjectValue run, string prompt, string asked,
+        string? contextLocation = null, LinkPrivateAgentStart? prepare = null)
     {
         // Its turn said over, the agent can still be going of its own (Claude Code woken by a task of its own in the
         // background), and a second run on the same session had two agents writing over each other. What's asked waits in
@@ -146,6 +147,11 @@ internal sealed partial class DawnScene
         // agent starts once it's taken, started alongside it its first writes could be in what was taken as before
         HexAgentEntry turn = chat.Ask(prompt, asked, contextLocation is null ? null : asked, contextLocation);
         agentsStarting.Add(chat);
+        if (prepare is not null)
+        {
+            LinkPrepareAgent(chat, prepare, () => LaunchAgent(chat, extension, run, prompt));
+            return;
+        }
         if (chat.LinkDraft is not null) { LaunchAgent(chat, extension, run, prompt); return; }
         TakeCheckpoint(turn, () =>
         {
@@ -422,7 +428,10 @@ internal sealed partial class DawnScene
 
         // One still waiting for its checkpoint is never started, its turn over as it is
         if (agentsStarting.Remove(chat))
+        {
+            LinkStopAgentPreparation(chat);
             chat.Done();
+        }
 
         foreach (AgentRun run in agentRuns.Where(run => run.Chat == chat).ToList())
         {

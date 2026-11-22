@@ -23,6 +23,7 @@ internal sealed partial class DawnScene
         Task<McpToolResult>? draftStatus = null;
         Task? step = null;
         Task<HexLinkDraftPublication>? result = null;
+        bool acceptedWhilePreparing = false;
         bool cut = false;
         int cuts = 0;
         string? why = null;
@@ -54,11 +55,30 @@ internal sealed partial class DawnScene
             if (PublicationPair(folder, device!) is not { PublicationPairReady: true } sync)
                 throw new IOException("The authority did not start its live sync pair.");
             await sync.Flush();
-            if (await LinkCreateAgentDraft(chat, folder.Name, cancel) is { } failure)
-                throw new IOException(failure);
+            var launched = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var request = new LinkPrivateAgentStart(folder.Name, null, "test-family", []);
+            await OnEditorForLink(() =>
+            {
+                chat.Ask("Private draft test", "Private draft test", null, null);
+                agentsStarting.Add(chat);
+                LinkPrepareAgent(chat, request, () =>
+                {
+                    agentsStarting.Remove(chat);
+                    chat.Done();
+                    launched.TrySetResult();
+                });
+                acceptedWhilePreparing = HexAgentHub.StateWord(chat).StartsWith("running (preparing private worktree", StringComparison.Ordinal)
+                    && !launched.Task.IsCompleted;
+                return true;
+            });
+            await launched.Task.WaitAsync(TimeSpan.FromSeconds(20));
             if (chat.LinkDraft is not { } id)
                 throw new IOException("The agent has no private worktree.");
             draft = await LinkOpenStoredDraft(id, cancel);
+            var child = new HexAgentChat(-10, chat.Agent);
+            if (await LinkCreateAgentDraft(child, folder.Name, cancel, request) is not null || child.LinkDraft != id)
+                throw new IOException("The same agent family did not reopen the existing private tree.");
+            privateAgentRoots.TryRemove(child.Id, out _);
         }
 
         async Task<HexLinkDraftPublication> Publish(string command)
@@ -106,7 +126,8 @@ internal sealed partial class DawnScene
         });
         test.WaitFor(() => step?.IsCompleted == true, 30.0f);
         test.Run(() => { if (step?.Exception is { } error) Console.WriteLine("[Hex self-test] link-worktree: " + error.GetBaseException().Message); });
-        test.Check("link-worktree: a detached draft opened while the authority live pair was running", () => step is { IsCompletedSuccessfully: true } && draft is not null && agent is not null && LinkAgentFolder(agent) == draft.Root);
+        test.Check("link-worktree: a chat became visible before its detached private draft was ready", () =>
+            acceptedWhilePreparing && step is { IsCompletedSuccessfully: true } && draft is not null && agent is not null && LinkAgentFolder(agent) == draft.Root);
         test.Run(() =>
         {
             if (draft is null)

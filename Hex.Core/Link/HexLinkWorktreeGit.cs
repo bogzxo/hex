@@ -177,7 +177,12 @@ internal sealed class HexLinkWorktreeGit
         }
         catch
         {
-            try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+            try
+            {
+                process.Kill(entireProcessTree: true);
+                await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            catch (Exception stopping) when (stopping is InvalidOperationException or TimeoutException) { }
             throw;
         }
     }

@@ -242,6 +242,125 @@ public sealed class HexLinkWorktreeTests : IDisposable
     }
 
     [Fact]
+    public async Task Scoped_drafts_keep_unopened_repositories_out_of_changes_until_they_are_opened()
+    {
+        if (HexLinkGit.Why() is not null)
+            return;
+
+        var folder = TwoRepositories();
+        var tree = new HexLinkTree(folder);
+        string storage = Folder("storage");
+        Guid id = Guid.NewGuid();
+        var progress = new List<HexLinkWorktreeProgress>();
+        var rootOnly = new HashSet<string> { "" };
+        var draft = await HexLinkPrivateWorktree.Open(storage, id, folder, tree.Manifest(), null,
+            CancellationToken.None, rootOnly, progress.Add);
+        Assert.Equal("", Assert.Single(draft.MaterializedRepositories));
+        Assert.Contains("engine", draft.RepositoryPaths);
+        Assert.Equal(1, Assert.Single(progress).Total);
+        Assert.False(Directory.Exists(Path.Combine(draft.Root, "engine")));
+        Assert.Empty((await draft.Status(CancellationToken.None)).Paths);
+
+        File.WriteAllText(Path.Combine(draft.Root, "root.txt"), "my private edit");
+        File.WriteAllText(Path.Combine(folder.Path, "engine", "engine.txt"), "current shared bytes");
+        var reused = await HexLinkPrivateWorktree.Open(storage, id, folder, null, null, CancellationToken.None);
+        await reused.Follow(tree.Manifest(), CancellationToken.None);
+        Assert.False(Directory.Exists(Path.Combine(reused.Root, "engine")));
+        await reused.EnsureRepositories(new HashSet<string> { "engine" }, tree.Manifest(), null, CancellationToken.None);
+        Assert.Equal(draft.Root, reused.Root);
+        Assert.Equal("current shared bytes", File.ReadAllText(Path.Combine(reused.Root, "engine", "engine.txt")));
+        Assert.False(Directory.Exists(Path.Combine(reused.Root, "engine", "obj")));
+        Assert.Equal("work/root.txt", Assert.Single((await reused.Status(CancellationToken.None)).Paths));
+
+        var reopened = await HexLinkPrivateWorktree.Open(storage, id, folder, null, null, CancellationToken.None);
+        Assert.Contains("engine", reopened.MaterializedRepositories);
+        Assert.Equal("my private edit", File.ReadAllText(Path.Combine(reopened.Root, "root.txt")));
+        await reopened.Discard(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Cancellation_during_a_nested_checkout_removes_the_partial_draft()
+    {
+        if (HexLinkGit.Why() is not null)
+            return;
+
+        var folder = TwoRepositories();
+        string storage = Folder("storage");
+        Guid id = Guid.NewGuid();
+        using var stop = new CancellationTokenSource();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => HexLinkPrivateWorktree.Open(storage, id,
+            folder, new HexLinkTree(folder).Manifest(), null, stop.Token, progress: step =>
+            {
+                if (step.Number == 2)
+                    stop.Cancel();
+            }));
+        string data = Path.Combine(storage, "drafts", id.ToString("N"));
+        Assert.False(Directory.Exists(Path.Combine(data, "tree")));
+        Assert.False(File.Exists(Path.Combine(data, "setup.json")));
+        Assert.Null(HexLinkPrivateWorktree.RecordedFolder(storage, id));
+        Assert.Equal("engine", File.ReadAllText(Path.Combine(folder.Path, "engine", "engine.txt")));
+    }
+
+    [Fact]
+    public async Task Startup_recovers_setup_markers_without_removing_a_committed_private_tree()
+    {
+        if (HexLinkGit.Why() is not null)
+            return;
+
+        var folder = TwoRepositories();
+        string storage = Folder("storage");
+        Guid readyId = Guid.NewGuid();
+        var ready = await HexLinkPrivateWorktree.Open(storage, readyId, folder, new HexLinkTree(folder).Manifest(),
+            null, CancellationToken.None);
+        string readyData = Path.GetDirectoryName(ready.Root)!;
+        string interrupted = Path.Combine(storage, "drafts", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(interrupted, "tree"));
+        File.WriteAllText(Path.Combine(interrupted, "tree", "partial.txt"), "incomplete checkout");
+        var marker = new System.Text.Json.Nodes.JsonObject
+        {
+            ["source"] = folder.Path,
+            ["repositories"] = new System.Text.Json.Nodes.JsonArray("", "engine")
+        };
+        File.WriteAllText(Path.Combine(readyData, "setup.json"), marker.ToJsonString());
+        File.WriteAllText(Path.Combine(interrupted, "setup.json"), marker.ToJsonString());
+        await HexLinkPrivateWorktree.RecoverSetups(storage, CancellationToken.None);
+        Assert.False(Directory.Exists(Path.Combine(interrupted, "tree")));
+        Assert.False(File.Exists(Path.Combine(readyData, "setup.json")));
+        Assert.Equal("engine", File.ReadAllText(Path.Combine(ready.Root, "engine", "engine.txt")));
+        await ready.Discard(CancellationToken.None);
+    }
+
+    [Fact]
+    public void The_configured_hex_gate_opens_the_engine_and_hidl_plus_requested_repositories()
+    {
+        string[] layout = ["", "hex", "dusk", "horizon", "dusk/horizon", "hex/hex-extensions", "horizon/Horizon.HIDL"];
+        var selected = HexLinkWorktreeScope.Initial(layout, "hex/docs/_linkpass/proj", ["dusk/horizon"]);
+        Assert.True(selected.SetEquals(["", "hex", "horizon", "horizon/Horizon.HIDL", "dusk", "dusk/horizon"]));
+        Assert.True(HexLinkWorktreeScope.Initial(layout, null, []).SetEquals(layout));
+        Assert.Throws<IOException>(() => HexLinkWorktreeScope.Initial(layout, "hex", ["../outside"]));
+    }
+
+    private HexLinkFolder TwoRepositories()
+    {
+        string shared = Folder("shared");
+        Git(shared, "init", "-q", "-b", "shared");
+        File.WriteAllText(Path.Combine(shared, ".gitignore"), "engine/\n");
+        File.WriteAllText(Path.Combine(shared, "root.txt"), "root");
+        Git(shared, "add", ".");
+        Git(shared, "-c", "user.name=Hex test", "-c", "user.email=test@example.invalid", "commit", "-qm", "Outer");
+
+        string nested = Directory.CreateDirectory(Path.Combine(shared, "engine")).FullName;
+        Git(nested, "init", "-q", "-b", "main");
+        File.WriteAllText(Path.Combine(nested, "engine.txt"), "engine");
+        File.WriteAllText(Path.Combine(nested, ".gitignore"), "obj/\n");
+        Git(nested, "add", ".");
+        Git(nested, "-c", "user.name=Hex test", "-c", "user.email=test@example.invalid", "commit", "-qm", "Nested");
+        Directory.CreateDirectory(Path.Combine(nested, "obj"));
+        File.WriteAllText(Path.Combine(nested, "obj", "ignored.txt"), "build output");
+        return new HexLinkFolder("work", shared);
+    }
+
+    [Fact]
     public async Task Recovery_never_overwrites_a_newer_external_edit()
     {
         if (HexLinkGit.Why() is not null)

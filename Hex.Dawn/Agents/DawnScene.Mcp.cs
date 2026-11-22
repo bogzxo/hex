@@ -440,13 +440,26 @@ internal sealed class HexMcpTools : IMcpTools
         if (caller is { } chat && (tool.TakesCaller || name.StartsWith("hex_agent", StringComparison.Ordinal)))
             arguments[HexMcpCaller.CALLER] = chat;
 
-        if (tool.RunAway is { } away)
-            return away(arguments, cancel);
+        if (caller is { } agent && hex.LinkPreparePrivateAgentPath(agent, name, arguments, cancel) is { } prepare)
+            return AfterPrivateRepository(prepare);
+        return Run();
 
-        // A call that says how long it may wait (wait_for's timeout) gets that and a little more
-        float timeout = arguments.Number("timeout") is { } asked ? (float)Math.Clamp(asked, 0.1, 600.0) + 5.0f : tool.Timeout;
-        var call = new HexMcpCall(name, tool.Run!(arguments).GetEnumerator(), timeout, cancel, caller, tool.NeedsEditor, tool.Alongside);
-        hex.QueueMcp(call);
-        return call.Done;
+        Task<McpToolResult> Run()
+        {
+            if (tool.RunAway is { } away)
+                return away(arguments, cancel);
+
+            // A call that says how long it may wait (wait_for's timeout) gets that and a little more
+            float timeout = arguments.Number("timeout") is { } asked ? (float)Math.Clamp(asked, 0.1, 600.0) + 5.0f : tool.Timeout;
+            var call = new HexMcpCall(name, tool.Run!(arguments).GetEnumerator(), timeout, cancel, caller, tool.NeedsEditor, tool.Alongside);
+            hex.QueueMcp(call);
+            return call.Done;
+        }
+
+        async Task<McpToolResult> AfterPrivateRepository(Task<string?> prepare)
+        {
+            string? failure = await prepare;
+            return failure is null ? await Run() : McpToolResult.Error(failure);
+        }
     }
 }

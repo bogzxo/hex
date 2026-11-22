@@ -42,6 +42,7 @@ internal sealed partial class DawnScene
                 ("model", McpSchema.String("The model, that agent system's setting there by default.")),
                 ("worktree", McpSchema.OneOf("Live workspace or a private worktree.", "live", "private")),
                 ("folder", McpSchema.String("Shared folder for a private worktree.")),
+                ("repositories", new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" }, ["description"] = "Additional shared repository paths to open in a private worktree." }),
                 ("options", new JsonObject { ["type"] = "object", ["description"] = "Agent options as hex_agent_spawn accepts, within the target's pre-approval policy." }),
                 ("permissions", new JsonObject { ["type"] = "object", ["description"] = "Allow and deny rule lists as hex_agent_spawn accepts, within the target's pre-approval policy." }),
                 ("approvals", McpSchema.OneOf("Who answers further requests. Default you; person keeps them on the target's card.", "you", "person")),
@@ -177,7 +178,7 @@ internal sealed partial class DawnScene
                 arguments[optional] = value;
         }
 
-        foreach (string key in (string[])["options", "permissions"])
+        foreach (string key in (string[])["options", "permissions", "repositories"])
         {
             if (args[key] is { } given)
                 arguments[key] = given.DeepClone();

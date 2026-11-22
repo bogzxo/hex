@@ -76,6 +76,7 @@ internal sealed partial class DawnScene
     {
         var services = linkServices ?? throw new InvalidOperationException("Link is off.");
         string storage = LinkPrivateStorage;
+        await HexLinkPrivateWorktree.RecoverSetups(storage, cancel);
         var publication = new HexLinkWorktreePublication(services, Path.Combine(storage, "pub"),
             recipients, deferLive, acknowledgeLive, installReplicaBaseline,
             folder =>
@@ -158,12 +159,83 @@ internal sealed partial class DawnScene
 
     internal void LinkPublicationPairReady() => CurrentLinkPublication?.Pump.Poke();
 
-    private async Task<HexLinkPrivateWorktree> LinkStartPrivateWorktree(LinkServices services, HexLinkFolder folder, Guid id, CancellationToken cancel)
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, SemaphoreSlim> privateDraftStarts = new();
+
+    private async Task<HexLinkPrivateWorktree> LinkStartPrivateWorktree(LinkServices services, HexLinkFolder folder, Guid id,
+        CancellationToken cancel, IReadOnlyList<string>? additional = null, Action<HexLinkWorktreeProgress>? progress = null)
     {
+        string storage = LinkPrivateStorage;
+        var serial = privateDraftStarts.GetOrAdd(id, static _ => new SemaphoreSlim(1));
+        await serial.WaitAsync(cancel);
+        try
+        {
+            HexLinkPrivateWorktree? existing = HexLinkPrivateWorktree.RecordedFolder(storage, id) is not null
+                ? await LinkOpenStoredDraft(id, cancel) : null;
+            var policy = LinkPrivateWorktreeGateForScope(services, folder);
+            HashSet<string> selected = [];
+            await using var live = await HexLinkPublicationFence.ForRoot(folder.Path).EnterLive(cancel);
+            var tree = new HexLinkTree(folder, () => services.Excludes);
+            HexLinkManifest snapshot = await Task.Run(() => tree.PrivateManifest(nested =>
+            {
+                string[] layout = HexLinkWorktreeScope.Layout(nested);
+                selected = HexLinkWorktreeScope.Initial(layout, policy?.WorkingFolder, additional ?? []);
+                if (existing is not null)
+                    selected.UnionWith(existing.MaterializedRepositories);
+                return path => selected.Contains(HexLinkWorktreeScope.Nearest(layout, path));
+            }, live.Stop), live.Stop);
+            if (existing is not null)
+            {
+                await existing.EnsureRepositories(selected, snapshot, progress, live.Stop);
+                await existing.Follow(snapshot, live.Stop);
+                return existing;
+            }
+
+            var draft = await HexLinkPrivateWorktree.Open(storage, id, folder, snapshot, () => services.Excludes, live.Stop, selected, progress);
+            if (cancel.IsCancellationRequested)
+            {
+                await draft.Discard(CancellationToken.None);
+                cancel.ThrowIfCancellationRequested();
+            }
+            linkPrivateDrafts[id] = draft;
+            return draft;
+        }
+        finally
+        {
+            serial.Release();
+        }
+    }
+
+    private HexLinkWorktreeGatePolicy? LinkPrivateWorktreeGateForScope(LinkServices services, HexLinkFolder folder)
+    {
+        if (services.FolderAuthorities.Of(folder) is not { } pin)
+            return null;
+        return pin.DeviceId == services.Device.Id
+            ? LinkReadOwnedWorktreeGate(services, folder with { Authority = pin })
+            : link?.PeerOf(pin.DeviceId)?.Workspace.Folders.FirstOrDefault(each =>
+                PlatformPaths.Comparer.Equals(each.Name, folder.Name) && each.Authority == pin)?.WorktreeGate;
+    }
+
+    private static bool PrivateRepositoryPresent(HexLinkPrivateWorktree draft, string path) =>
+        draft.MaterializedRepositories.Contains(HexLinkWorktreeScope.Nearest(draft.RepositoryPaths, path), PlatformPaths.Comparer);
+
+    private async Task LinkMaterializePrivatePath(HexLinkPrivateWorktree draft, string path, CancellationToken cancel)
+    {
+        if (PrivateRepositoryPresent(draft, path))
+            return;
+        var folder = draft.SharedFolder;
+        var services = linkServices ?? throw new IOException("Link is off.");
+        string repo = HexLinkWorktreeScope.Nearest(draft.RepositoryPaths, path);
+        var desired = new HashSet<string>(draft.RepositoryPaths.Where(parent => PlatformPaths.Comparer.Equals(parent, repo) ||
+            repo.StartsWith(parent + "/", PlatformPaths.Comparison)), PlatformPaths.Comparer);
+        desired.ExceptWith(draft.MaterializedRepositories);
         await using var live = await HexLinkPublicationFence.ForRoot(folder.Path).EnterLive(cancel);
         var tree = new HexLinkTree(folder, () => services.Excludes);
-        HexLinkManifest snapshot = await Task.Run(tree.Manifest, live.Stop);
-        return await HexLinkPrivateWorktree.Open(LinkPrivateStorage, id, folder, snapshot, () => services.Excludes, live.Stop);
+        var snapshot = await Task.Run(() => tree.PrivateManifest(nested =>
+        {
+            string[] layout = HexLinkWorktreeScope.Layout(nested);
+            return file => desired.Contains(HexLinkWorktreeScope.Nearest(layout, file));
+        }, live.Stop), live.Stop);
+        await draft.EnsureRepositories(desired, snapshot, null, live.Stop);
     }
 
     internal async Task LinkFollowPrivateWorkingChanges(HexLinkFolder folder, CancellationToken cancel)
@@ -174,7 +246,15 @@ internal sealed partial class DawnScene
             return;
         HexLinkManifest snapshot;
         await using (var live = await HexLinkPublicationFence.ForRoot(folder.Path).EnterLive(cancel))
-            snapshot = await Task.Run(new HexLinkTree(folder, () => services.Excludes).Manifest, live.Stop);
+        {
+            var selected = new HashSet<string>(drafts.SelectMany(draft => draft.MaterializedRepositories), PlatformPaths.Comparer);
+            var tree = new HexLinkTree(folder, () => services.Excludes);
+            snapshot = await Task.Run(() => tree.PrivateManifest(nested =>
+            {
+                string[] layout = HexLinkWorktreeScope.Layout(nested);
+                return path => selected.Contains(HexLinkWorktreeScope.Nearest(layout, path));
+            }, live.Stop), live.Stop);
+        }
         foreach (var draft in drafts)
             await draft.Follow(snapshot, cancel);
     }

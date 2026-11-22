@@ -18,17 +18,21 @@ internal sealed partial class HexLinkPrivateWorktree
     private readonly HexLinkFolder shared;
     private readonly string data;
     private readonly HexLinkTree draftTree;
-    private readonly Repository[] repositories;
+    private readonly List<Repository> repositories;
+    private readonly string[] repositoryLayout;
+    private volatile string[] materialized;
     private readonly Dictionary<string, Basis> basis;
     private readonly SemaphoreSlim operation = new(1);
     private readonly Func<HexExcludes>? excludes;
 
-    private HexLinkPrivateWorktree(HexLinkFolder shared, string data, Repository[] repositories, Dictionary<string, Basis> basis,
-        Func<HexExcludes>? excludes)
+    private HexLinkPrivateWorktree(HexLinkFolder shared, string data, IEnumerable<Repository> repositories, string[] layout,
+        Dictionary<string, Basis> basis, Func<HexExcludes>? excludes)
     {
         this.shared = shared;
         this.data = data;
-        this.repositories = repositories;
+        this.repositories = [.. repositories];
+        repositoryLayout = layout;
+        materialized = [.. this.repositories.Select(repo => repo.Path)];
         this.basis = basis;
         this.excludes = excludes;
         Root = Path.Combine(data, "tree");
@@ -37,7 +41,9 @@ internal sealed partial class HexLinkPrivateWorktree
 
     public string Root { get; }
     public string GateRoot => Path.Combine(data, "gate");
-    public IReadOnlyList<string> RepositoryPaths => [.. repositories.Select(repo => repo.Path)];
+    public IReadOnlyList<string> RepositoryPaths => repositoryLayout;
+    public IReadOnlyList<string> MaterializedRepositories => materialized;
+    public bool FirstGate => !File.Exists(Path.Combine(data, "gate.log"));
     public HexLinkFolder SharedFolder => shared;
 
     public bool HoldIncoming
@@ -66,7 +72,8 @@ internal sealed partial class HexLinkPrivateWorktree
     private string State => Path.Combine(data, "state.json");
 
     public static async Task<HexLinkPrivateWorktree> Open(string storage, Guid id, HexLinkFolder shared,
-        HexLinkManifest? snapshot, Func<HexExcludes>? excludes, CancellationToken cancel)
+        HexLinkManifest? snapshot, Func<HexExcludes>? excludes, CancellationToken cancel,
+        IReadOnlySet<string>? selected = null, Action<HexLinkWorktreeProgress>? progress = null)
     {
         if (id == Guid.Empty)
             throw new ArgumentException("A private worktree needs an ID.", nameof(id));
@@ -81,57 +88,100 @@ internal sealed partial class HexLinkPrivateWorktree
             (snapshot.Root is null && snapshot.Head is null && snapshot.NestedHeads is not { Count: > 0 }))
             throw new IOException("Private worktrees require a complete snapshot of a shared Git folder.");
 
-        string[] paths = ["", .. (snapshot.NestedHeads?.Keys ?? []).OrderBy(path => path.Count(ch => ch == '/')).ThenBy(path => path, StringComparer.Ordinal)];
-        var repos = new Repository[paths.Length];
-        var files = new List<HexLinkWorktreeFile>[paths.Length];
-        for (int i = 0; i < files.Length; i++)
-            files[i] = [];
-        Dictionary<string, FileVersion> versions = await Versions(shared, snapshot, cancel);
-        foreach (string wire in versions.Keys)
-        {
-            string relative = Relative(shared, wire);
-            int index = RepositoryIndex(paths, relative);
-            string full = HexLinkFiles.Resolve([shared], wire);
-            bool executable = !OperatingSystem.IsWindows() && File.GetUnixFileMode(full).HasFlag(UnixFileMode.UserExecute);
-            files[index].Add(new HexLinkWorktreeFile(Inside(paths[index], relative), executable));
-        }
-
+        string[] layout = HexLinkWorktreeScope.Layout(snapshot.NestedHeads);
+        string[] paths = [.. layout.Where(path => selected is null || path.Length == 0 || selected.Contains(path))];
         Directory.CreateDirectory(data);
-        string destination = Path.Combine(data, "tree");
-        var checkout = new List<(HexLinkWorktreeGit Git, string Path)>();
+        using var setup = SetupLock(data);
+        if (File.Exists(state))
+            return await Load(shared, home, data, state, excludes, cancel);
+        await RecoverSetup(data, home, cancel);
+
+        var draft = new HexLinkPrivateWorktree(shared, data, [], layout, new(StringComparer.Ordinal), excludes);
+        await draft.AddRepositories(paths, snapshot, progress, cancel);
+        return draft;
+    }
+
+    private async Task AddRepositories(string[] paths, HexLinkManifest snapshot, Action<HexLinkWorktreeProgress>? progress, CancellationToken cancel)
+    {
+        string home = Path.GetDirectoryName(Path.GetDirectoryName(data)!)!;
+        string source = Path.GetFullPath(shared.Path);
+        var selected = new HashSet<string>(paths, PlatformPaths.Comparer);
+        bool Selected(string wire) => selected.Contains(HexLinkWorktreeScope.Nearest(repositoryLayout, Relative(shared, wire)));
+        Dictionary<string, FileVersion> versions = await Versions(shared, snapshot, cancel, Selected);
+        var grouped = versions.ToLookup(item => HexLinkWorktreeScope.Nearest(repositoryLayout, Relative(shared, item.Key)),
+            PlatformPaths.Comparer);
+
+        WriteSetup(paths, source);
+        int before = repositories.Count;
+        var added = new List<string>();
         try
         {
             for (int i = 0; i < paths.Length; i++)
             {
+                cancel.ThrowIfCancellationRequested();
                 string relative = paths[i];
+                var versionsHere = grouped[relative].ToArray();
+                progress?.Invoke(new(relative, i + 1, paths.Length, versionsHere.Length, versionsHere.Sum(item => item.Value.Size)));
+                var files = new List<HexLinkWorktreeFile>(versionsHere.Length);
+                foreach (var (wire, _) in versionsHere)
+                {
+                    string full = HexLinkFiles.Resolve([shared], wire);
+                    bool executable = !OperatingSystem.IsWindows() && File.GetUnixFileMode(full).HasFlag(UnixFileMode.UserExecute);
+                    files.Add(new HexLinkWorktreeFile(Inside(relative, Relative(shared, wire)), executable));
+                }
+                string target = Path.Combine(Root, relative);
                 HexLinkWorktreeGit git = await HexLinkWorktreeGit.Open(ObjectDirectory(home, source, relative), cancel);
-                string commit = await git.Capture(Path.Combine(source, relative), files[i], cancel);
-                repos[i] = new Repository(relative, commit, git);
-                string target = Path.Combine(destination, relative);
+                string commit = await git.Capture(Path.Combine(source, relative), files, cancel);
                 await git.Checkout(commit, target, cancel);
-                checkout.Add((git, target));
+                int index = repositories.Count;
+                repositories.Add(new Repository(relative, commit, git));
+                foreach (var (wire, version) in versionsHere)
+                {
+                    basis.Add(wire, new Basis(version.Hash, index, commit));
+                    added.Add(wire);
+                }
             }
-
-            var bases = new Dictionary<string, Basis>(StringComparer.Ordinal);
-            foreach (var (wire, version) in versions)
-            {
-                int index = RepositoryIndex(paths, Relative(shared, wire));
-                bases[wire] = new Basis(version.Hash, index, repos[index].Commit);
-            }
-
-            var draft = new HexLinkPrivateWorktree(shared, data, repos, bases, excludes);
-            await draft.VerifyCheckout(versions, cancel);
-            draft.Save();
-            return draft;
+            await VerifyCheckout(versions, cancel, Selected);
+            cancel.ThrowIfCancellationRequested();
+            Save();
+            materialized = [.. repositories.Select(repo => repo.Path)];
         }
         catch
         {
-            foreach (var (git, path) in checkout.AsEnumerable().Reverse())
-            {
-                try { await git.Remove(path, CancellationToken.None); }
-                catch (IOException) { }
-            }
+            foreach (string wire in added)
+                basis.Remove(wire);
+            repositories.RemoveRange(before, repositories.Count - before);
+            await RecoverSetup(data, home, CancellationToken.None);
             throw;
+        }
+        File.Delete(SetupFile(data));
+    }
+
+    public async Task EnsureRepositories(IReadOnlySet<string> desired, HexLinkManifest snapshot,
+        Action<HexLinkWorktreeProgress>? progress, CancellationToken cancel)
+    {
+        await operation.WaitAsync(cancel);
+        try
+        {
+            if (!repositoryLayout.SequenceEqual(HexLinkWorktreeScope.Layout(snapshot.NestedHeads), PlatformPaths.Comparer))
+                throw new IOException("The shared repository layout changed after this worktree was opened.");
+            string[] missing = [.. repositoryLayout.Where(repo => desired.Contains(repo) && !materialized.Contains(repo, PlatformPaths.Comparer))];
+            if (missing.Length > 0)
+            {
+                using var setup = SetupLock(data);
+                await RecoverSetup(data, Path.GetDirectoryName(Path.GetDirectoryName(data)!)!, cancel);
+                foreach (string repo in missing)
+                {
+                    string path = Path.Combine(Root, repo);
+                    if (Directory.Exists(path) && Directory.EnumerateFileSystemEntries(path).Any())
+                        throw new IOException($"Save the files already in '{repo}' somewhere safe before opening that private repository.");
+                }
+                await AddRepositories(missing, snapshot, progress, cancel);
+            }
+        }
+        finally
+        {
+            operation.Release();
         }
     }
 
@@ -203,7 +253,7 @@ internal sealed partial class HexLinkPrivateWorktree
         {
             if (plan.Conflicts.Count > 0)
                 throw new InvalidOperationException("Settle private worktree conflicts before building.");
-            var expectedRepos = new HashSet<string>(repositories.Skip(1).Select(repo => repo.Path), StringComparer.Ordinal);
+            var expectedRepos = new HashSet<string>(repositoryLayout.Skip(1), PlatformPaths.Comparer);
             if (!expectedRepos.SetEquals(snapshot.NestedHeads?.Keys ?? []))
                 throw new IOException("The shared repository layout changed after this worktree was opened.");
 
@@ -217,7 +267,7 @@ internal sealed partial class HexLinkPrivateWorktree
             var gate = new HexLinkFolder(shared.Name, GateRoot);
             var tree = new HexLinkTree(gate, excludes);
             var current = await Versions(gate, await Task.Run(tree.Manifest, cancel), cancel);
-            var expected = await Versions(shared, snapshot, cancel);
+            var expected = await Versions(shared, snapshot, cancel, IsMaterialized);
             var candidate = new Dictionary<string, HexLinkPublishEdit>(plan.Edits.Count, StringComparer.Ordinal);
             foreach (HexLinkPublishEdit edit in plan.Edits)
             {
@@ -269,9 +319,11 @@ internal sealed partial class HexLinkPrivateWorktree
         {
             if (HoldIncoming)
                 return;
+            if (!repositoryLayout.SequenceEqual(HexLinkWorktreeScope.Layout(snapshot.NestedHeads), PlatformPaths.Comparer))
+                throw new IOException("The shared repository layout changed after this worktree was opened.");
 
             var current = await Current(cancel);
-            var incoming = await Versions(shared, snapshot, cancel);
+            var incoming = await Versions(shared, snapshot, cancel, IsMaterialized);
             var clean = new List<HexLinkPublishEdit>();
             foreach (string wire in incoming.Keys.Union(basis.Keys, StringComparer.Ordinal))
             {
@@ -389,7 +441,7 @@ internal sealed partial class HexLinkPrivateWorktree
         await operation.WaitAsync(cancel);
         try
         {
-            foreach (Repository repo in repositories.Reverse())
+            foreach (Repository repo in repositories.AsEnumerable().Reverse())
             {
                 string gate = Path.Combine(GateRoot, repo.Path);
                 if (File.Exists(Path.Combine(gate, ".git")))
@@ -406,9 +458,9 @@ internal sealed partial class HexLinkPrivateWorktree
         }
     }
 
-    private async Task VerifyCheckout(Dictionary<string, FileVersion> expected, CancellationToken cancel)
+    private async Task VerifyCheckout(Dictionary<string, FileVersion> expected, CancellationToken cancel, Func<string, bool> include)
     {
-        Dictionary<string, FileVersion> current = await Current(cancel);
+        Dictionary<string, FileVersion> current = await Current(cancel, include);
         foreach (var (wire, version) in expected)
         {
             if (current.GetValueOrDefault(wire)?.Hash == version.Hash)
@@ -425,8 +477,17 @@ internal sealed partial class HexLinkPrivateWorktree
             throw new IOException("The private checkout contains paths outside the shared snapshot.");
     }
 
-    private async Task<Dictionary<string, FileVersion>> Current(CancellationToken cancel) =>
-        await Versions(new HexLinkFolder(shared.Name, Root), await Task.Run(draftTree.Manifest, cancel), cancel);
+    private bool IsMaterialized(string wire) =>
+        materialized.Contains(HexLinkWorktreeScope.Nearest(repositoryLayout, Relative(shared, wire)), PlatformPaths.Comparer);
+
+    private async Task<Dictionary<string, FileVersion>> Current(CancellationToken cancel, Func<string, bool>? include = null)
+    {
+        HexLinkManifest snapshot = await Task.Run(() => draftTree.PrivateManifest(_ =>
+            include is null ? _ => true : path => include(shared.Name + "/" + path), cancel), cancel);
+        if (include is null && snapshot.Files.FirstOrDefault(file => !IsMaterialized(file.Path)) is { } unopened)
+            throw new IOException($"'{unopened.Path}' belongs to a private repository that has not been opened. Save the file outside the tree, open its repository and reapply the edit.");
+        return await Versions(new HexLinkFolder(shared.Name, Root), snapshot, cancel);
+    }
 
     private IEnumerable<string> Changed(Dictionary<string, FileVersion> current) =>
         current.Keys.Union(basis.Keys, StringComparer.Ordinal)
@@ -453,7 +514,8 @@ internal sealed partial class HexLinkPrivateWorktree
         return data;
     }
 
-    private static async Task<Dictionary<string, FileVersion>> Versions(HexLinkFolder folder, HexLinkManifest snapshot, CancellationToken cancel)
+    private static async Task<Dictionary<string, FileVersion>> Versions(HexLinkFolder folder, HexLinkManifest snapshot, CancellationToken cancel,
+        Func<string, bool>? include = null)
     {
         if (!snapshot.Certified || snapshot.Folder != folder.Name)
             throw new IOException("The working-tree snapshot is incomplete or belongs to a different folder.");
@@ -461,6 +523,8 @@ internal sealed partial class HexLinkPrivateWorktree
         foreach (HexLinkTreeFile file in snapshot.Files)
         {
             cancel.ThrowIfCancellationRequested();
+            if (include is not null && !include(file.Path))
+                continue;
             string? hash = file.Hash;
             if (hash is null)
             {
@@ -485,7 +549,8 @@ internal sealed partial class HexLinkPrivateWorktree
         var state = new JsonObject
         {
             ["source"] = Path.GetFullPath(shared.Path), ["folder"] = shared.Name,
-            ["repositories"] = repos, ["bases"] = files
+            ["repositories"] = repos, ["layout"] = new JsonArray([.. repositoryLayout.Select(path => (JsonNode)JsonValue.Create(path)!)]),
+            ["bases"] = files
         };
         HexLinkFiles.WriteAtomic(State, Encoding.UTF8.GetBytes(state.ToJsonString()));
     }
@@ -523,7 +588,13 @@ internal sealed partial class HexLinkPrivateWorktree
             basis.Add(path, new Basis(hash, repository, commit));
         }
 
-        return new HexLinkPrivateWorktree(shared, data, repositories, basis, excludes);
+        string[] layout = document["layout"] is JsonArray layoutRows
+            ? [.. layoutRows.Select(row => row is JsonValue value && value.TryGetValue(out string? path) && path is not null
+                ? path : throw new IOException("Invalid private repository layout."))]
+            : [.. repositories.Select(repo => repo.Path)];
+        if (layout.Length == 0 || layout[0] != "" || repositories.Any(repo => !layout.Contains(repo.Path, PlatformPaths.Comparer)))
+            throw new IOException("Invalid private repository layout.");
+        return new HexLinkPrivateWorktree(shared, data, repositories, layout, basis, excludes);
     }
 
     // Keep object stores shallow enough for Git for Windows, including its internal worktree paths.
@@ -536,12 +607,8 @@ internal sealed partial class HexLinkPrivateWorktree
 
     private static int RepositoryIndex(string[] paths, string relative)
     {
-        for (int i = paths.Length - 1; i > 0; i--)
-        {
-            if (relative.StartsWith(paths[i] + "/", StringComparison.Ordinal))
-                return i;
-        }
-        return 0;
+        string owner = HexLinkWorktreeScope.Nearest(paths, relative);
+        return Array.FindIndex(paths, repo => PlatformPaths.Comparer.Equals(repo, owner));
     }
 
     private static string Inside(string repo, string relative) => repo.Length == 0 ? relative : relative[(repo.Length + 1)..];

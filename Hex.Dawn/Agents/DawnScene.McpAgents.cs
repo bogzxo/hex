@@ -31,6 +31,7 @@ internal sealed partial class DawnScene
             McpSchema.Object([
                 ("worktree", McpSchema.OneOf("Live workspace or a private worktree.", "live", "private")),
                 ("folder", McpSchema.String("Shared folder for a private worktree.")),
+                ("repositories", new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" }, ["description"] = "Additional shared repository paths to open in a private worktree." }),
                 ("prompt", McpSchema.String("What it's to do, complete in itself.")),
                 ("name", McpSchema.String("A short name for it in the panel, a few words.")),
                 ("agent", McpSchema.String("The agent system's id from hex_agent_list, your own by default, the panel's when you aren't one.")),
@@ -302,10 +303,11 @@ internal sealed partial class DawnScene
             yield break;
         }
 
-        foreach (McpToolResult? step in LinkPrivateAgentStartup(chat, args))
+        string? invalid = LinkPrivateAgentRequest(args, out var prepare);
+        if (invalid is not null)
         {
-            yield return step;
-            if (step?.IsError == true) yield break;
+            yield return McpToolResult.Error(invalid);
+            yield break;
         }
         agentChats.Add(chat);
 
@@ -315,7 +317,9 @@ internal sealed partial class DawnScene
             + "You can talk to it as you both work. hex_agent_message tells it what you find as soon as it matters, asks it what you need or says you're blocked, "
             + "and its instructions, answers and what the other agents it started have found reach you as you work or in hex_agent_inbox, look between steps. hex_agent_list shows who else is working with you.]\n\n"
             + prompt;
-        StartAgent(chat, run.Extension, run.Run, told, prompt);
+        if (prepare is not null)
+            told = "[This agent runs in a private worktree. Hex file tools open a missing private repository as needed. Before using shell tools in an unopened repository, call hex_link_publish with action materialize and its relative path.]\n\n" + told;
+        StartAgent(chat, run.Extension, run.Run, told, prompt, prepare: prepare);
         if (remoteCall is not null)
             PublishAgentStatuses();
 
@@ -324,7 +328,8 @@ internal sealed partial class DawnScene
             && !models.Choices.Any(choice => string.Equals(choice.Value, picked, StringComparison.OrdinalIgnoreCase))
             ? $" {picked} isn't one {profile.Name} lists, it's passed on as it is."
             : string.Empty;
-        yield return McpToolResult.Text($"Started #{chat.Id}{(name is null ? string.Empty : $" \"{name}\"")} with {profile.Name}{(picked is not null ? " " + picked : string.Empty)}.{unlisted} hex_agent_wait waits for it.");
+        string preparing = prepare is null ? "" : " Preparing its private worktree; the agent runs when it is ready.";
+        yield return McpToolResult.Text($"Started #{chat.Id}{(name is null ? string.Empty : $" \"{name}\"")} with {profile.Name}{(picked is not null ? " " + picked : string.Empty)}.{unlisted}{preparing} hex_agent_wait waits for it.");
     }
 
     private async Task<McpToolResult> AgentWait(JsonObject args, CancellationToken cancel)
