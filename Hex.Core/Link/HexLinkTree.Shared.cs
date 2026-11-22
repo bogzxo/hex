@@ -7,6 +7,28 @@ internal sealed partial class HexLinkTree
     private bool shareFreshScans;
     private long scanVersion, lastScanVersion, scannedAt;
     private HexLinkManifest? lastScan;
+    private int publishingPacks;
+    private long packQuietAt;
+
+    internal HexLinkManifest? PreviousManifest => Volatile.Read(ref lastScan);
+
+    internal bool DelayDirectoryRescan => Volatile.Read(ref publishingPacks) != 0 ||
+        Environment.TickCount64 < Volatile.Read(ref packQuietAt);
+
+    internal PackPublication BeginPackPublication()
+    {
+        Interlocked.Increment(ref publishingPacks);
+        return new PackPublication(this);
+    }
+
+    internal readonly struct PackPublication(HexLinkTree tree) : IDisposable
+    {
+        public void Dispose()
+        {
+            Volatile.Write(ref tree.packQuietAt, Environment.TickCount64 + 500);
+            Interlocked.Decrement(ref tree.publishingPacks);
+        }
+    }
 
     public static HexLinkTree Shared(HexLinkFolder folder, Func<HexExcludes> excludes, string? cacheDirectory, bool streamLarge)
     {

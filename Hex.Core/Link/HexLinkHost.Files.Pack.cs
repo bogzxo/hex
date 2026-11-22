@@ -66,7 +66,8 @@ internal sealed partial class HexLinkHost
             }
         }
 
-        var options = new ParallelOptions { CancellationToken = cancel, MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount - 1, 1, 6) };
+        using var publishing = tree.BeginPackPublication();
+        var options = new ParallelOptions { CancellationToken = cancel, MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount - 1, 1, 4) };
         await Parallel.ForEachAsync(Enumerable.Range(0, entries.Count), options, async (i, stop) =>
         {
             if (paths[i] is not { } full)

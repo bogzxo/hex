@@ -326,12 +326,17 @@ internal sealed partial class HexLinkSync : IDisposable
 
             tree = HexLinkTree.Shared(folder, () => Excludes(), Path.GetDirectoryName(StateFile), peer.Session.SupportsBulk);
             watch = new HexLinkTreeSubscription(tree, Saw, Quiet, Rescan);
-            HexLinkManifest mine, theirs;
-            using (HexLinkSyncTiming.Measure("start.local-manifest"))
-                mine = (await Task.Run(tree.Manifest, cancel)) with { Authority = folder.Authority };
-            using (HexLinkSyncTiming.Measure("start.manifest-round-trip"))
-                theirs = await peer.WatchTree(folder.Name, Heard, cancel, mine);
-            remoteWatched = true;
+            // The previous snapshot is only a digest offer. The remote still verifies each offered directory
+            // against its current snapshot, so both current listings can run concurrently.
+            HexLinkManifest? previous = tree.PreviousManifest;
+            Task<HexLinkManifest> scanMine = HexLinkSyncTiming.MeasureAsync("start.local-manifest",
+                () => Task.Run(tree.Manifest, cancel));
+            Task<HexLinkManifest> scanTheirs = HexLinkSyncTiming.MeasureAsync("start.manifest-round-trip",
+                () => peer.WatchTree(folder.Name, Heard, cancel, previous));
+            try { await Task.WhenAll(scanMine, scanTheirs); }
+            finally { remoteWatched = scanTheirs.IsCompletedSuccessfully; }
+            HexLinkManifest mine = (await scanMine) with { Authority = folder.Authority };
+            HexLinkManifest theirs = await scanTheirs;
             LocalHead = mine.Head;
             RemoteHead = theirs.Head;
 
