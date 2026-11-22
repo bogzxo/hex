@@ -103,7 +103,7 @@ internal sealed partial class DawnScene
         public IAsyncEnumerable<string> Predict(HexLinkPrediction request, CancellationToken cancel) => hex.LinkPredictMake(request, cancel);
     }
 
-    internal async Task<string?> LinkCompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes,
+    internal Task<string?> LinkCompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes,
         CancellationToken cancel, bool? executable = null) =>
         LinkCompareAndReplace(full, wire, baseHash, bytes, cancel, executable, directories: null);
 
