@@ -72,9 +72,48 @@ internal sealed partial class DawnScene
         linkDirty = true;
     }
 
+    /// <summary>
+    /// Jumps once to where a device's person is (the palette's Spy): their file opened here the way Follow opens it and
+    /// the caret put on theirs, then left alone, nothing followed after. Stops following anybody else first.
+    /// </summary>
+    internal void LinkSpy(string deviceId)
+    {
+        string name = LinkPeers.FirstOrDefault(peer => peer.Device.Id == deviceId)?.Device.Name ?? deviceId;
+        if (!linkPresence.TryGetValue(deviceId, out LinkPresenceSeen? seen) || seen.Presence?.File is null)
+        {
+            Say(Said("link.spy_nowhere", ("device", name)));
+            return;
+        }
+
+        linkFollowing = deviceId;
+        linkFollowDocument = null;
+        linkFollowSeen = string.Empty;
+        linkSpying = true;
+        linkDirty = true;
+        LinkFollowUp();
+    }
+
+    // Whether the one followed is only being jumped to once (Spy), let go of the moment the caret is on theirs
+    private bool linkSpying;
+
+    // A Spy's jump done: the caret is on theirs, so it's let go of with a word rather than followed
+    private bool LinkSpyLanded()
+    {
+        if (!linkSpying)
+            return false;
+        string name = LinkPeers.FirstOrDefault(peer => peer.Device.Id == linkFollowing)?.Device.Name ?? linkFollowing ?? string.Empty;
+        linkSpying = false;
+        linkFollowing = null;
+        linkFollowDocument = null;
+        linkDirty = true;
+        Say(Said("link.spied", ("device", name)));
+        return true;
+    }
+
     /// <summary>Stops following.</summary>
     internal void LinkUnfollow(bool said = false)
     {
+        linkSpying = false;
         if (linkFollowing is null)
             return;
         if (said)
@@ -274,6 +313,7 @@ internal sealed partial class DawnScene
             linkFollowDocument = shared.Tab;
             linkFollowCaret = shared.Tab.Editor.Document.Caret;
             linkFollowVersion = shared.Tab.Editor.Document.Version;
+            LinkSpyLanded();
             return;
         }
 
@@ -313,6 +353,9 @@ internal sealed partial class DawnScene
         linkFollowDocument = open;
         linkFollowCaret = open.Editor.Document.Caret;
         linkFollowVersion = open.Editor.Document.Version;
+        // A shared document's caret is found in its room on the next tick, so a Spy waits for that one
+        if (!where.SharedDocument)
+            LinkSpyLanded();
     }
 
     // A device linked: it's told where this machine's person is at once, the next tick
@@ -327,6 +370,7 @@ internal sealed partial class DawnScene
     {
         LinkPresenceClear();
         linkPresenceDrawnKey = linkPresenceSent = string.Empty;
+        linkSpying = false;
         linkFollowing = null;
         linkFollowDocument = null;
     }
