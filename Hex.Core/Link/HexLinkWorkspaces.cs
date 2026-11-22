@@ -93,7 +93,8 @@ internal static class HexLinkWorkspaces
             string rootPath = real[root.Name];
             string prefix = roots.Length == 1 ? string.Empty : root.Name;
             string[] found = [.. HexLinkTree.FindNestedRepositories(rootPath, cancel, partial
-                ? (path, reason) => skipped.Add(new(prefix.Length == 0 ? path : prefix + "/" + path, reason)) : null).OrderBy(path => path.Length)];
+                ? (path, reason) => skipped.Add(new(prefix.Length == 0 ? path : prefix + "/" + path, reason)) : null,
+                includeSystemFiles: root.IncludeSystemFiles).OrderBy(path => path.Length)];
             var facts = new ProvisionFacts?[found.Length];
             var errors = new Exception?[found.Length];
             if (deferWorktree)
@@ -184,7 +185,8 @@ internal static class HexLinkWorkspaces
             string id = $"{HexLinkProvisionPlan.BUNDLE_PREFIX}{lease}-{repos.Count}";
             string? branch = parent is null ? facts.Branch : null;
             if (!deferWorktree && (only is null || inScope))
-                ProvisionChanges(directory, path, deleted, largeChanges, cancel);
+                ProvisionChanges(directory, path, deleted, largeChanges,
+                    selected.First(folder => wire == folder.Name || wire.StartsWith(folder.Name + "/", StringComparison.Ordinal)).IncludeSystemFiles, cancel);
 
             repos.Add(new HexLinkProvisionRepository(id, path, head, branch, facts.Origin, parent));
             wirePaths.Add(id, wire);
@@ -195,11 +197,13 @@ internal static class HexLinkWorkspaces
         }
     }
 
-    private static void ProvisionChanges(string directory, string repositoryPath, List<string> deleted, List<string> largeChanges, CancellationToken cancel)
+    private static void ProvisionChanges(string directory, string repositoryPath, List<string> deleted, List<string> largeChanges, bool includeSystemFiles, CancellationToken cancel)
     {
         foreach (string status in HexLinkProvision.Status(directory, cancel))
         {
             string file = status[3..];
+            if (!includeSystemFiles && HexLinkSystemFiles.Matches(file))
+                continue;
             string path = repositoryPath.Length > 0 ? repositoryPath + "/" + file : file;
             if ((status[0] == 'D' || status[1] == 'D') && !File.Exists(Path.Combine(directory, file)))
                 deleted.Add(path);

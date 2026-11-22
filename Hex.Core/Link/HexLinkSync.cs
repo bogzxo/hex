@@ -226,13 +226,37 @@ internal sealed partial class HexLinkSync : IDisposable
         return FetchPacked(wire, cancel);
     }
 
+    private volatile bool peerIncludesSystemFiles;
+    private volatile IReadOnlyList<string> peerSystemFiles = [];
+
+    private IEnumerable<HexLinkSyncSkipped> SystemSkips()
+    {
+        // Manifests carry names only. Report existing copies without placing them in the transfer or deletion queue.
+        HexLinkManifest? mine = tree.PreviousManifest;
+        IEnumerable<string> local = mine?.ExcludedSystemFiles ?? [];
+        if (folder.IncludeSystemFiles && !peerIncludesSystemFiles && mine is not null)
+            local = mine.Files.Select(file => file.Path[(folder.Name.Length + 1)..]).Where(path => HexLinkSystemFiles.Matches(path))
+                .Take(HexLinkSystemFiles.MaximumReported);
+        var there = peerSystemFiles;
+        if (ReferenceEquals(local, Array.Empty<string>()) && there.Count == 0)
+            yield break;
+        var here = local.ToHashSet(StringComparer.Ordinal);
+        foreach (string path in here.Union(there))
+        {
+            string place = here.Contains(path)
+                ? there.Contains(path, StringComparer.Ordinal) ? "both devices" : "this device"
+                : peer.Device.Name;
+            yield return new(folder.Name + "/" + path, $"Excluded operating system metadata on {place}.");
+        }
+    }
+
     /// <summary>The files that don't travel and why, by path.</summary>
     public IReadOnlyList<HexLinkSyncSkipped> Skipped
     {
         get
         {
             lock (gate)
-                return [.. skipped.Values.OrderBy(each => each.Path, StringComparer.Ordinal)];
+                return [.. SystemSkips().Concat(skipped.Values).DistinctBy(each => each.Path).OrderBy(each => each.Path, StringComparer.Ordinal)];
         }
     }
 
@@ -280,7 +304,7 @@ internal sealed partial class HexLinkSync : IDisposable
             lock (gate)
             {
                 conflicted = conflicts.Count;
-                skips = Math.Max(0, skipped.Count - retrying.Count);
+                skips = Math.Max(0, skipped.Count - retrying.Count) + SystemSkips().Count(entry => !skipped.ContainsKey(entry.Path));
             }
 
             string counts = $"{Sent} sent, {Received} received, {conflicted} {(conflicted == 1 ? "conflict" : "conflicts")}, {skips} skipped"
@@ -368,6 +392,11 @@ internal sealed partial class HexLinkSync : IDisposable
             HexLinkManifest actual = (await scanMine) with { Authority = folder.Authority };
             HexLinkManifest mine = peer.Session.SupportsBulk ? actual : HexLinkTree.ForLegacy(actual);
             HexLinkManifest theirs = await scanTheirs;
+            peerIncludesSystemFiles = theirs.IncludeSystemFiles;
+            peerSystemFiles = (theirs.ExcludedSystemFiles ?? []).Concat(
+                (!folder.IncludeSystemFiles || !peerIncludesSystemFiles)
+                    ? theirs.Files.Select(file => file.Path[(folder.Name.Length + 1)..]).Where(path => HexLinkSystemFiles.Matches(path))
+                    : []).Distinct(StringComparer.Ordinal).Take(HexLinkSystemFiles.MaximumReported).ToArray();
             LocalHead = mine.Head;
             RemoteHead = theirs.Head;
 

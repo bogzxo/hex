@@ -25,7 +25,8 @@ internal sealed record HexLinkTreeFile(string Path, string? Hash, long Size, str
 /// </summary>
 internal sealed record HexLinkManifest(string Folder, string? Head, IReadOnlyList<HexLinkTreeFile> Files, string? Root = null,
     bool Certified = true, IReadOnlyDictionary<string, string?>? NestedHeads = null, bool? CaseSensitive = null,
-    string? Checkout = null, HexLinkAuthority? Authority = null, IReadOnlyDictionary<string, HexLinkGitIssue>? GitIssues = null, IReadOnlyList<HexLinkProvisionSkip>? ProvisionIssues = null);
+    string? Checkout = null, HexLinkAuthority? Authority = null, IReadOnlyDictionary<string, HexLinkGitIssue>? GitIssues = null, IReadOnlyList<HexLinkProvisionSkip>? ProvisionIssues = null,
+    bool IncludeSystemFiles = false, IReadOnlyList<string>? ExcludedSystemFiles = null);
 
 /// <summary>
 /// A file of a watched tree that changed, its new hash (null with <see cref="Deleted"/> when it went, or when it's too
@@ -131,9 +132,17 @@ internal sealed partial class HexLinkTree
         var listing = HexLinkSyncTiming.Measure("tree.list-and-git");
         var issues = new Dictionary<string, HexLinkGitIssue>(StringComparer.Ordinal);
         DiskGitLayout? layout = null;
+        HashSet<string>? systemFiles = Folder.IncludeSystemFiles ? null : new(StringComparer.Ordinal);
+        void OmitSystemFile(string relativeName)
+        {
+            if (systemFiles is { Count: < HexLinkSystemFiles.MaximumReported } &&
+                relativeName.Length <= HexLinkFiles.MOST_PATH - Folder.Name.Length - 1 &&
+                Plain(relativeName) && !relativeName.Any(char.IsControl))
+                systemFiles.Add(relativeName);
+        }
         if (HexLinkGit.Why() is null)
         {
-            layout = DiscoverGitLayout(issues, allowIndexReuse: !verify && !provision);
+            layout = DiscoverGitLayout(issues, allowIndexReuse: !verify && !provision, systemFiles is null ? null : OmitSystemFile);
             GitResult listed = ListGitWorkingFiles(Root, string.Empty, layout, TimeSpan.FromMinutes(2), out GitResult? headAlreadyRead);
             if (listed.Ok)
             {
@@ -158,7 +167,7 @@ internal sealed partial class HexLinkTree
         }
 
         bool onDiskNames = relative is null;
-        relative ??= Walk();
+        relative ??= Walk(systemFiles is null ? null : OmitSystemFile);
         // Detect a capped root listing before nested repositories replace any of its entries.
         CheckCount(relative.Count);
         var nested = layout is not null ? AddNestedGitFiles(relative, issues, provision, layout) : null;
@@ -235,7 +244,9 @@ internal sealed partial class HexLinkTree
         string location = PlatformPaths.Comparison == StringComparison.Ordinal ? Root : Root.ToUpperInvariant();
         string checkout = HexLinkFiles.Hash(Encoding.UTF8.GetBytes(FormattableString.Invariant($"{location}\n{Directory.GetCreationTimeUtc(Root).Ticks}")));
         return new HexLinkManifest(Folder.Name, head, files, root, NestedHeads: nested,
-            CaseSensitive: PlatformPaths.Comparison == StringComparison.Ordinal, Checkout: checkout, Authority: Folder.Authority, GitIssues: issues.Count == 0 ? null : issues, ProvisionIssues: fileIssues);
+            CaseSensitive: PlatformPaths.Comparison == StringComparison.Ordinal, Checkout: checkout, Authority: Folder.Authority, GitIssues: issues.Count == 0 ? null : issues, ProvisionIssues: fileIssues,
+            IncludeSystemFiles: Folder.IncludeSystemFiles, ExcludedSystemFiles: systemFiles is { Count: > 0 }
+                ? [.. systemFiles.Order(StringComparer.Ordinal)] : null);
     }
 
     // The first commit of the repository, worked out once per head (it only moves if history is rewritten). A history
@@ -392,8 +403,13 @@ internal sealed partial class HexLinkTree
     internal void ForgetHash(string relative) =>
         hashes.TryRemove(Path.Combine(Root, relative.Replace('/', Path.DirectorySeparatorChar)), out _);
 
+    internal bool ExcludesSystemPath(string relative) =>
+        !Folder.IncludeSystemFiles && HexLinkSystemFiles.Matches(relative);
+
     private bool Hidden(string relative, bool folder = false)
     {
+        if (ExcludesSystemPath(relative))
+            return true;
         HexExcludes rules = excludes();
         if (rules.Hidden(relative, folder))
             return true;
@@ -490,7 +506,7 @@ internal sealed partial class HexLinkTree
     }
 
     // The files of a folder that isn't a repository, by walking it, what builds make left out
-    private List<string> Walk()
+    private List<string> Walk(Action<string>? omitted)
     {
         var found = new List<string>();
         var folders = new Stack<string>();
@@ -501,6 +517,11 @@ internal sealed partial class HexLinkTree
             foreach (string file in Directory.EnumerateFiles(at, "*", options))
             {
                 string relative = Path.GetRelativePath(Root, file).Replace(Path.DirectorySeparatorChar, '/');
+                if (ExcludesSystemPath(relative))
+                {
+                    omitted?.Invoke(relative);
+                    continue;
+                }
                 if (SyncArtifact(relative) || Hidden(relative))
                     continue;
                 found.Add(relative);
@@ -510,7 +531,9 @@ internal sealed partial class HexLinkTree
             foreach (string child in Directory.EnumerateDirectories(at, "*", options))
             {
                 string relative = Path.GetRelativePath(Root, child).Replace(Path.DirectorySeparatorChar, '/');
-                if (!SKIPPED.Contains(Path.GetFileName(child)) && !Hidden(relative, folder: true))
+                if (ExcludesSystemPath(relative))
+                    omitted?.Invoke(relative);
+                else if (!SKIPPED.Contains(Path.GetFileName(child)) && !Hidden(relative, folder: true))
                     folders.Push(child);
             }
         }
@@ -570,6 +593,10 @@ internal sealed partial class HexLinkTree
             said["git_issues"] = GitIssuesJson(issues);
         if (manifest.ProvisionIssues is { Count: > 0 } problems)
             said["provision_issues"] = ProvisionIssuesJson(problems);
+        if (manifest.IncludeSystemFiles)
+            said["include_system_files"] = true;
+        if (manifest.ExcludedSystemFiles is { Count: > 0 } excluded)
+            said["excluded_system_files"] = new JsonArray([.. excluded.Select(path => (JsonNode)path)]);
         return said;
     }
 
@@ -614,9 +641,13 @@ internal sealed partial class HexLinkTree
         string? checkout = HexLinkData.String(said, "checkout", 64);
         if (checkout is not { Length: 64 } || !checkout.All(char.IsAsciiHexDigit))
             checkout = null;
+        string[] excludedSystemFiles = [.. HexLinkData.Strings(said, "excluded_system_files", HexLinkSystemFiles.MaximumReported, HexLinkFiles.MOST_PATH)
+            .Where(path => path.Length + prefix.Length <= HexLinkFiles.MOST_PATH && Plain(path) && !path.Any(char.IsControl)
+                && HexLinkSystemFiles.Matches(path))];
         return new HexLinkManifest(folder, head is not null && HexLinkGit.IsCommitId(head) ? head : null, files,
             root is not null && HexLinkGit.IsCommitId(root) ? root : null, certified, NestedHeadsOf(said),
-            HexLinkData.Bool(said, "case_sensitive"), checkout, HexLinkAuthority.Of(HexLinkData.Object(said, "authority")), GitIssuesOf(said), ProvisionIssuesOf(said));
+            HexLinkData.Bool(said, "case_sensitive"), checkout, HexLinkAuthority.Of(HexLinkData.Object(said, "authority")), GitIssuesOf(said), ProvisionIssuesOf(said),
+            HexLinkData.Bool(said, "include_system_files") == true, excludedSystemFiles.Length > 0 ? excludedSystemFiles : null);
     }
 
     // A file's text hash and line ends said beside its hash, when it has them; a peer from before they were said sends
@@ -788,7 +819,7 @@ internal sealed class HexLinkTreeWatch : IDisposable
         lock (pending)
         {
             // A folder renamed or deleted takes its files with it, the whole tree looked over
-            if (Directory.Exists(full) || pending.Count > 10_000)
+            if (tree.ExcludesSystemPath(relative) || Directory.Exists(full) || pending.Count > 10_000)
                 everything = true;
             else
                 pending.Add(relative);

@@ -40,7 +40,12 @@ internal sealed partial class DawnScene
 
         public HexLinkWorkspace Workspace
         {
-            get => FolderAuthorities.Advertise(Volatile.Read(ref workspace));
+            get
+            {
+                HexLinkWorkspace advertised = FolderAuthorities.Advertise(Volatile.Read(ref workspace));
+                return hex.settings.LinkSystemFileFolders.Length == 0 ? advertised
+                    : advertised with { Folders = [.. advertised.Folders.Select(hex.LinkSystemFilePolicy)] };
+            }
             set => hex.LinkWorkspaceAdvertised(Interlocked.Exchange(ref workspace, value), value);
         }
 

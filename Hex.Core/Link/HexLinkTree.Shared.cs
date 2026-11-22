@@ -3,7 +3,7 @@ namespace Hex.Core;
 internal sealed partial class HexLinkTree
 {
     private static readonly Lock sharedTrees = new();
-    private static readonly Dictionary<(string Root, string Name, string? Cache, HexExcludes Rules), WeakReference<HexLinkTree>> trees = [];
+    private static readonly Dictionary<(string Root, string Name, string? Cache, HexExcludes Rules, bool IncludeSystemFiles), WeakReference<HexLinkTree>> trees = [];
     private bool shareFreshScans;
     private long scanVersion, lastScanVersion, scannedAt;
     private HexLinkManifest? lastScan;
@@ -34,7 +34,7 @@ internal sealed partial class HexLinkTree
     {
         string full = Path.GetFullPath(folder.Path);
         string keyRoot = PlatformPaths.Comparison == StringComparison.OrdinalIgnoreCase ? full.ToUpperInvariant() : full;
-        var key = (keyRoot, folder.Name, cacheDirectory is null ? null : Path.GetFullPath(cacheDirectory), excludes());
+        var key = (keyRoot, folder.Name, cacheDirectory is null ? null : Path.GetFullPath(cacheDirectory), excludes(), folder.IncludeSystemFiles);
         lock (sharedTrees)
         {
             if (trees.TryGetValue(key, out WeakReference<HexLinkTree>? known) && known.TryGetTarget(out HexLinkTree? tree))

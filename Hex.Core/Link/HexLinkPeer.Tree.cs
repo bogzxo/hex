@@ -81,7 +81,7 @@ internal sealed partial class HexLinkPeer
         if (!first.Certified || HexLinkData.Int(said, "offset") != 0 || first.Files.Count == 0 || total <= first.Files.Count)
             throw HexLinkException.Invalid("The peer sent an invalid first manifest page.");
 
-        JsonNode? repositories = said["repositories"], gitIssues = said["git_issues"];
+        JsonNode? repositories = said["repositories"], gitIssues = said["git_issues"], systemFiles = said["excluded_system_files"];
         var files = new List<HexLinkTreeFile>(total);
         files.AddRange(first.Files);
         var paths = new HashSet<string>(files.Select(file => file.Path), StringComparer.Ordinal);
@@ -93,6 +93,7 @@ internal sealed partial class HexLinkPeer
                 HexLinkData.Int(said, "total") != total || page.Folder != first.Folder || page.Head != first.Head ||
                 page.Root != first.Root || page.CaseSensitive != first.CaseSensitive || page.Checkout != first.Checkout ||
                 page.Authority != first.Authority || !JsonNode.DeepEquals(said["repositories"], repositories) || !JsonNode.DeepEquals(said["git_issues"], gitIssues) ||
+                page.IncludeSystemFiles != first.IncludeSystemFiles || !JsonNode.DeepEquals(said["excluded_system_files"], systemFiles) ||
                 !page.Certified || page.Files.Count == 0 || page.Files.Count > total - files.Count)
                 throw HexLinkException.Invalid("The peer sent an inconsistent manifest page.");
             foreach (HexLinkTreeFile file in page.Files)

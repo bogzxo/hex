@@ -212,6 +212,18 @@ is the explicit choice for a divergent checkout.
 
 ### 5.5 Working-tree sync
 
+Link leaves out operating-system metadata at any depth, independent of Git's ignore rules. The default list is
+`.DS_Store`, `._*` (AppleDouble), `.Spotlight-V100`, `.Trashes`, `.fseventsd`, `Thumbs.db`, `ehthumbs.db`,
+`desktop.ini` and `$RECYCLE.BIN`. Names are matched case-insensitively. An excluded directory stays local with its
+contents. Existing copies are left on disk and appear under ?doesn't travel? after the folder is compared. Link
+continues to apply the ordinary workspace and Git exclusions. Editor suffixes like `*.swp` and `*~` can be added to
+those rules when appropriate for a project.
+
+To opt a folder out of Link's operating-system defaults, add its absolute local path to `link_system_file_folders`
+under `editor` in your user settings, for example `link_system_file_folders = ["C:/source/special-workspace"]`.
+Restart Link on each device after changing the setting. Both ends must opt in before working-tree sync carries
+these paths. The setting leaves Git history intact, so committed content can still arrive in a Git checkout.
+
 A pair runs one automatic sync for the selected folder. It compares certified, paged manifests and uses watches
 for incremental changes. Directory digests and a shared scan and hash cache reduce repeat work. Git inventory
 includes tracked files and untracked files eligible under ignore and workspace exclusion rules. Nested

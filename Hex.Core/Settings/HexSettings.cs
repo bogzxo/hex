@@ -263,6 +263,9 @@ internal sealed partial class HexSettings
     /// <summary>Whether, while Link is on, this Hex says it's here on the LAN (mDNS) so others can find it to pair.</summary>
     public bool LinkDiscoverable = true;
 
+    /// <summary>Absolute local workspace roots that opt out of Link's default operating system file exclusions.</summary>
+    public string[] LinkSystemFileFolders = [];
+
     /// <summary>
     /// Whether Hex is without its agents, No AI. Agentic, the Agents panel, the chats and the extensions that are agent
     /// systems never made, and the MCP server's tools about agents left out of it (see HexAi). Read as the editor

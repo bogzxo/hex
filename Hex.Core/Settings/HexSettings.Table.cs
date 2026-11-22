@@ -98,6 +98,13 @@ internal sealed partial class HexSettings
         Whole("link_port", settings => settings.LinkPort, (settings, value) => settings.LinkPort = value, 1024.0f, 65535.0f),
         Text("link_name", settings => settings.LinkName, (settings, value) => settings.LinkName = value.Trim()),
         Flag("link_discoverable", settings => settings.LinkDiscoverable, (settings, value) => settings.LinkDiscoverable = value),
+        Special("link_system_file_folders",
+            (settings, values) =>
+            {
+                if (values.GetValueOrDefault("link_system_file_folders") is ListValue roots)
+                    settings.LinkSystemFileFolders = [.. Patterns(roots).Where(Path.IsPathFullyQualified)];
+            },
+            (settings, written) => written.Add("link_system_file_folders", Horizon.HIDL.Library.Natives.List(settings.LinkSystemFileFolders))),
         Flag("git_autofetch", settings => settings.GitAutoFetch, (settings, value) => settings.GitAutoFetch = value),
         Number("git_autofetch_interval", settings => settings.GitAutoFetchInterval, (settings, value) => settings.GitAutoFetchInterval = value, 1.0f, 60.0f),
         Choice("git_pull_mode", settings => settings.GitPullMode, (settings, value) => settings.GitPullMode = value, "default", "merge", "rebase", "ff_only"),

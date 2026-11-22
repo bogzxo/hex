@@ -133,11 +133,11 @@ internal sealed class HexLinkClaimExchange(IHexLinkServices services)
                     || !route.Outgoing.Contains(frame.Scope) || !MayExchange(frame.Scope, route) || frame.Origin.Id == services.Device.Id
                     || frame.Origin.Id != route.Peer.Device.Id && Owner(frame.Scope) != route.Peer.Device.Id)
                     continue;
-                if (frame.Add.Any(row => Hidden(row.Draft.Key)) || frame.Drop.Any(Hidden))
+                if (frame.Add.Any(row => Hidden(frame.Scope, row.Draft.Key)) || frame.Drop.Any(key => Hidden(frame.Scope, key)))
                 {
                     // A receiver with stricter excludes must not show, block on, or relay excluded paths.
-                    frame = frame with { Add = [.. frame.Add.Where(row => !Hidden(row.Draft.Key))],
-                        Drop = [.. frame.Drop.Where(key => !Hidden(key))] };
+                    frame = frame with { Add = [.. frame.Add.Where(row => !Hidden(frame.Scope, row.Draft.Key))],
+                        Drop = [.. frame.Drop.Where(key => !Hidden(frame.Scope, key))] };
                 }
                 HexLinkClaimReceipt receipt = Board.Receive(frame, route.Peer.Device.Id, now);
                 if (receipt == HexLinkClaimReceipt.Gap)
@@ -175,7 +175,7 @@ internal sealed class HexLinkClaimExchange(IHexLinkServices services)
                 {
                     foreach (HexLinkClaimDraft draft in shown.Values)
                     {
-                        if (Hidden(draft.Key))
+                        if (Hidden(scope, draft.Key))
                             continue;
                         if (++count > HexLinkClaims.DEVICE_LIMIT)
                         {
@@ -374,12 +374,15 @@ internal sealed class HexLinkClaimExchange(IHexLinkServices services)
     private bool MayExchange(HexLinkClaimScope scope, Route route) => Owner(scope) is { } owner
         && (owner == services.Device.Id || owner == route.Peer.Device.Id);
 
-    private bool Hidden(HexLinkClaimKey key)
+    private bool Hidden(HexLinkClaimScope scope, HexLinkClaimKey key)
     {
         if (key.Path.Length == 0)
             return false;
         HexExcludes excludes = services.Excludes;
         string path = key.Path;
+        if (folders.FirstOrDefault(folder => folder.Scope == scope)?.Folder.IncludeSystemFiles != true &&
+            HexLinkSystemFiles.Matches(path))
+            return true;
         if (excludes.Hidden(path, key.Prefix))
             return true;
         for (int slash = path.LastIndexOf('/'); slash >= 0; slash = path.LastIndexOf('/', slash - 1))

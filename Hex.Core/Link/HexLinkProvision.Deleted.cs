@@ -54,12 +54,16 @@ internal sealed partial class HexLinkHost
             HexLinkProvisionRepository repository = plan.Plan.Repositories.First(candidate => candidate.Id == id);
             try
             {
-                string directory = HexLinkFiles.Resolve(Folders, wire);
+                IReadOnlyList<HexLinkFolder> folders = Folders;
+                string directory = HexLinkFiles.Resolve(folders, wire);
+                int slash = wire.IndexOf('/');
+                string name = slash < 0 ? wire : wire[..slash];
+                bool includeSystemFiles = folders.Any(folder => PlatformPaths.Comparer.Equals(folder.Name, name) && folder.IncludeSystemFiles);
                 string output = HexLinkProvision.Run(directory,
                     ["diff", "--no-renames", "--name-only", "--diff-filter=D", "--ignore-submodules=all", "-z", "HEAD"], token);
                 foreach (string path in output.Split('\0', StringSplitOptions.RemoveEmptyEntries))
                 {
-                    if (!File.Exists(Path.Combine(directory, path)))
+                    if ((includeSystemFiles || !HexLinkSystemFiles.Matches(path)) && !File.Exists(Path.Combine(directory, path)))
                         paths.Add(repository.Path.Length == 0 ? path : repository.Path + "/" + path);
                 }
             }

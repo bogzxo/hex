@@ -33,7 +33,7 @@ internal sealed partial class DawnScene
 
             string transferKey = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(deviceId + "\n" + root)));
             string journal = Path.Combine(linkData, "provision", transferKey + ".json");
-            HexLinkProvisionResult got = await Task.Run(() => HexLinkProvision.Get(peer, root, journal, progress, cancel), cancel);
+            HexLinkProvisionResult got = await Task.Run(() => HexLinkProvision.Get(peer, root, journal, progress, cancel, folderPolicy: LinkSystemFilePolicy), cancel);
             IReadOnlyList<HexLinkFolder> folders = got.Folders;
             cancel.ThrowIfCancellationRequested();
             downloaded?.Invoke(got);
@@ -181,9 +181,15 @@ internal sealed partial class DawnScene
         catch (HexLinkException) { return Path.Combine(root, "workspace-" + folder); }
     }
 
+    private HexLinkFolder LinkSystemFilePolicy(HexLinkFolder folder) => folder with
+    {
+        IncludeSystemFiles = settings.LinkSystemFileFolders.Any(root => PlatformPaths.Same(root, folder.Path))
+    };
+
     private HexLinkFolder? LinkProvisionedLocal(string deviceId, string name) =>
         LinkReadProvisionedFolders().FirstOrDefault(binding => binding.DeviceId == deviceId
-            && PlatformPaths.Comparer.Equals(binding.Folder.Name, name) && Directory.Exists(binding.Folder.Path))?.Folder;
+            && PlatformPaths.Comparer.Equals(binding.Folder.Name, name) && Directory.Exists(binding.Folder.Path))?.Folder is { } folder
+            ? LinkSystemFilePolicy(folder) : null;
 
     // Older Get saved the authenticated source and local alias before it saved any folder authority.
     private async Task LinkRecoverProvisionedAuthority(HexLinkPeer peer)

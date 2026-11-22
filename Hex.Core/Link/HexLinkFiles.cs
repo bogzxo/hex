@@ -83,12 +83,18 @@ internal static partial class HexLinkFiles
                 throw Refused(wire, "Link's cache and staging files are never shared");
         }
 
-        if (excludes is not null && parts.Length > 1)
+        if (parts.Length > 1)
         {
-            bool directory = Directory.Exists(at);
             string requested = string.Join('/', parts, 1, parts.Length - 1);
-            if (Excluded(excludes, requested, directory) || Excluded(excludes, inside.Replace('\\', '/'), directory))
-                throw Refused(wire, "the workspace excludes it");
+            string real = inside.Replace('\\', '/');
+            if (!folder.IncludeSystemFiles && (HexLinkSystemFiles.Matches(requested) || HexLinkSystemFiles.Matches(real)))
+                throw Refused(wire, "Link excludes operating system metadata in this folder");
+            if (excludes is not null)
+            {
+                bool directory = Directory.Exists(at);
+                if (Excluded(excludes, requested, directory) || Excluded(excludes, real, directory))
+                    throw Refused(wire, "the workspace excludes it");
+            }
         }
 
         return at;

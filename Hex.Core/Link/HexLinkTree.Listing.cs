@@ -9,11 +9,12 @@ internal sealed partial class HexLinkTree
     private long reusedGitListings;
     internal long ReusedGitListings => Interlocked.Read(ref reusedGitListings);
 
-    private DiskGitLayout DiscoverGitLayout(Dictionary<string, HexLinkGitIssue> issues, bool allowIndexReuse)
+    private DiskGitLayout DiscoverGitLayout(Dictionary<string, HexLinkGitIssue> issues, bool allowIndexReuse, Action<string>? omittedSystemFile)
     {
         List<string>? inventory = allowIndexReuse && !trackedIndexes.IsEmpty && PreviousManifest is not null ? [] : null;
         string[] repositories = [.. FindNestedRepositories(Root, unavailable: (path, why) =>
-            issues[path] = new HexLinkGitIssue(OneLine(why), Unavailable: true), inventory: inventory)
+            issues[path] = new HexLinkGitIssue(OneLine(why), Unavailable: true), inventory: inventory, includeSystemFiles: Folder.IncludeSystemFiles,
+                omittedSystemFile: omittedSystemFile)
             .Where(path => !Hidden(path, folder: true)).OrderByDescending(path => path.Length)];
         ILookup<string, string>? candidates = inventory is { Count: <= MOST_FILES } && issues.Count == 0
             ? inventory.ToLookup(path => RepositoryContaining(path, repositories) ?? string.Empty, StringComparer.Ordinal)

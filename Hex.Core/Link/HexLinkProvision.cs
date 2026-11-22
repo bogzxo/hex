@@ -185,10 +185,11 @@ internal static partial class HexLinkProvision
         public bool Existing { get; init; }
     }
 
-    private sealed record FileTransfer(string Relative, string? Before, HexLinkTreeFile? Remote);
+    private sealed record FileTransfer(string Relative, string? Before, HexLinkTreeFile? Remote, bool IncludeSystemFiles);
 
     public static async Task<HexLinkProvisionResult> Get(HexLinkPeer peer, string destination, string journal,
-        IProgress<HexLinkProvisionProgress>? progress, CancellationToken cancel, IHexLinkBundleSource? bundles = null)
+        IProgress<HexLinkProvisionProgress>? progress, CancellationToken cancel, IHexLinkBundleSource? bundles = null,
+        Func<HexLinkFolder, HexLinkFolder>? folderPolicy = null)
     {
         progress?.Report(new HexLinkProvisionProgress(HexLinkProvisionPhase.Planning, 0, 0));
         ValidateDestination(destination, cancel);
@@ -225,6 +226,8 @@ internal static partial class HexLinkProvision
             plan = plan with { Deleted = deleted };
         }
         HexLinkFolder[] local = [.. plan.Folders.Select(folder => new HexLinkFolder(folder.Name, Resolve(destination, folder.Path), folder.Authority))];
+        if (folderPolicy is not null)
+            local = [.. local.Select(folderPolicy)];
         foreach (HexLinkFolder folder in local)
             Directory.CreateDirectory(folder.Path);
         await CopyWorkingTrees(peer, plan, local, destination, journal, progress, cancel, skipped: skipped);
@@ -285,6 +288,8 @@ internal static partial class HexLinkProvision
             string prefix = plan.Folders[i].Path;
             if (skipped is not null)
             {
+                foreach (string excluded in (remote.ExcludedSystemFiles ?? []).Concat(local.ExcludedSystemFiles ?? []).Distinct(StringComparer.Ordinal))
+                    SkipFile(Relative(prefix, excluded), HexLinkSystemFiles.Reason);
                 foreach (HexLinkProvisionSkip issue in (remote.ProvisionIssues ?? []).Concat(local.ProvisionIssues ?? []))
                     SkipFile(Relative(prefix, issue.Path), issue.Reason);
                 foreach (string path in (local.NestedHeads?.Keys ?? []).Union(remote.NestedHeads?.Keys ?? [], StringComparer.Ordinal))
@@ -308,9 +313,11 @@ internal static partial class HexLinkProvision
             if ((repos is null ? HexLinkTree.CommitsDiffer(local, remote, omitted) : CheckRepositoryHeads(plan, local, remote)) is { } why)
                 throw new InvalidOperationException($"The host changed while the workspace was being transferred. {why}. Retry with a new plan.");
 
+            bool includeSystemFiles = folder.IncludeSystemFiles && remote.IncludeSystemFiles;
             bool CopyPath(string within, HexLinkManifest manifest) =>
                 omitted?.Blocks(within) != true && !withheldFiles.Contains(Relative(prefix, within))
-                && InRepositoryScope(within, manifest.NestedHeads, repos);
+                && InRepositoryScope(within, manifest.NestedHeads, repos)
+                  && (includeSystemFiles || !HexLinkSystemFiles.Matches(within));
 
             var remotePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var localFiles = local.Files.Where(file => CopyPath(UnderFolder(file.Path, folder), local))
@@ -337,7 +344,7 @@ internal static partial class HexLinkProvision
                         continue;
                     }
                     paths.TryAdd(relative, relative);
-                    Resolve(destination, relative);
+                    Resolve(destination, relative, includeSystemFiles);
                     localFiles.TryGetValue(within, out HexLinkTreeFile? here);
                     if (here is not null && (here.Hash is not null && here.Hash == file.Hash
                         || here.Text is not null && here.Text == file.Text
@@ -350,7 +357,7 @@ internal static partial class HexLinkProvision
                     if (file.Hash is null)
                         throw new IOException("The source could not certify the file's contents.");
                     CheckLocal(relative, here?.Hash, here is not null);
-                    transfers.TryAdd(relative, new FileTransfer(relative, here?.Hash, file));
+                    transfers.TryAdd(relative, new FileTransfer(relative, here?.Hash, file, includeSystemFiles));
                 }
                 catch (Exception error) when (skipped is not null && ItemFailure(error, peer))
                 {
@@ -373,7 +380,7 @@ internal static partial class HexLinkProvision
                     }
 
                     CheckLocal(relative, here.Hash, exists: true);
-                    transfers.TryAdd(relative, new FileTransfer(relative, here.Hash, null));
+                    transfers.TryAdd(relative, new FileTransfer(relative, here.Hash, null, includeSystemFiles));
                 }
                 catch (Exception error) when (skipped is not null && ItemFailure(error, peer))
                 {
@@ -444,7 +451,7 @@ internal static partial class HexLinkProvision
         if (!bulk)
         {
             byte[]? content = file is null ? null : await ReadSnapshot(peer, file, cancel);
-            string path = Resolve(destination, transfer.Relative);
+            string path = Resolve(destination, transfer.Relative, transfer.IncludeSystemFiles);
             if (content is null || transfer.Before is null || dirty || !await MatchesCheckoutText(path, transfer.Before, content, cancel))
                 await HexLinkFiles.CompareAndReplace(path, transfer.Relative, transfer.Before, content, cancel, file?.Executable);
             return content?.LongLength ?? 0;
@@ -454,7 +461,7 @@ internal static partial class HexLinkProvision
         {
             if (file is null)
             {
-                string delete = Resolve(destination, transfer.Relative);
+                string delete = Resolve(destination, transfer.Relative, transfer.IncludeSystemFiles);
                 await HexLinkFiles.CompareAndReplace(delete, transfer.Relative, transfer.Before, null, 0, null, stop);
                 return 0L;
             }
@@ -462,7 +469,7 @@ internal static partial class HexLinkProvision
             string stage = await peer.ReadProvisionBulk(file, stop);
             try
             {
-                string path = Resolve(destination, transfer.Relative);
+                string path = Resolve(destination, transfer.Relative, transfer.IncludeSystemFiles);
                 if (file.Size <= HexLinkFiles.MOST_READ && transfer.Before is { } expected && !dirty
                     && await MatchesCheckoutText(path, expected, await File.ReadAllBytesAsync(stage, stop), stop))
                     return file.Size;
@@ -783,7 +790,7 @@ internal static partial class HexLinkProvision
         }
     }
 
-    internal static string Resolve(string destination, string relative)
+    internal static string Resolve(string destination, string relative, bool includeSystemFiles = false)
     {
         const string root = "workspace";
         string full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(destination));
@@ -791,7 +798,7 @@ internal static partial class HexLinkProvision
         string wire = relative.Length == 0 ? root : root + "/" + relative;
         if (relative.EndsWith("/", StringComparison.Ordinal))
             throw HexLinkException.Invalid("A path in the workspace plan ends in a slash.");
-        string path = HexLinkFiles.Resolve([new HexLinkFolder(root, full)], wire);
+        string path = HexLinkFiles.Resolve([new HexLinkFolder(root, full) { IncludeSystemFiles = includeSystemFiles }], wire);
         string spelled = Path.GetFullPath(Path.Combine(full, relative.Replace('/', Path.DirectorySeparatorChar)));
         if (!PlatformPaths.Same(path, spelled))
             throw HexLinkException.Invalid($"A link points elsewhere at {relative}.");

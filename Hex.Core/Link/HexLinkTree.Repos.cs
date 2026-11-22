@@ -25,7 +25,7 @@ internal sealed partial class HexLinkTree
 
     // Read .git markers and directory names together, including below directories ignored by the outer repo.
     internal static List<string> FindNestedRepositories(string root, CancellationToken cancel = default,
-        Action<string, string>? unavailable = null, List<string>? inventory = null)
+        Action<string, string>? unavailable = null, List<string>? inventory = null, bool includeSystemFiles = false, Action<string>? omittedSystemFile = null)
     {
         using var timing = HexLinkSyncTiming.Measure("tree.discover-repositories");
         var repositories = new List<string>();
@@ -47,7 +47,7 @@ internal sealed partial class HexLinkTree
                         : (entry.ToFullPath(), entry.IsDirectory, false), options)
                 {
                     ShouldIncludePredicate = (ref FileSystemEntry entry) => entry.FileName.Equals(".git", PlatformPaths.Comparison)
-                        || (entry.IsDirectory || inventory is not null) && (entry.Attributes & FileAttributes.ReparsePoint) == 0
+                        || (entry.IsDirectory || inventory is not null || omittedSystemFile is not null && HexLinkSystemFiles.Leaf(entry.FileName)) && (entry.Attributes & FileAttributes.ReparsePoint) == 0
                 };
                 foreach (var (path, directory, link) in entries)
                 {
@@ -55,6 +55,10 @@ internal sealed partial class HexLinkTree
                     {
                         marker = true;
                         linked = link;
+                    }
+                    else if (!includeSystemFiles && HexLinkSystemFiles.Leaf(Path.GetFileName(path)))
+                    {
+                        omittedSystemFile?.Invoke(HexExcludes.Relative(root, path));
                     }
                     else if (!directory)
                     {

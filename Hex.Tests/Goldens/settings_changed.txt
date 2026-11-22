@@ -50,6 +50,7 @@ link = true
 link_port = 23916
 link_name = "hex/test"
 link_discoverable = false
+link_system_file_folders = []
 git_autofetch = false
 git_autofetch_interval = 1.87
 git_pull_mode = "rebase"

@@ -42,7 +42,8 @@ internal sealed partial class HexLinkSync
     {
         if (!wire.StartsWith(folder.Name + "/", StringComparison.Ordinal))
             return true;
-        if (HexLinkTree.SyncArtifact(wire) || includeMissing && BlockedRepository(wire))
+        if (HexLinkTree.SyncArtifact(wire) || includeMissing && BlockedRepository(wire) ||
+            (!folder.IncludeSystemFiles || !peerIncludesSystemFiles) && HexLinkSystemFiles.Matches(wire.AsSpan(folder.Name.Length + 1)))
             return true;
         return StateWire is { } state && state.Equals(wire, StringComparison.OrdinalIgnoreCase);
     }

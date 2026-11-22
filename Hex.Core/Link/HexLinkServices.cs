@@ -5,6 +5,7 @@ namespace Hex.Core;
 /// <summary>A folder of the workspace, by the name the wire knows it by, and where it is here (never sent).</summary>
 internal sealed record HexLinkFolder(string Name, string Path, HexLinkAuthority? Authority = null)
 {
+    public bool IncludeSystemFiles { get; init; }
     public string? FolderAuthorityId => Authority?.DeviceId;
     public long FolderAuthorityEpoch => Authority?.Epoch ?? 0;
     public HexLinkWorktreeGatePolicy? WorktreeGate { get; init; }
