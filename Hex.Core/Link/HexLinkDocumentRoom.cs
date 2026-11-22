@@ -20,9 +20,27 @@ internal sealed partial class HexLinkDocumentRoom(string path, string text, HexD
     private long rosterVersion;
     private int lastAuthor;
     private HexDocFileBasis? fileBasis = initialFile;
+    private bool retiredForSubmission;
     public string Path { get; } = path;
 
     public HexDocView View() => authority.View();
+
+    internal bool TryRetireForSubmission(string savedText)
+    {
+        lock (gate)
+        {
+            if (retiredForSubmission || SavingFile || authority.View().Text != savedText)
+                return false;
+            retiredForSubmission = true;
+            return true;
+        }
+    }
+
+    private void RequireCurrentRoom()
+    {
+        if (retiredForSubmission)
+            throw new HexLinkException(HexLinkErrors.DOCUMENT_HELD, "A held file submission is updating this document.");
+    }
 
     public bool IsVacant
     {
@@ -33,6 +51,7 @@ internal sealed partial class HexLinkDocumentRoom(string path, string text, HexD
     {
         lock (gate)
         {
+            RequireCurrentRoom();
             if (!members.TryGetValue(scope, out var participant))
             {
                 if (members.Count - agentUntil.Count >= MaxParticipants)
@@ -59,6 +78,7 @@ internal sealed partial class HexLinkDocumentRoom(string path, string text, HexD
     {
         lock (gate)
         {
+            RequireCurrentRoom();
             if (online.GetValueOrDefault(scope) != connection || !members.TryGetValue(scope, out var participant))
                 throw HexLinkException.NotFound("Join the shared document first.");
 
@@ -110,6 +130,7 @@ internal sealed partial class HexLinkDocumentRoom(string path, string text, HexD
         TaskCompletionSource<bool> waiter;
         lock (gate)
         {
+            RequireCurrentRoom();
             if (online.GetValueOrDefault(scope) != connection || !members.TryGetValue(scope, out var participant))
                 throw HexLinkException.NotFound("Join the shared document first.");
             if (authority.Frontier != (epoch, revision) || knownSaved is { } seen && seen != (saved?.Revision ?? -1))

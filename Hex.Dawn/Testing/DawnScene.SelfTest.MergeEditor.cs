@@ -99,6 +99,8 @@ internal sealed partial class DawnScene
         test.WaitFor(() => Volatile.Read(ref binaryWrites) == 1 && document.Merge is null, 12);
         test.Check("merge editor: the binary choice returns the selected file bytes", () => binaryWrites == 1 && document.Merge is null);
 
+        TestManualMergeDelimiters(test);
+
         static double Contrast(Vector4 first, Vector4 second)
         {
             static double Level(float value) => value <= 0.04045f ? value / 12.92 : Math.Pow((value + 0.055) / 1.055, 2.4);

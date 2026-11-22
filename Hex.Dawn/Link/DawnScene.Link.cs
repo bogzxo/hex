@@ -404,6 +404,7 @@ internal sealed partial class DawnScene
             linkGitWait -= LINK_LOOK_EVERY;
             LinkLookAtWorkspace(force: linkGitWait <= 0.0f);
             LinkPredictLookServing();
+            CheckLinkHoldAge();
         }
 
         if (linkDirty)

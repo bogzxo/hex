@@ -8,8 +8,18 @@ using static Hex.Tests.HexLinkTestKit;
 
 namespace Hex.Tests;
 
-internal sealed partial class LinkServices
+internal sealed partial class LinkServices : IHexLinkHeldSubmission
 {
+    internal readonly System.Collections.Concurrent.ConcurrentQueue<string> SubmittedPaths = new();
+
+    public async Task<string?> ApplyHeldSubmission(string full, string wire, string? basis, byte[]? bytes, CancellationToken cancel,
+        bool? executable, HexLinkFiles.PackDirectories? directories)
+    {
+        string? hash = await HexLinkFiles.CompareAndReplace(full, wire, basis, bytes, cancel, executable);
+        SubmittedPaths.Enqueue(wire);
+        return hash;
+    }
+
     internal HexLinkHoldStore? HoldStore { get; set; }
 
     public HexLinkHoldStore? Holds(HexLinkFolder folder) =>
@@ -23,6 +33,68 @@ public sealed class HexLinkHoldSyncTests
     private const string Baseline = "the baseline\n";
     private const string Private = "local work in progress\n";
     private const string Shared = "incoming from the other device\n";
+
+    [Fact]
+    public async Task Remote_hex_read_uses_shared_text_and_symbols_for_a_held_file()
+    {
+        using var pair = await LinkedPair.Up(Edit, Edit);
+        const string wire = "work/Example.cs";
+        string file = Path.Combine(pair.A.Work, "Example.cs");
+        const string baseline = "class SharedBaseline { }\n";
+        const string working = "class PrivateDraft { }\n";
+        var index = new HexCodeIndex(() => [pair.A.Work]);
+        pair.A.LinkTools.ReadIndex = index;
+        EnableHolds(pair.A).Hold(wire, Bytes(baseline), HexLinkHoldBaseSource.Agreed);
+        File.WriteAllText(file, working);
+        index.Look(force: true);
+        Assert.Contains("PrivateDraft", index.Read(file, null, null, null, false, 2000).Text);
+
+        var ranged = await pair.PeerA.Call("hex_read", new() { ["path"] = wire });
+        Assert.False(ranged.IsError);
+        Assert.Contains("held on Desk: showing the last shared version", ranged.AllText());
+        Assert.Contains(baseline.Trim(), ranged.AllText());
+        Assert.DoesNotContain("PrivateDraft", ranged.AllText());
+
+        var symbol = await pair.PeerA.Call("hex_read", new() { ["path"] = file, ["symbol"] = "SharedBaseline" });
+        Assert.False(symbol.IsError);
+        Assert.Contains("class SharedBaseline { }", symbol.AllText());
+        Assert.DoesNotContain("PrivateDraft", symbol.AllText());
+
+        var privateSymbol = await pair.PeerA.Call("hex_read", new() { ["path"] = file, ["symbol"] = "PrivateDraft" });
+        Assert.True(privateSymbol.IsError);
+        Assert.DoesNotContain(working.Trim(), privateSymbol.AllText());
+        Assert.Equal(HexLinkErrors.NOT_ALLOWED, await CodeOf(pair.PeerA.Call("hex_link_hold", new() { ["action"] = "list" })));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Exact_checked_hold_resolution_is_marked_for_the_open_peer_editor(bool packed)
+    {
+        using var pair = await LinkedPair.Up(Edit, Edit, bulk: packed ? HexLinkBulkSupport.Raw : HexLinkBulkSupport.None);
+        Both(pair, Baseline);
+        HexLinkHoldStore holds = EnableHolds(pair.A);
+        using var sync = Sync(pair.A, pair.PeerB);
+        await Ready(sync);
+        var service = new HexLinkHoldService(pair.A.Workspace.Folders[0], holds) { AgreedBasis = sync.HoldBasis };
+        await service.Hold(Wire);
+        File.WriteAllText(Local(pair.A), Private);
+        File.WriteAllText(Local(pair.B), Shared);
+        await Until(() => holds.Get(Wire)?.HasIncoming == true, sync);
+
+        var conflict = Assert.Single((await service.Submit()).NeedsMerge);
+        const string resolved = "hand resolved on the holder\n";
+        await conflict.Session!.Complete(Bytes(resolved));
+        await Flush(sync);
+
+        Assert.Empty(sync.Conflicts);
+        Assert.Equal(resolved, File.ReadAllText(Local(pair.B)));
+        Assert.Equal(Wire, Assert.Single(pair.B.SubmittedPaths));
+        File.WriteAllText(Local(pair.A), "ordinary change after submission\n");
+        await Flush(sync);
+        Assert.Equal("ordinary change after submission\n", File.ReadAllText(Local(pair.B)));
+        Assert.Equal(Wire, Assert.Single(pair.B.SubmittedPaths));
+    }
 
     [Fact]
     public async Task Holder_keeps_its_edits_records_peer_changes_and_leaves_other_files_live()
