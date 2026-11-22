@@ -60,9 +60,15 @@ internal sealed partial class DawnScene
             ReadProvisionTestFile(Path.Combine(root, "committed.txt")) == FOLLOW_TEST_REVERSE
             && ReadProvisionTestFile(Path.Combine(peerHome, "git-follow-returned.txt")) == ProvisionTestGit(root, "rev-parse", "HEAD"));
         test.Check("link-git-follow: history, index and checkout agree on the branch", () =>
-            final is not null && ProvisionTestGit(root, "log", "-2", "--format=%s").ReplaceLineEndings("\n") == "reverse\nsecond"
-            && ProvisionTestGit(root, "branch", "--show-current") == "device-topic"
-            && ProvisionTestGit(root, "status", "--porcelain") == string.Empty);
+        {
+            string history = ProvisionTestGit(root, "log", "-2", "--format=%s").ReplaceLineEndings("\n");
+            string branch = ProvisionTestGit(root, "branch", "--show-current");
+            string status = ProvisionTestGit(root, "status", "--porcelain");
+            bool same = final is not null && history == "reverse\nsecond" && branch == "device-topic" && status.Length == 0;
+            if (!same)
+                Console.WriteLine($"[Hex self-test] link-git-follow: branch {branch}, history {history.ReplaceLineEndings(" / ")}, status {status}");
+            return same;
+        });
         test.WaitFor(() => linkTestPeer is { HasExited: true }, 45.0f);
         test.Check("link-git-follow: child verified history and a clean index", () => linkTestPeer is { HasExited: true, ExitCode: 0 });
         test.Run(StopLink);
@@ -114,6 +120,7 @@ internal sealed partial class DawnScene
             && ProvisionTestGit(destination, "rev-parse", "HEAD") == ReadProvisionTestFile(target)
             && ProvisionTestGit(destination, "branch", "--show-current") == "device-topic"
             && ProvisionTestGit(destination, "status", "--porcelain") == string.Empty);
+        Task? flushed = null;
         test.Run(() =>
         {
             ProvisionTestGit(destination, "config", "user.email", "link.test@example.com");
@@ -121,11 +128,17 @@ internal sealed partial class DawnScene
             File.WriteAllText(file, FOLLOW_TEST_REVERSE);
             ProvisionTestGit(destination, "commit", "-qam", "reverse");
             File.WriteAllText(Path.Combine(home, "git-follow-returned.txt"), ProvisionTestGit(destination, "rev-parse", "HEAD"));
+            if (source is not null && LinkSyncOf(source.Device.Id, FOLLOW_TEST_FOLDER) is { } sync)
+                flushed = sync.Flush();
         });
-        test.WaitFor(() => source is not null && LinkSyncOf(source.Device.Id, FOLLOW_TEST_FOLDER) is { } sync
-            && sync.RemoteHead == ReadProvisionTestFile(Path.Combine(home, "git-follow-returned.txt")) && sync.Queued == 0, 85.0f);
-        test.Check("link-git-follow: the authority accepted the joiner's commit", () =>
-            source is not null && LinkSyncOf(source.Device.Id, FOLLOW_TEST_FOLDER)?.RemoteHead == ReadProvisionTestFile(Path.Combine(home, "git-follow-returned.txt")));
+        test.WaitFor(() => flushed is { IsCompleted: true }, 85.0f);
+        test.Check("link-git-follow: the authority accepted the joiner's commit and its working file", () =>
+        {
+            if (flushed?.Exception is { } error)
+                Console.WriteLine($"[Hex self-test] link-git-follow: {error.GetBaseException().Message}");
+            return flushed is { IsCompletedSuccessfully: true } && source is not null
+                && LinkSyncOf(source.Device.Id, FOLLOW_TEST_FOLDER)?.RemoteHead == ReadProvisionTestFile(Path.Combine(home, "git-follow-returned.txt"));
+        });
         test.Run(StopLink);
     }
 }
