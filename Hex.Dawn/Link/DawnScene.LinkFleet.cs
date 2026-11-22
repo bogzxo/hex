@@ -50,7 +50,7 @@ internal sealed partial class DawnScene
             key = key * 31 + string.GetHashCode(peer.Session.Connection.Address, StringComparison.Ordinal);
         }
 
-        return key;
+        return key * 31 + linkChatFoldsVersion;
     }
 
     /// <summary>

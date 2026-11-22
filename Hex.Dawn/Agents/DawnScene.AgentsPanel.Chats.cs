@@ -189,36 +189,19 @@ internal sealed partial class DawnScene
         if (alone)
             holder.Add(new Label { Text = Said("agents_panel.finished_none_working"), TextScale = 0.125f, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal, Size = new Vector2(0, FINISHED_ALONE), Position = new Vector2(inset, 0) });
 
-        var row = holder.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, FINISHED_HEAD), Color = Vector4.Zero });
-        var head = row.Add(new Button
-        {
-            Style = "button_flat", Fill = UIFill.Both, Label = string.Empty, Animated = false,
-            Tooltip = Said(open ? "agents_panel.finished_fold" : "agents_panel.finished_open"), OnPressed = ToggleFinished
-        });
-        head.OnContextMenu = at =>
+        Menu FinishedMenu()
         {
             var menu = new Menu("finished chats");
             menu.Add(Said(open ? "agents_panel.finished_fold" : "agents_panel.finished_open"), ToggleFinished, icon: open ? "chevron-down" : "chevron-right");
             menu.Add(Said("agents_panel.finished_settle_all"), SettleAllFinished, icon: "check-all").IsEnabled = () => agentChats.Any(CanSettle);
-            ContextMenu.Show(chrome, at, menu);
-        };
-        row.Add(new Label
-        {
-            Text = $"$({(open ? "chevron-down" : "chevron-right")}) {Said("agents_panel.finished_head")}", TextScale = 0.125f, Dim = true, Bold = true,
-            Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(inset, 0), Align = Origin.Left
-        });
-        string many = count.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        row.Add(new Badge { Text = many, Tone = UIBadgeTone.Neutral, TextScale = 0.11f, Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-8, 0) });
-        if (unread > 0)
-        {
-            // Left of the count, measured off its words, a pill's ends and its dot
-            float countWidth = (Skin?.Font.Measure(many, 0.11f, markup: false).X ?? 8.0f) + 14.0f;
-            row.Add(new Badge
-            {
-                Text = Said("agents_panel.finished_unread", ("count", unread.ToString(System.Globalization.CultureInfo.InvariantCulture))), Tone = UIBadgeTone.Accent, Dot = true,
-                TextScale = 0.11f, Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-8 - countWidth - 6, 0)
-            });
+            return menu;
         }
+
+        string flag = unread > 0
+            ? Said("agents_panel.finished_unread", ("count", unread.ToString(System.Globalization.CultureInfo.InvariantCulture)))
+            : string.Empty;
+        holder.Add(ListSectionHead("local/finished", Said("agents_panel.finished_head"), count, flag, UIBadgeTone.Accent, open,
+            _ => ToggleFinished(), FinishedMenu, inset));
         return holder;
     }
 

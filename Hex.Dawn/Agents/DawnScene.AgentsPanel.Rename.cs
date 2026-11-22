@@ -160,6 +160,17 @@ internal sealed partial class DawnScene
 
         internal bool FocusWhenShown { get; set; }
 
+        protected override void OnTextInput(char character)
+        {
+            switch (character)
+            {
+                case UIKeyboard.UP: scene.MoveChatListFocus(this, -1); break;
+                case UIKeyboard.DOWN: scene.MoveChatListFocus(this, 1); break;
+                case UIKeyboard.LEFT: scene.MoveChatListFocus(this, -1, headOnly: true); break;
+                default: base.OnTextInput(character); break;
+            }
+        }
+
         // Whether the click going on was pressed on the card's name, and not by a key
         private bool onTitle;
 
