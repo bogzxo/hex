@@ -607,7 +607,7 @@ internal sealed partial class HexLinkSync : IDisposable
             return;
         try
         {
-            await peer.UnwatchTree(folder.Name);
+            await peer.UnwatchTree(folder.Name, expected: Heard);
         }
         catch (HexLinkException)
         {

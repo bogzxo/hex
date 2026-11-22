@@ -7,6 +7,7 @@ internal sealed partial class HexLinkPeer
 {
     // What hears of the changes of each watched tree of the other machine's, by folder
     private readonly ConcurrentDictionary<string, Action<IReadOnlyList<HexLinkTreeChange>>> trees = new(StringComparer.Ordinal);
+    private readonly SemaphoreSlim treeWatchLifecycle = new(1, 1);
 
     /// <summary>
     /// A folder of the other machine's workspace as the working-tree sync sees it: every file git would carry there
@@ -20,20 +21,33 @@ internal sealed partial class HexLinkPeer
     /// files that changed there (on the reading task), a short while after they did.
     /// </summary>
     public async Task<HexLinkManifest> WatchTree(string folder, Action<IReadOnlyList<HexLinkTreeChange>> changes,
-        CancellationToken cancel = default, HexLinkManifest? basis = null)
+        CancellationToken cancel = default, HexLinkManifest? basis = null) =>
+        (await OpenTreeWatch(folder, changes, cancel, basis, restoring: false))!;
+
+    private async Task<HexLinkManifest?> OpenTreeWatch(string folder, Action<IReadOnlyList<HexLinkTreeChange>> changes,
+        CancellationToken cancel, HexLinkManifest? basis, bool restoring)
     {
-        trees[folder] = changes;
+        await treeWatchLifecycle.WaitAsync(cancel);
         try
         {
-            HexLinkManifest manifest = await ReadManifest("sync/watch", folder, cancel, basis);
-            RememberTree(folder, manifest);
-            return manifest;
+            if (restoring && trees.GetValueOrDefault(folder) != changes)
+                return null;
+            trees[folder] = changes;
+            try
+            {
+                HexLinkManifest manifest = await ReadManifest("sync/watch", folder, cancel, basis);
+                RememberTree(folder, manifest);
+                return manifest;
+            }
+            catch (Exception)
+            {
+                try { await RemoveTreeWatch(folder, CancellationToken.None); } catch (HexLinkException) { }
+                throw;
+            }
         }
-        catch (Exception)
+        finally
         {
-            trees.TryRemove(folder, out _);
-            try { await UnwatchTree(folder); } catch (HexLinkException) { }
-            throw;
+            treeWatchLifecycle.Release();
         }
     }
 
@@ -95,7 +109,22 @@ internal sealed partial class HexLinkPeer
     }
 
     /// <summary>A folder of the other machine's no longer watched.</summary>
-    public Task UnwatchTree(string folder, CancellationToken cancel = default)
+    public async Task UnwatchTree(string folder, CancellationToken cancel = default,
+        Action<IReadOnlyList<HexLinkTreeChange>>? expected = null)
+    {
+        await treeWatchLifecycle.WaitAsync(cancel);
+        try
+        {
+            if (expected is null || trees.GetValueOrDefault(folder) == expected)
+                await RemoveTreeWatch(folder, cancel);
+        }
+        finally
+        {
+            treeWatchLifecycle.Release();
+        }
+    }
+
+    private Task RemoveTreeWatch(string folder, CancellationToken cancel)
     {
         trees.TryRemove(folder, out _);
         treeWatchFiles.TryRemove(folder, out _);

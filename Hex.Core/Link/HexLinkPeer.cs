@@ -278,8 +278,8 @@ internal sealed partial class HexLinkPeer : IDisposable
                     lock (files)
                         before = new(files, StringComparer.Ordinal);
                 }
-                HexLinkManifest manifest = await WatchTree(folder, callback, session.Closing);
-                if (!stillAllowed() || trees.GetValueOrDefault(folder) != callback)
+                HexLinkManifest? manifest = await OpenTreeWatch(folder, callback, session.Closing, basis: null, restoring: true);
+                if (manifest is null || !stillAllowed() || trees.GetValueOrDefault(folder) != callback)
                     return;
 
                 var changed = new List<HexLinkTreeChange>();

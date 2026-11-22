@@ -145,6 +145,28 @@ public sealed class HexLinkTreeCacheTests
     }
 
     [Fact]
+    public async Task The_stopped_sync_cannot_unwatch_its_replacement()
+    {
+        const HexLinkRights edit = HexLinkRights.View | HexLinkRights.Edit;
+        using var pair = await LinkedPair.Up(edit, edit);
+        using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        Action<IReadOnlyList<HexLinkTreeChange>> first = _ => { };
+        var heard = new TaskCompletionSource<HexLinkTreeChange>(TaskCreationOptions.RunContinuationsAsynchronously);
+        await pair.PeerB.WatchTree("work", first, limit.Token);
+        await pair.PeerB.WatchTree("work", changes =>
+        {
+            foreach (HexLinkTreeChange change in changes.Where(each => each.Path == "work/after-restart.txt"))
+                heard.TrySetResult(change);
+        }, limit.Token);
+
+        await pair.PeerB.UnwatchTree("work", limit.Token, expected: first);
+        File.WriteAllText(Path.Combine(pair.B.Work, "after-restart.txt"), "keep watching");
+        await pair.PeerB.Flush("work", limit.Token);
+
+        Assert.False((await heard.Task.WaitAsync(limit.Token)).Deleted);
+    }
+
+    [Fact]
     public void Reconnecting_after_the_last_watcher_stops_reads_a_new_manifest()
     {
         using var site = new LinkServices(HexLinkTestKit.DeviceA);
