@@ -59,6 +59,7 @@ internal sealed partial class DawnScene
             Options = PredictionOptionsNow,
             Snapshot = PredictionSnapshotOf
         };
+        AddActivePredictionCommands();
         predictionRecent = new (HexDocument?, int)[3];
         documentClosed += PredictionClosed;
         foreach (var open in documents)
