@@ -65,7 +65,7 @@ internal static class DocumentFile
                 using (var writer = new StreamWriter(file, encoding, leaveOpen: true)) writer.Write(text);
                 file.Flush(flushToDisk: true);
             }
-            using IDisposable publication = HexLinkFiles.LockForLocalWrite(path);
+            using IDisposable publication = FilePublication.Enter(path);
             if (File.Exists(path)) File.Replace(temporary, path, null);
             else File.Move(temporary, path);
         }

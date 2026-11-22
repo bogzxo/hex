@@ -340,7 +340,8 @@ internal sealed partial class DawnScene
         allTabs.Visible = overflow;
         docTabs.Size = docTabs.Size with { X = MathF.Max(MIN_FLEXIBLE, tabRoom - (overflow ? allTabs.Size.X : 0.0f)) };
         crumbs.Size = crumbs.Size with { X = centerWidth };
-        FitLinkEditorNotices(centerWidth);
+        if (linkEditorNotices is not null)
+            FitLinkEditorNotices(centerWidth);
         bottom.Size = bottom.Size with { X = centerWidth };
         FitRowsTo(problems, problemsScroll);
         FitRowsTo(output, outputScroll);

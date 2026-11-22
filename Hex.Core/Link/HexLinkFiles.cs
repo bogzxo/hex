@@ -443,20 +443,14 @@ internal static partial class HexLinkFiles
             string? next;
             using (HexLinkSyncTiming.Measure("cas.hash-new"))
                 next = bytes is null ? null : Hash(bytes);
-            PathWrite gate = JoinPath(full);
-            bool entered = false;
-            try
+            IDisposable publication;
+            using (HexLinkSyncTiming.Measure("cas.path-lock-wait"))
+                publication = await FilePublication.EnterAsync(full, cancel).ConfigureAwait(false);
+            using (publication)
             {
-                using (HexLinkSyncTiming.Measure("cas.path-lock-wait"))
-                    await gate.Turn.WaitAsync(cancel).ConfigureAwait(false);
-                entered = true;
                 await ReplaceChecked(full, wire, baseHash, temp, executable, cancel).ConfigureAwait(false);
                 temp = null;
                 return next;
-            }
-            finally
-            {
-                LeavePath(full, gate, entered);
             }
         }
         finally
@@ -531,66 +525,11 @@ internal static partial class HexLinkFiles
     private static async Task PublishStreamed(string full, string wire, string? baseHash, string? temp,
         bool? executable, CancellationToken cancel)
     {
-        PathWrite gate = JoinPath(full);
-        bool entered = false;
-        try
-        {
-            await gate.Turn.WaitAsync(cancel).ConfigureAwait(false);
-            entered = true;
-            await ReplaceChecked(full, wire, baseHash, temp, executable, cancel, fullHash: true).ConfigureAwait(false);
-        }
-        finally
-        {
-            LeavePath(full, gate, entered);
-        }
+        using IDisposable publication = await FilePublication.EnterAsync(full, cancel).ConfigureAwait(false);
+        await ReplaceChecked(full, wire, baseHash, temp, executable, cancel, fullHash: true).ConfigureAwait(false);
     }
 
-    private sealed class PathWrite
-    {
-        public SemaphoreSlim Turn { get; } = new(1, 1);
-        public int Users { get; set; }
-    }
-
-    private static readonly Dictionary<string, PathWrite> writing = new(PlatformPaths.Comparer);
-
-    private static PathWrite JoinPath(string full)
-    {
-        lock (writing)
-        {
-            if (!writing.TryGetValue(full, out PathWrite? gate))
-                writing.Add(full, gate = new PathWrite());
-            gate.Users++;
-            return gate;
-        }
-    }
-
-    private static void LeavePath(string full, PathWrite gate, bool entered)
-    {
-        if (entered)
-            gate.Turn.Release();
-        lock (writing)
-        {
-            if (--gate.Users == 0)
-            {
-                writing.Remove(full);
-                gate.Turn.Dispose();
-            }
-        }
-    }
-
-    private sealed class LocalWrite(string full, PathWrite gate) : IDisposable
-    {
-        public void Dispose() => LeavePath(full, gate, entered: true);
-    }
-
-    /// <summary>Coordinates the final publication of an editor save with linked compare-and-replace.</summary>
-    internal static IDisposable LockForLocalWrite(string full)
-    {
-        full = Path.GetFullPath(full);
-        PathWrite gate = JoinPath(full);
-        gate.Turn.Wait();
-        return new LocalWrite(full, gate);
-    }
+    internal static IDisposable LockForLocalWrite(string full) => FilePublication.Enter(full);
 
     private static async Task ReplaceChecked(string full, string wire, string? baseHash, string? temp,
         bool? executable, CancellationToken cancel, bool fullHash = false)

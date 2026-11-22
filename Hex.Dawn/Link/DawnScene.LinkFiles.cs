@@ -197,7 +197,7 @@ internal sealed partial class DawnScene
     // A remote tab saved: the copy sent back with the hash it had there
     private void LinkRemoteSaved(HexDocument saved)
     {
-        if (saved.Path is not { } path || remoteTabs?.TryGetValue(path, out LinkRemoteTab? tab) != true)
+        if (saved.Path is not { } path || remoteTabs is null || !remoteTabs.TryGetValue(path, out LinkRemoteTab? tab))
             return;
         if (!tab.CanEdit)
         {
@@ -398,7 +398,7 @@ internal sealed partial class DawnScene
     // A remote tab closed: no longer watched there, its copy left for next time
     private void LinkRemoteClosed(HexDocument closed)
     {
-        if (closed.Path is not { } path || remoteTabs?.Remove(path, out LinkRemoteTab? tab) != true)
+        if (closed.Path is not { } path || remoteTabs is null || !remoteTabs.Remove(path, out LinkRemoteTab? tab))
             return;
         tab.Card?.Close();
         if (link?.PeerOf(tab.DeviceId) is { } peer && !linkRemote.Values.Any(each => each.DeviceId == tab.DeviceId && each.Wire == tab.Wire))
