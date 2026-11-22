@@ -742,6 +742,12 @@ internal sealed partial class HexLinkSync
             return;
         if ((mine?.Size ?? 0) > HexLinkFiles.MOST_READ || (theirs?.Size ?? 0) > HexLinkFiles.MOST_READ)
         {
+            if (firstComparison && agreed is null && held is null && (mine is null || theirs is null) &&
+                (staleTracked.Contains(wire) || await StreamedPathHadSharedBase(wire, stop)))
+            {
+                HoldStreamedConflict(wire, "tracked large file has no agreed working-tree hash");
+                return;
+            }
             await ReconcileStreamed(wire, full, mine, theirs, agreed, held, stop);
             return;
         }

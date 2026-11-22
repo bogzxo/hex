@@ -25,6 +25,8 @@ internal sealed partial class HexLinkHost
     private JsonObject FirstPage(JsonObject parameters, HexLinkManifest manifest, bool watch)
     {
         bool paged = HexLinkData.Bool(parameters, "paged") == true;
+        HexLinkAuthority? authority = Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, manifest.Folder))?.Authority;
+        manifest = manifest with { Authority = authority };
         int fullCount = manifest.Files.Count;
         var (changed, equal) = HexLinkDirectoryDigests.Select(manifest, parameters);
         manifest = changed;

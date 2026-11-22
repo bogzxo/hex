@@ -1,3 +1,5 @@
+using Hex.Core.Git;
+
 namespace Hex.Core;
 
 internal sealed partial class HexLinkSync
@@ -13,6 +15,23 @@ internal sealed partial class HexLinkSync
         if (read.Length != length)
             throw new IOException($"{wire} changed while Link read its hash.");
         return new HexLinkTreeFile(wire, hash, length, Executable: tree.Mode(full));
+    }
+
+    private async Task<bool> StreamedPathHadSharedBase(string wire, CancellationToken cancel)
+    {
+        if (!remoteCertified)
+            return false;
+        string relative = wire[(folder.Name.Length + 1)..];
+        HeadRepository? repo = headRepositories.FirstOrDefault(each => relative.StartsWith(each.Prefix, StringComparison.Ordinal));
+        if (repo?.Head is not { } head)
+            return false;
+        string directory = Path.Combine(tree.Root, repo.Prefix);
+        GitResult listed = await Task.Run(() => GitProcess.Run(directory,
+            ["--literal-pathspecs", "ls-tree", "-z", head, "--", relative[repo.Prefix.Length..]],
+            cancel: cancel), cancel);
+        if (!listed.Ok)
+            throw new IOException($"Git could not confirm the shared base of {wire}: {listed.Why}");
+        return listed.Output.Length != 0;
     }
 
     private async Task ReconcileStreamed(string wire, string full, HexLinkTreeFile? mine, HexLinkTreeFile? theirs,

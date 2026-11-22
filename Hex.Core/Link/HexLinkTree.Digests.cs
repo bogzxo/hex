@@ -89,7 +89,7 @@ internal sealed class HexLinkDirectoryDigests
     private static string Digest(List<HexLinkTreeFile> files)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        Span<byte> values = stackalloc byte[9];
+        Span<byte> values = stackalloc byte[10];
         foreach (HexLinkTreeFile file in files.OrderBy(file => file.Path, StringComparer.Ordinal))
         {
             Append(hash, file.Path);
@@ -98,6 +98,7 @@ internal sealed class HexLinkDirectoryDigests
             Append(hash, file.Eol);
             BinaryPrimitives.WriteInt64LittleEndian(values, file.Size);
             values[8] = file.Executable switch { true => 2, false => 1, null => 0 };
+            values[9] = file.Unavailable ? (byte)1 : (byte)0;
             hash.AppendData(values);
         }
         return Convert.ToHexStringLower(hash.GetHashAndReset());

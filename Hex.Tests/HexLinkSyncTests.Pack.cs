@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 
 using Hex.Core;
+using Hex.Core.Git;
 
 using static Hex.Tests.HexLinkTestKit;
 
@@ -33,6 +34,39 @@ public sealed partial class HexLinkSyncTests
             Assert.Contains(pair.B.Audited, entry => entry.Detail.StartsWith("sync/pack/write", StringComparison.Ordinal));
         Assert.Empty(sync.Skipped);
         Assert.Empty(sync.Conflicts);
+    }
+
+    [Fact]
+    public async Task A_large_tracked_path_without_a_common_working_tree_hash_holds_its_contents()
+    {
+        if (HexLinkGit.Why() is not null)
+            return;
+        using var pair = new LinkedPair(EDIT, EDIT);
+        string left = Path.Combine(pair.A.Work, "nested"), right = Path.Combine(pair.B.Work, "nested");
+        MakeSharedCheckout(left, right);
+        string from = Path.Combine(left, "large.bin"), to = Path.Combine(right, "large.bin");
+        using (FileStream file = File.Create(from))
+            file.SetLength(HexLinkFiles.MOST_READ + 1);
+
+        Git(left, "add", "large.bin");
+        Git(left, "-c", "user.name=Link test", "-c", "user.email=link-test@example.invalid", "commit", "-qm", "track a large file");
+        Git(right, "fetch", "-q");
+        Git(right, "checkout", "-q", "--detach", "FETCH_HEAD");
+        File.Delete(to);
+
+        using HexLinkSync sync = SyncOf(pair, await PackedPeer(pair));
+        await sync.Start();
+        await Settled(sync);
+
+        Assert.Equal(HexLinkFiles.MOST_READ + 1, new FileInfo(from).Length);
+        Assert.False(File.Exists(to));
+        Assert.Contains(sync.Conflicts, conflict => conflict.Path == "work/nested/large.bin");
+
+        static void Git(string folder, params string[] args)
+        {
+            GitResult result = GitProcess.Run(folder, args, patience: TimeSpan.FromSeconds(15));
+            Assert.True(result.Ok, result.Why);
+        }
     }
 
     [Fact]

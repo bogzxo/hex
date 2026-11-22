@@ -328,7 +328,7 @@ internal sealed partial class HexLinkSync : IDisposable
             watch = new HexLinkTreeSubscription(tree, Saw, Quiet, Rescan);
             HexLinkManifest mine, theirs;
             using (HexLinkSyncTiming.Measure("start.local-manifest"))
-                mine = await Task.Run(tree.Manifest, cancel);
+                mine = (await Task.Run(tree.Manifest, cancel)) with { Authority = folder.Authority };
             using (HexLinkSyncTiming.Measure("start.manifest-round-trip"))
                 theirs = await peer.WatchTree(folder.Name, Heard, cancel, mine);
             remoteWatched = true;
