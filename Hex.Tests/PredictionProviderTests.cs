@@ -117,6 +117,23 @@ public sealed class PredictionProviderTests
     }
 
     [Fact]
+    public async Task Discovery_lists_all_installed_tags_using_the_configured_server_prefix()
+    {
+        var server = new FakeServer(request =>
+        {
+            Assert.Equal(HttpMethod.Get, request.Method);
+            Assert.Equal("/proxy/api/tags?instance=one", request.RequestUri!.PathAndQuery);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"models":[{"name":"x:1"},{"name":"x:2"},{"name":"x:1"},{"name":"x:3"},{"name":"x:4"},{"name":"x:5"},{"name":"x:6"},{"name":"x:7"},{}]}""")
+            });
+        });
+        using var client = new HttpClient(server);
+        var url = PredictionProviders.OllamaUrl("http://localhost/proxy?instance=one")!;
+        Assert.Equal(["x:1", "x:2", "x:3", "x:4", "x:5", "x:6", "x:7"], await OllamaProvider.InstalledModels(client, url, default));
+    }
+
+    [Fact]
     public async Task A_missing_model_names_the_model_what_the_server_has_and_the_models_folder()
     {
         var server = new FakeServer(request => Task.FromResult(request.RequestUri!.AbsolutePath == "/api/tags"

@@ -13,6 +13,23 @@ namespace Hex.Tests;
 /// </summary>
 public class PredictionSettingsTests
 {
+    [Fact]
+    public void Ollama_picker_preserves_exact_tags_and_a_missing_configured_value_when_the_server_reconnects()
+    {
+        var original = EditorSettingsCatalog.Settings.Single(row => row.Key == "edit_predictions_model");
+        string[] installed = ["code:Q4_K_M", "other:latest"];
+        var row = OllamaModelPicker.ModelRow(original, installed, "");
+        Assert.Equal(["", "code:Q4_K_M", "other:latest"], row.Choices);
+        Assert.Equal("code:Q4_K_M", row.LabelOf("code:Q4_K_M"));
+        var missing = OllamaModelPicker.ModelRow(row, installed, "older:1");
+        Assert.Equal(["older:1", "code:Q4_K_M", "other:latest"], missing.Choices);
+        Assert.Same(missing, OllamaModelPicker.ModelRow(missing, installed, "older:1"));
+        var empty = OllamaModelPicker.ModelRow(missing, [], "");
+        Assert.Equal([""], empty.Choices);
+        var offline = OllamaModelPicker.ModelRow(row, null, "older:1");
+        Assert.Equal(original, offline);
+    }
+
     // Obviously not a key anybody has
     private const string FAKE_KEY = "sk-test-not-a-key";
 

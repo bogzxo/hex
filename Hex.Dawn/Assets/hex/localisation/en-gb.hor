@@ -2748,6 +2748,8 @@ let strings = {
         edit_predictions_model_title: "Model name",
         edit_predictions_model_help: "Which model the server runs the predictions with, its name as the server lists it (ollama list shows Ollama's). Predictions need one: with no model named (and the provider not Hex Link) nothing is asked. Zeta 2 is pulled into Ollama with ollama pull and the name shown here.",
         edit_predictions_model_placeholder: "hf.co/bartowski/zed-industries_zeta-2-GGUF:Q4_K_M",
+        ollama_select_model: "Select a model",
+        ollama_no_models: "No installed models",
         edit_predictions_prompt_format_title: "Prompt format",
         edit_predictions_max_tokens_title: "Most tokens",
         edit_predictions_max_tokens_help: "The most tokens a model writes for one prediction. Fewer comes back quicker.",
