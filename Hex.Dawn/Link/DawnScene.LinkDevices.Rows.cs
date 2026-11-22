@@ -174,13 +174,24 @@ internal sealed partial class DawnScene
     private void DrawLinkDeviceActions(StackPanel column, HexLinkKnown known, HexLinkPeer? peer)
     {
         string id = known.Device.Id;
+        LinkWorkspaceOffer? pendingOffer = linkWorkspaceOffers.GetValueOrDefault(id);
+        bool canGetOffer = CanGetLinkOffer(peer);
+        if (pendingOffer is not null && (peer is null || canGetOffer))
+        {
+            column.Add(LinkLine(LinkWorkspaceOfferTitle(pendingOffer)));
+            if (peer is null)
+                column.Add(LinkLine(Said("link.devices_workspace_offer_reconnect")));
+        }
+
         var actions = LinkActionRow(column);
         Action? share = null, get = null;
         bool sharing = LinkSyncs.Any(sync => sync.DeviceId == id && sync.State != HexLinkSyncState.Off);
-        bool offerShare = linkServices?.Workspace.Folders.Count > 0;
+        bool offerShare = !(pendingOffer is not null && canGetOffer) && linkServices?.Workspace.Folders.Count > 0;
         if (peer is not null)
         {
             LinkDeviceProvisionActions(id, ref share, ref get);
+            if (pendingOffer is not null && canGetOffer)
+                get = () => GetLinkOfferedWorkspace(pendingOffer);
             AddLinkAction(actions, offerShare ? "link.devices_share" : "link.devices_get", offerShare ? "cloud-upload" : "cloud-download",
                 offerShare ? share : get, "link.devices_provision_pending");
             AddLinkAction(actions, "link.devices_start_agent", "robot", HexLinkAllowed.Has(peer.Granted, HexLinkRights.Steer)
