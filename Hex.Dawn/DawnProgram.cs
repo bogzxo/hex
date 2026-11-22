@@ -154,15 +154,12 @@ public static partial class DawnProgram
         // started with, run on the pool while the engine is made. The editor waits for them only if they aren't done
         _ = Task.Run(() => System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(DawnScene).TypeHandle));
         Horizon.UI.UILayout.Prewarm(EditorLayouts());
-        // And the grammars: the first is the TextMate registry made as well, a fifth of a second the editor's making
-        // waited on for the agents' box (Markdown) and again for the first file of code
-        _ = Task.Run(() =>
+        // Warm the grammar of the file the person opened. Other grammars load on first use.
+        if (files.Count > 0)
         {
-            // Each read once as well, a grammar gets going (its rules, the languages it holds) the first time it reads, which
-            // the agents' first message and the first file of code waited on otherwise. The editor reads on the pool too
-            foreach (string kind in (string[])["message.md", "file.cs"])
-                Horizon.UI.Scripting.CodeLanguages.ForFile(kind)?.Read("x\n", 1);
-        });
+            string opening = files[^1].Path;
+            _ = Task.Run(() => Horizon.UI.Scripting.CodeLanguages.ForFile(opening)?.Read("x\n", 1));
+        }
 
         var options = new HexOptions(
             Open: files.Count > 0 ? files[^1].Path : null,

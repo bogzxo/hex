@@ -51,6 +51,7 @@ internal sealed partial class DawnScene
     // For the self test: predictions shown and taken
     private int predictionsShown, predictionsTaken;
 
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(predictions))]
     private void StartPredictions()
     {
         predictions = new PredictionEngine(TimeProvider.System)

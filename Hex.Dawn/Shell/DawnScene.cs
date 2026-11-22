@@ -201,6 +201,8 @@ internal sealed partial class DawnScene : Scene
             HexAi.Force();
         else
             HexAi.Decide(settings.NoAi);
+        if (!HexAi.Off)
+            _ = Task.Run(() => Horizon.UI.Scripting.CodeLanguages.ForFile("message.md")?.Read("x\n", 1));
         BuildRenderScale();
         ReadBackdropAhead();
         DeclareMenus();
@@ -300,7 +302,8 @@ internal sealed partial class DawnScene : Scene
         BuildMergeEditor();
         BuildPeek();
         AddLanguageModeCommands();
-        AddPredictionCommands();
+        if (!HexAi.Off)
+            AddPredictionCommands();
         commands.Build(menu);
         LoadKeys();
         WireViews();
@@ -611,9 +614,13 @@ internal sealed partial class DawnScene : Scene
 
         if (tabsDirty) RebuildTabs();
         if (treeDirty && !treeHeld) RebuildTree();
-        if (inspectorDirty) RebuildInspector();
+        if (inspectorDirty && right.Shown)
+        {
+            RebuildInspector();
+            inspectorDirty = false;
+        }
 
-        tabsDirty = inspectorDirty = false;
+        tabsDirty = false;
         treeDirty = treeHeld;
         if (codeShown)
             codeDirty = codeShown = false;
