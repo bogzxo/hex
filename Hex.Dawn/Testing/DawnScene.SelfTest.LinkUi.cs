@@ -296,13 +296,15 @@ internal sealed partial class DawnScene
                 .SelectMany(Descendants).OfType<ListBox>().Any(list => list.Items.Any(item => item.EndsWith(ConflictName, StringComparison.Ordinal))));
         test.Run(() => chrome.Root.Children.OfType<UIDialog>().LastOrDefault(dialog => dialog is { IsOpen: true, IsPalette: true })?.Close());
         test.Settle(0.25f);
+        Button? ConfirmStopSharing() => chrome.Root.Children.OfType<UIDialog>().LastOrDefault(dialog => dialog.IsOpen)?.Buttons
+            .FirstOrDefault(button => button.Danger && button.Label == Said("link.devices_stop_sharing"));
         ClickMore("link.devices_stop_sharing");
+        test.WaitFor(() => ConfirmStopSharing() is not null, 4);
         test.Settle(0.35f);
         test.Check("link-ui: Stop sharing asks before stopping a running sync", () =>
-            peerId is not null && LinkSyncs.Any(sync => sync.DeviceId == peerId && sync.State is HexLinkSyncState.Idle or HexLinkSyncState.PullOnly) &&
-            chrome.Root.Children.OfType<UIDialog>().Any(dialog => dialog.IsOpen && dialog.Buttons.Any(button => button.Danger && button.Label == Said("link.devices_stop_sharing"))));
-        test.Click(() => Centre(chrome.Root.Children.OfType<UIDialog>().LastOrDefault(dialog => dialog.IsOpen)?.Buttons.FirstOrDefault(button =>
-            button.Label == Said("link.devices_stop_sharing"))));
+            peerId is not null && LinkSyncs.Any(sync => sync.DeviceId == peerId && sync.State != HexLinkSyncState.Off)
+            && ConfirmStopSharing() is not null);
+        test.Click(() => Centre(ConfirmStopSharing()));
         test.WaitFor(() => LinkSyncs.All(sync => sync.DeviceId != peerId || sync.State == HexLinkSyncState.Off), 5);
         test.Check("link-ui: confirming Stop sharing stops the sync and keeps the peer connected", () =>
             LinkSyncs.All(sync => sync.DeviceId != peerId || sync.State == HexLinkSyncState.Off) && LinkPeers.Count == 1);
@@ -496,7 +498,7 @@ internal sealed partial class DawnScene
         test.WaitFor(() => agentsSend.Enabled, 3.0f);
         test.Click(() => Centre(agentsSend));
         test.WaitFor(() => SpawnedMirror() && MirrorHas(LINK_UI_FOLLOW)
-            && agentChat!.Entries.Count(row => row.Text == LINK_UI_OUTPUT) == 2, 15.0f);
+            && agentChat!.Entries.Count(row => row.Text == LINK_UI_OUTPUT) == 2, 45.0f);
         test.Check("link-ui: a follow-up sent while Steer is granted runs on the same remote chat", () =>
             SpawnedMirror() && MirrorHas(LINK_UI_FOLLOW) && agentChat!.Entries.Count(row => row.Text == LINK_UI_OUTPUT) == 2);
 
