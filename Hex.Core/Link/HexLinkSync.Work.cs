@@ -112,7 +112,8 @@ internal sealed partial class HexLinkSync
                 HexLinkTreeFile? mineFile = here.GetValueOrDefault(path), theirsFile = remote.GetValueOrDefault(path);
                 string? m = mineFile?.Hash, t = theirsFile?.Hash;
                 bool mineThere = mineFile is not null, theirsThere = theirsFile is not null;
-                if (peer.Session.SupportsBulk && m is not null && m == t && mineFile!.Executable != theirsFile!.Executable)
+                if (peer.Session.SupportsBulk && m is not null && m == t &&
+                    mineFile!.Executable is { } mineMode && theirsFile!.Executable is { } theirsMode && mineMode != theirsMode)
                 {
                     differ.Add(path, TransferSize(mineFile, theirsFile));
                 }
@@ -128,10 +129,11 @@ internal sealed partial class HexLinkSync
                 else if (m is not null && m == t)
                 {
                     // The same on both, agreed whatever was known before, a conflict settled by hand on both sides with it
-                    if (mineFile!.Text is { } same && mineFile.Eol is not null)
-                        SetBase(path, new HexLinkSyncAgreed(m, m, same, EolIn(mineFile.Eol), EolIn(mineFile.Eol), mineFile.Executable));
+                    bool? mode = mineFile!.Executable ?? theirsFile!.Executable;
+                    if (mineFile.Text is { } same && mineFile.Eol is not null)
+                        SetBase(path, new HexLinkSyncAgreed(m, m, same, EolIn(mineFile.Eol), EolIn(mineFile.Eol), mode));
                     else
-                        SetBase(path, Identical(m) with { Executable = mineFile!.Executable });
+                        SetBase(path, Identical(m) with { Executable = mode });
                     conflicts.Remove(path);
                 }
                 else if (m is not null && t is not null && mineFile!.Text is { } text && text == theirsFile!.Text)
@@ -994,6 +996,13 @@ internal sealed partial class HexLinkSync
             if (now != file.Hash)
                 Interlocked.Increment(ref eolOnly);
             Notify();
+            return;
+        }
+
+        // Held while it was being fetched: the hold keeps the file as it is, the other version is looked at as incoming
+        if (Holds?.IsHeld(wire) == true)
+        {
+            Again(wire);
             return;
         }
 

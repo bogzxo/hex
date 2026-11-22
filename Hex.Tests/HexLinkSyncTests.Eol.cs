@@ -80,6 +80,42 @@ public sealed partial class HexLinkSyncTests
     }
 
     [Fact]
+    public async Task First_sync_leaves_identical_content_and_timestamps_when_one_side_has_no_mode()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        using var pair = await LinkedPair.Up(EDIT, EDIT, bulk: HexLinkBulkSupport.Raw);
+        CrlfAgainstLf(pair);
+        pair.A.TreeCacheDirectory = Path.Combine(pair.A.Root, "tree-cache");
+        var fromMac = new HexLinkTree(pair.A.Workspace.Folders[0], cacheDirectory: pair.A.TreeCacheDirectory);
+        string[] files = [.. TEXTS, "identical.txt"];
+        Put(pair.A, "identical.txt", "same bytes");
+        Put(pair.B, "identical.txt", "same bytes");
+        DateTime old = new(2021, 4, 15, 12, 0, 0, DateTimeKind.Utc);
+        foreach (string relative in files)
+        {
+            string full = Path.Combine(pair.A.Work, relative);
+            File.SetLastWriteTimeUtc(full, old);
+            File.SetLastWriteTimeUtc(Path.Combine(pair.B.Work, relative), old);
+            fromMac.RememberMode(full, false);
+        }
+        fromMac.Manifest();
+
+        using var sync = SyncOfB(pair);
+        await sync.Start();
+        await Settled(sync);
+
+        Assert.Equal(0, sync.Reads + sync.Sent + sync.Received);
+        Assert.Equal(TEXTS.Length, sync.EolOnly);
+        foreach (string relative in files)
+        {
+            Assert.Equal(old, File.GetLastWriteTimeUtc(Path.Combine(pair.A.Work, relative)));
+            Assert.Equal(old, File.GetLastWriteTimeUtc(Path.Combine(pair.B.Work, relative)));
+        }
+    }
+
+    [Fact]
     public async Task An_edit_arrives_in_the_receivers_line_ends_both_ways_without_echoes()
     {
         using var pair = await LinkedPair.Up(EDIT, EDIT);
