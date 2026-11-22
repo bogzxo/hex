@@ -125,6 +125,35 @@ public sealed class HexLinkTreeCacheTests
     }
 
     [Fact]
+    public async Task Files_written_into_an_existing_folder_are_looked_at_without_a_whole_tree_rescan()
+    {
+        using var site = new LinkServices(HexLinkTestKit.DeviceA);
+        var tree = new HexLinkTree(site.Workspace.Folders[0]);
+        string folder = Path.Combine(site.Work, "checkout");
+        Directory.CreateDirectory(folder);
+        HexLinkManifest seeded = tree.Manifest();
+        // On disk but missing from the seeded snapshot: only a look over the whole tree reports it.
+        File.WriteAllText(Path.Combine(site.Work, "unseen.txt"), "only a whole rescan finds this");
+
+        var changes = new System.Collections.Concurrent.ConcurrentQueue<HexLinkTreeChange>();
+        using var watch = new HexLinkTreeWatch(tree, batch =>
+        {
+            foreach (HexLinkTreeChange change in batch)
+                changes.Enqueue(change);
+        }, TimeSpan.FromMilliseconds(50), TimeSpan.FromMinutes(1));
+        watch.Seed(seeded);
+
+        for (int i = 0; i < 40; i++)
+            File.WriteAllText(Path.Combine(folder, $"{i:00}.txt"), $"switched {i}\n");
+        using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        while (changes.Count(change => change.Path.StartsWith("work/checkout/", StringComparison.Ordinal)) < 40)
+            await Task.Delay(20, limit.Token);
+        await Task.Delay(300, limit.Token);
+
+        Assert.DoesNotContain(changes, change => change.Path == "work/unseen.txt");
+    }
+
+    [Fact]
     public async Task Shared_watchers_fan_out_changes_and_catch_up_new_subscribers()
     {
         using var site = new LinkServices(HexLinkTestKit.DeviceA);

@@ -752,7 +752,7 @@ internal sealed class HexLinkTreeWatch : IDisposable
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.Attributes,
                 InternalBufferSize = 64 * 1024
             };
-            watcher.Changed += (_, e) => Moved(e.FullPath);
+            watcher.Changed += (_, e) => Moved(e.FullPath, contentOnly: true);
             watcher.Created += (_, e) => Moved(e.FullPath);
             watcher.Deleted += (_, e) => Moved(e.FullPath);
             watcher.Renamed += (_, e) => Renamed(e.OldFullPath, e.FullPath);
@@ -810,16 +810,22 @@ internal sealed class HexLinkTreeWatch : IDisposable
     }
 
     // Something under the folder moved, looked at once it's been quiet a moment
-    private void Moved(string full)
+    private void Moved(string full, bool contentOnly = false)
     {
         string relative = Path.GetRelativePath(tree.Root, full).Replace(Path.DirectorySeparatorChar, '/');
         if (relative.StartsWith("..", StringComparison.Ordinal) || HexLinkTree.SyncArtifact(relative) ||
             relative.Split('/').Any(part => part.Equals(".git", StringComparison.OrdinalIgnoreCase)))
             return;
+        bool folder = Directory.Exists(full);
+        // A folder only changed (its entries written, its time touched): each entry brings an event of its own, and
+        // a dropped one an Error and a whole look. Looking the whole tree over for it made a checkout of many files
+        // in one folder rescan the workspace.
+        if (folder && contentOnly)
+            return;
         lock (pending)
         {
-            // A folder renamed or deleted takes its files with it, the whole tree looked over
-            if (tree.ExcludesSystemPath(relative) || Directory.Exists(full) || pending.Count > 10_000)
+            // A folder made, renamed or deleted takes its files with it, the whole tree looked over
+            if (tree.ExcludesSystemPath(relative) || folder || pending.Count > 10_000)
                 everything = true;
             else
                 pending.Add(relative);
