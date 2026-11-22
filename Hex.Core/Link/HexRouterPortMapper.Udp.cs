@@ -59,7 +59,7 @@ public sealed partial class HexRouterPortMapper
 
             return UdpExchange(route, request, timeout, response =>
                 // An older gateway may explicitly reject PCP as an unknown NAT-PMP version.
-                (response.Length == 8 && response[0] == 0 && response[1] == 129 && ReadPort(response, 2) == 1)
+                (response.Length == 8 && response[0] == 0 && response[1] == 0 && ReadPort(response, 2) == 1)
                 || (response.Length >= 24 && response[0] == 2 && response[1] == 129
                     && (response[3] != 0 || (response.Length >= 60 && response[36] == 6
                         && ReadPort(response, 40) == localPort && response.AsSpan(24, 12).SequenceEqual(nonce)
@@ -85,16 +85,14 @@ public sealed partial class HexRouterPortMapper
             cancellationToken.ThrowIfCancellationRequested();
             var sent = DateTimeOffset.UtcNow;
             byte[]? response = await Exchange(Lifetime).ConfigureAwait(false);
-            if (response is not null && ReadPort(response, 2) != 0)
+            // NAT-PMP has no nonce. Without a grant, a delete could remove a preexisting mapping for this port.
+            if (response is null || ReadPort(response, 2) != 0)
                 return null;
 
             mayExist = true;
-            if (response is not null)
-            {
-                assigned = ReadPort(response, 10);
-                if (PublicGrant(address, assigned, ReadSeconds(response, 12), sent) is { } grant)
-                    return grant;
-            }
+            assigned = ReadPort(response, 10);
+            if (PublicGrant(address, assigned, ReadSeconds(response, 12), sent) is { } grant)
+                return grant;
 
             await DeleteAsync().ConfigureAwait(false);
             return null;
