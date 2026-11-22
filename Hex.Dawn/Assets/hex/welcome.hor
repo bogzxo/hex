@@ -62,8 +62,7 @@ let title = compositor.label({
     align: "left",
 });
 
-// Amphetamine in the weight of a heading and 3.1.0 after it, small and dim: the name is what a person says, the number is
-// what a bug report needs
+// DawnScene.Welcome fills in the release name and number from the build metadata.
 let release = compositor.stack({
     parent: wordmark,
     anchor: "left",
@@ -76,7 +75,7 @@ let release_name = compositor.label({
     parent: release,
     anchor: "bottom_left",
     pivot: "bottom_left",
-    text: "Amphetamine",
+    text: "",
     text_scale: 0.16,
     bold: true,
     align: "left",
@@ -86,7 +85,7 @@ let release_number = compositor.label({
     parent: release,
     anchor: "bottom_left",
     pivot: "bottom_left",
-    text: "3.1.0",
+    text: "",
     text_scale: 0.13,
     dim: true,
     align: "left",

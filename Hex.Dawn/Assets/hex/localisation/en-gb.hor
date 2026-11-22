@@ -283,6 +283,8 @@ let strings = {
         go_persistent: "Turn it on",
         launch_faster: "Hex starts faster: fonts, pictures and the loading screen are kept between runs, and what isn't needed for the first frame waits.",
         go_launch: "See Speed settings",
+        linked_workspaces: "Hex Link can share a workspace across your devices. Hold local edits until you are ready to share them.",
+        go_link: "Open Link settings",
         actions_menu: "Ctrl+. is a menu of actions for the line: the language server's fixes and refactorings, the editor's own, and an agent to fix the problem, write what a TODO leaves or explain the code. A lightbulb in the gutter says when there's a fix.",
         go_actions: "Open Problems",
         faces_smooth: "Going between Dawn, Agentic and Dusk never flashes: a face is warmed as you point at its button, and a short crossfade carries you over (none with UI animation at 0).",
