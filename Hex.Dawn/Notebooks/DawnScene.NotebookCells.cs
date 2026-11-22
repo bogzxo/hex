@@ -12,6 +12,7 @@ namespace Hex.Dawn;
 /// <summary>A cell of the notebook on screen, its card and what's in it.</summary>
 internal sealed class NotebookCellView
 {
+    public required HexNotebook Notebook { get; init; }
     public required NotebookCell Cell { get; init; }
     public required NotebookCellCard Card { get; init; }
     public required StackPanel Body { get; init; }
@@ -99,10 +100,10 @@ internal sealed class NotebookCellEditor : CodeEditor
     {
     }
 
-    // The editor's own Escape keeps the keyboard however it goes, so only its hover is left to it
+    // The editor keeps the keyboard when Escape closes its prediction or hover, otherwise the notebook takes it.
     protected override bool OnEscape()
     {
-        if (HoverUp)
+        if (HasPrediction || HoverUp)
             return base.OnEscape();
 
         Escaped?.Invoke();
@@ -152,7 +153,10 @@ internal sealed partial class DawnScene
     private void ClearCellViews()
     {
         foreach (NotebookCellView view in cellViews)
+        {
+            ForgetPrediction(CellPredictionTarget(view));
             ForgetOutputs(view);
+        }
         cellViews.Clear();
         cellTools.Parent?.Remove(cellTools);
         toolsOn = null;
@@ -211,7 +215,7 @@ internal sealed partial class DawnScene
 
         var view = new NotebookCellView
         {
-            Cell = cell, Card = card, Body = body, Outputs = outputs, Count = count, RunButton = run, Editor = editor, Frame = frame, Took = took,
+            Notebook = notebook, Cell = cell, Card = card, Body = body, Outputs = outputs, Count = count, RunButton = run, Editor = editor, Frame = frame, Took = took,
             OutputRow = outputRow, OutputRail = outputRail, OutputHidden = outputHidden, InputRail = inputRail, InputHidden = inputHidden
         };
         card.Pressed = twice => PressCell(notebook, view, twice);
@@ -274,12 +278,17 @@ internal sealed partial class DawnScene
             CellKind.Raw => null,
             _ => CodeLanguages.ForExtension(ExtensionOfLanguage(notebook.Model.Language))
         };
+        var prediction = new PredictionTarget(notebook.Document, editor, notebook, cell);
+        if (predictionSession is not null && cell.Kind != CellKind.Raw)
+            PreparePrediction(prediction);
         editor.OnChanged = () =>
         {
-            if (editor.Text == cell.Source)
+            string source = editor.Text;
+            if (source == cell.Source)
                 return;
-            cell.Source = editor.Text;
+            cell.Source = source;
             NotebookChanged(notebook);
+            PredictionEdited(prediction);
         };
         editor.Escaped = () => StopEditing(notebook);
         if (cell.Kind == CellKind.Code)

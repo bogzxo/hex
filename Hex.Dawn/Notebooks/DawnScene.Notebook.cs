@@ -275,6 +275,11 @@ internal sealed partial class DawnScene
             ClearCellViews();
         }
 
+        if (predictionSession is { } session)
+        {
+            foreach (string path in notebook.PredictionPaths)
+                session.Engine.History.Closed(path);
+        }
         StopKernel(notebook);
         languages.NotebookClosed(notebook);
     }

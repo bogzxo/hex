@@ -221,10 +221,15 @@ internal sealed class PredictionEngine(TimeProvider time)
     {
         if (!ReferenceEquals(this.document, document))
             return;
-        Stop(counted: false);
-        Volatile.Write(ref ready, null);
-        this.document = null;
-        pending = false;
+        lock (gate)
+        {
+            Stop(counted: false);
+            Volatile.Write(ref ready, null);
+            this.document = null;
+            pending = false;
+            if (Status == PredictionStatus.Waiting)
+                SetStatus(PredictionStatus.Ok, "");
+        }
     }
 
     /// <summary>
@@ -312,10 +317,12 @@ internal sealed class PredictionEngine(TimeProvider time)
 
             History.Note(snapshot.Path, text);
             var input = new PredictionInput(snapshot.Path, snapshot.Language, text, caret,
-                History.Events(snapshot.Path), snapshot.Related?.Invoke() ?? []);
+                History.Events(snapshot.Path), snapshot.Related?.Invoke() ?? [], snapshot.Notebook);
 
             PredictionCache? cache = asked is LinkProvider link ? link.Cache : Cache;
             string? key = cache is null ? null : PredictionCache.Key(text, caret, options.Model, format.Name);
+            if (key is not null && snapshot.Notebook is { } notebook)
+                key = string.Join('\0', key, snapshot.Path, snapshot.Language, notebook.Before, notebook.After);
             if (cache is not null && key is not null && cache.TryGet(key, caret, out IReadOnlyList<PredictionEdit> cached, out int? cachedCaret))
             {
                 var timing = new PredictionTiming(0, Elapsed(started), 0, 0);

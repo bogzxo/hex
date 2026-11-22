@@ -273,7 +273,8 @@ internal sealed partial class DawnScene
         {
             if (commands.CanPick(item))
             {
-                if (item == predictNowCommand && (Face != HexFace.Dawn || PredictionGateOf(document) != PredictionGate.Open))
+                if (item == predictNowCommand && (Face != HexFace.Dawn || PredictionTargetOnScreen() is not { } target
+                    || PredictionGateOf(target) != PredictionGate.Open))
                     continue;
                 item.OnPicked?.Invoke();
                 return true;

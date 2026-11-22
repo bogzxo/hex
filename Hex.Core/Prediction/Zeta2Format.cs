@@ -83,7 +83,17 @@ internal sealed class Zeta2Format : IPredictionFormat
 
         string history = History(input.Events, afterCursor);
         int afterHistory = Math.Max(0, afterCursor - PredictionTokens.Of(PredictionTokens.Bytes(history) + 1));
-        string related = Related(input.Related, afterHistory);
+        var excerpts = input.Related.AsEnumerable();
+        if (input.Notebook is { } notebook)
+        {
+            var cells = new List<PredictionExcerpt>(2);
+            if (notebook.Before.Length > 0 && !Ambiguous(notebook.Before))
+                cells.Add(new PredictionExcerpt(input.Path + "/before", notebook.Before));
+            if (notebook.After.Length > 0 && !Ambiguous(notebook.After))
+                cells.Add(new PredictionExcerpt(input.Path + "/after", notebook.After));
+            excerpts = cells.Concat(excerpts);
+        }
+        string related = Related(excerpts, afterHistory);
 
         var prompt = new StringBuilder(suffixText.Length + cursorText.Length + history.Length + related.Length + 64)
             .Append(suffixText).Append(PREFIX);
@@ -276,7 +286,7 @@ internal sealed class Zeta2Format : IPredictionFormat
     }
 
     // Other files' excerpts in order while they fit, each file's name once over its excerpts
-    private static string Related(IReadOnlyList<PredictionExcerpt> excerpts, int most)
+    private static string Related(IEnumerable<PredictionExcerpt> excerpts, int most)
     {
         var related = new StringBuilder();
         int total = 0;
