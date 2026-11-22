@@ -775,6 +775,8 @@ public sealed partial class HexLinkSyncTests
             Assert.False(File.Exists(Path.Combine(root, "escaped2.txt")));
             Assert.False(File.Exists(Path.Combine(work, "x.theirs-laptop.txt")));
             Assert.False(File.Exists(Path.Combine(work, "double.txt")));
+            // Stopped first, so a background state save's own temp file is never in the snapshot
+            sync.Stop();
             string[] entries = [.. Directory.EnumerateFileSystemEntries(work).Select(full => Path.GetFileName(full)).Order(StringComparer.Ordinal)];
             Assert.Equal(new[] { ".git", "fine.txt", "ok", stateName }.Order(StringComparer.Ordinal), entries);
             Assert.DoesNotContain("evil", File.ReadAllText(sync.StateFile));
