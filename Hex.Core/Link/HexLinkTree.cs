@@ -752,9 +752,15 @@ internal sealed class HexLinkTreeWatch : IDisposable
                 pending.Clear();
                 renames = [.. caseMoves];
                 caseMoves.Clear();
-                whole = everything;
                 verify = verifyOnScan || Environment.TickCount64 >= verifyAt;
-                everything = verifyOnScan = false;
+                // A burst creates many directories. Keep processing its file events and coalesce the recursive
+                // checks until the burst pauses. An explicit flush, watcher error or verification still scans now.
+                bool defer = everything && !verify && !throwOnFailure && tree.DelayDirectoryRescan;
+                whole = everything && !defer;
+                everything = defer;
+                verifyOnScan = false;
+                if (defer)
+                    quiet.Change(TimeSpan.FromMilliseconds(500), Timeout.InfiniteTimeSpan);
             }
 
             foreach (string path in paths)

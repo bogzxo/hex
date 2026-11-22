@@ -39,6 +39,27 @@ public sealed class HexLinkTreeCacheTests
     }
 
     [Fact]
+    public async Task Explicit_flush_certifies_a_directory_created_during_a_pack()
+    {
+        using var site = new LinkServices(HexLinkTestKit.DeviceA);
+        var tree = new HexLinkTree(site.Workspace.Folders[0]);
+        var changes = new System.Collections.Concurrent.ConcurrentQueue<HexLinkTreeChange>();
+        using var watch = new HexLinkTreeWatch(tree, batch =>
+        {
+            foreach (HexLinkTreeChange change in batch)
+                changes.Enqueue(change);
+        }, TimeSpan.FromSeconds(3), TimeSpan.FromMinutes(1));
+        watch.Seed(tree.Manifest());
+        using var publishing = tree.BeginPackPublication();
+
+        string directory = Path.Combine(site.Work, "whole-directory");
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "kept.txt"), "signed by this scan");
+        await watch.Flush();
+        Assert.Contains(changes, change => change.Path == "work/whole-directory/kept.txt" && !change.Deleted);
+    }
+
+    [Fact]
     public async Task Shared_watchers_fan_out_changes_and_catch_up_new_subscribers()
     {
         using var site = new LinkServices(HexLinkTestKit.DeviceA);

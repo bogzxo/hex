@@ -33,6 +33,12 @@ internal static class HexLinkSyncTiming
         return counters is null ? default : new Span(counters.GetOrAdd(phase, static _ => new Counter()), Stopwatch.GetTimestamp(), units);
     }
 
+    public static async Task<T> MeasureAsync<T>(string phase, Func<Task<T>> operation)
+    {
+        using var timing = Measure(phase);
+        return await operation();
+    }
+
     public static string[] Finish()
     {
         var counters = Interlocked.Exchange(ref active, null);
