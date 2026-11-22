@@ -13,7 +13,7 @@ namespace Hex.Dusk;
 internal sealed partial class DuskScene
 {
     private SettingsWindow? settingsView;
-    private readonly OllamaModelPicker ollamaModels = new();
+    private OllamaModelPicker? ollamaModels;
 
     // The part of the settings that's the terminal's, what Dusk's window is for
     private const string TERMINAL_PART = "Terminal";
@@ -46,6 +46,8 @@ internal sealed partial class DuskScene
         // Each source keeps the keys of the section it doesn't have, so the two write side by side
         var text = new FileSectionSource(host.Settings.Path, SettingsSections.EDITOR, EditorSettingsCatalog.Text, EditorSettingsCatalog.Usual);
 
+        if (!HexAi.Off)
+            ollamaModels = new();
         settingsView = new SettingsWindow(
             [new TerminalSettingsSource(host, EditorSettingsCatalog.THEME), new EditorSettingsSource(editor), text,
                 new WindowsSource(), new DefaultTerminalSource(said => Notify(said, error: true))],
@@ -122,6 +124,8 @@ internal sealed partial class DuskScene
     {
         if (settingsView?.Window is { Parent: { } parent } window)
             parent.Remove(window);
+        ollamaModels?.Update(null);
+        ollamaModels = null;
         settingsView = null;
         lookPicker = null;
         panel.FocusedView?.Focus();

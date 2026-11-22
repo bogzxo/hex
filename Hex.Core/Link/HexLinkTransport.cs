@@ -102,8 +102,9 @@ internal sealed partial class HexLinkTransport : IDisposable
         }
     }
 
-    /// <summary>Let connections in from addresses that aren't private. Off, and nothing in Hex turns it on.</summary>
-    public bool AllowPublic { get; set; }
+    /// <summary>Allow connections to and from public addresses when the user enables them in Devices.</summary>
+    public bool AllowPublic { get => Volatile.Read(ref allowPublic); set => Volatile.Write(ref allowPublic, value); }
+    private bool allowPublic;
 
     /// <summary>
     /// Whether a connection from an address is let as far as TLS, private ones unless <see cref="AllowPublic"/>. A test

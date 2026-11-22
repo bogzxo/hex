@@ -45,6 +45,7 @@ internal sealed partial class DawnScene
         debugger?.DetachOnClose();
         extensions?.StopWatching();
         StopRemote();
+        _ = linkPortMapping?.SetPort(0);
         base.DisposeOther();
     }
 }

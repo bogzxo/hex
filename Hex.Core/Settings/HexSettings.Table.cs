@@ -99,6 +99,8 @@ internal sealed partial class HexSettings
         Whole("link_port", settings => settings.LinkPort, (settings, value) => settings.LinkPort = value, 1024.0f, 65535.0f),
         Text("link_name", settings => settings.LinkName, (settings, value) => settings.LinkName = value.Trim()),
         Flag("link_discoverable", settings => settings.LinkDiscoverable, (settings, value) => settings.LinkDiscoverable = value),
+        Flag("link_allow_public", settings => settings.LinkAllowPublic, (settings, value) => settings.LinkAllowPublic = value),
+        Flag("link_map_public_port", settings => settings.LinkMapPublicPort, (settings, value) => settings.LinkMapPublicPort = value),
         Special("link_system_file_folders",
             (settings, values) =>
             {

@@ -537,6 +537,7 @@ internal sealed partial class DawnScene
         ("link-git-follow", "two linked editors keep Git branches, commits, index and working files in sync", TestLinkGitFollow),
         ("link-missing-repository", "two editors sync common files while a nested checkout awaits its own Get", TestLinkMissingRepository),
         ("link-documents", "three linked editors share unsaved text, edit ownership, carets and saves", TestLinkDocuments),
+        ("link-public", "public connection controls and router consent with a loopback listener and simulated router", TestLinkPublic),
         ("link-editor-notices", "claim marks, shared document notices and Follow in the editor", TestLinkEditorNotices),
         ("link-claims", "two linked editors coordinate claims, then merge disjoint edits and settle overlaps", TestLinkClaims),
         ("merge-editor", "three-way conflict resolution, manual edits, undo, cancellation, and binary choices", TestMergeEditor),

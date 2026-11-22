@@ -270,6 +270,12 @@ internal sealed partial class HexSettings
     /// <summary>Whether, while Link is on, this Hex says it's here on the LAN (mDNS) so others can find it to pair.</summary>
     public bool LinkDiscoverable = true;
 
+    /// <summary>Allow paired and explicitly invited connections over public networks.</summary>
+    public bool LinkAllowPublic;
+
+    /// <summary>Whether the user approved requesting a router mapping for the public listener.</summary>
+    public bool LinkMapPublicPort;
+
     /// <summary>Absolute local workspace roots that opt out of Link's default operating system file exclusions.</summary>
     public string[] LinkSystemFileFolders = [];
 

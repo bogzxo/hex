@@ -138,6 +138,7 @@ internal sealed partial class DawnScene
         }
         if (predictions is null)
             StartPredictions();
+
         SayPredictionsOnce();
 
         // A prediction taken is in the history now, the next is asked for at once

@@ -242,6 +242,7 @@ internal sealed partial class DawnScene
         linkThisDeviceSwitch.State = LinkOn;
         if (linkKeyFileBadge is not null)
             linkKeyFileBadge.Visible = LinkProtection == HexLinkProtection.File;
+        RefreshLinkPublicControls();
         DrawLinkIdentityWarning();
     }
 
@@ -291,8 +292,10 @@ internal sealed partial class DawnScene
             SettingsPage?.Refresh("link_discoverable");
             ApplyLink();
         };
+        AddLinkPublicControls(dialog.Body);
         dialog.Closed = () =>
         {
+            linkPublicStatus = null;
             linkThisDeviceDialog = null;
             linkNameBox = null;
             linkNameSeen = null;
