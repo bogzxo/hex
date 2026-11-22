@@ -4,7 +4,7 @@ namespace Hex.Core;
 
 internal sealed record HexDocParticipant(int Author, string Device, string Name, HexDocPoint? Caret = null,
     HexDocPoint? Anchor = null, HexDocPoint? Pointer = null);
-internal sealed record HexDocExchange(int Author, HexDocReplay Replay, IReadOnlyList<HexDocParticipant> Participants);
+internal sealed record HexDocExchange(int Author, HexDocReplay Replay, IReadOnlyList<HexDocParticipant> Participants, bool CanEdit = true);
 
 /// <summary>One document and the authenticated members who may exchange operations with its authority.</summary>
 internal sealed class HexLinkDocumentRoom(string path, string text)
@@ -53,6 +53,7 @@ internal sealed class HexLinkDocumentRoom(string path, string text)
             {
                 if (operations.Any(operation => operation.Id.Author != participant.Author))
                     throw new InvalidOperationException("A device may submit only its own edits.");
+                authority.Acknowledge(epoch, participant.Author, revision, checkpointReady: false);
                 foreach (HexDocOperation operation in operations)
                 {
                     HexDocReceipt receipt = authority.Submit(epoch, participant.Author, operation);
@@ -145,11 +146,14 @@ internal sealed class HexLinkDocumentRooms
         }
     }
 
-    public HexLinkDocumentRoom Find(string path)
+    public HexLinkDocumentRoom? TryFind(string path)
     {
         lock (gate)
-            return rooms.TryGetValue(path, out var room) ? room : throw HexLinkException.NotFound("This document is not shared.");
+            return rooms.GetValueOrDefault(path);
     }
+
+    public HexLinkDocumentRoom Find(string path) =>
+        TryFind(path) ?? throw HexLinkException.NotFound("This document is not shared.");
 
     public bool Close(string path)
     {
@@ -195,7 +199,7 @@ internal static class HexLinkDocumentWire
             ["author"] = reply.Author, ["epoch"] = replay.Epoch.ToString("N"), ["revision"] = replay.Since,
             ["head"] = replay.Head, ["checkpoint"] = replay.Checkpoint?.Text,
             ["ops"] = new JsonArray([.. replay.Operations.Select(EncodeOperation)]),
-            ["participants"] = new JsonArray([.. reply.Participants.Select(EncodeParticipant)])
+            ["participants"] = new JsonArray([.. reply.Participants.Select(EncodeParticipant)]), ["editable"] = reply.CanEdit
         };
     }
 
@@ -213,7 +217,8 @@ internal static class HexLinkDocumentWire
             : null;
         HexDocParticipant[] participants = [.. BoundedArray(message, "participants", MaxPeople)
             .Select(node => DecodeParticipant(node as JsonObject ?? throw HexLinkException.Invalid("Invalid document participant.")))];
-        return new HexDocExchange(author, new HexDocReplay(epoch, since, head, checkpoint, ops), participants);
+        return new HexDocExchange(author, new HexDocReplay(epoch, since, head, checkpoint, ops), participants,
+            HexLinkData.Bool(message, "editable") == true);
     }
 
     internal static Guid? Epoch(JsonObject message)

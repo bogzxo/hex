@@ -53,7 +53,7 @@ internal sealed partial class DawnScene
         catch (Exception error) { Say(error.Message, error: true); }
     }
 
-    private async void LinkDocumentJoin(HexLinkPeer peer, string wire)
+    private async void LinkLegacyDocumentJoin(HexLinkPeer peer, string wire)
     {
         int generation = ++linkJoinGeneration;
         try

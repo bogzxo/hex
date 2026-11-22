@@ -92,7 +92,8 @@ internal sealed partial class DawnScene
             tab.Title = LinkRemoteTitle(shown) ?? (shown.IsText && shown.Path is { } path ? Path.GetFileName(path) : shown.Name);
             tab.Icon = icon;
             tab.IconColor = shown.IsText ? null : FolderColor;
-            tab.Tooltip = LinkRemoteTooltip(shown) ?? (shown.Path is { } where ? where : Said("tabs.never_saved", ("name", shown.Name)));
+            tab.Tooltip = LinkLiveTooltip(shown) ?? LinkRemoteTooltip(shown) ?? (shown.Path is { } where ? where : Said("tabs.never_saved", ("name", shown.Name)));
+            tab.PresenceColors = LinkLiveTabColors(shown);
             tab.Modified = shown.Modified;
             tab.Pinned = shown.Pinned;
             tab.TitleColor = TabGitColor(shown);

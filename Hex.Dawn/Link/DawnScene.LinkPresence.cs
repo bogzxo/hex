@@ -139,6 +139,9 @@ internal sealed partial class DawnScene
     /// <summary>A file here as a wire path, folder-name/relative/path: of a workspace folder, or the file of a remote tab; null otherwise.</summary>
     internal string? LinkWireOf(string path)
     {
+        foreach (var live in linkLiveDocuments.Values)
+            if (live.Tab.Path is { } livePath && PlatformPaths.Same(livePath, path))
+                return live.Wire;
         if (linkDocument is { } shared && shared.Tab.Path is { } sharedPath && PlatformPaths.Same(sharedPath, path))
             return shared.Base.Path;
         if (linkRemote.TryGetValue(path, out LinkRemoteTab? remote))
@@ -194,6 +197,8 @@ internal sealed partial class DawnScene
         {
             if (seen.Presence is not { File: not null } where || LinkDocumentOf(seen.Device.Id, where.File) is not { IsText: true } open)
                 continue;
+            if (linkLiveDocuments.ContainsKey(open))
+                continue;
             if (!carets.TryGetValue(open, out var participants))
                 carets[open] = participants = [];
             participants.Add(new(seen.Device.Id, seen.Device.Name, where.Line, where.Column, where.ToLine ?? where.Line,
@@ -224,6 +229,25 @@ internal sealed partial class DawnScene
             && (followed.Editor.Document.Version != linkFollowVersion || followed.Editor.Document.Caret != linkFollowCaret))
         {
             LinkUnfollow(said: true);
+            return;
+        }
+
+        foreach (var shared in linkLiveDocuments.Values)
+        {
+            var caret = shared.Tab.Editor.RemoteCarets.FirstOrDefault(remote => remote.Id == id);
+            if (caret.Id is null)
+                continue;
+
+            string liveKey = $"{shared.Wire}:{caret.Line}:{caret.Column}";
+            if (liveKey == linkFollowSeen)
+                return;
+            linkFollowSeen = liveKey;
+            if (document != shared.Tab)
+                Show(shared.Tab);
+            shared.Tab.Editor.GoTo(caret.Line, caret.Column);
+            linkFollowDocument = shared.Tab;
+            linkFollowCaret = shared.Tab.Editor.Document.Caret;
+            linkFollowVersion = shared.Tab.Editor.Document.Version;
             return;
         }
 

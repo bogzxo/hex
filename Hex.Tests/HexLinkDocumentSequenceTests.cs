@@ -139,6 +139,69 @@ public sealed class HexLinkDocumentSequenceTests
     }
 
     [Fact]
+    public async Task A_third_device_can_relay_through_one_link_with_rights_checked_at_each_hop()
+    {
+        const string wire = "work/note.txt";
+        using var first = await LinkedPair.Up(HexLinkRights.View);
+        using var tablet = new LinkServices(DeviceC);
+        using var fromTablet = new HexLink(tablet);
+        first.B.DocumentRoute = first.LinkB.PeerOf;
+        first.A.Documents.Rooms.Open(wire, "draft");
+        var (b, c) = Pair();
+        HexLinkRights fromC = HexLinkRights.View | HexLinkRights.Edit;
+        var tabletAtB = first.LinkB.Add(new HexLinkConnection(b, DeviceC, "memory", true, () => fromC));
+        var relay = await fromTablet.Add(new HexLinkConnection(c, DeviceB, "memory", false, () => HexLinkRights.View));
+        await tabletAtB;
+        Assert.Equal(HexLinkErrors.NOT_ALLOWED, await CodeOf(relay.OpenDocument(wire, relayTo: DeviceA.Id)));
+
+        fromC |= HexLinkRights.Steer;
+        HexDocExchange opened = await relay.OpenDocument(wire, relayTo: DeviceA.Id);
+        Assert.False(opened.CanEdit);
+        Assert.Equal(DeviceC.Id, Assert.Single(opened.Participants).Device);
+        var replica = new HexLinkDocumentReplica(opened);
+        replica.Capture(replica.View, "draft!");
+        Assert.Equal(HexLinkErrors.NOT_ALLOWED,
+            await CodeOf(relay.ExchangeDocument(wire, replica.Epoch, replica.Revision, replica.Batch(), relayTo: DeviceA.Id)));
+
+        first.BOnA |= HexLinkRights.Edit;
+        replica.Receive(await relay.ExchangeDocument(wire, replica.Epoch, replica.Revision, replica.Batch(), relayTo: DeviceA.Id));
+        Assert.Equal("draft!", replica.View.Text);
+        Assert.Contains(first.B.Audited, item => item.What == "relay" && item.Detail.Contains(DeviceC.Id, StringComparison.Ordinal));
+        Assert.Contains(first.A.Audited, item => item.What == "relay" && item.Detail.Contains(DeviceC.Id, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_key_typed_during_replay_uses_the_last_painted_atoms_without_losing_remote_changes()
+    {
+        var room = new HexLinkDocumentRoom("work/note.txt", "abcde");
+        var a = new object();
+        var b = new object();
+        var alice = new HexLinkDocumentReplica(room.Join(DeviceA.Id, a, DeviceA));
+        var bob = new HexLinkDocumentReplica(room.Join(DeviceB.Id, b, DeviceB));
+        var alicePainted = alice.Capture(alice.View, "abXcde");
+        var bobPainted = bob.Capture(bob.View, "abcQe");
+        HexDocPoint bobCaret = bobPainted.PointAt(4);
+        var acceptedButLost = Exchange(DeviceA, a, alice, alicePainted.PointAt(3));
+        Assert.Equal(1L, acceptedButLost.Replay.Head);
+        bob.Receive(Exchange(DeviceB, b, bob, bobCaret));
+        Assert.Equal("abXcQe", bob.View.Text);
+        var aliceCaughtUp = Exchange(DeviceA, a, alice, alicePainted.PointAt(3));
+        alice.Receive(aliceCaughtUp);
+        Assert.False(alice.HasPending);
+
+        var latestTyping = alice.Capture(alicePainted, "abXYcde");
+        alice.Receive(Exchange(DeviceA, a, alice, latestTyping.PointAt(4)));
+        bob.Receive(Exchange(DeviceB, b, bob, bobCaret));
+        Assert.Equal("abXYcQe", bob.View.Text);
+        Assert.Equal(bob.View.Text, alice.View.Text);
+        Assert.Equal(6, alice.View.OffsetOf(bobCaret));
+        Assert.Equal(6, alice.View.OffsetOf(new HexDocPoint(default, 4))); // the old 'd' was deleted
+
+        HexDocExchange Exchange(HexLinkDevice device, object connection, HexLinkDocumentReplica replica, HexDocPoint caret) =>
+            room.Exchange(device.Id, connection, replica.Epoch, replica.Revision, replica.Batch(), caret, caret, null, false);
+    }
+
+    [Fact]
     public void Sixteen_editors_converge_after_random_overlaps_reorder_and_partitions()
     {
         string? overrideCount = Environment.GetEnvironmentVariable("HEX_LINK_CRDT_SEEDS");

@@ -33,6 +33,11 @@ internal sealed partial class DawnScene
 
         public HexLinkDocuments Documents { get; } = new();
 
+        public Task<HexLinkDocumentRoom> OpenSharedDocument(string path, string full, HexLinkDevice caller, bool automatic,
+            CancellationToken cancel) => hex.LinkLiveOpenRoom(this, path, full, caller, automatic, cancel);
+
+        public HexLinkPeer? SharedDocumentPeer(string id) => hex.link?.PeerOf(id);
+
         public HexHubSnapshot Fleet => hex.hub.Snapshot;
 
         public IReadOnlyDictionary<int, HexLinkChatExtra> FleetExtras

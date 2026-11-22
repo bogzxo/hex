@@ -14,6 +14,7 @@ internal readonly record struct HexDocId(long Clock, int Author) : IComparable<H
 // Offsets are UTF-16 boundaries in an immutable run. The default point is the start of the seed.
 internal readonly record struct HexDocPoint(HexDocId Run, int Offset);
 internal readonly record struct HexDocSpan(HexDocId Run, int Start, int Length);
+internal readonly record struct HexDocPositionSpan(HexDocId Run, int Start, int End, int Offset, bool Visible);
 internal abstract record HexDocOperation(HexDocId Id);
 internal sealed record HexDocEdit(HexDocId Id, HexDocPoint After, string Inserted, HexDocSpan[] Removed) : HexDocOperation(Id);
 internal sealed record HexDocVisibility(HexDocId Id, HexDocId Edit, bool Enabled) : HexDocOperation(Id);
@@ -158,6 +159,7 @@ internal sealed class HexLinkDocumentSequence
             return current;
         var text = new StringBuilder();
         var visible = new List<HexDocSpan>();
+        var positions = new List<HexDocPositionSpan>();
         var visits = new Stack<Visit>();
         visits.Push(new Visit(runs[default], 0, 0, true));
         Dictionary<HexDocId, Interval[]>? deletions = null;
@@ -169,7 +171,10 @@ internal sealed class HexLinkDocumentSequence
                 continue;
             }
             if (!Enabled(visit.Run.Id))
+            {
+                positions.Add(new(visit.Run.Id, visit.Start, visit.End, text.Length, false));
                 continue;
+            }
 
             int at = visit.Start;
             if (visit.Run.Deletions is not null)
@@ -180,6 +185,10 @@ internal sealed class HexLinkDocumentSequence
                 for (int i = FirstEndAfter(ranges, at); i < ranges.Length && ranges[i].Start < visit.End; i++)
                 {
                     Append(at, ranges[i].Start);
+                    int hiddenStart = Math.Max(at, ranges[i].Start);
+                    int hiddenEnd = Math.Min(visit.End, ranges[i].End);
+                    if (hiddenStart < hiddenEnd)
+                        positions.Add(new(visit.Run.Id, hiddenStart, hiddenEnd, text.Length, false));
                     at = Math.Max(at, ranges[i].End);
                 }
             }
@@ -189,12 +198,13 @@ internal sealed class HexLinkDocumentSequence
             {
                 if (from >= to)
                     return;
+                positions.Add(new(visit.Run.Id, from, to, text.Length, true));
                 text.Append(visit.Run.Text.AsSpan(from, to - from));
                 visible.Add(new HexDocSpan(visit.Run.Id, from, to - from));
             }
         }
 
-        return view = new HexDocView(text.ToString(), [.. visible]);
+        return view = new HexDocView(text.ToString(), [.. visible], [.. positions]);
     }
 
     private static void Schedule(Run run, Stack<Visit> visits)
@@ -281,10 +291,42 @@ internal sealed class HexLinkDocumentSequence
 }
 
 /// <summary>Immutable text and the stable ranges which produced it.</summary>
-internal sealed class HexDocView(string text, HexDocSpan[] spans)
+internal sealed class HexDocView(string text, HexDocSpan[] spans, HexDocPositionSpan[]? positions = null)
 {
+    private int[]? lineStarts;
     public string Text { get; } = text;
     public IReadOnlyList<HexDocSpan> Spans => spans;
+
+    public int OffsetAt(int line, int column)
+    {
+        int[] starts = Lines();
+        if ((uint)line >= (uint)starts.Length)
+            return Text.Length;
+        int start = starts[line];
+        int end = line + 1 == starts.Length ? Text.Length : starts[line + 1] - 1;
+        int offset = start + Math.Clamp(column, 0, end - start);
+        return HexLinkDocumentSequence.Boundary(Text, offset) ? offset : offset - 1;
+    }
+
+    public (int Line, int Column) PositionAt(int offset)
+    {
+        int[] starts = Lines();
+        offset = Math.Clamp(offset, 0, Text.Length);
+        int line = Array.BinarySearch(starts, offset);
+        if (line < 0)
+            line = ~line - 1;
+        return (line, offset - starts[line]);
+    }
+
+    private int[] Lines()
+    {
+        if (lineStarts is { } known)
+            return known;
+        var starts = new List<int> { 0 };
+        for (int i = Text.IndexOf('\n'); i >= 0; i = Text.IndexOf('\n', i + 1))
+            starts.Add(i + 1);
+        return lineStarts = [.. starts];
+    }
 
     public HexDocEdit Edit(HexDocId id, int start, int length, string inserted)
     {
@@ -307,6 +349,54 @@ internal sealed class HexDocView(string text, HexDocSpan[] spans)
             offset -= span.Length;
         }
         throw new InvalidOperationException("Missing visible document span.");
+    }
+
+    // The boundary after a deleted atom stays at its old place in sequence order.
+    public int? OffsetOf(HexDocPoint point)
+    {
+        if (point == default)
+            return 0;
+        if (positions is not null)
+        {
+            foreach (HexDocPositionSpan range in positions)
+                if (range.Run == point.Run && point.Offset > range.Start && point.Offset <= range.End)
+                    return range.Offset + (range.Visible ? point.Offset - range.Start : 0);
+            return null;
+        }
+
+        int offset = 0;
+        foreach (HexDocSpan range in spans)
+        {
+            if (range.Run == point.Run && point.Offset > range.Start && point.Offset <= range.Start + range.Length)
+                return offset + point.Offset - range.Start;
+            offset += range.Length;
+        }
+        return null;
+    }
+
+    // Only local atoms belong to this view. Keep it when another key was typed before a network result could paint.
+    internal HexDocView WithEdit(HexDocSplice change, HexDocId id, string replaced)
+    {
+        var result = new List<HexDocSpan>();
+        Copy(0, change.Start);
+        if (change.Inserted.Length != 0)
+            result.Add(new HexDocSpan(id, 0, change.Inserted.Length));
+        Copy(change.Start + change.Length, Text.Length);
+        return new HexDocView(replaced, [.. result]);
+
+        void Copy(int start, int end)
+        {
+            int offset = 0;
+            foreach (HexDocSpan span in spans)
+            {
+                if (offset >= end)
+                    break;
+                int from = Math.Max(start, offset), to = Math.Min(end, offset + span.Length);
+                if (from < to)
+                    result.Add(new HexDocSpan(span.Run, span.Start + from - offset, to - from));
+                offset += span.Length;
+            }
+        }
     }
 
     private HexDocSpan[] Removal(int start, int length)

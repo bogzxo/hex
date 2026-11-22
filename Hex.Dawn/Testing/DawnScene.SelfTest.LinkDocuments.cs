@@ -18,7 +18,7 @@ internal sealed partial class DawnScene
         switch (linkDocTestStage)
         {
             case 0 when Flag("host"):
-                LinkDocumentJoin(peer, LINK_DOC_WIRE);
+                LinkLegacyDocumentJoin(peer, LINK_DOC_WIRE);
                 break;
             case 1 when shared is { Busy: false } && shared.Tab.Editor.Text == "seed":
                 document.Editor.GoTo(0, 2);
