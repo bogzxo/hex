@@ -423,9 +423,25 @@ internal sealed partial class DawnScene
         test.WaitFor(() => RemoteApprovalButton("check") is not null, 6);
         test.Check("link-ui: a Steer mirror shows Allow and Deny for the pending approval", () =>
             RemoteApprovalButton("check") is not null && RemoteApprovalButton("close") is not null);
+        // Sync notifications can stack over the bottom-right approval controls when suites run together.
+        test.Run(ClearToasts);
+        test.WaitFor(() => toasts.Cards.Count == 0, 2.0f);
+        bool allowUnderPointer = false;
+        test.Hover(() => Centre(RemoteApprovalButton("check")));
+        test.Run(() =>
+        {
+            Button? allow = RemoteApprovalButton("check");
+            allowUnderPointer = allow is not null && allow.Module?.Compositor.HoveredComponent == allow;
+        });
         test.Click(() => Centre(RemoteApprovalButton("check")));
         test.WaitFor(() => LinkTestPeerSaid("approval allowed"), 8);
-        test.Check("link-ui: Allow from the remote approval card reaches the hosting chat", () => LinkTestPeerSaid("approval allowed"));
+        test.Check("link-ui: Allow from the remote approval card reaches the hosting chat", () =>
+        {
+            if (LinkTestPeerSaid("approval allowed"))
+                return true;
+            Console.WriteLine($"[Hex self-test] link-ui: Allow under pointer before click: {allowUnderPointer}; approval still shown: {RemoteApprovalButton("check") is not null}; notifications: {toasts.Cards.Count}");
+            return false;
+        });
 
         HexAgentChat? approvalStarter = null;
         Task<McpToolResult>? approvalSpawn = null, approvalReply = null;
