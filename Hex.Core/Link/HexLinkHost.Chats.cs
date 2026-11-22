@@ -131,14 +131,14 @@ internal sealed partial class HexLinkHost
             if (chats.TryRemove(id, out WatchedChat? gone))
             {
                 gone.Coalesce.Dispose();
-                session.Tell("chat/changed", new JsonObject { ["id"] = id, ["gone"] = true });
+                await session.TellAsync("chat/changed", new JsonObject { ["id"] = id, ["gone"] = true });
             }
 
             return;
         }
 
         if (patch.Count > 0)
-            session.Tell("chat/changed", patch);
+            await session.TellAsync("chat/changed", patch);
     }
 
     // A question card answered as the person would

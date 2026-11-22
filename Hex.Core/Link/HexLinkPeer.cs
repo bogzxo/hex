@@ -123,16 +123,20 @@ internal sealed partial class HexLinkPeer : IDisposable
                     HexLinkData.String(each, "head", 64) ?? string.Empty, string.Empty))]);
     }
 
+    internal async ValueTask ToldAsync(string method, JsonObject parameters)
+    {
+        if (!await PredictTold(method, parameters))
+            Told(method, parameters);
+    }
+
     /// <summary>
     /// A notification from the other end that's this half's to take: the fleet, a chat, a file, a bundle's chunks, what
-    /// it grants. Never throws, whatever it says. The session calls it on its reading task.
+    /// it grants. The session calls it on its dispatch task.
     /// </summary>
     public void Told(string method, JsonObject parameters)
     {
         try
         {
-            if (PredictTold(method, parameters))
-                return;
             switch (method)
             {
                 case "fleet/changed":
@@ -436,17 +440,15 @@ internal sealed partial class HexLinkPeer : IDisposable
         presenceSend.Poke();
     }
 
-    private Task SendPresence()
+    private async Task SendPresence()
     {
         JsonObject said = HexLinkHost.PresenceJson(presenceNow);
         string key = said.ToJsonString();
         if (key != presenceSent)
         {
             presenceSent = key;
-            session.Tell("presence/set", said);
+            await session.TellAsync("presence/set", said);
         }
-
-        return Task.CompletedTask;
     }
 
     // An answer that has to be an object, anything else the other end's mistake

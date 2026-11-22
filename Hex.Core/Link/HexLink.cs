@@ -75,11 +75,8 @@ internal sealed class HexLink(IHexLinkServices services) : IDisposable
         }
 
         session.Requested = host.Handle;
-        session.Told = (method, parameters) =>
-        {
-            if (!host.Told(method, parameters))
-                peer.Told(method, parameters);
-        };
+        session.ToldAsync = (method, parameters) =>
+            host.Told(method, parameters) ? ValueTask.CompletedTask : peer.ToldAsync(method, parameters);
         host.DirectlyLinked = id =>
         {
             lock (links)

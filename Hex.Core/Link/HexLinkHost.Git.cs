@@ -74,7 +74,7 @@ internal sealed partial class HexLinkHost
 
             if (made is null)
             {
-                session.Tell("git/done", new JsonObject { ["id"] = id, ["ok"] = true, ["size"] = 0 });
+                await session.TellAsync("git/done", new JsonObject { ["id"] = id, ["ok"] = true, ["size"] = 0 });
                 return answer;
             }
 
@@ -144,28 +144,28 @@ internal sealed partial class HexLinkHost
     }
 
     // The bundle's bytes in chunks, in order, then done, and the temp file deleted whatever happened
-    private void SendBundle(string id, string file, CancellationTokenSource transfer)
+    private async Task SendBundle(string id, string file, CancellationTokenSource transfer)
     {
         long at = 0;
         try
         {
-            using var read = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, HexLinkGit.CHUNK);
+            using var read = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, HexLinkGit.CHUNK, FileOptions.Asynchronous);
             byte[] chunk = new byte[HexLinkGit.CHUNK];
             int got;
-            while ((got = read.ReadAtLeast(chunk, chunk.Length, throwOnEndOfStream: false)) > 0)
+            while ((got = await read.ReadAtLeastAsync(chunk, chunk.Length, throwOnEndOfStream: false, cancellationToken: transfer.Token)) > 0)
             {
                 transfer.Token.ThrowIfCancellationRequested();
                 Need(HexLinkRights.View, "git/chunk");
-                if (!session.Tell("git/chunk", new JsonObject { ["id"] = id, ["at"] = at, ["data"] = Convert.ToBase64String(chunk, 0, got) }))
+                if (!await session.TellAsync("git/chunk", new JsonObject { ["id"] = id, ["at"] = at, ["data"] = Convert.ToBase64String(chunk, 0, got) }, transfer.Token))
                     return;
                 at += got;
             }
 
-            session.Tell("git/done", new JsonObject { ["id"] = id, ["ok"] = true, ["size"] = at });
+            await session.TellAsync("git/done", new JsonObject { ["id"] = id, ["ok"] = true, ["size"] = at });
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or HexLinkException or OperationCanceledException)
         {
-            session.Tell("git/done", new JsonObject { ["id"] = id, ["ok"] = false, ["error"] = e.Message });
+            await session.TellAsync("git/done", new JsonObject { ["id"] = id, ["ok"] = false, ["error"] = e.Message });
         }
         finally
         {

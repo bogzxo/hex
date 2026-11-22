@@ -523,7 +523,7 @@ internal sealed partial class DawnScene
                 return;
             linkListenAddresses = current;
             foreach (HexLinkPeer peer in LinkPeers)
-                peer.Session.Tell("link/addresses", services.RedialAdvertisement());
+                peer.Session.TellLatest("link/addresses", services.RedialAdvertisement());
         });
     }
 

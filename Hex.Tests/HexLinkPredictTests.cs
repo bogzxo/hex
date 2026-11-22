@@ -183,6 +183,29 @@ public sealed class HexLinkPredictTests
     }
 
     [Fact]
+    public async Task A_slow_prediction_consumer_keeps_every_piece_past_the_buffer_limit()
+    {
+        using Linked linked = await Linked.Up(HexLinkRights.Predict);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(WAIT_MS));
+        string[] pieces = [.. Enumerable.Range(0, 300).Select(i => $"{i} ")];
+        linked.Desktop.Model = (_, cancel) => Pieces(cancel, pieces);
+
+        await using IAsyncEnumerator<string> result = linked.Desk.Predict(ASKED, timeout.Token).GetAsyncEnumerator();
+        Assert.True(await result.MoveNextAsync());
+        var received = new List<string> { result.Current };
+        while (!linked.Desk.Session.ReceivingBackpressure)
+        {
+            Assert.False(linked.Desk.IsClosed);
+            await Task.Delay(5, timeout.Token);
+        }
+
+        while (await result.MoveNextAsync())
+            received.Add(result.Current);
+        Assert.Equal(pieces, received);
+        Assert.NotNull(await linked.Desk.Session.Ask("link/ping", cancel: timeout.Token));
+    }
+
+    [Fact]
     public async Task A_cancel_reaches_the_model_at_once_and_nothing_more_arrives()
     {
         using Linked linked = await Linked.Up(HexLinkRights.Predict);
@@ -404,24 +427,24 @@ public sealed class HexLinkPredictTests
     }
 
     [Fact]
-    public async Task A_prediction_that_outpaces_the_reader_is_cancelled_instead_of_buffering_unlimited_text()
+    public async Task Disposing_a_prediction_releases_receive_backpressure_and_cancels_its_model()
     {
         using Linked linked = await Linked.Up(HexLinkRights.Predict);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(WAIT_MS));
         var model = new Waiting();
         linked.Desktop.Model = model.Run;
-        await using IAsyncEnumerator<string> stream = linked.Desk.Predict(ASKED).GetAsyncEnumerator();
-        Assert.True(await stream.MoveNextAsync());
-        HexLinkSession sender = Assert.Single(linked.DesktopLink.Peers).Session;
-        for (int i = 0; i < 80; i++)
-            Assert.True(sender.Tell("predict/chunk", new JsonObject { ["id"] = "p1", ["text"] = "extra" }));
-        await model.Cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        var failure = await Assert.ThrowsAsync<HexLinkException>(async () =>
+        await using (IAsyncEnumerator<string> stream = linked.Desk.Predict(ASKED, timeout.Token).GetAsyncEnumerator())
         {
-            int count = 0;
-            while (await stream.MoveNextAsync())
-                Assert.InRange(++count, 1, 64);
-        });
-        Assert.Contains("receive buffer", failure.Message, StringComparison.Ordinal);
+            Assert.True(await stream.MoveNextAsync());
+            HexLinkSession sender = Assert.Single(linked.DesktopLink.Peers).Session;
+            for (int i = 0; i < 120; i++)
+                Assert.True(await sender.TellAsync("predict/chunk", new JsonObject { ["id"] = "p1", ["text"] = "extra" }, timeout.Token));
+            while (!linked.Desk.Session.ReceivingBackpressure)
+                await Task.Delay(5, timeout.Token);
+        }
+
+        await model.Cancelled.Task.WaitAsync(timeout.Token);
+        Assert.NotNull(await linked.Desk.Session.Ask("link/ping", cancel: timeout.Token));
     }
 
     // A link is one stream: a big answer being written holds the next line until it's out, so a prediction's first

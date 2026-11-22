@@ -162,7 +162,7 @@ internal sealed partial class HexLinkHost : IDisposable
             return;
         JsonObject said = PresenceJson(presence);
         said["device"] = new JsonObject { ["id"] = from.Id, ["name"] = from.Name };
-        session.Tell("presence/set", said);
+        session.TellLatest("presence/set", said, from.Id);
     }
 
     /// <summary>What the device may do here changed (Link's window), told to it at once.</summary>
@@ -170,7 +170,7 @@ internal sealed partial class HexLinkHost : IDisposable
     {
         if (!HexLinkAllowed.Has(Rights, HexLinkRights.View))
             StopWatching();
-        session.Tell("link/rights", new JsonObject { ["granted"] = HexLinkData.Words(Rights) });
+        session.TellLatest("link/rights", new JsonObject { ["granted"] = HexLinkData.Words(Rights) });
         ServesMoved();
     }
 
@@ -227,11 +227,10 @@ internal sealed partial class HexLinkHost : IDisposable
             fleet.Poke();
     }
 
-    private Task SendFleet()
+    private async Task SendFleet()
     {
         if (fleetAsked && HexLinkAllowed.Has(Rights, HexLinkRights.View))
-            session.Tell("fleet/changed", Fleet());
-        return Task.CompletedTask;
+            await session.TellAsync("fleet/changed", Fleet());
     }
 
     // The most of an agent's last reply a fleet row carries

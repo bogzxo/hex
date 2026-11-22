@@ -61,7 +61,7 @@ internal sealed partial class HexLinkHost
             StopPredicting();
 
         if (Interlocked.Exchange(ref servesSaid, serves ? 1 : 0) != (serves ? 1 : 0))
-            session.Tell("link/serves", new JsonObject { ["serves"] = ServesJson(serves) });
+            session.TellLatest("link/serves", new JsonObject { ["serves"] = ServesJson(serves) });
     }
 
     // A prediction started: checked, the oldest cancelled when there are too many, the model run on a task of its own
@@ -123,7 +123,7 @@ internal sealed partial class HexLinkHost
             {
                 if (cancel.IsCancellationRequested || !ServesPredictions)
                     break;
-                if (piece.Length > 0 && !session.Tell("predict/chunk", new JsonObject { ["id"] = running.Id, ["text"] = piece }))
+                if (piece.Length > 0 && !await session.TellAsync("predict/chunk", new JsonObject { ["id"] = running.Id, ["text"] = piece }, cancel))
                     break;
             }
 
@@ -149,7 +149,7 @@ internal sealed partial class HexLinkHost
 
         // A link that's gone has nobody to tell; one cancelled by the asker is told anyway, it's a line and it's harmless
         if (!session.IsClosed)
-            session.Tell("predict/done", done);
+            await session.TellAsync("predict/done", done);
     }
 
     private static void Ended(JsonObject done, string error, string status)

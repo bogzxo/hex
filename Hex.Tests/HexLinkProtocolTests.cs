@@ -107,6 +107,110 @@ public sealed class HexLinkProtocolTests
     }
 
     [Fact]
+    public async Task A_full_send_queue_backpressures_ordered_notifications()
+    {
+        var (end, other) = Pair();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(WAIT_MS));
+        var writing = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var received = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var order = new List<int>();
+        using var a = Session(new ObservedStream(end, (_, cancel) =>
+        {
+            writing.TrySetResult();
+            return new ValueTask(release.Task.WaitAsync(cancel));
+        }), true).Start();
+        using var b = Session(other, false);
+        b.Told = (_, said) =>
+        {
+            order.Add(said["number"]!.GetValue<int>());
+            if (order.Count == 24)
+                received.SetResult();
+        };
+        b.Start();
+
+        Task<bool>[] sends;
+        try
+        {
+            sends = [.. Enumerable.Range(0, 24).Select(i =>
+                a.TellAsync("sync/changed", new JsonObject { ["number"] = i }, timeout.Token).AsTask())];
+            await writing.Task.WaitAsync(timeout.Token);
+            Assert.All(sends, send => Assert.False(send.IsCompleted));
+            Assert.False(a.IsClosed, a.Why);
+        }
+        finally
+        {
+            release.SetResult();
+        }
+
+        Assert.All(await Task.WhenAll(sends), sent => Assert.True(sent));
+        await received.Task.WaitAsync(timeout.Token);
+        Assert.Equal(Enumerable.Range(0, 24), order);
+    }
+
+    [Fact]
+    public async Task A_full_notification_fifo_waits_without_dropping_any_family_or_the_reply_barrier()
+    {
+        var (end, other) = Pair();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(WAIT_MS));
+        using var release = new ManualResetEventSlim();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var order = new List<(string Method, int Number)>();
+        var burst = new List<(string Method, int Number)> { ("predict/chunk", 0) };
+        string[] kinds = ["predict/chunk", "git/chunk", "sync/changed", "fs/changed", "fleet/changed",
+            "chat/changed", "presence/set", "claim/changed", "doc/changed"];
+        for (int i = 1; i <= 100; i++)
+            burst.Add((kinds[(i - 1) % kinds.Length], i));
+        burst.Add(("predict/done", 101));
+        burst.Add(("git/done", 102));
+
+        var sent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var a = Session(end, true);
+        using var b = Session(other, false);
+        b.Requested = async (_, _, cancel) =>
+        {
+            foreach (var (method, number) in burst)
+                Assert.True(await b.TellAsync(method, new JsonObject { ["number"] = number }, cancel));
+            sent.SetResult();
+            return new JsonObject();
+        };
+        a.Told = (method, said) =>
+        {
+            int number = said["number"]!.GetValue<int>();
+            order.Add((method, number));
+            if (number == 0)
+            {
+                entered.SetResult();
+                release.Wait(timeout.Token);
+            }
+        };
+        a.Start();
+        b.Start();
+        Task<JsonNode?> reply = a.Ask("test/burst", cancel: timeout.Token);
+
+        try
+        {
+            await entered.Task.WaitAsync(timeout.Token);
+            await sent.Task.WaitAsync(timeout.Token);
+            while (!a.ReceivingBackpressure)
+            {
+                Assert.False(a.IsClosed, a.Why);
+                await Task.Delay(5, timeout.Token);
+            }
+            Assert.False(b.IsClosed, b.Why);
+            Assert.False(reply.IsCompleted);
+        }
+        finally
+        {
+            release.Set();
+        }
+
+        Assert.NotNull(await reply);
+        Assert.Equal(burst, order);
+        Assert.NotNull(await a.Ask("link/ping", cancel: timeout.Token));
+    }
+
+    [Fact]
     public async Task Bulk_frames_round_trip_raw_and_compressed_bytes_in_order()
     {
         var (end, other) = Pair();
