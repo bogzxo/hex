@@ -187,9 +187,10 @@ internal sealed partial class DawnScene
         test.Check("link-worktree: both repositories and the replica app started", () => why is null && linkTestPeer is not null);
         test.WaitFor(() => LinkPairingPending is not null || linkTestPeer is { HasExited: true }, 90.0f);
         test.Run(() => LinkPairingPending?.Decide(HexLinkRights.View | HexLinkRights.Steer | HexLinkRights.Edit));
-        test.WaitFor(() => LinkPeers.Count == 1 && LinkTestPeerSaid("link-worktree: replica ready"), 60.0f);
+        bool ReplicaSaid(string text) => linkTestPeerSaid.Any(line => line.Contains(text, StringComparison.Ordinal));
+        test.WaitFor(() => LinkPeers.Count == 1 && ReplicaSaid("link-worktree: replica ready"), 60.0f);
         test.Check("link-worktree: the existing replica can publish through its sync source", () =>
-            LinkTestPeerSaid("pass: link-worktree: syncing an existing replica pins the source and enables checked publication"));
+            ReplicaSaid("pass: link-worktree: syncing an existing replica pins the source and enables checked publication"));
         test.Run(() =>
         {
             peer = LinkPeers.FirstOrDefault();
