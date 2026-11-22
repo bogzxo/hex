@@ -193,6 +193,36 @@ public sealed class HexLinkStoreTests : IDisposable
     }
 
     [Fact]
+    public void Audit_rotation_keeps_a_large_latest_event_that_fits_the_byte_limit()
+    {
+        string path = Path.Combine(folder, "audit.log");
+        var audit = new HexLinkAudit(path, most: 256);
+        string detail = new('界', 65);
+        audit.Write("older", "DEVICE", "first event");
+        audit.Write("newest", "DEVICE", detail);
+
+        HexLinkAuditEntry entry = Assert.Single(audit.Latest(10));
+        Assert.Equal(("newest", "DEVICE", detail), (entry.Event, entry.Device, entry.Detail));
+        Assert.InRange(new FileInfo(path).Length, 1L, 256L);
+    }
+
+    [Fact]
+    public void Rotation_of_an_existing_larger_log_respects_the_current_byte_limit()
+    {
+        string path = Path.Combine(folder, "audit.log");
+        var older = new HexLinkAudit(path);
+        for (int i = 0; i < 100; i++)
+            older.Write("older", "DEVICE", $"event {i}");
+
+        var audit = new HexLinkAudit(path, most: 256);
+        audit.Write("newest", "DEVICE", "last event");
+
+        Assert.InRange(new FileInfo(path).Length, 1L, 256L);
+        Assert.Equal("last event", Assert.Single(audit.Latest(1)).Detail);
+        Assert.All(File.ReadAllLines(path), line => Assert.Equal(4, line.Split('\t').Length));
+    }
+
+    [Fact]
     public void The_audit_log_keeps_its_latest_under_its_cap()
     {
         string path = Path.Combine(folder, "audit.log");
