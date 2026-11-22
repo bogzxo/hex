@@ -154,6 +154,7 @@ internal sealed partial class DawnScene
             return false;
         string name = LinkNameOf(id);
         bool forgot = linkTrust.Forget(id);
+        linkWorkspaceOffers.Remove(id);
         link?.Remove(id, "it was forgotten here");
         linkRedial.Soon(id);
         linkHeldOff.Remove(id);

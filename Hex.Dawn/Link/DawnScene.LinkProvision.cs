@@ -4,7 +4,6 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 
 using Horizon.Core.Threading;
-using Horizon.UI.Components;
 
 namespace Hex.Dawn;
 
@@ -110,26 +109,7 @@ internal sealed partial class DawnScene
             return;
         string draft = LinkDefaultProvisionDestination(peer);
         AskText(Said("link.provision.get_title", ("device", peer.Device.Name)), Said("link.provision.destination"), draft,
-            Said("link.provision.get_button"), selected =>
-            {
-                string destination = selected.Trim();
-                if (destination.Length == 0)
-                    return;
-                Context.Work.Start($"link-provision-{deviceId}", Said("link.provision.get_title", ("device", peer.Device.Name)),
-                    async work =>
-                    {
-                        if (await LinkGetWorkspace(deviceId, destination, new Progress<HexLinkProvisionProgress>(progress => ReportProvision(work, progress)),
-                            work.Token) is { } why)
-                            throw new InvalidOperationException(why);
-                    },
-                    done =>
-                    {
-                        if (done.State == WorkState.Failed)
-                            Say(Said("link.provision.failed", ("why", done.Error ?? string.Empty)), error: true);
-                        else if (done.State == WorkState.Succeeded)
-                            Say(Said("link.provision.ready", ("folder", destination)));
-                    });
-            });
+            Said("link.provision.get_button"), selected => LinkGetWorkspaceInto(deviceId, peer.Device.Name, selected.Trim()));
     }
 
     internal void LinkShareWorkspaceCommand(string deviceId)
@@ -150,19 +130,7 @@ internal sealed partial class DawnScene
             });
     }
 
-    private void LinkWorkspaceOffered(HexLinkDevice device, string workspace) => PostLink(() =>
-    {
-        if (link?.PeerOf(device.Id) is not { } peer || !HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))
-            return;
-
-        UINotification? card = null;
-        card = toasts.Show(Said("link.provision.offered", ("device", device.Name), ("workspace", HexLinkNames.Clean(workspace) ?? peer.Workspace.Name)),
-            "download", null, 0.0f, (Said("link.provision.get_button"), () =>
-            {
-                card?.Close();
-                LinkGetWorkspaceCommand(device.Id);
-            }));
-    });
+    private void LinkWorkspaceOffered(HexLinkDevice device, string workspace) => QueueLinkWorkspaceOffer(device, workspace);
 
     private List<(string Text, Action Picked)> LinkProvisionPaletteCommands()
     {
