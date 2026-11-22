@@ -141,12 +141,14 @@ internal sealed partial class HexLinkPeer
 
         public async Task Receive(string file, Action<long, long>? progress, CancellationToken cancel)
         {
-            await using var stream = new FileStream(file, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+            // Made at the first chunk, so a refused or empty bundle never leaves a file behind for a scanner to hold open
+            FileStream? stream = null;
             long written = 0;
             try
             {
                 await foreach (var (at, text) in chunks.Reader.ReadAllAsync(cancel).ConfigureAwait(false))
                 {
+                    stream ??= new FileStream(file, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, useAsync: true);
                     byte[] data = Convert.FromBase64String(text);
                     long expected = advertised.Task.IsCompletedSuccessfully ? advertised.Task.Result : -1;
                     long next = written + data.Length;
@@ -165,6 +167,11 @@ internal sealed partial class HexLinkPeer
             catch (Exception e) when (e is FormatException or IOException)
             {
                 throw BundleFailure(e.Message);
+            }
+            finally
+            {
+                if (stream is not null)
+                    await stream.DisposeAsync().ConfigureAwait(false);
             }
         }
     }
