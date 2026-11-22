@@ -227,26 +227,26 @@ public sealed class PredictionFormatTests
     }
 
     [Fact]
-    public void A_change_then_four_lines_the_region_has_settles_the_answer_while_it_streams()
+    public void A_change_then_two_lines_the_region_has_settles_the_answer_while_it_streams()
     {
         string text = string.Join('\n', Enumerable.Range(0, 20).Select(i => "line" + i));
         var (prompt, _) = Small(text, 0);
 
-        Assert.False(zeta.Parse(prompt, "line0\nLINE1\nline2\nline3\nline4\n", false).Done);
-        PredictionParsed parsed = zeta.Parse(prompt, "line0\nLINE1\nline2\nline3\nline4\nline5\n", false);
+        Assert.False(zeta.Parse(prompt, "line0\nLINE1\nline2\n", false).Done);
+        PredictionParsed parsed = zeta.Parse(prompt, "line0\nLINE1\nline2\nline3\n", false);
 
         Assert.True(parsed.Done);
         Assert.Equal(new PredictionEdit(6, 10, "LINE"), Assert.Single(parsed.Edits));
     }
 
     [Fact]
-    public void Four_unchanged_lines_past_the_caret_settle_the_answer_as_nothing()
+    public void Two_unchanged_lines_past_the_caret_settle_the_answer_as_nothing()
     {
         string text = string.Join('\n', Enumerable.Range(0, 20).Select(i => "line" + i));
         var (prompt, _) = Small(text, 1);
 
-        Assert.False(zeta.Parse(prompt, "line0\nline1\nline2\nline3\n", false).Done);
-        PredictionParsed parsed = zeta.Parse(prompt, "line0\nline1\nline2\nline3\nline4\n", false);
+        Assert.False(zeta.Parse(prompt, "line0\nline1\n", false).Done);
+        PredictionParsed parsed = zeta.Parse(prompt, "line0\nline1\nline2\n", false);
 
         Assert.True(parsed.Done);
         Assert.Empty(parsed.Edits);

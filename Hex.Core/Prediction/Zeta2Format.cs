@@ -25,7 +25,7 @@ internal sealed class Zeta2Format : IPredictionFormat
     // Here it's smaller and mostly below the caret, where the next edit usually is, a few lines above for the model to
     // find its place. HEX_PREDICT_REGION_TOKENS tries another size.
     private const int USUAL_REGION_TOKENS = 150;
-    private const int ABOVE_SHARE = 4;
+    private static readonly int ABOVE_SHARE = int.TryParse(Environment.GetEnvironmentVariable("HEX_PREDICT_ABOVE_SHARE"), out int share) ? Math.Clamp(share, 1, 20) : 6;
     private static readonly int REGION_TOKENS = int.TryParse(Environment.GetEnvironmentVariable("HEX_PREDICT_REGION_TOKENS"), out int asked)
         ? Math.Clamp(asked, 30, 350) : USUAL_REGION_TOKENS;
 
@@ -35,7 +35,7 @@ internal sealed class Zeta2Format : IPredictionFormat
     private const int MOST_EVENTS = 6;
 
     // Lines the old region has, after a change, that settle an answer still streaming
-    private const int SAME_TO_STOP = 4;
+    private static readonly int SAME_TO_STOP = int.TryParse(Environment.GetEnvironmentVariable("HEX_PREDICT_SAME_TO_STOP"), out int same) ? Math.Clamp(same, 1, 8) : 2;
 
     // What a file can't hold for its prompt to be read one way only
     private static readonly string[] tokens = [SUFFIX, PREFIX, MIDDLE, FILE, CURSOR];
@@ -188,7 +188,7 @@ internal sealed class Zeta2Format : IPredictionFormat
                 size += Size(++bottom);
                 grew = true;
             }
-            bool roomAbove = sizeAbove + (top > 0 ? Size(top - 1) : 0) <= most / ABOVE_SHARE || bottom + 1 >= count;
+            bool roomAbove = sizeAbove + (top > 0 ? Size(top - 1) : 0) <= most / ABOVE_SHARE;
             if (top > 0 && roomAbove && size + Size(top - 1) <= most)
             {
                 sizeAbove += Size(top - 1);

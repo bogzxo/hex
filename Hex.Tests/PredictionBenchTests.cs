@@ -133,6 +133,8 @@ public sealed class PredictionBenchTests(ITestOutputHelper output)
                     output.WriteLine($"{c.Name}: no prompt");
                     continue;
                 }
+                if (Environment.GetEnvironmentVariable("HEX_TEST_DUMP") is { Length: > 0 } dump)
+                    File.WriteAllText(Path.Combine(dump, c.Name + ".prompt.txt"), prompt.Request.Prompt);
                 var firsts = new List<double>();
                 var totals = new List<double>();
                 string shown = "";
