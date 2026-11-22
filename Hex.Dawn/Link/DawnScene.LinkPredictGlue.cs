@@ -10,7 +10,30 @@ namespace Hex.Dawn;
 // Link's errors read back into PredictionExceptions the status bar can say, and RemoteName is that device's name.
 internal sealed partial class DawnScene
 {
-    /// <summary>Link and the prediction relay bound to each other, once, as Link's status item is made.</summary>
+    private bool linkPredictionsBound;
+
+    private void ApplyLinkPredictions()
+    {
+        bool wanted = LinkOn && !HexAi.Off && (settings.EditPredictions || settings.EditPredictionsShare);
+        if (wanted == linkPredictionsBound)
+            return;
+        if (wanted)
+            BindLinkPredictions();
+        else
+            UnbindLinkPredictions();
+        linkPredictionsBound = wanted;
+    }
+
+    private void UnbindLinkPredictions()
+    {
+        LinkPredictSourceChanged -= LinkPredictTakeSource;
+        LinkPredictServe = null;
+        LinkPredictServing = null;
+        LinkPredictTakeSource(null);
+        HexPredictionRelay.Configure(null, null);
+    }
+
+    /// <summary>Connect an enabled predictor or explicitly shared model to this machine's Link service.</summary>
     private void BindLinkPredictions()
     {
         HexPredictionRelay.Configure(() => MakePredictionOptions(settings), () => !HexAi.Off && PredictionSettings.Share(settings));
@@ -18,6 +41,7 @@ internal sealed partial class DawnScene
         LinkPredictServe = LinkPredictionGlue.Serve;
         LinkPredictSourceChanged -= LinkPredictTakeSource;
         LinkPredictSourceChanged += LinkPredictTakeSource;
+        LinkPredictTakeSource(LinkPredictSource);
     }
 
     // The device that serves this one now, or none, handed to the relay; on the editor's thread

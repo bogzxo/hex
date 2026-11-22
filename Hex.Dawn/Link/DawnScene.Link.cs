@@ -250,7 +250,7 @@ internal sealed partial class DawnScene
             }
             if (linkEditorNotices is null)
                 BuildLinkEditorNotices();
-            BindLinkPredictions();
+            ApplyLinkPredictions();
             mcpTools?.Refresh();
             AppDomain.CurrentDomain.ProcessExit += StopLinkAtExit;
             linkFoldersSeen = [];
@@ -308,6 +308,7 @@ internal sealed partial class DawnScene
         linkTransport?.Dispose();
         linkTransport = null;
         LinkOn = false;
+        ApplyLinkPredictions();
         mcpTools?.Refresh();
         linkIdentity?.Dispose();
         linkIdentity = null;
@@ -429,6 +430,7 @@ internal sealed partial class DawnScene
             LinkRedialDue();
             linkGitWait -= LINK_LOOK_EVERY;
             LinkLookAtWorkspace(force: linkGitWait <= 0.0f);
+            ApplyLinkPredictions();
             LinkPredictLookServing();
             CheckLinkHoldAge();
         }

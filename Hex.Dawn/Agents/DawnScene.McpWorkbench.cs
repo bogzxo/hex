@@ -91,7 +91,7 @@ internal sealed partial class DawnScene
     /// </summary>
     internal List<HexMcpTool> McpToolList() => HexAi.Off
         ? [.. new[] { ScreenTools(), EditorTools(), WorkbenchTools(), NotebookTools(), Behind(WorkspaceTools()), DevTools(), Behind(HarnessTools()),
-            Alongside(Behind(FileTools())), Alongside(Behind(CodeTools())), GitDiffTools(), TerminalTools(), DebugTools() }.SelectMany(tools => tools).Where(tool => !AgentsOnly(tool.Meta.Name)), LinkHoldTool()]
+            Alongside(Behind(FileTools())), Alongside(Behind(CodeTools())), GitDiffTools(), TerminalTools(), DebugTools() }.SelectMany(tools => tools).Where(tool => !AgentsOnly(tool.Meta.Name)), .. (LinkOn ? new[] { LinkHoldTool() } : [])]
         : [.. ScreenTools(), .. EditorTools(), .. WorkbenchTools(), .. NotebookTools(), .. AgentTools(),
         // The agents', their mail's and their plans' alongside the call going on: they touch chats, not the screen, and
         // queued behind another agent's long call (a build in the terminal, a wait on a language server) an orchestrator's
