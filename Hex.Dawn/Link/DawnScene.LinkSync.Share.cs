@@ -9,11 +9,7 @@ internal sealed partial class DawnScene
     private void LinkShareJoined(HexLinkPeer peer)
     {
         if (HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))
-        {
-            LinkSyncResume(peer);
-            if (LinkAutoSyncOwner(peer.Session.Connection.Dialled, peer.Session.Connection.Rights, peer.Granted))
-                LinkSyncStartSharedFolders(peer);
-        }
+            _ = LinkPrepareSharedWorkspace(peer);
         LinkFilesJoined(peer);
         LinkPresenceJoined(peer);
     }

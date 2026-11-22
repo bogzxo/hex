@@ -14,7 +14,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private sealed class LinkServices(DawnScene hex) : IHexLinkServices, IHexLinkProvisionOffers, IHexLinkRepositoryReady
     {
-        private volatile HexLinkWorkspace workspace = HexLinkWorkspace.Empty;
+        private HexLinkWorkspace workspace = HexLinkWorkspace.Empty;
         private volatile IReadOnlyDictionary<int, HexLinkChatExtra> extras = new Dictionary<int, HexLinkChatExtra>();
 
         public HexLinkDevice Device => hex.linkIdentity?.Device ?? new HexLinkDevice(string.Empty, hex.LinkNameWanted);
@@ -23,8 +23,8 @@ internal sealed partial class DawnScene
 
         public HexLinkWorkspace Workspace
         {
-            get => FolderAuthorities.Advertise(workspace);
-            set => workspace = value;
+            get => FolderAuthorities.Advertise(Volatile.Read(ref workspace));
+            set => hex.LinkWorkspaceAdvertised(Interlocked.Exchange(ref workspace, value), value);
         }
 
         public IReadOnlyList<string> ChosenSyncFolders(string deviceId) => hex.LinkSyncChosen(deviceId);

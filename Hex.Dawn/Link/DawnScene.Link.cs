@@ -485,7 +485,6 @@ internal sealed partial class DawnScene
         Say(Said("link.connected", ("device", LinkNameOf(peer.Device.Id, peer.Device.Name))));
         linkDirty = true;
         // What's shared with it taken up again: the folders synced with it, presence, its remote tabs (DawnScene.LinkSync, ...)
-        LinkLearnAuthority(peer);
         LinkShareJoined(peer);
         if (HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))
         {

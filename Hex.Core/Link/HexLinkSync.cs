@@ -287,6 +287,7 @@ internal sealed partial class HexLinkSync : IDisposable
                 return;
             }
 
+            await peer.RefreshWorkspace(cancel);
             if (!peer.Workspace.Folders.Any(each => PlatformPaths.Comparer.Equals(each.Name, folder.Name)))
             {
                 Fail($"{peer.Device.Name} has no folder called {folder.Name} open");

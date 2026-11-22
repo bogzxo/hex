@@ -164,6 +164,9 @@ internal sealed partial class HexLinkPeer : IDisposable
                 case "link/name":
                     TakeName(parameters);
                     break;
+                case "workspace/changed":
+                    PokeWorkspaceRefresh();
+                    break;
                 case "link/addresses":
                     TakeAddresses(parameters);
                     break;
@@ -217,12 +220,9 @@ internal sealed partial class HexLinkPeer : IDisposable
 
         await Attempt(async () =>
         {
-            JsonObject hello = await AskObject("link/hello", null, session.Closing).ConfigureAwait(false);
+            await RefreshWorkspace(session.Closing).ConfigureAwait(false);
             if (StillAllowed())
-            {
-                Workspace = WorkspaceOf(HexLinkData.Object(hello, "workspace"));
                 ViewRestored?.Invoke();
-            }
         });
         await Task.WhenAll(
             Attempt(async () =>
@@ -468,6 +468,7 @@ internal sealed partial class HexLinkPeer : IDisposable
 
     public void Dispose()
     {
+        workspaceRefresh?.Dispose();
         presenceSend.Dispose();
         foreach (var (_, receiving) in bundles)
             receiving.Fail("the link closed");
