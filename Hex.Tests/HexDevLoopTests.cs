@@ -63,6 +63,99 @@ public sealed class HexDevLoopTests : IDisposable
     }
 
     [Fact]
+    public async Task Child_processes_can_hold_two_generations_of_a_build_dll()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        string dll = Path.Combine(folder, "Hex.Dawn.dll");
+        string source = Path.Combine(System.Environment.SystemDirectory, "version.dll");
+        File.Copy(source, dll);
+        using var firstChild = MapBuildDll();
+        using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        try
+        {
+            Assert.Equal("mapped", await firstChild.StandardOutput.ReadLineAsync(stop.Token));
+            var first = Assert.Single(DawnScene.MoveLockedAside(folder));
+            Assert.Equal(dll, first.From);
+            Assert.False(File.Exists(dll));
+
+            File.Copy(source, dll);
+            using var secondChild = MapBuildDll();
+            try
+            {
+                Assert.Equal("mapped", await secondChild.StandardOutput.ReadLineAsync(stop.Token));
+                var second = Assert.Single(DawnScene.MoveLockedAside(folder));
+                Assert.Equal(dll, second.From);
+                Assert.NotEqual(first.Aside, second.Aside);
+                Assert.False(File.Exists(dll));
+
+                File.WriteAllText(dll, "incomplete replacement");
+                DawnScene.PutBack([second]);
+                Assert.Equal(File.ReadAllBytes(source), File.ReadAllBytes(dll));
+                Assert.True(File.Exists(first.Aside));
+                Assert.False(File.Exists(second.Aside));
+            }
+            finally
+            {
+                await StopChild(secondChild);
+            }
+
+            await StopChild(firstChild);
+            DawnScene.CleanAside(folder);
+            Assert.False(File.Exists(first.Aside));
+        }
+        finally
+        {
+            await StopChild(firstChild);
+        }
+    }
+
+    private System.Diagnostics.Process MapBuildDll()
+    {
+        var start = new System.Diagnostics.ProcessStartInfo("powershell.exe")
+        {
+            WorkingDirectory = folder,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true
+        };
+        start.ArgumentList.Add("-NoProfile");
+        start.ArgumentList.Add("-Command");
+        start.ArgumentList.Add("""
+            $ErrorActionPreference = 'Stop'
+            Add-Type -Name Loader -Namespace Test -MemberDefinition @'
+            [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+            public static extern System.IntPtr LoadLibraryEx(string name, System.IntPtr file, uint flags);
+            '@
+            $path = [IO.Path]::Combine((Get-Location).Path, 'Hex.Dawn.dll')
+            if ([Test.Loader]::LoadLibraryEx($path, [IntPtr]::Zero, 1) -eq [IntPtr]::Zero) { exit 1 }
+            [Console]::WriteLine('mapped')
+            [void][Console]::ReadLine()
+            """);
+        return System.Diagnostics.Process.Start(start)!;
+    }
+
+    private static async Task StopChild(System.Diagnostics.Process child)
+    {
+        if (child.HasExited)
+            return;
+
+        child.StandardInput.Close();
+        using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        try
+        {
+            await child.WaitForExitAsync(stop.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            child.Kill();
+            await child.WaitForExitAsync();
+        }
+    }
+
+    [Fact]
     public void A_build_in_agents_scratch_under_data_is_neither_moved_aside_nor_cleaned_away()
     {
         string scratch = Path.Combine(folder, "data", "agents", "temp", "scratch", "worker", "bin");
