@@ -1,4 +1,5 @@
 using Hex.Core.Git;
+using System.Diagnostics;
 using System.Text.Json.Nodes;
 using Horizon.UI.Components;
 
@@ -28,8 +29,19 @@ internal sealed partial class DawnScene
         public bool OriginalReadOnly = tab.Editor.ReadOnly;
         public float Wait;
         public long LastLocalChange = Environment.TickCount64;
+        public long PresenceAt, MaintenanceAt, RetryAt;
+        public (UITextPosition Caret, UITextPosition Anchor, UITextPosition? Pointer)? LastPresence;
+        public LinkLiveRevision? RevisionReply;
+        public bool HoldEditsForTest, ApplyingRemote;
+        public Action? TextChanged;
+        public CancellationTokenSource? RevisionWait;
+        public HexLinkPeer? RevisionWaitUnsupported;
+        public Action<LinkLiveTiming, string, long>? TestTiming;
     }
 
+    private enum LinkLiveTiming { LocalChange, Dispatch, WorkerStart, WireReplay, Prepared }
+
+    private sealed record LinkLiveRevision(Guid Epoch, long Revision, HexDocExchange Reply, long Arrived);
     private sealed record ScopedDocumentDraft(string SharedText, string Reason);
     private sealed record LinkLiveAgentWork(string Agent, string Name, string Before, string After, TaskCompletionSource<string?> Done);
 
@@ -246,7 +258,7 @@ internal sealed partial class DawnScene
             if (tab.Editor.ReadOnly || shared.Draft is not null || shared.UndoRequests.Count >= 32)
                 return;
             shared.UndoRequests.Enqueue(redo);
-            shared.Wait = 0;
+            LinkLiveFlush(shared, urgent: true);
         };
         if (tab.Editor.Text != shared.Shown.Text)
         {
@@ -258,6 +270,17 @@ internal sealed partial class DawnScene
             LinkLiveApply(shared, shared.Shown, null);
         }
         LinkLiveReadRights(shared, peer);
+        var buffer = tab.Editor.Document;
+        shared.TextChanged = () =>
+        {
+            if (!shared.ApplyingRemote)
+            {
+                shared.TestTiming?.Invoke(LinkLiveTiming.LocalChange, buffer.Text, Stopwatch.GetTimestamp());
+                LinkLiveFlush(shared, urgent: true);
+            }
+        };
+        buffer.Changed += shared.TextChanged;
+        LinkLiveStartRevisionWait(shared);
         linkPresenceDrawnKey = string.Empty;
         shared.Tab.Editor.RemoteCarets = LinkCaretsForShared(shared, LiveCarets(shared.Shown, shared.Participants, shared.Replica.Author));
         tabsDirty = true;
@@ -273,6 +296,12 @@ internal sealed partial class DawnScene
     {
         shared.Draft = new(authorityText ?? shared.Replica.View.Text, reason);
         linkPresenceDrawnKey = string.Empty;
+        LinkLiveStopRevisionWait(shared);
+        if (shared.TextChanged is { } changed)
+        {
+            shared.Tab.Editor.Document.Changed -= changed;
+            shared.TextChanged = null;
+        }
         while (shared.AgentEdits.TryDequeue(out var request))
             request.Done.TrySetResult(reason);
         shared.Tab.Editor.Document.SharedUndo = null;
@@ -286,6 +315,9 @@ internal sealed partial class DawnScene
     {
         if (!linkLiveDocuments.Remove(shared.Tab))
             return;
+        LinkLiveStopRevisionWait(shared);
+        if (shared.TextChanged is { } changed)
+            shared.Tab.Editor.Document.Changed -= changed;
         while (shared.AgentEdits.TryDequeue(out var request))
             request.Done.TrySetResult("The shared document closed before the edit.");
 
@@ -339,49 +371,133 @@ internal sealed partial class DawnScene
                 continue;
             }
 
-            if (shared.Busy || shared.Draft is not null || (shared.Wait -= dt) > 0)
-                continue;
-            if (LiveFolder(shared.Wire) is { } folder && services.FolderAuthorities.Of(folder) is { } pin && pin != shared.Authority)
-            {
-                if (shared.Room is not null)
-                    services.Documents.Rooms.Close(shared.Wire);
-                LinkLiveDraft(shared, "The folder's authority changed.");
-                continue;
-            }
-            shared.Wait = 0.05f;
-            var peer = shared.Room is null ? LinkLiveRoute(shared.Authority, shared.Connection) : null;
-            if (shared.Room is null && (peer is null || !HexLinkAllowed.Has(peer.Granted, HexLinkRights.View)))
-            {
-                if (!shared.Offline)
-                {
-                    shared.Offline = true;
-                    linkPresenceDrawnKey = string.Empty;
-                    while (shared.AgentEdits.TryDequeue(out var request))
-                        request.Done.TrySetResult("The shared document's owner is offline.");
-                    shared.Tab.Editor.RemoteCarets = [];
-                    tabsDirty = true;
-                    Say(Said("link.doc_offline", ("path", shared.Wire)));
-                }
-                if (peer is not null)
-                    shared.Tab.Editor.ReadOnly = true;
-                shared.Connection = null;
-                peer = null;
-                if (shared.Version == shared.Tab.Editor.Document.Version && shared.UndoRequests.Count == 0)
-                    continue;
-            }
-
-            LinkLiveReadRights(shared, peer);
-            var buffer = shared.Tab.Editor.Document;
-            bool changed = shared.Version != buffer.Version;
-            if (changed)
-                shared.LastLocalChange = Environment.TickCount64;
-            string local = changed ? buffer.Text : shared.Shown.Text;
-            var cursor = document == shared.Tab ? (buffer.Caret, buffer.Anchor, shared.Tab.Editor.PointerTextPosition) :
-                ((UITextPosition, UITextPosition, UITextPosition?)?)null;
-            bool editable = !shared.Tab.Editor.ReadOnly;
-            shared.Busy = true;
-            LinkLiveStep(shared, peer, local, buffer.Version, cursor, editable, linkCancel?.Token ?? default);
+            if (!shared.Busy)
+                shared.Wait -= dt;
+            LinkLiveFlush(shared, urgent: shared.RevisionReply is not null || shared.Version != shared.Tab.Editor.Document.Version);
         }
+    }
+
+    private void LinkLiveFlush(LinkLiveDocument shared, bool urgent)
+    {
+        long now = Environment.TickCount64;
+        if (linkServices is not { } services || shared.Busy || shared.Draft is not null || shared.HoldEditsForTest
+            || shared.RetryAt > now || !urgent && shared.Wait > 0)
+            return;
+        if (LiveFolder(shared.Wire) is { } folder && services.FolderAuthorities.Of(folder) is { } pin && pin != shared.Authority)
+        {
+            if (shared.Room is not null)
+                services.Documents.Rooms.Close(shared.Wire);
+            LinkLiveDraft(shared, "The folder's authority changed.");
+            return;
+        }
+
+        shared.Wait = 0.05f;
+        var peer = shared.Room is null ? LinkLiveRoute(shared.Authority, shared.Connection) : null;
+        if (peer != shared.Connection)
+            LinkLiveStopRevisionWait(shared);
+        if (shared.Room is null && (peer is null || !HexLinkAllowed.Has(peer.Granted, HexLinkRights.View)))
+        {
+            LinkLiveStopRevisionWait(shared);
+            if (!shared.Offline)
+            {
+                shared.Offline = true;
+                linkPresenceDrawnKey = string.Empty;
+                while (shared.AgentEdits.TryDequeue(out var request))
+                    request.Done.TrySetResult("The shared document's owner is offline.");
+                shared.Tab.Editor.RemoteCarets = [];
+                tabsDirty = true;
+                Say(Said("link.doc_offline", ("path", shared.Wire)));
+            }
+            if (peer is not null)
+                shared.Tab.Editor.ReadOnly = true;
+            shared.Connection = null;
+            peer = null;
+            if (shared.Version == shared.Tab.Editor.Document.Version && shared.UndoRequests.Count == 0)
+                return;
+        }
+
+        LinkLiveReadRights(shared, peer);
+        var buffer = shared.Tab.Editor.Document;
+        bool changed = shared.Version != buffer.Version;
+        if (changed)
+            shared.LastLocalChange = now;
+        var cursor = document == shared.Tab ? (buffer.Caret, buffer.Anchor, shared.Tab.Editor.PointerTextPosition) :
+            ((UITextPosition, UITextPosition, UITextPosition?)?)null;
+        var wake = shared.RevisionReply;
+        shared.RevisionReply = null;
+        var replica = shared.Replica;
+        bool connecting = peer != shared.Connection;
+        bool localWork = changed || replica.HasPending || replica.Revision < replica.Head || shared.SaveRequested
+            || shared.AgentEdits.Count > 0 || shared.UndoRequests.Count > 0;
+        bool useReplay = wake is not null && !connecting && !localWork && (wake.Epoch, wake.Revision) == (replica.Epoch, replica.Revision);
+        bool updatePresence = !useReplay && now >= shared.PresenceAt && (connecting || cursor != shared.LastPresence);
+        if (!useReplay && !localWork && !updatePresence && !connecting && shared.MaintenanceAt > now)
+        {
+            LinkLiveStartRevisionWait(shared);
+            return;
+        }
+
+        if (!useReplay)
+            shared.MaintenanceAt = now + (peer is not null && peer == shared.RevisionWaitUnsupported ? 50 : 250);
+        shared.Busy = true;
+        LinkLiveStep(shared, peer, changed ? buffer.Text : shared.Shown.Text, buffer.Version, cursor,
+            !shared.Tab.Editor.ReadOnly, updatePresence, useReplay ? wake : null, linkCancel?.Token ?? default);
+    }
+
+    private void LinkLiveStartRevisionWait(LinkLiveDocument shared)
+    {
+        var peer = shared.Connection;
+        if (shared.RevisionWait is not null || shared.Room is null &&
+            (peer is null || peer == shared.RevisionWaitUnsupported || !HexLinkAllowed.Has(peer.Granted, HexLinkRights.View)))
+            return;
+        var lifetime = CancellationTokenSource.CreateLinkedTokenSource(linkCancel?.Token ?? default);
+        shared.RevisionWait = lifetime;
+        _ = LinkLiveWaitForRevision(shared, peer, shared.Replica.Epoch, shared.Replica.Revision, shared.Replica.RosterVersion, lifetime);
+    }
+
+    private static void LinkLiveStopRevisionWait(LinkLiveDocument shared)
+    {
+        var previous = shared.RevisionWait;
+        shared.RevisionWait = null;
+        shared.RevisionReply = null;
+        previous?.Cancel();
+    }
+
+    private async Task LinkLiveWaitForRevision(LinkLiveDocument shared, HexLinkPeer? peer, Guid epoch, long revision,
+        long roster, CancellationTokenSource lifetime)
+    {
+        HexDocExchange? reply = null;
+        bool timedOut = false, unsupported = false;
+        long arrived = 0;
+        try
+        {
+            reply = shared.Room is { } room
+                ? await Task.Run(() => room.WaitForRevision(shared.Authority.DeviceId, shared.Tab, epoch, revision,
+                    lifetime.Token, roster), lifetime.Token).ConfigureAwait(false)
+                : await peer!.WaitForDocumentRevision(shared.Wire, epoch, revision, lifetime.Token,
+                    LinkLiveRelay(shared.Authority, peer), roster).ConfigureAwait(false);
+            timedOut = reply is null;
+            if (reply is not null && shared.TestTiming is not null)
+                arrived = Stopwatch.GetTimestamp();
+        }
+        catch (HexLinkException error) when (error.Code == HexLinkErrors.METHOD_NOT_FOUND) { unsupported = true; }
+        catch (Exception error) when (error is IOException or HexLinkException or OperationCanceledException) { }
+        PostLink(() =>
+        {
+            lifetime.Dispose();
+            if (shared.RevisionWait != lifetime)
+                return;
+            shared.RevisionWait = null;
+            if (unsupported)
+                shared.RevisionWaitUnsupported = peer;
+            if (reply is not null)
+            {
+                shared.RevisionReply = new(epoch, revision, reply, arrived);
+                LinkLiveFlush(shared, urgent: true);
+            }
+            else if (timedOut && !shared.Busy && (shared.Room is not null || peer is { IsClosed: false }))
+                LinkLiveStartRevisionWait(shared);
+        });
     }
 
     private void LinkLiveAutoOpen(LinkServices services, HexDocument tab)
@@ -429,8 +545,10 @@ internal sealed partial class DawnScene
     }
 
     private async void LinkLiveStep(LinkLiveDocument shared, HexLinkPeer? peer, string local, int version,
-        (UITextPosition Caret, UITextPosition Anchor, UITextPosition? Pointer)? cursor, bool editable, CancellationToken cancel)
+        (UITextPosition Caret, UITextPosition Anchor, UITextPosition? Pointer)? cursor, bool editable, bool updatePresence,
+        LinkLiveRevision? replay, CancellationToken cancel)
     {
+        shared.TestTiming?.Invoke(LinkLiveTiming.Dispatch, local, Stopwatch.GetTimestamp());
         HexDocView basis = shared.Shown;
         HexDocView captured = basis;
         Guid epoch = shared.Replica.Epoch;
@@ -451,6 +569,7 @@ internal sealed partial class DawnScene
         {
             await Task.Run(async () =>
             {
+                long started = shared.TestTiming is not null ? Stopwatch.GetTimestamp() : 0;
                 var replica = shared.Replica;
                 if (editable)
                     captured = replica.Capture(basis, local);
@@ -463,7 +582,7 @@ internal sealed partial class DawnScene
                         replica.ChangeUndo(redo);
 
                 HexDocPoint? caret = null, anchor = null, pointer = null;
-                if (cursor is { } here)
+                if (updatePresence && cursor is { } here)
                 {
                     caret = LivePoint(captured, here.Caret);
                     anchor = LivePoint(captured, here.Anchor);
@@ -476,16 +595,18 @@ internal sealed partial class DawnScene
                 bool ready = idle && undo.Length == 0 && !saveRequested && agent is null &&
                     replica.CheckpointSuggested && !replica.HasPending && replica.Revision == replica.Head;
                 HexDocExchange response;
-                if (shared.Room is { } room)
+                if (replay is not null)
+                    response = replay.Reply;
+                else if (shared.Room is { } room)
                     response = room.Exchange(shared.Authority.DeviceId, shared.Tab, replica.Epoch, replica.Revision,
-                        replica.Batch(), caret, anchor, pointer, ready, replica.RosterVersion);
+                        replica.Batch(), caret, anchor, pointer, ready, replica.RosterVersion, updatePresence);
                 else if (peer != shared.Connection)
                     response = await peer!.OpenDocument(shared.Wire, replica.Epoch, replica.Revision, cancel,
                         relayTo: LinkLiveRelay(shared.Authority, peer)).ConfigureAwait(false);
                 else
                     response = await peer!.ExchangeDocument(shared.Wire, replica.Epoch, replica.Revision,
                         replica.Batch(), caret, anchor, pointer, checkpointReady: ready, cancel: cancel,
-                        relayTo: LinkLiveRelay(shared.Authority, peer), knownRoster: replica.RosterVersion).ConfigureAwait(false);
+                        relayTo: LinkLiveRelay(shared.Authority, peer), knownRoster: replica.RosterVersion, updatePresence: updatePresence).ConfigureAwait(false);
 
                 replica.Receive(response);
                 if (agent is not null && editable && replica.CanEdit && !replica.HasPending && replica.Revision == replica.Head)
@@ -519,6 +640,13 @@ internal sealed partial class DawnScene
                     }
                 }
                 var updated = replica.View;
+                if (shared.TestTiming is { } trace)
+                {
+                    if (replay is { Arrived: > 0 })
+                        trace(LinkLiveTiming.WireReplay, updated.Text, replay.Arrived);
+                    trace(LinkLiveTiming.WorkerStart, updated.Text, started);
+                    trace(LinkLiveTiming.Prepared, updated.Text, Stopwatch.GetTimestamp());
+                }
                 if (epoch == replica.Epoch)
                     patches = [.. captured.PatchesTo(updated).Select(splice => new UITextEdit(
                         LivePosition(captured, splice.Start), LivePosition(captured, splice.Start + splice.Length), splice.Inserted))];
@@ -547,7 +675,8 @@ internal sealed partial class DawnScene
             }
             if (error is not null)
             {
-                shared.Wait = 1f;
+                shared.RetryAt = Environment.TickCount64 + 1000;
+                LinkLiveStopRevisionWait(shared);
                 shared.Connection = null;
                 if (!shared.Offline)
                 {
@@ -573,6 +702,13 @@ internal sealed partial class DawnScene
             if (shared.Offline || !LiveSamePeople(shared.Participants, shared.Replica.Participants))
                 tabsDirty = true;
             shared.Offline = false;
+            if (shared.Connection != peer || epoch != shared.Replica.Epoch)
+                shared.LastPresence = null;
+            else if (updatePresence)
+            {
+                shared.LastPresence = cursor;
+                shared.PresenceAt = Environment.TickCount64 + 50;
+            }
             shared.Connection = peer;
             LinkLiveReadRights(shared, peer);
             shared.Participants = shared.Replica.Participants;
@@ -580,6 +716,8 @@ internal sealed partial class DawnScene
             {
                 if (epoch != shared.Replica.Epoch)
                     LinkLiveDraft(shared, "The shared document restarted while this tab was changing.");
+                else
+                    LinkLiveFlush(shared, urgent: true);
                 return;
             }
             LinkLiveApply(shared, shared.Replica.View, epoch == shared.Replica.Epoch ? captured : null, patches);
@@ -590,6 +728,10 @@ internal sealed partial class DawnScene
                 if (!shared.Tab.Editor.RemoteCarets.SequenceEqual(visible))
                     shared.Tab.Editor.RemoteCarets = visible;
             }
+            if (shared.RevisionReply is not null || shared.Replica.Revision < shared.Replica.Head)
+                LinkLiveFlush(shared, urgent: true);
+            else
+                LinkLiveStartRevisionWait(shared);
         });
     }
 
@@ -597,8 +739,13 @@ internal sealed partial class DawnScene
     {
         var buffer = shared.Tab.Editor.Document;
         bool following = linkFollowDocument == shared.Tab && linkFollowVersion == buffer.Version && linkFollowCaret == buffer.Caret;
-        shared.Tab.Editor.ApplySharedText(view.Text, (basis, draft, changed) => HexLinkDocuments.TryMerge(basis, draft, changed, out string merged) ? merged : null,
-            previous is null ? null : point => view.OffsetOf(LivePoint(previous, point)) is { } offset ? LivePosition(view, offset) : point, patches);
+        shared.ApplyingRemote = true;
+        try
+        {
+            shared.Tab.Editor.ApplySharedText(view.Text, (basis, draft, changed) => HexLinkDocuments.TryMerge(basis, draft, changed, out string merged) ? merged : null,
+                previous is null ? null : point => view.OffsetOf(LivePoint(previous, point)) is { } offset ? LivePosition(view, offset) : point, patches);
+        }
+        finally { shared.ApplyingRemote = false; }
         shared.Shown = view;
         shared.Version = buffer.Version;
         if (following)
@@ -630,7 +777,7 @@ internal sealed partial class DawnScene
         var outcome = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
         shared.AgentEdits.Enqueue(new(caller?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "mcp",
             HexLinkNames.Clean(name) ?? "MCP", before, after, outcome));
-        shared.Wait = 0;
+        LinkLiveFlush(shared, urgent: true);
         while (!outcome.Task.IsCompleted)
             yield return null;
         if (outcome.Task.Result is { } error)
@@ -652,7 +799,7 @@ internal sealed partial class DawnScene
             return true;
         }
         shared.SaveRequested = true;
-        shared.Wait = 0;
+        LinkLiveFlush(shared, urgent: true);
         return true;
     }
 

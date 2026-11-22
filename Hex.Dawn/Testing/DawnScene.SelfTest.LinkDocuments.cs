@@ -9,7 +9,18 @@ internal sealed partial class DawnScene
 {
     private const string LINK_DOC_TEST = "HEX_LINK_DOCUMENT_TEST";
     private const string LINK_DOC_WIRE = "shared/note.txt";
+    private const int LINK_DOC_SAMPLES = 24;
     private int linkDocTestStage, linkDocLatencySample;
+    private readonly long[] linkDocWire = new long[LINK_DOC_SAMPLES], linkDocGuestWorker = new long[LINK_DOC_SAMPLES],
+        linkDocReceived = new long[LINK_DOC_SAMPLES], linkDocApplied = new long[LINK_DOC_SAMPLES];
+
+    private static string LinkDocSample(int sample) => $"seed{(char)('a' + sample - 1)}";
+
+    private static void LinkDocStamp(long[] ticks, string text, long observed = 0)
+    {
+        if (text is ['s', 'e', 'e', 'd', >= 'a' and <= 'x' and var key])
+            Interlocked.CompareExchange(ref ticks[key - 'a'], observed == 0 ? Stopwatch.GetTimestamp() : observed, 0);
+    }
 
     private void LinkDocumentTestPeer(string work)
     {
@@ -43,28 +54,46 @@ internal sealed partial class DawnScene
         if (linkDocTestStage == 1 && document.Editor.Text == "seed")
         {
             document.Editor.Document.Select(new(0, 0), new(0, 2));
+            shared.TestTiming = (stage, text, ticks) =>
+            {
+                switch (stage)
+                {
+                    case LinkLiveTiming.WireReplay:
+                        LinkDocStamp(linkDocWire, text, ticks);
+                        break;
+                    case LinkLiveTiming.WorkerStart:
+                        LinkDocStamp(linkDocGuestWorker, text, ticks);
+                        break;
+                    case LinkLiveTiming.Prepared:
+                        LinkDocStamp(linkDocReceived, text, ticks);
+                        break;
+                }
+            };
+            var buffer = document.Editor.Document;
+            buffer.Changed += () => LinkDocStamp(linkDocApplied, buffer.Text);
             Signal("joined");
             linkDocTestStage++;
         }
 
-        for (int sample = linkDocLatencySample + 1; sample <= 4; sample++)
+        for (int sample = linkDocLatencySample + 1; sample <= LINK_DOC_SAMPLES; sample++)
         {
-            if (document.Editor.Text != $"seed{sample}")
+            if (document.Editor.Text != LinkDocSample(sample))
                 break;
-            Signal($"latency{sample}", Stopwatch.GetTimestamp().ToString(CultureInfo.InvariantCulture));
+            Signal($"latency{sample}", FormattableString.Invariant($"{linkDocWire[sample - 1]}|{linkDocGuestWorker[sample - 1]}|{linkDocReceived[sample - 1]}|{linkDocApplied[sample - 1]}|{Stopwatch.GetTimestamp()}"));
             linkDocLatencySample = sample;
         }
 
         if (linkDocTestStage == 2 && Flag("overlap") && document.Editor.Text == "seed")
         {
-            shared.Wait = 3600;
+            shared.HoldEditsForTest = true;
             Rewrite(document, "Y");
             Signal("draft");
             linkDocTestStage++;
         }
         if (linkDocTestStage == 3 && Flag("release"))
         {
-            shared.Wait = 0;
+            shared.HoldEditsForTest = false;
+            LinkLiveFlush(shared, urgent: true);
             linkDocTestStage++;
         }
         if (linkDocTestStage == 4 && document.Editor.Text == "YX")
@@ -93,11 +122,20 @@ internal sealed partial class DawnScene
         string peerFolder = Path.Combine(peerHome, "shared"), readerFolder = Path.Combine(readerHome, "shared");
         string peerWork = Path.Combine(peerHome, LINK_PEER_FOLDER), readerWork = Path.Combine(readerHome, LINK_PEER_FOLDER);
         string[] files = [path, Path.Combine(peerFolder, "note.txt"), Path.Combine(readerFolder, "note.txt")];
-        long[] sent = new long[4];
+        long[] sent = new long[LINK_DOC_SAMPLES], typed = new long[LINK_DOC_SAMPLES];
+        long[] dispatched = new long[LINK_DOC_SAMPLES], ownerWorker = new long[LINK_DOC_SAMPLES], ordered = new long[LINK_DOC_SAMPLES];
         HexAgentChat? named = null;
         Task<McpToolResult>? agentEdit = null;
         Task<string?>? syncing = null;
         bool SyncReady(HexLinkPeer peer) => LinkSyncOf(peer.Device.Id, "shared")?.State is HexLinkSyncState.Idle or HexLinkSyncState.PullOnly;
+
+        async Task<string?> StartFixtureSync(HexLinkPeer peer)
+        {
+            string? why = await LinkSyncStart(peer.Device.Id, "shared", remember: false);
+            // The automatic check may have started first, then declined this plain folder.
+            return why is null && LinkSyncOf(peer.Device.Id, "shared")?.State == HexLinkSyncState.Off
+                ? await LinkSyncStart(peer.Device.Id, "shared", remember: false) : why;
+        }
         bool Flag(string work, string name) => File.Exists(Path.Combine(work, name));
         void Signal(string work, string name) => File.WriteAllText(Path.Combine(work, name), "");
         void Await(string label, Func<bool> check)
@@ -133,7 +171,7 @@ internal sealed partial class DawnScene
         test.Run(() =>
         {
             if (LinkPeers.SingleOrDefault() is { } editor)
-                syncing = LinkSyncStart(editor.Device.Id, "shared", remember: false);
+                syncing = StartFixtureSync(editor);
         });
         Await("the editor's plain folder is synced", () =>
             syncing is { IsCompletedSuccessfully: true, Result: null } && LinkPeers.SingleOrDefault() is { } editor && SyncReady(editor));
@@ -146,6 +184,20 @@ internal sealed partial class DawnScene
         Await("a synced tab joined its owner's unsaved buffer automatically", () => Flag(peerWork, "joined") && LinkLiveOf(document) is not null);
         Await("caret and selection arrived from B", () => document.Editor.RemoteCarets.Any(c => c.Column == 2 && c.AnchorColumn == 0));
 
+        test.Run(() =>
+        {
+            if (LinkLiveOf(document) is not { } shared)
+                return;
+            shared.TestTiming = (stage, text, ticks) => LinkDocStamp(stage switch
+            {
+                LinkLiveTiming.LocalChange => typed,
+                LinkLiveTiming.Dispatch => dispatched,
+                LinkLiveTiming.WorkerStart => ownerWorker,
+                _ => ordered
+            }, text, ticks);
+            var buffer = document.Editor.Document;
+            buffer.Changed += () => LinkDocStamp(typed, buffer.Text);
+        });
         for (int sample = 1; sample <= sent.Length; sample++)
         {
             int number = sample;
@@ -154,21 +206,45 @@ internal sealed partial class DawnScene
                 document.Editor.Focus();
                 document.Editor.Document.Select(new(0, 4), new(0, document.Editor.Text.Length));
                 sent[number - 1] = Stopwatch.GetTimestamp();
-                Engine.Input.Post(Horizon.Input.InputEvent.Typed(number.ToString(CultureInfo.InvariantCulture)));
+                Engine.Input.Post(Horizon.Input.InputEvent.Typed(LinkDocSample(number)[^1..]));
             });
             Await($"live edit {number} reached the second editor", () => Flag(peerWork, $"latency{number}"));
         }
         test.Run(() =>
         {
-            var elapsed = new List<double>();
+            var samples = new List<long[]>();
             for (int i = 0; i < sent.Length; i++)
             {
                 string flag = Path.Combine(peerWork, $"latency{i + 1}");
-                if (File.Exists(flag) && long.TryParse(File.ReadAllText(flag), CultureInfo.InvariantCulture, out long observed))
-                    elapsed.Add(Stopwatch.GetElapsedTime(sent[i], observed).TotalMilliseconds);
+                if (!File.Exists(flag))
+                    continue;
+                string[] fields = File.ReadAllText(flag).Split('|');
+                if (fields.Length == 5 && fields.All(each => long.TryParse(each, CultureInfo.InvariantCulture, out _)))
+                    samples.Add([sent[i], typed[i], dispatched[i], ownerWorker[i], ordered[i],
+                        .. fields.Select(each => long.Parse(each, CultureInfo.InvariantCulture))]);
             }
-            if (elapsed.Count > 0)
-                Console.WriteLine($"[Hex self-test] link-documents loopback edit to remote display: {string.Join(", ", elapsed.Select(ms => $"{ms:F1}"))} ms");
+            Measure("input dispatch to local edit", 0, 1);
+            Measure("local edit to exchange", 1, 2);
+            Measure("exchange to authority worker", 2, 3);
+            Measure("authority worker to ordered edit", 3, 4);
+            Measure("authority order to wire replay", 4, 5);
+            Measure("wire replay to peer worker", 5, 6);
+            Measure("peer worker to prepared edit", 6, 7);
+            Measure("prepared edit to remote editor", 7, 8);
+            Measure("remote editor to fixture observation", 8, 9);
+            Measure("input dispatch to remote editor", 0, 8);
+            Measure("input dispatch to fixture observation", 0, 9);
+
+            void Measure(string label, int from, int to)
+            {
+                double[] ms = [.. samples.Where(row => row[from] != 0 && row[to] != 0)
+                    .Select(row => Stopwatch.GetElapsedTime(row[from], row[to]).TotalMilliseconds).Order()];
+                if (ms.Length == 0)
+                    return;
+                double median = (ms[(ms.Length - 1) / 2] + ms[ms.Length / 2]) * 0.5;
+                double p95 = ms[(int)Math.Ceiling(ms.Length * 0.95) - 1];
+                Console.WriteLine(FormattableString.Invariant($"[Hex self-test] link-documents timing {label}, n={ms.Length}, median={median:F1} ms, p95={p95:F1} ms"));
+            }
             Rewrite(document, "seed");
             Signal(peerWork, "overlap");
         });
@@ -190,7 +266,7 @@ internal sealed partial class DawnScene
         test.Run(() =>
         {
             if (LinkPeers.FirstOrDefault(peer => !HexLinkAllowed.Has(peer.Session.Connection.Rights, HexLinkRights.Edit)) is { } reader)
-                syncing = LinkSyncStart(reader.Device.Id, "shared", remember: false);
+                syncing = StartFixtureSync(reader);
         });
         Await("the reader's plain folder is synced", () =>
             syncing is { IsCompletedSuccessfully: true, Result: null } && LinkPeers.Count(SyncReady) == 2);
