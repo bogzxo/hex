@@ -44,18 +44,31 @@ internal sealed partial class DawnScene
         test.Check("link-ui: the status item says who is linked", () =>
             LinkPeers.Count == 1 && linkItem.Text.Contains(OneLine(LinkNameOf(LinkPeers[0].Device.Id, LinkPeers[0].Device.Name), 18), StringComparison.Ordinal));
 
-        // Made again once first so a sync that was still starting has settled into its rows, then compared
+        // An initial sync adds progress rows. Compare two rebuilds only once those transfers finish.
         float before = 0.0f;
+        bool measuredIdle = false;
+        test.WaitFor(SyncIdle, 15.0f);
         test.Run(() => linkWindowStale = true);
-        test.Settle(0.5f);
-        test.Run(() => before = linkWindowDevices?.Bounds.Height ?? 0.0f);
-        test.Run(() => linkWindowStale = true);
+        test.Settle(0.4f);
+        test.Run(() =>
+        {
+            measuredIdle = SyncIdle();
+            before = linkWindowDevices?.Bounds.Height ?? 0.0f;
+            linkWindowStale = true;
+        });
         test.Settle(0.4f);
         test.Check("link-ui: the window made again from the same state keeps its size", () =>
         {
             float after = linkWindowDevices?.Bounds.Height ?? -1.0f;
             Console.WriteLine($"[Hex self-test] link-ui: devices part {before.ToString("0.0", CultureInfo.InvariantCulture)} then {after.ToString("0.0", CultureInfo.InvariantCulture)}");
-            return before > 0.0f && MathF.Abs(after - before) < 1.0f;
+            return measuredIdle && SyncIdle() && before > 0.0f && MathF.Abs(after - before) < 1.0f;
         });
+
+        bool SyncIdle()
+        {
+            LinkSyncShown[] states = [.. LinkSyncs, .. LinkPeers.SelectMany(LinkRemoteSyncs)];
+            return states.Any(sync => sync.State == HexLinkSyncState.Idle) &&
+                states.All(sync => sync.State is not (HexLinkSyncState.Comparing or HexLinkSyncState.Syncing));
+        }
     }
 }
