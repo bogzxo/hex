@@ -113,6 +113,7 @@ internal sealed partial class HexLinkSync : IDisposable
     {
         this.peer = peer;
         this.folder = folder;
+        TreeCacheDirectory = stateFolder;
         if (peer.Session.SupportsBulk)
             Quiet = TimeSpan.FromMilliseconds(120);
         int inFlight = peer.Session.SupportsBulk ? HexLinkFilePack.MaximumFiles : MOST_IN_FLIGHT;
@@ -233,6 +234,8 @@ internal sealed partial class HexLinkSync : IDisposable
     /// <summary>Called when anything shown of it moved (its state, a count, a conflict), on whatever thread it moved on.</summary>
     public Action? Changed { get; set; }
 
+    internal string? TreeCacheDirectory { get; init; }
+
     public int FilesDone => Volatile.Read(ref filesDone);
     public int FilesTotal => Volatile.Read(ref filesTotal);
     public long BytesDone => Volatile.Read(ref bytesDone);
@@ -344,7 +347,7 @@ internal sealed partial class HexLinkSync : IDisposable
 
             peer.Session.Closed += LinkClosed;
 
-            tree = HexLinkTree.Shared(folder, () => Excludes(), Path.GetDirectoryName(StateFile), peer.Session.SupportsBulk);
+            tree = HexLinkTree.Shared(folder, () => Excludes(), TreeCacheDirectory, peer.Session.SupportsBulk);
             watch = new HexLinkTreeSubscription(tree, Saw, Quiet, Rescan);
             // The previous snapshot is only a digest offer. The remote still verifies each offered directory
             // against its current snapshot, so both current listings can run concurrently.

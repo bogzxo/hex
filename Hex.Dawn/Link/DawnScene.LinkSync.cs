@@ -163,6 +163,7 @@ internal sealed partial class DawnScene
                     ApplyStream = LinkCompareAndReplaceStream,
                     RenameLocal = LinkRenameCase,
                     Excludes = () => services.Excludes,
+                    TreeCacheDirectory = services.TreeCacheDirectory,
                     GitFollowEnabled = LinkGitFollowChoice(local, peer, !automatic),
                     GitFollowData = linkData,
                     GitFollowAudited = detail => services.Audit("git", peer.Device, detail)

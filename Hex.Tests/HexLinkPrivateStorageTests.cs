@@ -40,14 +40,52 @@ public sealed class HexLinkPrivateStorageTests
         string data = Path.Combine(repo, "data", "link");
         string appData = Path.Combine(root, "user");
         string external = HexLinkPrivateStorage.Choose(data, appData, [new("repo", repo)])!;
-        Directory.CreateDirectory(external);
+        Directory.CreateDirectory(Path.Combine(external, "pub"));
         try
         {
             Assert.Equal(external, HexLinkPrivateStorage.Choose(data, appData, []));
         }
         finally
         {
-            Directory.Delete(external);
+            Directory.Delete(external, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void A_cache_inside_an_export_moves_to_its_private_profile()
+    {
+        string repo = Path.Combine(Temp, "cache-repo");
+        string data = Path.Combine(repo, "data", "link");
+        string cache = Path.Combine(data, "sync");
+        string appData = Path.Combine(Temp, "cache-appdata");
+        var export = new HexLinkFolder("repo", repo);
+        string privateStore = HexLinkPrivateStorage.Choose(data, appData, [export])!;
+
+        Assert.Equal(cache, HexLinkPrivateStorage.ChooseTreeCache(data, cache, appData, []));
+        Assert.Equal(Path.Combine(privateStore, "tree-cache"),
+            HexLinkPrivateStorage.ChooseTreeCache(data, cache, appData, [export]));
+        Assert.Null(HexLinkPrivateStorage.ChooseTreeCache(data, cache, appData,
+            [export, new("user", appData)]));
+    }
+
+    [Fact]
+    public void A_cache_only_profile_does_not_move_existing_private_drafts()
+    {
+        string root = Path.Combine(Temp, Guid.NewGuid().ToString("N"));
+        string data = Path.Combine(root, "data", "link");
+        string cache = Path.Combine(data, "sync");
+        var export = new HexLinkFolder("only cache", cache);
+        string? externalCache = HexLinkPrivateStorage.ChooseTreeCache(data, cache, Path.Combine(root, "app"), [export]);
+        Assert.NotNull(externalCache);
+        Directory.CreateDirectory(externalCache);
+        try
+        {
+            Assert.Equal(Path.Combine(data, "wt"),
+                HexLinkPrivateStorage.Choose(data, Path.Combine(root, "app"), [export]));
+        }
+        finally
+        {
+            Directory.Delete(externalCache);
         }
     }
 

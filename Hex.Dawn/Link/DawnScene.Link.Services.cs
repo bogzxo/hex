@@ -83,7 +83,9 @@ internal sealed partial class DawnScene
         public Task RenameCase(string from, string to, string expected, CancellationToken cancel) =>
             hex.LinkRenameCase(from, to, expected, cancel);
 
-        public string? TreeCacheDirectory => hex.linkData is { } data ? Path.Combine(data, LINK_SYNC_STATES) : null;
+        public string? TreeCacheDirectory => hex.linkData is { Length: > 0 } data
+            ? HexLinkPrivateStorage.ChooseTreeCache(data, Path.Combine(data, LINK_SYNC_STATES), hex.LinkProfileDataRoot, Workspace.Folders)
+            : null;
 
         public Task<string?> CompareAndReplace(string full, string wire, string? baseHash, Stream? source,
             long length, string? expectedHash, CancellationToken cancel, bool? executable) =>

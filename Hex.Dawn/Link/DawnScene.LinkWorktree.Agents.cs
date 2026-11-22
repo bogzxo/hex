@@ -9,9 +9,12 @@ internal sealed partial class DawnScene
 
     private const string LINK_PRIVATE_STORAGE_UNAVAILABLE = "No private Link storage is available outside the shared folders.";
 
+    private string LinkProfileDataRoot => options.SelfTest
+        ? Path.Combine(Path.GetTempPath(), "hex-link-selftest-data") : PlatformPaths.DataRoot;
+
     private string? LinkPrivateStoragePath => HexLinkPrivateStorage.Choose(
         linkData.Length > 0 ? linkData : Path.Combine(HexData.Root, LINK_FOLDER),
-        options.SelfTest ? Path.Combine(Path.GetTempPath(), "hex-link-selftest-data") : PlatformPaths.DataRoot,
+        LinkProfileDataRoot,
         linkServices?.Workspace.Folders ?? []);
 
     private string LinkPrivateStorage => LinkPrivateStoragePath ?? throw new IOException(LINK_PRIVATE_STORAGE_UNAVAILABLE);
