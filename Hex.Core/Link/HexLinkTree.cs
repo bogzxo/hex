@@ -85,6 +85,12 @@ internal sealed partial class HexLinkTree
     /// </summary>
     public HexLinkManifest Manifest() => Manifest(verify: false);
 
+    internal async Task<HexLinkManifest> ManifestAsync(CancellationToken cancel, bool provision = false)
+    {
+        await using var lease = await HexLinkPublicationFence.ForRoot(Root).EnterLive(cancel);
+        return await Task.Run(() => provision ? ProvisionManifest() : Manifest(), cancel);
+    }
+
     internal HexLinkManifest Manifest(bool verify, bool reuse = true, bool provision = false)
     {
         using var timing = HexLinkSyncTiming.Measure("tree.scan-total");
@@ -655,6 +661,8 @@ internal sealed class HexLinkTreeWatch : IDisposable
     private readonly FileSystemWatcher? watcher;
     private readonly Timer quiet, rescan;
     private readonly SemaphoreSlim looking = new(1, 1);
+    private readonly CancellationTokenSource stopping = new();
+    private readonly CancellationToken stopped;
     private readonly HashSet<string> pending = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> caseMoves = new(StringComparer.Ordinal);
     private Dictionary<string, (string? Hash, bool? Executable, bool Unavailable)> known = new(StringComparer.Ordinal);
@@ -673,6 +681,7 @@ internal sealed class HexLinkTreeWatch : IDisposable
     {
         this.tree = tree;
         this.changed = changed;
+        stopped = stopping.Token;
         Quiet = quietFor ?? TimeSpan.FromMilliseconds(150);
         Rescan = rescanEvery ?? TimeSpan.FromSeconds(15);
         quiet = new Timer(_ => _ = Look(), null, Timeout.Infinite, Timeout.Infinite);
@@ -787,8 +796,10 @@ internal sealed class HexLinkTreeWatch : IDisposable
     {
         await looking.WaitAsync();
         using var timing = HexLinkSyncTiming.Measure("watch.look-and-hash");
+        HexLinkPublicationFence.Lease? lease = null;
         try
         {
+            lease = await HexLinkPublicationFence.ForRoot(tree.Root).EnterLive(stopped);
             string[] paths;
             bool whole, verify;
             KeyValuePair<string, string>[] renames;
@@ -912,6 +923,8 @@ internal sealed class HexLinkTreeWatch : IDisposable
                 }
             }
 
+            await lease.DisposeAsync();
+            lease = null;
             for (int at = 0; at < changes.Count;)
             {
                 int end = at, bytes = 0;
@@ -929,6 +942,9 @@ internal sealed class HexLinkTreeWatch : IDisposable
                 at = end;
             }
         }
+        catch (OperationCanceledException) when (stopped.IsCancellationRequested && !throwOnFailure)
+        {
+        }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or HexLinkException)
         {
             // No incomplete pass changes the baseline. Try the whole tree again on the next event or rescan.
@@ -939,6 +955,8 @@ internal sealed class HexLinkTreeWatch : IDisposable
         }
         finally
         {
+            if (lease is not null)
+                await lease.DisposeAsync();
             looking.Release();
         }
     }
@@ -960,7 +978,13 @@ internal sealed class HexLinkTreeWatch : IDisposable
     public void Dispose()
     {
         lock (pending)
+        {
+            if (disposed)
+                return;
             disposed = true;
+        }
+        stopping.Cancel();
+        stopping.Dispose();
         watcher?.Dispose();
         quiet.Dispose();
         rescan.Dispose();

@@ -50,7 +50,11 @@ internal sealed partial class HexLinkHost
             async (partial, stop) =>
             {
                 Need(HexLinkRights.Edit, "sync/file/write");
-                string full = ResolveStreamedFile(transfer.Path, out HexLinkTree current);
+                string full = ResolveFile(transfer.Path);
+                await using var lease = await HexLinkPublicationFence.ForRoot(full).EnterLive(stop);
+                Need(HexLinkRights.Edit, "sync/file/write");
+                if (!PlatformPaths.Comparer.Equals(full, ResolveStreamedFile(transfer.Path, out HexLinkTree current)))
+                    throw new HexLinkException(HexLinkErrors.CONFLICT, "The streamed file path changed before it was written.");
                 services.Audit("edit", Device, $"sync/file/write {transfer.Path}, {transfer.Length} bytes");
                 await using FileStream file = HexLinkFileTransfer.Read(partial);
                 string? hash = await services.CompareAndReplace(full, transfer.Path, transfer.Base, file, transfer.Length,
@@ -68,9 +72,17 @@ internal sealed partial class HexLinkHost
         if (!Guid.TryParseExact(id, "N", out _))
             throw HexLinkException.Invalid("Invalid Link streamed read request id.");
         var transfer = HexLinkFileTransfer.Of(parameters);
-        string full = ResolveStreamedFile(transfer.Path, out _);
+        string full = ResolveFile(transfer.Path);
         var checkpoint = HexLinkFileTransfer.Checkpoint.Of(parameters, transfer.Length);
-        await using FileStream file = HexLinkFileTransfer.Read(full);
+        FileStream opened;
+        await using (await HexLinkPublicationFence.ForRoot(full).EnterLive(cancel))
+        {
+            Need(HexLinkRights.View, "sync/file/read");
+            if (!PlatformPaths.Comparer.Equals(full, ResolveStreamedFile(transfer.Path, out _)))
+                throw new HexLinkException(HexLinkErrors.CONFLICT, "The streamed file path changed before it was read.");
+            opened = HexLinkFileTransfer.Read(full);
+        }
+        await using FileStream file = opened;
         await transfer.Send(session, "sync/file/read", new JsonObject { ["id"] = id }, file, checkpoint, cancel);
         return new JsonObject { ["hash"] = transfer.Hash };
     }
@@ -83,7 +95,11 @@ internal sealed partial class HexLinkHost
         string expected = HexLinkData.Need(parameters, "base", 65);
         if (expected.Length != 64 || !expected.All(char.IsAsciiHexDigit))
             throw HexLinkException.Invalid("A streamed deletion needs a SHA-256 base.");
-        string full = ResolveStreamedFile(path, out _);
+        string full = ResolveFile(path);
+        await using var lease = await HexLinkPublicationFence.ForRoot(full).EnterLive(cancel);
+        Need(HexLinkRights.Edit, "sync/file/delete");
+        if (!PlatformPaths.Comparer.Equals(full, ResolveStreamedFile(path, out _)))
+            throw new HexLinkException(HexLinkErrors.CONFLICT, "The streamed file path changed before it was deleted.");
         services.Audit("edit", Device, $"sync/file/delete {path}");
         await services.CompareAndReplace(full, path, expected, null, 0, null, cancel, null);
         return new JsonObject { ["path"] = path };

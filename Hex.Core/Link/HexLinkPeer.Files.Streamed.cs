@@ -63,7 +63,11 @@ internal sealed partial class HexLinkPeer
     {
         JsonObject answer = await AskObject("sync/file/resume", transfer.Json(), cancel, TimeSpan.FromMinutes(5));
         var checkpoint = HexLinkFileTransfer.Checkpoint.Of(answer, transfer.Length);
-        await using FileStream file = HexLinkFileTransfer.Read(full);
+        FileStream opened;
+        await using (await HexLinkPublicationFence.ForRoot(full).EnterLive(cancel))
+            opened = HexLinkFileTransfer.Read(full);
+        // A checked replacement can rename this path after the open. The handle keeps the opened contents.
+        await using FileStream file = opened;
         JsonNode? result = await transfer.Send(session, "sync/file/write", transfer.Json(), file, checkpoint, cancel);
         if (result is not JsonObject committed || HexLinkData.String(committed, "hash", 64) != transfer.Hash)
             throw HexLinkException.Invalid("The peer did not confirm the streamed file hash.");

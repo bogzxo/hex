@@ -72,6 +72,38 @@ public sealed class HexLinkTreeCacheTests
     }
 
     [Fact]
+    public async Task Manifest_and_watcher_wait_for_the_whole_publication()
+    {
+        using var site = new LinkServices(HexLinkTestKit.DeviceA);
+        var tree = new HexLinkTree(site.Workspace.Folders[0]);
+        var changes = new System.Collections.Concurrent.ConcurrentQueue<HexLinkTreeChange>();
+        using var watch = new HexLinkTreeWatch(tree, batch =>
+        {
+            foreach (HexLinkTreeChange change in batch)
+                changes.Enqueue(change);
+        }, TimeSpan.FromSeconds(3), TimeSpan.FromMinutes(1));
+        watch.Seed(tree.Manifest());
+
+        using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        Task<HexLinkManifest> manifest;
+        Task flush;
+        await using (await HexLinkPublicationFence.ForRoot(tree.Root).EnterExclusive(HexLinkFenceKind.Publication, limit.Token))
+        {
+            File.WriteAllText(Path.Combine(tree.Root, "one.txt"), "first");
+            manifest = tree.ManifestAsync(limit.Token);
+            flush = watch.Flush();
+            Assert.False(manifest.IsCompleted);
+            Assert.False(flush.IsCompleted);
+            Assert.Empty(changes);
+            File.WriteAllText(Path.Combine(tree.Root, "two.txt"), "second");
+        }
+
+        Assert.Equal(2, (await manifest).Files.Count);
+        await flush.WaitAsync(limit.Token);
+        Assert.Equal(new[] { "work/one.txt", "work/two.txt" }, changes.Select(change => change.Path).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public async Task Explicit_flush_certifies_a_directory_created_during_a_pack()
     {
         using var site = new LinkServices(HexLinkTestKit.DeviceA);

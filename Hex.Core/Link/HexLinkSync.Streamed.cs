@@ -66,6 +66,17 @@ internal sealed partial class HexLinkSync
         }
     }
 
+    private async Task ApplyFencedStream(string full, string wire, string? expected, Stream? content, long length,
+        string? hash, CancellationToken cancel, bool? executable)
+    {
+        await using var lease = await HexLinkPublicationFence.ForRoot(full).EnterLive(cancel);
+        if (!PlatformPaths.Comparer.Equals(full, Jailed(wire)))
+            throw new HexLinkException(HexLinkErrors.CONFLICT, "The streamed file path changed before it was written.");
+        await ApplyStream(full, wire, expected, content, length, hash, cancel, executable);
+        if (content is not null)
+            tree.RememberMode(full, executable);
+    }
+
     private async Task PullStreamed(string wire, string full, string? expected, HexLinkTreeFile? theirs, CancellationToken cancel)
     {
         try
@@ -78,7 +89,7 @@ internal sealed partial class HexLinkSync
                     return;
                 }
                 if (expected is not null)
-                    await ApplyStream(full, wire, expected, null, 0, null, cancel, null);
+                    await ApplyFencedStream(full, wire, expected, null, 0, null, cancel, null);
             }
             else
             {
@@ -94,8 +105,7 @@ internal sealed partial class HexLinkSync
                 try
                 {
                     await using FileStream staged = HexLinkFileTransfer.Read(partial);
-                    await ApplyStream(full, wire, expected, staged, transfer.Length, transfer.Hash, cancel, transfer.Executable);
-                    tree.RememberMode(full, transfer.Executable);
+                    await ApplyFencedStream(full, wire, expected, staged, transfer.Length, transfer.Hash, cancel, transfer.Executable);
                 }
                 catch (HexLinkException e) when (e.Code == HexLinkErrors.INVALID_PARAMS)
                 {

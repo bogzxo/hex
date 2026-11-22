@@ -700,30 +700,35 @@ internal sealed partial class HexLinkSync
         // two saves within one tick of the clock can share
         HexLinkTreeFile? mine = null;
         byte[]? localBytes = null;
-        if (HexLinkTree.RegularFile(full, tree.Root) is { } info)
-        {
-            if (info.Length > HexLinkFiles.MOST_READ)
-                mine = await ReadStreamedMetadata(wire, full, info, stop);
-            else
-            {
-                using (HexLinkSyncTiming.Measure("reconcile.read-source"))
-                    localBytes = peer.Session.SupportsBulk && info.Length <= 64 * 1024
-                        ? HexLinkFiles.ReadShared(full)
-                        : await HexLinkFiles.ReadSharedAsync(full, stop);
-                TextInfo text = TextOf(localBytes);
-                mine = new HexLinkTreeFile(wire, HexLinkFiles.Hash(localBytes), localBytes.LongLength, text.Norm, EolWord(text.Eol), tree.Mode(full));
-            }
-        }
         HexLinkTreeFile? theirs;
         HexLinkSyncAgreed? agreed;
         HexLinkSyncConflict? held;
         bool firstComparison;
-        lock (gate)
+        await using (await HexLinkPublicationFence.ForRoot(full).EnterLive(stop))
         {
-            remote.TryGetValue(wire, out theirs);
-            bases.TryGetValue(wire, out agreed);
-            conflicts.TryGetValue(wire, out held);
-            firstComparison = passSizes?.ContainsKey(wire) == true;
+            if (!PlatformPaths.Comparer.Equals(full, Jailed(wire)))
+                throw new HexLinkException(HexLinkErrors.CONFLICT, "The file path changed before it was compared.");
+            if (HexLinkTree.RegularFile(full, tree.Root) is { } info)
+            {
+                if (info.Length > HexLinkFiles.MOST_READ)
+                    mine = await ReadStreamedMetadata(wire, full, info, stop);
+                else
+                {
+                    using (HexLinkSyncTiming.Measure("reconcile.read-source"))
+                        localBytes = peer.Session.SupportsBulk && info.Length <= 64 * 1024
+                            ? HexLinkFiles.ReadShared(full)
+                            : await HexLinkFiles.ReadSharedAsync(full, stop);
+                    TextInfo text = TextOf(localBytes);
+                    mine = new HexLinkTreeFile(wire, HexLinkFiles.Hash(localBytes), localBytes.LongLength, text.Norm, EolWord(text.Eol), tree.Mode(full));
+                }
+            }
+            lock (gate)
+            {
+                remote.TryGetValue(wire, out theirs);
+                bases.TryGetValue(wire, out agreed);
+                conflicts.TryGetValue(wire, out held);
+                firstComparison = passSizes?.ContainsKey(wire) == true;
+            }
         }
 
         if (theirs?.Unavailable == true)

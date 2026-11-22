@@ -153,13 +153,17 @@ internal sealed partial class HexLinkHost
             string prefix = tree.Folder.Name + "/";
             if (!path.StartsWith(prefix, StringComparison.Ordinal))
                 throw HexLinkException.Invalid("The path is outside the manifest folder.");
-            HexLinkFiles.Resolve(Folders, path, services.Excludes);
+            string full = HexLinkFiles.Resolve(Folders, path, services.Excludes);
+            await using var lease = await HexLinkPublicationFence.ForRoot(full).EnterLive(cancel);
+            Need(HexLinkRights.View, "sync/manifest");
+            if (!PlatformPaths.Comparer.Equals(full, HexLinkFiles.Resolve(Folders, path, services.Excludes)))
+                return new JsonObject { ["absent"] = false };
             return new JsonObject { ["absent"] = tree.Gone(path[prefix.Length..]) };
         }
         if (HexLinkData.String(parameters, "snapshot", 64) is { } id)
             return ContinueManifest(tree, parameters, id, watch: false);
         bool provision = HexLinkData.Bool(parameters, "provision") == true;
-        return FirstPage(parameters, await Task.Run(() => provision ? tree.ProvisionManifest() : tree.Manifest(), cancel), watch: false);
+        return FirstPage(parameters, await tree.ManifestAsync(cancel, provision), watch: false);
     }
 
     // The tree as it is now and what changes of it from now on, sent as sync/changed
@@ -177,7 +181,7 @@ internal sealed partial class HexLinkHost
         var watch = new HexLinkTreeSubscription(tree, changes => TreeMoved(folder, changes), quiet, TreeRescan);
         try
         {
-            HexLinkManifest manifest = await Task.Run(tree.Manifest, cancel);
+            HexLinkManifest manifest = await tree.ManifestAsync(cancel);
             JsonObject answer = FirstPage(parameters, manifest, watch: true);
             if (treeWatches.TryGetValue(folder, out HexLinkTreeSubscription? was))
                 was.Dispose();

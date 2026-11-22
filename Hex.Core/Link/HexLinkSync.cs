@@ -330,7 +330,7 @@ internal sealed partial class HexLinkSync : IDisposable
             // against its current snapshot, so both current listings can run concurrently.
             HexLinkManifest? previous = tree.PreviousManifest;
             Task<HexLinkManifest> scanMine = HexLinkSyncTiming.MeasureAsync("start.local-manifest",
-                () => Task.Run(tree.Manifest, cancel));
+                () => tree.ManifestAsync(cancel));
             Task<HexLinkManifest> scanTheirs = HexLinkSyncTiming.MeasureAsync("start.manifest-round-trip",
                 () => peer.WatchTree(folder.Name, Heard, cancel, previous));
             try { await Task.WhenAll(scanMine, scanTheirs); }

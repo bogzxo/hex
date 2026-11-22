@@ -78,7 +78,10 @@ internal sealed partial class HexLinkHost
             await packedWrites.WaitAsync(stop);
             try
             {
+                await using var lease = await HexLinkPublicationFence.ForRoot(full).EnterLive(stop);
                 Need(HexLinkRights.Edit, "sync/pack/write");
+                if (!PlatformPaths.Comparer.Equals(full, ResolveFile(entry.Path)))
+                    throw new HexLinkException(HexLinkErrors.CONFLICT, "The packed file path changed before it was written.");
                 string? hash = await services.CompareAndReplacePacked(full, entry.Path, entry.Base, entry.Bytes, stop, entry.Executable, directories);
                 tree.RememberMode(full, entry.Executable);
                 results[i] = new(entry.Path, hash);
@@ -123,6 +126,10 @@ internal sealed partial class HexLinkHost
             try
             {
                 string full = ResolveFile(path);
+                await using var lease = await HexLinkPublicationFence.ForRoot(full).EnterLive(cancel);
+                Need(HexLinkRights.View, "sync/pack/read");
+                if (!PlatformPaths.Comparer.Equals(full, ResolveFile(path)))
+                    throw new HexLinkException(HexLinkErrors.CONFLICT, "The packed file path changed before it was read.");
                 var info = new FileInfo(full);
                 if (info.Length > maximum)
                     throw new HexLinkException(HexLinkErrors.TOO_BIG, $"The file {path} has outgrown a Link file pack.");

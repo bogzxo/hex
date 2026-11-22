@@ -47,7 +47,7 @@ internal sealed partial class HexLinkSync
                     else
                     {
                         await using FileStream source = HexLinkFileTransfer.Read(full);
-                        await ApplyStream(full, wire, mine.Hash, source, mine.Size, mine.Hash, cancel, mode);
+                        await ApplyFencedStream(full, wire, mine.Hash, source, mine.Size, mine.Hash, cancel, mode);
                     }
                 }
                 tree.RememberMode(full, mode);
