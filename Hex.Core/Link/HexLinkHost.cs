@@ -93,6 +93,7 @@ internal sealed partial class HexLinkHost : IDisposable
         "sync/unwatch" => Task.FromResult<JsonNode?>(SyncUnwatch(parameters)),
         "sync/flush" => SyncFlush(parameters),
         "git/bundle" => GitBundle(parameters, cancel),
+        "provision/bulk" => ProvisionBulk(parameters, cancel),
         "patch/offer" => PatchOffer(parameters),
         "predict/start" => PredictStart(parameters),
         _ => throw new HexLinkException(HexLinkErrors.METHOD_NOT_FOUND, $"A link has no {(method.Length > 60 ? method[..60] : method)}.")

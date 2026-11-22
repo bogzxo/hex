@@ -154,6 +154,7 @@ internal sealed partial class HexLinkHost
         if (HexLinkData.String(parameters, "id", 64) is not { Length: > 0 } id)
             return;
 
+        CancelPreparedProvisionBundle(id);
         lock (bundleGate)
         {
             if (outgoingBundles.TryGetValue(id, out CancellationTokenSource? transfer))

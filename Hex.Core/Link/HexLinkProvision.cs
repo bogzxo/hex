@@ -172,7 +172,7 @@ internal sealed partial class HexLinkPeer : IHexLinkBundleSource
         AskObject("git/bundle", new JsonObject { ["operation"] = "offer", ["workspace"] = workspace }, cancel);
 
     Task<string?> IHexLinkBundleSource.TransferBundle(string repository, IReadOnlyList<string> have, Action<long, long> progress, string? verifyIn, CancellationToken cancel) =>
-        Bundle(repository, have, progress, verifyIn, cancel);
+        ProvisionBundle(repository, have, progress, verifyIn, cancel);
 }
 
 internal static partial class HexLinkProvision
@@ -208,10 +208,11 @@ internal static partial class HexLinkProvision
             }
         }
         plan = WithoutSkipped(plan, skipped);
-        foreach (string large in plan.LargeChanges ?? [])
+        if (!await peer.SupportsProvisionBulk(cancel))
         {
-            if (!HexLinkProvisionPlan.Skips(skipped, large))
-                skipped.Add(new(large, "The working file exceeds this link's 8 MB transfer limit.", File: true));
+            foreach (string large in plan.LargeChanges ?? [])
+                if (!HexLinkProvisionPlan.Skips(skipped, large))
+                    skipped.Add(new(large, "The working file exceeds this link's 8 MB transfer limit.", File: true));
         }
         progress?.Report(new(HexLinkProvisionPhase.Planning, 0, plan.Repositories.Count, Skipped: skipped.ToArray()));
 
@@ -262,6 +263,7 @@ internal static partial class HexLinkProvision
     {
         JsonObject previous = File.Exists(journal) ? JsonNode.Parse(File.ReadAllBytes(journal)) as JsonObject
             ?? throw new IOException("The workspace transfer journal is damaged.") : [];
+        bool bulk = await peer.SupportsProvisionBulk(cancel);
         var transfers = new Dictionary<string, FileTransfer>(StringComparer.OrdinalIgnoreCase);
         var dirty = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (HexLinkProvisionRepository repository in plan.Repositories)
@@ -278,7 +280,7 @@ internal static partial class HexLinkProvision
             HexLinkManifest remote = skipped is null ? await peer.Manifest(folder.Name, cancel) : await peer.ProvisionManifest(folder.Name, cancel);
             if (remote.Folder != folder.Name)
                 throw HexLinkException.Invalid("A manifest names the wrong workspace folder.");
-            var tree = new HexLinkTree(folder);
+            var tree = new HexLinkTree(folder, streamLarge: bulk);
             HexLinkManifest local = skipped is null ? tree.Manifest() : tree.ProvisionManifest();
             string prefix = plan.Folders[i].Path;
             if (skipped is not null)
@@ -343,8 +345,10 @@ internal static partial class HexLinkProvision
                         continue;
                     if (file.Unavailable)
                         throw new IOException("The host could not read the file.");
-                    if (file.Big)
+                    if (!bulk && (file.Big || file.Size > HexLinkFiles.MOST_READ))
                         throw new InvalidOperationException("The working file exceeds this link's 8 MB transfer limit.");
+                    if (file.Hash is null)
+                        throw new IOException("The source could not certify the file's contents.");
                     CheckLocal(relative, here?.Hash, here is not null);
                     transfers.TryAdd(relative, new FileTransfer(relative, here?.Hash, file));
                 }
@@ -391,15 +395,11 @@ internal static partial class HexLinkProvision
         await Parallel.ForEachAsync(transfers.Values, new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = cancel },
             async (transfer, token) =>
             {
-                int copied = 0;
+                long copied = 0;
                 string? problem = null;
                 try
                 {
-                    byte[]? content = transfer.Remote is { } file ? await ReadSnapshot(peer, file, token) : null;
-                    token.ThrowIfCancellationRequested();
-                    string path = Resolve(destination, transfer.Relative);
-                    await HexLinkFiles.CompareAndReplace(path, transfer.Relative, transfer.Before, content, token);
-                    copied = content?.Length ?? 0;
+                    copied = await ApplyWorkingFile(peer, destination, transfer, bulk, dirty.Contains(transfer.Relative), token);
                 }
                 catch (Exception error) when (skipped is not null && ItemFailure(error, peer))
                 {
@@ -435,6 +435,55 @@ internal static partial class HexLinkProvision
         void Report(bool includeSkips = true) => progress?.Report(new HexLinkProvisionProgress(HexLinkProvisionPhase.Files, plan.Repositories.Count,
             plan.Repositories.Count, bytesDone, bytesTotal, done, transfers.Count,
             includeSkips && skipped is { Count: > 0 } ? SortedSkips(skipped) : null));
+    }
+
+    private static async Task<long> ApplyWorkingFile(HexLinkPeer peer, string destination, FileTransfer transfer, bool bulk,
+        bool dirty, CancellationToken cancel)
+    {
+        var file = transfer.Remote;
+        if (!bulk)
+        {
+            byte[]? content = file is null ? null : await ReadSnapshot(peer, file, cancel);
+            string path = Resolve(destination, transfer.Relative);
+            if (content is null || transfer.Before is null || dirty || !await MatchesCheckoutText(path, transfer.Before, content, cancel))
+                await HexLinkFiles.CompareAndReplace(path, transfer.Relative, transfer.Before, content, cancel, file?.Executable);
+            return content?.LongLength ?? 0;
+        }
+
+        return await peer.WhileProvisionView(async stop =>
+        {
+            if (file is null)
+            {
+                string delete = Resolve(destination, transfer.Relative);
+                await HexLinkFiles.CompareAndReplace(delete, transfer.Relative, transfer.Before, null, 0, null, stop);
+                return 0L;
+            }
+
+            string stage = await peer.ReadProvisionBulk(file, stop);
+            try
+            {
+                string path = Resolve(destination, transfer.Relative);
+                if (file.Size <= HexLinkFiles.MOST_READ && transfer.Before is { } expected && !dirty
+                    && await MatchesCheckoutText(path, expected, await File.ReadAllBytesAsync(stage, stop), stop))
+                    return file.Size;
+                await using FileStream input = HexLinkFileTransfer.Read(stage);
+                await HexLinkFiles.CompareAndReplace(path, transfer.Relative, transfer.Before, input, file.Size, file.Hash, stop, file.Executable);
+                return file.Size;
+            }
+            finally { HexLinkGit.TryDelete(stage); }
+        }, cancel);
+    }
+
+    private static async Task<bool> MatchesCheckoutText(string path, string expected, byte[] content, CancellationToken cancel)
+    {
+        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 4096, useAsync: true);
+        long length = stream.Length;
+        if (length > HexLinkFiles.MOST_READ)
+            return false;
+        byte[] checkout = new byte[(int)length];
+        await stream.ReadExactlyAsync(checkout, cancel);
+        return stream.ReadByte() == -1 && HexLinkFiles.Hash(checkout) == expected && HexLinkSync.SameText(checkout, content);
     }
 
     private static string UnderFolder(string wire, HexLinkFolder folder)
