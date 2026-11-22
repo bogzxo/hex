@@ -70,7 +70,7 @@ internal sealed partial class HexLinkHost : IDisposable
         "tools/list" => Task.FromResult<JsonNode?>(ToolsList()),
         "tools/call" => ToolsCall(parameters, cancel),
         "doc/join" or "doc/poll" or "doc/edit" => Task.FromResult<JsonNode?>(DocumentRequest(method, parameters)),
-        "doc2/open" or "doc2/exchange" or "doc2/leave" or "doc2/save" => Document2Request(method, parameters, cancel),
+        "doc2/open" or "doc2/exchange" or "doc2/leave" or "doc2/save" or "doc2/agent" => Document2Request(method, parameters, cancel),
         "doc2/relay" => Document2Relay(parameters, cancel),
         "fs/list" => Task.FromResult<JsonNode?>(FsList(parameters)),
         "fs/read" => Task.FromResult<JsonNode?>(FsRead(parameters)),

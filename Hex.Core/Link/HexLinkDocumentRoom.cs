@@ -28,7 +28,7 @@ internal sealed partial class HexLinkDocumentRoom(string path, string text, HexD
         {
             if (!members.TryGetValue(scope, out var participant))
             {
-                if (members.Count >= MaxParticipants)
+                if (members.Count - agentUntil.Count >= MaxParticipants)
                     throw new InvalidOperationException("The shared document has reached its participant limit.");
                 participant = new HexDocParticipant(++lastAuthor, device.Id, device.Name);
                 members.Add(scope, participant);
@@ -118,6 +118,7 @@ internal sealed partial class HexLinkDocumentRoom(string path, string text, HexD
                 return;
             online.Remove(scope);
             roster = null;
+            agentUntil.Remove(scope);
             if (members.Remove(scope, out var participant))
                 authority.Leave(participant.Author);
         }
@@ -125,6 +126,7 @@ internal sealed partial class HexLinkDocumentRoom(string path, string text, HexD
 
     private HexDocExchange State(int author, Guid? epoch, long revision)
     {
+        ExpireAgents();
         return new(author, authority.Replay(epoch, revision, budget: HexLinkDocumentWire.Budget),
             roster ??= [.. online.Keys.Select(scope => members[scope]).OrderBy(each => each.Author)], Saved: saved);
     }
@@ -180,7 +182,7 @@ internal static class HexLinkDocumentWire
     internal const int MaxBatch = 128;
     internal const int MaxText = 2 * 1024 * 1024;
     internal const int Budget = 14 * 1024 * 1024;
-    private const int MaxPeople = 65;
+    private const int MaxPeople = 97;
 
     internal static JsonObject Open(string path, Guid? epoch, long revision) =>
         new() { ["path"] = path, ["epoch"] = epoch?.ToString("N"), ["revision"] = revision };

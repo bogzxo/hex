@@ -10,7 +10,7 @@ internal readonly record struct HexDocReceipt(Guid Epoch, long Revision, HexDocA
 /// </summary>
 internal sealed class HexLinkDocumentAuthority
 {
-    private const int MaxParticipants = 65;
+    private const int MaxParticipants = 97;
     private const int MaxReplayOperations = 256;
     private readonly Lock gate = new();
     private readonly Dictionary<int, Participant> participants = [];
@@ -32,6 +32,7 @@ internal sealed class HexLinkDocumentAuthority
     }
 
     private long Head => checkpoint.Revision + tail.Count;
+    public long Clock { get { lock (gate) return sequence.Clock; } }
 
     public HexDocCheckpoint Checkpoint
     {

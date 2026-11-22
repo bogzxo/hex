@@ -77,6 +77,15 @@ internal sealed partial class HexLinkHost
                 return saved.Encode();
             }
 
+            if (method == "doc2/agent")
+            {
+                Need(HexLinkRights.Edit, method);
+                HexDocAgentChange change = HexDocAgentChange.Decode(parameters);
+                var edited = room.AgentEdit(scope, this, author, epoch.Value, revision, change);
+                services.Audit("edit", Device, $"agent {change.Agent} edited shared document {path}");
+                return HexLinkDocumentWire.Encode(edited);
+            }
+
             HexDocOperation[] operations = HexLinkDocumentWire.DecodeOperations(parameters);
             if (operations.Length > 0)
                 Need(HexLinkRights.Edit, method);
@@ -101,7 +110,7 @@ internal sealed partial class HexLinkHost
             throw HexLinkException.NotAllowed("one document relay hop");
         string target = HexLinkDocumentProtocol.Field(parameters, "target", 64);
         string method = HexLinkDocumentProtocol.Field(parameters, "method", 16);
-        if (method is not ("doc2/open" or "doc2/exchange" or "doc2/leave" or "doc2/save") || target == Device.Id)
+        if (method is not ("doc2/open" or "doc2/exchange" or "doc2/leave" or "doc2/save" or "doc2/agent") || target == Device.Id)
             throw HexLinkException.Invalid("Invalid document relay destination or method.");
         if (services.SharedDocumentPeer(target) is not { IsClosed: false } peer)
             throw HexLinkException.NotFound("The shared document's owner is offline.");
@@ -110,7 +119,7 @@ internal sealed partial class HexLinkHost
             throw HexLinkException.NotAllowed("one document relay hop");
 
         bool canEdit = HexLinkAllowed.Has(Rights, HexLinkRights.Edit);
-        if (method == "doc2/save" || method == "doc2/exchange" && request["ops"] is JsonArray { Count: > 0 })
+        if (method is "doc2/save" or "doc2/agent" || method == "doc2/exchange" && request["ops"] is JsonArray { Count: > 0 })
             Need(HexLinkRights.Edit, "relay document edits");
         if (method != "doc2/exchange" || request["ops"] is JsonArray { Count: > 0 })
             services.Audit("relay", Device, $"{method} from {Device.Name} ({Device.Id}) to {peer.Device.Id}");
@@ -171,6 +180,10 @@ internal sealed partial class HexLinkPeer
     public async Task<HexDocSaved> SaveDocument(string path, Guid epoch, long revision, CancellationToken cancel = default,
         string? relayTo = null) => HexDocSaved.Decode(await ForwardDocument("doc2/save",
             HexLinkDocumentWire.Open(path, epoch, revision), cancel, relayTo));
+
+    public async Task<HexDocExchange> EditDocumentAsAgent(string path, Guid epoch, long revision, HexDocAgentChange change,
+        CancellationToken cancel = default, string? relayTo = null) => HexLinkDocumentWire.Decode(await ForwardDocument(
+            "doc2/agent", change.Encode(path, epoch, revision), cancel, relayTo));
 
     public Task LeaveDocument(string path, CancellationToken cancel = default, string? relayTo = null) =>
         ForwardDocument("doc2/leave", new JsonObject { ["path"] = path }, cancel, relayTo);

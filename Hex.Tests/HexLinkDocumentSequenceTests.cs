@@ -139,6 +139,27 @@ public sealed class HexLinkDocumentSequenceTests
     }
 
     [Fact]
+    public async Task An_agent_edits_as_its_own_site()
+    {
+        const string wire = "work/note.txt";
+        using var pair = await LinkedPair.Up(HexLinkRights.Edit | HexLinkRights.View);
+        HexLinkDocumentRoom room = pair.A.Documents.Rooms.Open(wire, "seed");
+        var actor = new HexLinkDocumentReplica(await pair.PeerA.OpenDocument(wire));
+        actor.Capture(actor.View, "Hseed");
+        actor.Receive(await pair.PeerA.ExchangeDocument(wire, actor.Epoch, actor.Revision, actor.Batch()));
+
+        var change = new HexDocAgentChange("42", "Fixture", HexDocAgentChange.HashText("Hseed"), new(5, 0, "!"));
+        var applied = await pair.PeerA.EditDocumentAsAgent(wire, actor.Epoch, actor.Revision, change);
+        actor.Receive(applied);
+        var agent = Assert.Single(applied.Participants, participant => participant.Name == "Agent Fixture");
+        Assert.NotEqual(actor.Author, agent.Author);
+        Assert.Equal(new HexDocPoint(applied.Replay.Operations[^1].Id, 1), agent.Caret);
+        Assert.Equal("Hseed!", actor.View.Text);
+
+        Assert.Equal("Hseed!", room.View().Text);
+    }
+
+    [Fact]
     public async Task A_shared_save_is_idempotent_preserves_encoding_and_refuses_a_new_disk_version()
     {
         const string wire = "work/note.txt";

@@ -23,11 +23,13 @@ internal sealed partial class DawnScene
         public bool SaveRequested;
         public HexDocSaved? Saved;
         public readonly Queue<HexDocSaved> ConfirmedWrites = new();
+        public readonly Queue<LinkLiveAgentWork> AgentEdits = new();
         public bool OriginalReadOnly = tab.Editor.ReadOnly;
         public float Wait;
     }
 
     private sealed record ScopedDocumentDraft(string SharedText, string Reason);
+    private sealed record LinkLiveAgentWork(string Agent, string Name, string Before, string After, TaskCompletionSource<string?> Done);
 
     private readonly Dictionary<HexDocument, LinkLiveDocument> linkLiveDocuments = [];
     private readonly HashSet<string> linkLiveJoining = new(PlatformPaths.Comparer);
@@ -258,6 +260,8 @@ internal sealed partial class DawnScene
     {
         if (!linkLiveDocuments.Remove(shared.Tab))
             return;
+        while (shared.AgentEdits.TryDequeue(out var request))
+            request.Done.TrySetResult("The shared document closed before the edit.");
 
         if (explicitly)
             linkLivePaused.Add(shared.Wire);
@@ -390,6 +394,9 @@ internal sealed partial class DawnScene
         IReadOnlyList<UICodeRemoteCaret>? carets = null;
         HexDocSaved? save = null;
         bool saveRequested = shared.SaveRequested;
+        shared.AgentEdits.TryPeek(out var agent);
+        bool agentAttempted = false;
+        string? agentError = null;
         string? localPath = shared.Tab.Path;
         try
         {
@@ -427,6 +434,22 @@ internal sealed partial class DawnScene
                         relayTo: LinkLiveRelay(shared.Authority, peer)).ConfigureAwait(false);
 
                 replica.Receive(response);
+                if (agent is not null && editable && replica.CanEdit && !replica.HasPending && replica.Revision == replica.Head)
+                {
+                    agentAttempted = true;
+                    try
+                    {
+                        var change = new HexDocAgentChange(agent.Agent, agent.Name, HexDocAgentChange.HashText(agent.Before),
+                            HexDocSplice.Between(agent.Before, agent.After));
+                        var revised = shared.Room is { } authority
+                            ? authority.AgentEdit(shared.Authority.DeviceId, shared.Tab,
+                                new HexLinkDevice(shared.Authority.DeviceId, shared.Authority.DeviceId), replica.Epoch, replica.Revision, change)
+                            : await peer!.EditDocumentAsAgent(shared.Wire, replica.Epoch, replica.Revision, change, cancel,
+                                LinkLiveRelay(shared.Authority, peer)).ConfigureAwait(false);
+                        replica.Receive(revised);
+                    }
+                    catch (Exception e) { agentError = e.Message; }
+                }
                 if (saveRequested && editable && replica.CanEdit && !replica.HasPending && replica.Revision == replica.Head)
                     save = shared.Room is { } owned
                         ? await owned.Save(shared.Authority.DeviceId, shared.Tab, localPath!, replica.Epoch, replica.Revision, cancel).ConfigureAwait(false)
@@ -444,6 +467,11 @@ internal sealed partial class DawnScene
             shared.Busy = false;
             shared.Shown = captured;
             shared.Version = version;
+            if (agentAttempted && agent is not null && shared.AgentEdits.TryPeek(out var pending) && pending == agent)
+            {
+                shared.AgentEdits.Dequeue();
+                agent.Done.TrySetResult(agentError);
+            }
             if (error is InvalidOperationException or ArgumentException
                 || error is HexLinkException { Code: HexLinkErrors.NOT_ALLOWED or HexLinkErrors.CONFLICT or HexLinkErrors.INVALID_REQUEST })
             {
@@ -502,6 +530,40 @@ internal sealed partial class DawnScene
             linkFollowCaret = buffer.Caret;
             linkFollowVersion = buffer.Version;
         }
+    }
+
+    private LinkLiveDocument? LinkLiveOf(HexDocument? tab) =>
+        tab is not null ? linkLiveDocuments.GetValueOrDefault(tab) : null;
+
+    private IEnumerable<McpToolResult?> LinkLiveAgentWrite(JsonObject args, LinkLiveDocument shared,
+        string before, string after, string said)
+    {
+        if (shared.Offline || shared.Draft is not null || shared.Tab.Editor.ReadOnly)
+        {
+            yield return McpToolResult.Error("The shared session cannot accept this edit. Its buffer and disk were kept.");
+            yield break;
+        }
+        if (shared.AgentEdits.Count >= 16)
+        {
+            yield return McpToolResult.Error("The shared session is busy. Read the latest text and retry.");
+            yield break;
+        }
+
+        int? caller = McpServer.CallingChat.Value;
+        string name = caller is { } id ? ChatById(id)?.Shown ?? $"#{id}" : "MCP";
+        var outcome = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        shared.AgentEdits.Enqueue(new(caller?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "mcp",
+            HexLinkNames.Clean(name) ?? "MCP", before, after, outcome));
+        shared.Wait = 0;
+        while (!outcome.Task.IsCompleted)
+            yield return null;
+        if (outcome.Task.Result is { } error)
+        {
+            yield return McpToolResult.Error(error);
+            yield break;
+        }
+        foreach (var step in McpThenCheck(args, shared.Tab.Path!, said + " Changed the shared buffer. It will reach disk when saved."))
+            yield return step;
     }
 
     private bool LinkLiveTrySave(HexDocument tab, string path)
