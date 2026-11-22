@@ -5,7 +5,7 @@ namespace Hex.Core;
 
 internal sealed record HexLinkPublishEdit(string Path, string? Base, byte[]? Bytes);
 
-internal sealed record HexLinkPublishReceipt(Guid Id, string Commit, int Files);
+internal sealed record HexLinkPublishReceipt(Guid Id, string Commit, int Files, string? Author = null);
 
 internal sealed record HexLinkPublishTarget(
     Func<Guid, CancellationToken, ValueTask<IAsyncDisposable>> Fence,
@@ -24,10 +24,11 @@ internal sealed class HexLinkPublishJournal(string directory, HexLinkWorktreeGit
     private readonly SemaphoreSlim requests = new(1);
     private const string ManifestName = "manifest.json";
 
-    public async Task<HexLinkPublishReceipt> Publish(Guid id, IReadOnlyList<HexLinkPublishEdit> edits, CancellationToken cancel)
+    public async Task<HexLinkPublishReceipt> Publish(Guid id, IReadOnlyList<HexLinkPublishEdit> edits, CancellationToken cancel, string? author = null)
     {
+        author = HexLinkNames.Clean(author);
         HexLinkPublishEdit[] ordered = [.. edits.OrderBy(edit => edit.Path, StringComparer.Ordinal)];
-        JsonObject manifest = Manifest(id, ordered);
+        JsonObject manifest = Manifest(id, ordered, author);
         await requests.WaitAsync(cancel);
         try
         {
@@ -66,7 +67,7 @@ internal sealed class HexLinkPublishJournal(string directory, HexLinkWorktreeGit
                     target.BlockLiveForRecovery?.Invoke(id, false);
                 throw;
             }
-            return await Project(id, commit, ordered, stop);
+            return await Project(id, commit, ordered, author, stop);
         }
         finally
         {
@@ -108,7 +109,7 @@ internal sealed class HexLinkPublishJournal(string directory, HexLinkWorktreeGit
         if (ManifestId(said) != id || said["files"] is not JsonArray list || list.Count > HexLinkTree.MOST_FILES)
             throw new IOException("The saved publication manifest is invalid.");
         if (Completed(id, commit))
-            return new HexLinkPublishReceipt(id, commit, list.Count);
+            return new HexLinkPublishReceipt(id, commit, list.Count, HexLinkData.String(said, "author", 80));
 
         HexLinkPublishEdit[] edits = await ReadEdits(commit, list, cancel);
 
@@ -116,7 +117,7 @@ internal sealed class HexLinkPublishJournal(string directory, HexLinkWorktreeGit
         if (Completed(id, commit))
             return new HexLinkPublishReceipt(id, commit, edits.Length);
         target.BlockLiveForRecovery?.Invoke(id, true);
-        return await Project(id, commit, edits, fence is HexLinkPublicationFence.Lease lease ? lease.Stop : cancel);
+        return await Project(id, commit, edits, HexLinkData.String(said, "author", 80), fence is HexLinkPublicationFence.Lease lease ? lease.Stop : cancel);
     }
 
     public async Task<IReadOnlyList<HexLinkPublishEdit>> CommittedEdits(Guid id, CancellationToken cancel)
@@ -154,7 +155,7 @@ internal sealed class HexLinkPublishJournal(string directory, HexLinkWorktreeGit
         return edits;
     }
 
-    private async Task<HexLinkPublishReceipt> Project(Guid id, string commit, IReadOnlyList<HexLinkPublishEdit> edits, CancellationToken cancel)
+    private async Task<HexLinkPublishReceipt> Project(Guid id, string commit, IReadOnlyList<HexLinkPublishEdit> edits, string? author, CancellationToken cancel)
     {
         foreach (HexLinkPublishEdit edit in edits)
         {
@@ -167,7 +168,7 @@ internal sealed class HexLinkPublishJournal(string directory, HexLinkWorktreeGit
             await target.Apply(edit, cancel);
         }
 
-        var receipt = new HexLinkPublishReceipt(id, commit, edits.Count);
+        var receipt = new HexLinkPublishReceipt(id, commit, edits.Count, author);
         await target.Announce(receipt, edits, cancel);
         HexLinkFiles.WriteAtomic(CompletePath(id), Encoding.UTF8.GetBytes(commit));
         target.BlockLiveForRecovery?.Invoke(id, false);
@@ -217,7 +218,7 @@ internal sealed class HexLinkPublishJournal(string directory, HexLinkWorktreeGit
         Guid.TryParseExact(HexLinkData.String(said, "id", 32), "N", out Guid id) && id != Guid.Empty
             ? id : throw new IOException("The saved publication ID is invalid.");
 
-    private static JsonObject Manifest(Guid id, HexLinkPublishEdit[] edits)
+    private static JsonObject Manifest(Guid id, HexLinkPublishEdit[] edits, string? author)
     {
         if (id == Guid.Empty || edits.Length is 0 or > HexLinkTree.MOST_FILES)
             throw HexLinkException.Invalid("A publication needs an ID and a bounded set of changes.");
@@ -236,7 +237,10 @@ internal sealed class HexLinkPublishJournal(string directory, HexLinkWorktreeGit
                 ["hash"] = edit.Bytes is { } bytes ? HexLinkFiles.Hash(bytes) : null
             });
         }
-        return new JsonObject { ["id"] = id.ToString("N"), ["files"] = entries };
+        var result = new JsonObject { ["id"] = id.ToString("N"), ["files"] = entries };
+        if (author is not null)
+            result["author"] = author;
+        return result;
     }
 
     private static bool IsHash(string value) => value.Length == 64 && value.All(char.IsAsciiHexDigit);

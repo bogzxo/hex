@@ -4,7 +4,8 @@ namespace Hex.Core;
 internal sealed class HexLinkPublicationReplica(HexLinkCommittedSets receipts,
     Func<HexLinkFolder, HexExcludes> excludes,
     Func<string, string, string?, byte[]?, CancellationToken, Task<string?>> apply,
-    Func<HexLinkFolder, HexLinkCommittedSet, CancellationToken, Task> installBaseline)
+    Func<HexLinkFolder, HexLinkCommittedSet, CancellationToken, Task> installBaseline,
+    Action<HexLinkCommittedSet>? committed = null)
 {
     public void Restore(Func<HexLinkCommittedSet, HexLinkFolder> folder)
     {
@@ -53,6 +54,7 @@ internal sealed class HexLinkPublicationReplica(HexLinkCommittedSets receipts,
         await installBaseline(folder, set, stop);
         HexLinkCommittedAck receipt = receipts.CompleteIncoming(set);
         fence.ReleaseRecovery(set.Id);
+        committed?.Invoke(set);
         return receipt;
     }
 

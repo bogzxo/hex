@@ -6,7 +6,7 @@ namespace Hex.Core;
 internal sealed record HexLinkCommittedFile(string Path, string? Base, string? Hash, bool? Executable = null);
 
 internal sealed record HexLinkCommittedSet(Guid Id, string Folder, string Scope, long Epoch, HexLinkFenceKind Kind,
-    IReadOnlyList<HexLinkCommittedFile> Files)
+    IReadOnlyList<HexLinkCommittedFile> Files, string? Author = null)
 {
     // Payload bytes are retained by the producer's journal until delivery. The receipt binds their expected hashes.
     public JsonObject ToJson()
@@ -14,11 +14,14 @@ internal sealed record HexLinkCommittedSet(Guid Id, string Folder, string Scope,
         var files = new JsonArray();
         foreach (var file in Files.OrderBy(file => file.Path, StringComparer.Ordinal))
             files.Add((JsonNode)new JsonObject { ["path"] = file.Path, ["base"] = file.Base, ["hash"] = file.Hash, ["exec"] = file.Executable });
-        return new JsonObject
+        var said = new JsonObject
         {
             ["id"] = Id.ToString("N"), ["folder"] = Folder, ["scope"] = Scope, ["epoch"] = Epoch,
             ["kind"] = Kind.ToString(), ["files"] = files
         };
+        if (Author is not null)
+            said["author"] = Author;
+        return said;
     }
 
     public static HexLinkCommittedSet Read(JsonObject value)
@@ -47,7 +50,7 @@ internal sealed record HexLinkCommittedSet(Guid Id, string Folder, string Scope,
                 throw HexLinkException.Invalid("A committed file mode is invalid.");
             files.Add(new(path, from, to, executable));
         }
-        return new(id, folder, scope, epoch, kind, files.AsReadOnly());
+        return new(id, folder, scope, epoch, kind, files.AsReadOnly(), HexLinkNames.Clean(HexLinkData.String(value, "author", 80)));
     }
 
     private static string? ReadHash(JsonObject row, string name) => row[name] is null ? null :

@@ -23,7 +23,7 @@ internal sealed class HexLinkWorktreePublication : IHexLinkPublicationService
         Func<HexLinkFolder, HexLinkCommittedSet, IReadOnlyList<string>, CancellationToken, Task> deferLive,
         Func<HexLinkFolder, HexLinkCommittedSet, string, CancellationToken, Task> acknowledgeLive,
         Func<HexLinkFolder, HexLinkCommittedSet, CancellationToken, Task> installReplicaBaseline, Action<HexLinkFolder>? queued = null, Action<HexLinkFolder, HexLinkCommittedSet, string>? releaseLive = null,
-        Func<HexLinkFolder, CancellationToken, Task<HexLinkDraftPresence>>? draftPresence = null)
+        Func<HexLinkFolder, CancellationToken, Task<HexLinkDraftPresence>>? draftPresence = null, Action<HexLinkCommittedSet>? received = null)
     {
         this.services = services;
         this.storage = Path.GetFullPath(storage);
@@ -34,7 +34,8 @@ internal sealed class HexLinkWorktreePublication : IHexLinkPublicationService
         this.draftPresence = draftPresence;
         this.releaseLive = releaseLive;
         receipts = new HexLinkCommittedSets(Path.Combine(this.storage, "sets"));
-        replica = new HexLinkPublicationReplica(receipts, _ => services.Excludes, services.CompareAndReplace, installReplicaBaseline);
+        replica = new HexLinkPublicationReplica(receipts, _ => services.Excludes,
+            (full, wire, hash, bytes, stop) => services.CompareAndReplace(full, wire, hash, bytes, stop), installReplicaBaseline, received);
     }
 
     public string PublicationSpool => Path.Combine(storage, "spool");
@@ -150,7 +151,9 @@ internal sealed class HexLinkWorktreePublication : IHexLinkPublicationService
             throw new HexLinkException(HexLinkErrors.CONFLICT, "This device is no longer the folder authority.");
         if (bypass)
             services.Audit("publish-anyway", device, $"{folder.Name} {id:N}");
-        return await (await Owner(folder, epoch, cancel)).Publish(id, edits, cancel);
+        var receipt = await (await Owner(folder, epoch, cancel)).Publish(id, edits, cancel, device.Name);
+        services.Audit("publish", device, $"{folder.Name} {id:N}, {receipt.Files} files");
+        return receipt;
     }
 
     private async Task<HexLinkPublishJournal> Owner(HexLinkFolder folder, long epoch, CancellationToken cancel)
@@ -187,7 +190,7 @@ internal sealed class HexLinkWorktreePublication : IHexLinkPublicationService
             async (edit, stop) => await services.CompareAndReplace(Resolve(edit.Path), edit.Path, edit.Base, edit.Bytes, stop),
             async (receipt, edits, stop) =>
             {
-                HexLinkCommittedSet set = Descriptor(folder, epoch, receipt.Id, edits);
+                HexLinkCommittedSet set = Descriptor(folder, epoch, receipt.Id, edits) with { Author = receipt.Author };
                 string[] peers = [.. recipients(folder.Name).Where(id => id != services.Device.Id).Distinct(StringComparer.OrdinalIgnoreCase)];
                 receipts.Queue(set, peers);
                 await deferLive(folder, set, peers, stop);
@@ -227,7 +230,7 @@ internal sealed class HexLinkWorktreePublication : IHexLinkPublicationService
             [.. edits.Select(edit => new HexLinkCommittedFile(edit.Path, edit.Base, edit.Bytes is null ? null : HexLinkFiles.Hash(edit.Bytes)))]);
 
     private static JsonObject ReceiptJson(HexLinkPublishReceipt receipt) =>
-        new() { ["id"] = receipt.Id.ToString("N"), ["commit"] = receipt.Commit, ["files"] = receipt.Files };
+        new() { ["id"] = receipt.Id.ToString("N"), ["commit"] = receipt.Commit, ["files"] = receipt.Files, ["author"] = receipt.Author };
 
     private static HexLinkPublishReceipt? ReceiptOf(JsonObject? answer, Guid id)
     {
@@ -237,6 +240,6 @@ internal sealed class HexLinkWorktreePublication : IHexLinkPublicationService
             HexLinkData.String(answer, "commit", 65) is not { } commit || !HexLinkGit.IsCommitId(commit) ||
             HexLinkData.Int(answer, "files") is not int files || files <= 0)
             throw HexLinkException.Invalid("The authority returned an invalid publication receipt.");
-        return new(id, commit, files);
+        return new(id, commit, files, HexLinkNames.Clean(HexLinkData.String(answer, "author", 80)));
     }
 }

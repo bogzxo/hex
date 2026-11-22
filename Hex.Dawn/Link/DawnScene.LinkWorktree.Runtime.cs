@@ -19,7 +19,11 @@ internal sealed partial class DawnScene
         var services = linkServices ?? throw new InvalidOperationException("Link is off.");
         var publication = new HexLinkWorktreePublication(services, Path.Combine(LinkPrivateStorage, "pub"),
             recipients, deferLive, acknowledgeLive, installReplicaBaseline,
-            _ => CurrentLinkPublication?.Pump.Poke(), releaseLive, ReadPrivateWorktreePresence);
+            folder =>
+            {
+                CurrentLinkPublication?.Pump.Poke();
+                QueuePrivateWorktreeFollow(folder);
+            }, releaseLive, ReadPrivateWorktreePresence, NoticePrivatePublication);
         await publication.Restore(cancel);
         if (!ReferenceEquals(services, linkServices))
             return;
@@ -106,6 +110,30 @@ internal sealed partial class DawnScene
             snapshot = await Task.Run(new HexLinkTree(folder, () => services.Excludes).Manifest, live.Stop);
         foreach (var draft in drafts)
             await draft.Follow(snapshot, cancel);
+    }
+
+    private void NoticePrivatePublication(HexLinkCommittedSet set) => PostLink(() =>
+    {
+        Say(Said("link.publication_arrived", ("author", set.Author ?? "Link"), ("folder", set.Folder),
+            ("count", set.Files.Count.ToString(System.Globalization.CultureInfo.InvariantCulture))));
+        if (linkServices?.Workspace.Folders.FirstOrDefault(folder => folder.Name == set.Folder) is { } folder)
+            QueuePrivateWorktreeFollow(folder);
+    });
+
+    private void QueuePrivateWorktreeFollow(HexLinkFolder folder)
+    {
+        if (linkPrivateDrafts.IsEmpty)
+            return;
+        CancellationToken stop = linkCancel?.Token ?? CancellationToken.None;
+        _ = Task.Run(async () =>
+        {
+            try { await LinkFollowPrivateWorkingChanges(folder, stop); }
+            catch (Exception error) when (error is IOException or HexLinkException or OperationCanceledException)
+            {
+                if (!stop.IsCancellationRequested)
+                    Console.WriteLine($"[Hex] Private worktree follow is pending: {error.Message}");
+            }
+        });
     }
 
     private HexLinkDraftRoute? LinkPrivatePublishRoute(HexLinkFolder folder)

@@ -23,7 +23,7 @@ public sealed class HexLinkPublicationTests
             await File.WriteAllTextAsync(Path.Combine(a.Work, "file.txt"), "shared", stop.Token);
             await File.WriteAllTextAsync(Path.Combine(b.Work, "file.txt"), "shared", stop.Token);
             Guid id = Guid.NewGuid();
-            int held = 0, installed = 0, acked = 0;
+            int held = 0, installed = 0, acked = 0, notices = 0;
             var owner = new HexLinkWorktreePublication(a, Path.Combine(storage, "a"), _ => [DeviceB.Id],
                 (_, set, peers, _) =>
                 {
@@ -48,6 +48,10 @@ public sealed class HexLinkPublicationTests
                     Assert.Equal(id, set.Id);
                     installed++;
                     return Task.CompletedTask;
+                }, received: set =>
+                {
+                    Assert.Equal(DeviceB.Name, set.Author);
+                    notices++;
                 });
             a.Publication = owner;
             b.Publication = replica;
@@ -85,6 +89,7 @@ public sealed class HexLinkPublicationTests
             Assert.Equal(second, await File.ReadAllBytesAsync(Path.Combine(b.Work, "new.txt"), stop.Token));
             Assert.Equal(1, installed);
             Assert.Equal(1, acked);
+            Assert.Equal(1, notices);
         }
         finally
         {

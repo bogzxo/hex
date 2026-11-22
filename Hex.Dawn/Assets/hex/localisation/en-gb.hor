@@ -4686,6 +4686,7 @@ let strings = {
     publication_following: "Following Git",
     publication_pack: "Applying a file pack",
     publication_recovering: "Recovering an interrupted set",
+    publication_arrived: "{author} published {count} files to {folder}",
     publication_unpublished: "{count} unpublished files on this device",
     authority_make: "Make this device the authority",
         authority_confirm_lost: "The authority for {folder} is offline. Continue only if that device is permanently gone.",
