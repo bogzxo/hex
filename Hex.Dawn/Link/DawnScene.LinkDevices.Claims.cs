@@ -5,7 +5,7 @@ namespace Hex.Dawn;
 
 internal sealed partial class DawnScene
 {
-    private sealed record LinkClaimMark(string Holder, bool CanOpen);
+    private sealed record LinkClaimMark(string Holder, bool CanOpen, string DeviceId);
 
     private LinkClaimMark? LinkClaimMarkOf(string? path)
     {
@@ -21,16 +21,25 @@ internal sealed partial class DawnScene
     {
         if (LinkClaimMarkOf(shown.Path) is not { } claim)
             return;
-        tab.Icon = "link";
-        tab.IconColor = LinkWarning;
+        tab.Icon = "lock";
+        tab.IconColor = LinkDeviceTint(claim.DeviceId, Skin);
         tab.Tooltip += "\n" + LinkClaimLabel(claim);
     }
 
     private void LinkClaimExplorerRow(UITreeItem row, string path)
     {
-        bool claimed = LinkClaimMarkOf(path) is not null;
-        row.Note = claimed ? Said("link.devices_claimed") : string.Empty;
-        row.Dot = claimed ? LinkWarning : null;
+        if (LinkClaimMarkOf(path) is { } claim)
+        {
+            row.Icon = "lock";
+            row.IconColor = LinkDeviceTint(claim.DeviceId, Skin);
+            row.Tooltip = path + "\n" + LinkClaimLabel(claim);
+        }
+        else if (row.Icon == "lock" && row.Tooltip.Length > path.Length)
+        {
+            row.Icon = HexExplorer.FileIcon(path);
+            row.IconColor = explorer.IsCutPath(path) ? DimColor : explorer.FileIconColor(path);
+            row.Tooltip = path;
+        }
     }
 
     private void LinkExplorerFileMenu(ExplorerEntry entry)
@@ -42,8 +51,8 @@ internal sealed partial class DawnScene
 
     private void AddLinkClaimMenu(Menu menu, string? path)
     {
-        if (path is not null && LinkClaimMarkOf(path) is { } mark)
-            menu.Add(Said("link.devices_open_shared"), () => OpenLinkClaim(path), icon: "link").IsEnabled = () => mark.CanOpen;
+        if (path is not null && LinkClaimMarkOf(path) is { CanOpen: true })
+            menu.Add(Said("link.devices_open_shared"), () => OpenLinkClaim(path), icon: "link");
     }
 
     private void OpenLinkClaim(string path)
@@ -64,14 +73,19 @@ internal sealed partial class DawnScene
 
     private void DrawLinkClaimCount(StackPanel column, string deviceId)
     {
-        int count = 0;
-        LinkReadClaimCount(deviceId, ref count);
-        if (count > 0)
-            column.Add(LinkLine(Said(count == 1 ? "link.devices_one_claim" : "link.devices_claim_count",
-                ("count", count.ToString(System.Globalization.CultureInfo.CurrentCulture)))));
+        IReadOnlyList<string> paths = [];
+        LinkReadClaimPaths(deviceId, ref paths);
+        if (paths.Count == 0)
+            return;
+
+        string first = OneLine(Path.GetFileName(paths[0].TrimEnd('/')), 65);
+        var label = LinkLine(Said(paths.Count == 1 ? "link.devices_one_claim" : "link.devices_claim_count",
+            ("count", paths.Count.ToString(System.Globalization.CultureInfo.CurrentCulture)), ("file", first)));
+        label.Tooltip = string.Join("\n", paths);
+        column.Add(label);
     }
 
     partial void LinkReadClaimMark(string path, ref LinkClaimMark? mark);
     partial void LinkOpenClaimPath(string path, ref bool opened);
-    partial void LinkReadClaimCount(string deviceId, ref int count);
+    partial void LinkReadClaimPaths(string deviceId, ref IReadOnlyList<string> paths);
 }

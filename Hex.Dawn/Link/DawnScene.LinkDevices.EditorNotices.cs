@@ -10,7 +10,7 @@ internal sealed partial class DawnScene
 {
     private StackPanel? linkEditorNotices;
     private bool linkEditorNoticesDirty = true;
-    private (HexDocument? Document, float Width, LinkClaimMark? Claim, LinkSessionNotice? Session) linkEditorNoticeDrawn;
+    private (HexDocument? Document, float Width, LinkClaimMark? Claim, LinkSessionNotice? Session, string? Following) linkEditorNoticeDrawn;
     private float linkEditorNoticeWidth;
 
     private void BuildLinkEditorNotices()
@@ -46,7 +46,7 @@ internal sealed partial class DawnScene
         LinkSessionNotice? session = null;
         if (shown is not null)
             LinkReadSessionNotice(shown, ref session);
-        var pieces = (shown, width, claim, session);
+        var pieces = (shown, width, claim, session, session is null ? null : linkFollowing);
         if (pieces == linkEditorNoticeDrawn)
             return;
 
@@ -55,15 +55,23 @@ internal sealed partial class DawnScene
         notices.Size = new Vector2(width, 0);
         notices.Visible = claim is not null || session is not null;
 
-        if (claim is not null && shown?.Path is { } path)
-        {
-            Button open = LinkButton(Said("link.devices_open_shared"), "link", () => OpenLinkClaim(path));
-            open.Enabled = claim.CanOpen;
-            open.Tooltip = claim.CanOpen ? Said("link.devices_claim_open_tip") : Said("link.devices_claim_cannot_open");
-            DrawEditorLinkNotice(notices, LinkClaimLabel(claim), "warning", warning: true, width, open);
-        }
         if (session is not null && shown is not null)
-            DrawLinkSessionNotice(notices, shown, session, width);
+        {
+            DrawLinkSessionNotice(notices, shown, session, claim, width);
+        }
+        else if (claim is not null && shown?.Path is { } path)
+        {
+            Button? open = null;
+            string caption = LinkClaimLabel(claim);
+            if (claim.CanOpen)
+            {
+                open = LinkButton(Said("link.devices_open_shared"), "link", () => OpenLinkClaim(path));
+                open.Tooltip = Said("link.devices_claim_open_tip");
+            }
+            else
+                caption += ". " + Said("link.devices_claim_cannot_open");
+            DrawEditorLinkNotice(notices, caption, "lock", warning: true, width, open);
+        }
     }
 
     private StackPanel DrawEditorLinkNotice(StackPanel notices, string caption, string icon, bool warning, float width, Button? action = null)
