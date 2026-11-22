@@ -1013,7 +1013,8 @@ internal sealed partial class HexLinkSync
             return;
         }
 
-        bool heldSubmission = IsSubmittedHold(wire, expectedLocal);
+        HeldSubmission? submission = HeldSubmissionFor(wire, expectedLocal);
+        bool heldSubmission = submission is not null;
         try
         {
             if (bytes is null)
@@ -1117,8 +1118,8 @@ internal sealed partial class HexLinkSync
                     SetBase(wire, AgreedOf(bytes, sending) with { Executable = tree.Mode(full) });
             }
 
-            if (heldSubmission)
-                ForgetHeldSubmission(wire, expectedLocal);
+            if (submission is not null)
+                ForgetHeldSubmission(wire, submission);
             Interlocked.Increment(ref sent);
             Notify();
         }

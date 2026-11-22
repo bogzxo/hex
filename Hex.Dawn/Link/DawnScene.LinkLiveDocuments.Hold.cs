@@ -113,7 +113,7 @@ internal sealed partial class DawnScene
         lock (linkSyncGate)
             forwarding = [.. linkSyncs.Values.Where(entry => slash > 0 && PlatformPaths.Comparer.Equals(entry.Folder, wire[..slash]))
                 .Select(entry => entry.Sync).OfType<HexLinkSync>()];
-        string? submitted = bytes is null ? null : HexLinkFiles.Hash(bytes);
+        var submitted = new HexLinkSync.HeldSubmission(bytes is null ? null : HexLinkFiles.Hash(bytes), basis, Forwarded: true);
         foreach (HexLinkSync sync in forwarding)
             sync.RememberHeldSubmission(wire, submitted);
         try

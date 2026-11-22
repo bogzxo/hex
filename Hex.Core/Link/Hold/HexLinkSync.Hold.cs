@@ -14,7 +14,9 @@ internal sealed partial class HexLinkSync
     private readonly Dictionary<string, string?> offeredWhileHeld = new(PlatformPaths.Comparer);
     private readonly Dictionary<string, string?> remoteSeenWhileHeld = new(PlatformPaths.Comparer);
     private readonly Dictionary<string, string?> releasedPeerOffers = new(PlatformPaths.Comparer);
-    private readonly Dictionary<string, string?> submittedHolds = new(PlatformPaths.Comparer);
+    private readonly Dictionary<string, HeldSubmission> submittedHolds = new(PlatformPaths.Comparer);
+
+    internal sealed record HeldSubmission(string? Hash, string? Basis = null, bool Forwarded = false);
 
     // Called under the sync gate.
     private void NoteRemoteHold(string wire, bool held, bool fromNotice = false)
@@ -154,7 +156,7 @@ internal sealed partial class HexLinkSync
             {
                 string wire = entry.Path;
                 if (submitted?.TryGetValue(wire, out string? hashSubmitted) == true)
-                    submittedHolds[wire] = hashSubmitted;
+                    submittedHolds[wire] = new HeldSubmission(hashSubmitted);
                 if (remoteHeld.Contains(wire))
                     continue;
                 HexLinkTreeFile? theirs = remote.GetValueOrDefault(wire);
@@ -173,29 +175,32 @@ internal sealed partial class HexLinkSync
         }
     }
 
-    internal void RememberHeldSubmission(string wire, string? hash)
+    internal void RememberHeldSubmission(string wire, HeldSubmission submission)
     {
         lock (gate)
-            submittedHolds[wire] = hash;
+            submittedHolds[wire] = submission;
     }
 
-    internal void ForgetHeldSubmission(string wire, string? hash)
+    internal void ForgetHeldSubmission(string wire, HeldSubmission submission)
     {
         lock (gate)
-            if (submittedHolds.TryGetValue(wire, out string? pending) && pending == hash)
+            if (ReferenceEquals(submittedHolds.GetValueOrDefault(wire), submission))
                 submittedHolds.Remove(wire);
     }
 
-    private bool IsSubmittedHold(string wire, string? current)
+    private HeldSubmission? HeldSubmissionFor(string wire, string? current)
     {
         lock (gate)
         {
-            if (!submittedHolds.TryGetValue(wire, out string? submitted))
-                return false;
-            if (submitted == current)
-                return true;
-            submittedHolds.Remove(wire);
-            return false;
+            if (!submittedHolds.TryGetValue(wire, out HeldSubmission? submission))
+                return null;
+            if (submission.Hash == current)
+                return submission;
+
+            // A checked write registers before changing the disk. Sync can still be looking at the version it replaces.
+            if (!submission.Forwarded || submission.Basis != current)
+                submittedHolds.Remove(wire);
+            return null;
         }
     }
 
