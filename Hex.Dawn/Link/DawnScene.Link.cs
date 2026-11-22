@@ -424,7 +424,17 @@ internal sealed partial class DawnScene
             // Breathing while a device steers something here, so it's seen from across the room
             linkSteeringShown = LinkSteeringNow;
             string glyph = linkSteeringShown ? "$(link~breathe)" : "$(link)";
-            linkItem.Text = peers.Count > 0 ? $"{glyph} {peers.Count}" : glyph;
+            // Who is linked (the name of the one, the count of several) and what needs the person, readable without opening anything
+            int needing = LinkConflicts.Count;
+            string who = peers.Count switch
+            {
+                0 => string.Empty,
+                1 => " " + OneLine(LinkNameOf(peers[0].Device.Id, peers[0].Device.Name), 18),
+                _ => " " + Said("link.status_count", ("count", peers.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)))
+            };
+            string need = needing > 0 ? " · " + Said("link.status_conflicts", ("count", needing.ToString(System.Globalization.CultureInfo.InvariantCulture))) : string.Empty;
+            linkItem.Text = glyph + who + need;
+            linkItem.Color = needing > 0 ? LinkWarning : null;
             linkItem.Tooltip = peers.Count == 0
                 ? Said(linkTransport?.PairingOpen == true ? "link.status_tip_pairing" : "link.status_tip_none")
                 : Said("link.status_tip", ("devices", string.Join("\n", peers.Select(peer =>

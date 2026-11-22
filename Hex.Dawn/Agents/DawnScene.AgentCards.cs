@@ -139,7 +139,11 @@ internal sealed partial class DawnScene
             string? model = HexAgentModels.Of(chat);
             // Who it's run by over its name, the agent system, and the chat that started it first for one an agent started.
             // The model goes with what it used under its name, where the model and what it cost read together
-            string starter = remote is not null ? LinkStarterOf(remote, chat, system) : chat.Parent is { } parent ? $"{ChatName(parent)} · {system}" : system;
+            // The row's own number leads (#12 · Claude Code), the chat that started it is on the tooltip
+            string starter = remote is not null ? LinkStarterOf(remote, chat, system) : $"#{chat.Id} · {system}";
+            string startedBy = remote is not null ? LinkStarterTip(remote, chat) : chat.Parent is { } startedParent ? Said("agents_panel.started_by", ("name", ChatName(startedParent))) : string.Empty;
+            if (from.Tooltip != startedBy)
+                from.Tooltip = startedBy;
             ShowAgentStatus(state, chat, approval);
 
             // As much of it as fits beside the state, measured in the font, which a count of letters guessed at short

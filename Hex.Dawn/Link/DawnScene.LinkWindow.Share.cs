@@ -49,7 +49,7 @@ internal sealed partial class DawnScene
             column.Add(LinkLine(Said("link.devices_sync_none")));
             return;
         }
-        column.Add(new Label { Text = Said("link.sync_heading"), TextScale = LINK_SMALL, Bold = true, Align = Origin.Left, Fill = UIFill.Horizontal });
+        column.Add(new Label { Text = Said("link.sync_heading"), TextScale = LINK_SMALL, Bold = true, Align = Origin.Left, Fill = UIFill.Horizontal, Tooltip = Said("link.sync_hint") });
         foreach (string folder in folders)
         {
             LinkSyncShown? sync = syncs.FirstOrDefault(each => each.DeviceId.Equals(peer.Device.Id, StringComparison.OrdinalIgnoreCase) && each.Folder.Equals(folder, StringComparison.OrdinalIgnoreCase));
@@ -90,18 +90,28 @@ internal sealed partial class DawnScene
             holder.Add(LinkLine(Said("link.devices_sync_runs_there", ("device", LinkNameOf(id, peer.Device.Name)))));
         if (sync is not null && (sync.Sent != 0 || sync.Received != 0 || sync.Conflicts != 0 || sync.Skipped != 0))
         {
-            Label counts = holder.Add(LinkLine(Said("link.sync_counts", ("sent", sync.Sent.ToString(CultureInfo.InvariantCulture)),
-                ("received", sync.Received.ToString(CultureInfo.InvariantCulture)), ("conflicts", sync.Conflicts.ToString(CultureInfo.InvariantCulture)),
-                ("skipped", sync.Skipped.ToString(CultureInfo.InvariantCulture)))));
+            // Only what moved is counted aloud, a zero is noise; files that don't travel say so, with the files in the tooltip
+            var parts = new List<string>(4);
+            if (sync.Sent != 0)
+                parts.Add(Said("link.sync_count_sent", ("n", sync.Sent.ToString(CultureInfo.InvariantCulture))));
+            if (sync.Received != 0)
+                parts.Add(Said("link.sync_count_received", ("n", sync.Received.ToString(CultureInfo.InvariantCulture))));
+            if (sync.Conflicts != 0)
+                parts.Add($"[color:{HexColour(LinkWarning)}]{UIRichText.Literal(Said("link.sync_count_conflicts", ("n", sync.Conflicts.ToString(CultureInfo.InvariantCulture))))}[/color]");
+            if (sync.Skipped != 0)
+                parts.Add(Said("link.sync_count_skipped", ("n", sync.Skipped.ToString(CultureInfo.InvariantCulture))));
+            Label counts = holder.Add(LinkLine(string.Empty));
+            counts.Text = string.Join(" · ", parts.Select(part => part.StartsWith("[color:", StringComparison.Ordinal) ? part : UIRichText.Literal(part)));
+            counts.Padding = new UIEdges(18, 0, 0, 0);
             if (!reportedByOwner && sync.Skipped > 0)
-                counts.Tooltip = string.Join("\n", LinkSyncSkipped(id, folder).Take(20).Select(each => each.ToString()));
+                counts.Tooltip = Said("link.sync_skipped_tip") + "\n" + string.Join("\n", LinkSyncSkipped(id, folder).Take(20).Select(each => each.ToString()));
         }
 
         bool running = state is HexLinkSyncState.Comparing or HexLinkSyncState.Syncing or HexLinkSyncState.Idle or HexLinkSyncState.PullOnly or HexLinkSyncState.NeedsGit;
         if (!reportedByOwner)
         {
             if (running)
-                row.Add(LinkButton(Said("link.sync_stop"), "debug-stop", () => LinkSyncStop(id, folder)));
+                row.Add(LinkButton(Said("link.sync_stop"), "debug-stop", () => LinkSyncStop(id, folder))).Tooltip = Said("link.tip_pause_sync");
             else
                 row.Add(LinkButton(Said(pausedOn is not null ? "link.sync_resume" : state == HexLinkSyncState.Failed ? "link.devices_try_now" : "link.sync_start"),
                     "sync", () => LinkSyncGo(id, folder, force: false))).Enabled = HexLinkAllowed.Has(peer.Granted, HexLinkRights.View);
@@ -132,13 +142,19 @@ internal sealed partial class DawnScene
         int queued = 0;
         string? detail = null;
         LinkDeviceSyncProgress(sync, ref filesDone, ref filesTotal, ref bytesDone, ref bytesTotal, ref queued, ref detail);
-        if (filesTotal > 0 || bytesTotal > 0)
+        // A pass that's on keeps its bar from the first tick, empty until the counts come, so the row doesn't grow under the pointer
+        bool passing = sync.State is HexLinkSyncState.Syncing or HexLinkSyncState.Comparing;
+        if (filesTotal > 0 || bytesTotal > 0 || passing)
         {
             holder.Add(new ProgressBar
             {
                 Size = new Vector2(0, 9), Fill = UIFill.Horizontal, ShowText = false,
-                Progress = bytesTotal > 0 ? (float)((double)bytesDone / bytesTotal) : (float)filesDone / filesTotal
+                Progress = bytesTotal > 0 ? (float)((double)bytesDone / bytesTotal) : filesTotal > 0 ? (float)filesDone / filesTotal : 0.0f
             });
+        }
+
+        if (filesTotal > 0 || bytesTotal > 0)
+        {
             var counts = new List<string>(3);
             if (filesTotal > 0)
                 counts.Add(Said("link.devices_sync_progress", ("done", filesDone.ToString(CultureInfo.InvariantCulture)), ("total", filesTotal.ToString(CultureInfo.InvariantCulture))));
@@ -162,8 +178,8 @@ internal sealed partial class DawnScene
             return;
 
         bool here = string.Equals(authority.DeviceId, LinkDevice?.Id, StringComparison.OrdinalIgnoreCase);
-        string name = here ? Said("link.runs_on_here") : LinkNameOf(authority.DeviceId);
-        holder.Add(LinkLine(Said("link.devices_folder_authority", ("device", name))));
+        string name = here ? Said("link.runs_on_here").ToLowerInvariant() : LinkNameOf(authority.DeviceId);
+        holder.Add(LinkLine(Said("link.devices_folder_authority", ("device", name)))).Tooltip = Said("link.tip_source_of_truth");
         if (local is not null && !here)
             LinkActionRow(holder).Add(LinkButton(Said("link.authority_make"), "shield", () => ConfirmLinkFolderAuthority(folder, local)));
     }
@@ -266,9 +282,9 @@ internal sealed partial class DawnScene
             TextScale = LINK_TEXT, Align = Origin.Left, Fill = UIFill.Horizontal, Tooltip = conflict.Copy ?? string.Empty
         });
         var buttons = column.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 8.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, LINK_ROW) });
-        buttons.Add(LinkButton(Said("link.conflict_mine"), "arrow-up", () => LinkResolveGo(conflict, HexLinkSyncKeep.Mine)));
-        buttons.Add(LinkButton(Said("link.conflict_theirs"), "arrow-down", () => LinkResolveGo(conflict, HexLinkSyncKeep.Theirs)));
-        buttons.Add(LinkButton(Said("link.conflict_difference"), "diff", () => LinkOpenConflictDifference(conflict.DeviceId, conflict.Path)));
+        buttons.Add(LinkButton(Said("link.conflict_mine"), "arrow-up", () => LinkResolveGo(conflict, HexLinkSyncKeep.Mine))).Tooltip = Said("link.tip_keep_mine");
+        buttons.Add(LinkButton(Said("link.conflict_theirs"), "arrow-down", () => LinkResolveGo(conflict, HexLinkSyncKeep.Theirs))).Tooltip = Said("link.tip_take_theirs");
+        buttons.Add(LinkButton(Said("link.conflict_difference"), "diff", () => LinkOpenConflictDifference(conflict.DeviceId, conflict.Path))).Tooltip = Said("link.tip_difference");
         return card;
     }
 

@@ -222,10 +222,17 @@ internal sealed partial class DawnScene
     /// <summary>What started a remote chat as its card says it, the starter's number and name there, and its agent system.</summary>
     private string LinkStarterOf(LinkRemoteCard remote, HexAgentChat chat, string system)
     {
+        // Its own number there leads, who started it is in the card's tooltip (LinkStarterTip)
+        return $"#{remote.Id} · {system}";
+    }
+
+    /// <summary>The line of a remote card's tooltip that says which chat started it, empty for one that nothing started.</summary>
+    private string LinkStarterTip(LinkRemoteCard remote, HexAgentChat chat)
+    {
         if (chat.Parent is not { } parent)
-            return system;
+            return string.Empty;
         HexLinkRow? starter = LinkPeerOf(remote.DeviceId)?.Fleet.FirstOrDefault(row => row.Id == parent);
-        return starter is null ? $"#{parent} · {system}" : $"#{parent} {starter.Name} · {system}";
+        return Said("agents_panel.started_by", ("name", starter is null ? $"#{parent}" : $"#{parent} {starter.Name}"));
     }
 
     /// <summary>

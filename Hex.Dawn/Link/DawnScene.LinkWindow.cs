@@ -168,6 +168,7 @@ internal sealed partial class DawnScene
         DrawLinkShare();
         DrawLinkNearby();
         DrawLinkActivity();
+        LinkReadableChips(linkWindow);
         if (linkNameBox is not null && chrome.Compositor.Focus != linkNameBox && linkNameBox.Text != settings.LinkName)
             linkNameBox.Text = settings.LinkName;
         if (linkNameBox is not null)
@@ -218,6 +219,7 @@ internal sealed partial class DawnScene
                     LinkStartAddressPairing();
                     ShowLinkDevicePage(LinkDevicePage.Invite);
                 }, icon: "plug");
+            menu.AddSeparator();
             menu.Add(Said(linkActivityShown ? "link.devices_activity_hide" : "link.devices_activity_show"), () =>
             {
                 linkActivityShown = !linkActivityShown;
@@ -580,6 +582,37 @@ internal sealed partial class DawnScene
     }
 
     private Vector4? LinkBadgeInfoColour => Skin is { Palette.LightField: true } skin ? skin.Palette.Link : null;
+
+    /// <summary>
+    /// The colour a chip of a tone is drawn in so its words read at 4.5:1 or better. The light looks put their tone
+    /// colours on tinted chips at about 4:1, mixed a half toward the text colour they pass; the dark ones already do.
+    /// </summary>
+    private Vector4? LinkBadgeColour(UIBadgeTone tone)
+    {
+        if (Skin is not { } skin)
+            return null;
+        bool light = skin.Palette.LightField;
+        Vector4? basis = tone switch
+        {
+            UIBadgeTone.Success => skin.Palette.Success,
+            UIBadgeTone.Warning => skin.Palette.Warning,
+            UIBadgeTone.Danger => skin.Palette.Error,
+            UIBadgeTone.Info => light ? skin.Palette.Link : new Vector4(0.38f, 0.62f, 1.0f, 1.0f),
+            _ => null
+        };
+        return basis is { } colour ? Vector4.Lerp(colour, skin.Palette.Text, light ? 0.5f : 0.4f) : null;
+    }
+
+    // Every chip of the window put right for the look, the ones given a colour of their own left as they are
+    private void LinkReadableChips(UIComponent from)
+    {
+        foreach (UIComponent child in from.Children)
+        {
+            if (child is Badge { Colour: null } badge)
+                badge.Colour = LinkBadgeColour(badge.Tone);
+            LinkReadableChips(child);
+        }
+    }
 
     // TLS's version as people write it
     private static string LinkTlsSaid(System.Security.Authentication.SslProtocols tls) => tls switch

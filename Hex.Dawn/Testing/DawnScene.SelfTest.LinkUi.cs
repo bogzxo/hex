@@ -126,17 +126,37 @@ internal sealed partial class DawnScene
             UIComponent? surface = (UIComponent?)linkOnboardingDialog ?? (UIComponent?)linkThisDeviceDialog ?? linkWindow;
             return surface is null ? null : Descendants(surface).OfType<Button>().FirstOrDefault(button => button.Label == label && button.IsShownInHierarchy);
         }
-        void ClickWindow(string key) => ClickWindowLabel(Said(key));
+        // A label with the device's name in it is found by the words around the name
+        void ClickWindow(string key)
+        {
+            string template = Said(key, ("device", "\u0001"));
+            int at = template.IndexOf('\u0001');
+            if (at < 0)
+            {
+                ClickWindowLabel(template);
+                return;
+            }
 
-        void ClickWindowLabel(string label)
+            string before = template[..at], after = template[(at + 1)..];
+            ClickWindowLabelOf(() =>
+            {
+                UIComponent? surface = (UIComponent?)linkOnboardingDialog ?? (UIComponent?)linkThisDeviceDialog ?? linkWindow;
+                return surface is null ? template : Descendants(surface).OfType<Button>().Select(button => button.Label)
+                    .FirstOrDefault(text => text.StartsWith(before, StringComparison.Ordinal) && text.EndsWith(after, StringComparison.Ordinal)) ?? template;
+            });
+        }
+
+        void ClickWindowLabel(string label) => ClickWindowLabelOf(() => label);
+
+        void ClickWindowLabelOf(Func<string> label)
         {
             test.Run(() =>
             {
-                if (linkOnboardingDialog is null && linkThisDeviceDialog is null && WindowButton(label) is { } button)
+                if (linkOnboardingDialog is null && linkThisDeviceDialog is null && WindowButton(label()) is { } button)
                     linkDevicesScroll?.ScrollIntoView(button);
             });
             test.Settle(0.2f);
-            test.Click(() => Centre(WindowButton(label)));
+            test.Click(() => Centre(WindowButton(label())));
         }
 
         void ClickMore(string key, bool local = false)
@@ -273,6 +293,7 @@ internal sealed partial class DawnScene
                 && !badges.Any(badge => badge.Text == Said("link.right_title_predict"));
         });
         Shot("link_ui_window_device.png");
+        LinkUiRevampChecks(test);
         ClickWindow("link.devices_change_rights");
         test.Check("link-ui: Change opens the rights editor after pairing", () =>
             chrome.Root.Children.OfType<UIDialog>().Any(dialog => dialog.IsOpen &&
@@ -396,6 +417,9 @@ internal sealed partial class DawnScene
             peer?.Fleet.Any(row => row.Id == peerChat && row.Approvals.Any(approval => approval.Number == 1 && approval.Title == "Run the tests")) == true &&
             RemoteCard(noonFleetRows)?.Parent is { } approvalCard && Descendants(approvalCard).OfType<Badge>()
                 .Any(badge => badge.Text == Said("agents_panel.waiting_approval_short")));
+        test.Check("link-ui: the remote card shows its own number there, not its starter's", () =>
+            RemoteCard(noonFleetRows)?.Parent is { } idCard && LinkRemoteOf(RemoteCard(noonFleetRows)!.Chat) is { } idRemote
+            && Descendants(idCard).OfType<Label>().Any(label => label.Text.Contains($"#{idRemote.Id} ·", StringComparison.Ordinal)));
         Shot("link_ui_fleet.png");
 
         Task<McpToolResult>? waitingOnApproval = null;

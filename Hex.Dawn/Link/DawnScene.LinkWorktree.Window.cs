@@ -28,7 +28,7 @@ internal sealed partial class DawnScene
             ? LinkReadOwnedWorktreeGate(services, shared with { Authority = pin })
             : link?.PeerOf(pin?.DeviceId ?? "")?.Workspace.Folders.FirstOrDefault(
                 item => PlatformPaths.Comparer.Equals(item.Name, shared.Name) && item.Authority == pin)?.WorktreeGate;
-        holder.Add(LinkLine("Publish gate: " + (gate?.Options.Describe() ?? "Nearest task or project in each affected repository")));
+        holder.Add(LinkLine("Pre-publish check: " + (gate?.Options.Describe() ?? "builds the nearest project in each changed repository")));
         string path = Path.GetFullPath(shared.Path);
         if (PlatformPaths.Comparison != StringComparison.Ordinal)
             path = path.ToUpperInvariant();
@@ -36,7 +36,7 @@ internal sealed partial class DawnScene
         string saved = Path.Combine(storage, "drafts", id.ToString("N"), "state.json");
         if (!File.Exists(saved))
         {
-            holder.Add(LinkButton("Start private worktree", "git-branch", () => RunPrivateDeviceAction(id, async stop =>
+            holder.Add(LinkButton("New isolated worktree", "git-branch", () => RunPrivateDeviceAction(id, async stop =>
             {
                 HexLinkPrivateWorktree draft = await LinkStartPrivateWorktree(services, shared, id, stop);
                 linkPrivateDrafts[id] = draft;

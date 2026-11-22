@@ -49,9 +49,24 @@ internal sealed partial class DawnScene
                 badge.Tooltip = LinkTlsSaid(tls);
         }
 
+        AddLinkNetwork(top, known, peer);
+
+        // What needs the person leads the card, under the name and the state, so it isn't found at the bottom
+        LinkConflictShown[] forDevice = [.. conflicts.Where(conflict => conflict.DeviceId.Equals(id, StringComparison.OrdinalIgnoreCase))];
+        if (forDevice.Length > 0)
+        {
+            var lead = LinkActionRow(column, LINK_ROW);
+            lead.Add(new Label
+            {
+                Text = $"[color:{HexColour(LinkWarning)}]$(warning) {UIRichText.Literal(Said("link.devices_lead_conflicts", ("count", forDevice.Length.ToString(CultureInfo.InvariantCulture))))}[/color]",
+                TextScale = LINK_TEXT, Bold = true, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left
+            });
+            lead.Add(LinkButton(Said("link.devices_resolve", ("count", forDevice.Length.ToString(CultureInfo.InvariantCulture))),
+                "warning", () => LinkChooseConflict(forDevice))).Primary = true;
+        }
+
         if (known.Named is not null)
             column.Add(LinkLine(Said("link.device_calls_itself", ("name", known.Device.Name))));
-        AddLinkNetwork(top, known, peer);
         string platform = LinkPlatform(peer?.Device ?? known.Device);
 
         if (peer is not null && HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))
@@ -79,23 +94,18 @@ internal sealed partial class DawnScene
         if (peer is not null)
             LinkDeviceSyncRows(column, peer);
 
-        StackPanel here = LinkRightChipsRow(column, Said("link.devices_rights_here"), known.Rights);
-        here.Add(LinkButton(Said("link.devices_change_rights"), "edit", () => LinkChangeDeviceRights(known)));
+        StackPanel here = LinkRightChipsRow(column, Said("link.devices_rights_here", ("device", known.Shown)), known.Rights, Said("link.devices_rights_here_tip"));
+        here.Add(LinkButton(Said("link.devices_change_rights"), "edit", () => LinkChangeDeviceRights(known))).Tooltip = Said("link.tip_edit_permissions");
         if (HexLinkAllowed.Has(known.Rights, HexLinkRights.Steer))
-            column.Add(LinkLine(LinkPreApprovalLabel(known.RemotePreApproval)));
+            column.Add(LinkLine(LinkPreApprovalLabel(known.RemotePreApproval, known.Shown)));
         if (peer is not null)
-            LinkRightChipsRow(column, Said("link.devices_rights_there"), peer.Granted);
+            LinkRightChipsRow(column, Said("link.devices_rights_there", ("device", known.Shown)), peer.Granted, Said("link.devices_rights_there_tip"));
         else
         {
             var there = LinkActionRow(column, 23);
-            there.Add(new Label { Text = Said("link.devices_rights_there"), TextScale = LINK_SMALL, Bold = true, Anchor = Origin.Left, Pivot = Origin.Left });
+            there.Add(new Label { Text = Said("link.devices_rights_there", ("device", known.Shown)), TextScale = LINK_SMALL, Bold = true, Anchor = Origin.Left, Pivot = Origin.Left });
             there.Add(new Label { Text = Said("link.device_there_unknown"), TextScale = LINK_SMALL, Dim = true, Anchor = Origin.Left, Pivot = Origin.Left });
         }
-
-        LinkConflictShown[] forDevice = [.. conflicts.Where(conflict => conflict.DeviceId.Equals(id, StringComparison.OrdinalIgnoreCase))];
-        if (forDevice.Length > 0)
-            LinkActionRow(column).Add(LinkButton(Said("link.devices_resolve", ("count", forDevice.Length.ToString(CultureInfo.InvariantCulture))),
-                "warning", () => LinkChooseConflict(forDevice)));
 
         DrawLinkDeviceActions(column, known, peer, hasAddress);
         return card;
@@ -113,13 +123,13 @@ internal sealed partial class DawnScene
             string route = Said(!knownIp ? "link.devices_route_network" : vpn ? "link.devices_route_vpn" : "link.devices_route_lan");
             string tip = Said("link.devices_route_tip", ("address", address), ("choice",
                 known.PreferredRoute is { } routeChoice ? LinkRouteAddress(routeChoice) : Said("link.devices_route_auto")));
-            row.Add(new Badge { Text = route, Tooltip = tip, TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left });
+            row.Add(new Badge { Text = route, Tooltip = Said(!knownIp ? "link.tip_route_network" : vpn ? "link.tip_route_vpn" : "link.tip_route") + " " + tip, TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left });
         }
         if (peer is not null && linkLatencies.TryGetValue(known.Device.Id, out var sampled) && sampled.Peer == peer && sampled.Milliseconds is { } ms)
             row.Add(new Badge
             {
                 Text = Said("link.devices_latency", ("ms", Math.Max(1, Math.Round(ms)).ToString(CultureInfo.InvariantCulture))),
-                Tone = ms > 150 ? UIBadgeTone.Warning : UIBadgeTone.Neutral,
+                Tone = ms > 150 ? UIBadgeTone.Warning : UIBadgeTone.Neutral, Tooltip = Said("link.tip_latency"),
                 TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left
             });
     }
@@ -147,7 +157,7 @@ internal sealed partial class DawnScene
             _ => HexLinkPreset.Custom
         };
         LinkGrantControls(dialog.Body, preset, grants, (_, changed) => grants = changed);
-        Button picker = LinkActionRow(dialog.Body).Add(LinkButton(LinkPreApprovalLabel(preApproval), "shield", () => { }));
+        Button picker = LinkActionRow(dialog.Body).Add(LinkButton(LinkPreApprovalLabel(preApproval, known.Shown), "shield", () => { }));
         picker.Tooltip = Said("link.devices_preapproval_help");
         picker.OnPressed = () =>
         {
@@ -156,7 +166,7 @@ internal sealed partial class DawnScene
                 menu.Add(LinkPreApprovalName(policy), () =>
                 {
                     preApproval = policy;
-                    Button measured = LinkButton(LinkPreApprovalLabel(preApproval), "shield", () => { });
+                    Button measured = LinkButton(LinkPreApprovalLabel(preApproval, known.Shown), "shield", () => { });
                     picker.Label = measured.Label;
                     picker.Size = measured.Size;
                 }).IsChecked = () => preApproval == policy;
@@ -167,13 +177,13 @@ internal sealed partial class DawnScene
     private static string LinkPreApprovalName(HexLinkPreApproval policy) =>
         Said("link.devices_preapproval_" + HexLinkSpawnPolicy.Word(policy));
 
-    private static string LinkPreApprovalLabel(HexLinkPreApproval policy) =>
-        Said("link.devices_preapproval", ("policy", LinkPreApprovalName(policy)));
+    private static string LinkPreApprovalLabel(HexLinkPreApproval policy, string device) =>
+        Said("link.devices_preapproval", ("device", device), ("policy", LinkPreApprovalName(policy).ToLowerInvariant()));
 
-    private StackPanel LinkRightChipsRow(StackPanel column, string caption, HexLinkRights rights)
+    private StackPanel LinkRightChipsRow(StackPanel column, string caption, HexLinkRights rights, string tip = "")
     {
         StackPanel row = LinkActionRow(column);
-        row.Add(new Label { Text = caption, TextScale = LINK_SMALL, Bold = true, Anchor = Origin.Left, Pivot = Origin.Left });
+        row.Add(new Label { Text = caption, TextScale = LINK_SMALL, Bold = true, Anchor = Origin.Left, Pivot = Origin.Left, Size = new Vector2(88, 23), Align = Origin.Left, Tooltip = tip });
         foreach (Badge chip in LinkRightsChips(rights))
             row.Add(chip);
         return row;
@@ -223,13 +233,13 @@ internal sealed partial class DawnScene
             if (pendingOffer is not null && canGetOffer)
                 get = () => GetLinkOfferedWorkspace(pendingOffer);
             AddLinkAction(actions, offerShare ? "link.devices_share" : "link.devices_get", offerShare ? "cloud-upload" : "cloud-download",
-                offerShare ? share : get, "link.devices_provision_pending");
+                offerShare ? share : get, "link.devices_provision_pending", known.Shown, offerShare ? "link.tip_send_workspace" : "link.tip_get_workspace");
             AddLinkAction(actions, "link.devices_start_agent", "robot", HexLinkAllowed.Has(peer.Granted, HexLinkRights.Steer)
-                ? () => LinkStartAgentOnDevice(id) : null, "link.devices_needs_steer");
+                ? () => LinkStartAgentOnDevice(id) : null, "link.devices_needs_steer", known.Shown, "link.tip_run_agent");
             if (linkDeviceRowsNarrow)
                 actions = LinkActionRow(column);
             AddLinkAction(actions, "link.devices_open_files", "folder-opened", HexLinkAllowed.Has(peer.Granted, HexLinkRights.View)
-                ? () => LinkOpenRemoteCommand(peer) : null, "link.devices_needs_view");
+                ? () => LinkOpenRemoteCommand(peer) : null, "link.devices_needs_view", known.Shown, "link.tip_browse_files");
         }
         else
         {
@@ -248,7 +258,7 @@ internal sealed partial class DawnScene
                 }
                 else
                     AddLinkAction(actions, key, "plug", LinkOn && state?.Connecting != true ? () => LinkConnectKnown(known) : null,
-                        LinkOn ? "link.devices_connecting" : "link.pair_off_text");
+                        LinkOn ? "link.devices_connecting" : "link.pair_off_text", known.Shown);
             }
         }
 
@@ -257,29 +267,39 @@ internal sealed partial class DawnScene
         if (peer is not null && (offerShare ? share : get) is null)
             column.Add(LinkLine(Said("link.devices_provision_short")));
 
+        // Grouped as the person thinks of it: how it is reached, what is shared, what it is called, then the ways to end it
         more.OnPressed = () =>
         {
             var menu = new Menu("device actions");
             LinkAddRouteMenu(menu, known);
             if (peer is not null)
             {
-                menu.Add(Said(offerShare ? "link.devices_get" : "link.devices_share"),
-                    () => (offerShare ? get : share)?.Invoke(), icon: offerShare ? "cloud-download" : "cloud-upload").IsEnabled = () => (offerShare ? get : share) is not null;
-                menu.Add(Said("link.devices_stop_sharing"), () => LinkStopDeviceSharing(known), icon: "debug-stop").IsEnabled = () => sharing;
                 menu.Add(Said("link.device_disconnect"), () => LinkDisconnect(id), icon: "debug-disconnect");
+                if ((offerShare ? get : share) is not null || sharing)
+                    menu.AddSeparator();
+                if ((offerShare ? get : share) is not null)
+                    menu.Add(Said(offerShare ? "link.devices_get" : "link.devices_share", ("device", known.Shown)),
+                        () => (offerShare ? get : share)?.Invoke(), icon: offerShare ? "cloud-download" : "cloud-upload");
+                if (sharing)
+                    menu.Add(Said("link.devices_stop_sharing"), () => LinkStopDeviceSharing(known), icon: "debug-stop");
             }
+
+            menu.AddSeparator();
             menu.Add(Said("link.device_rename"), () => AskText(Said("link.rename_title"), Said("link.rename_text", ("device", known.Device.Name)),
                 known.Shown, Said("link.rename_button"), typed => LinkRename(id, typed)), icon: "edit");
             if (known.Named is not null)
                 menu.Add(Said("link.device_own_name"), () => LinkUseOwnName(id), icon: "discard");
+            menu.AddSeparator();
             menu.Add(Said("link.device_forget"), () => AskForgetDevice(known), icon: "trash");
             ContextMenu.Show(chrome, more.Bounds.PointAt(Origin.TopLeft), menu);
         };
     }
 
-    private void AddLinkAction(StackPanel row, string labelKey, string icon, Action? action, string unavailable)
+    private void AddLinkAction(StackPanel row, string labelKey, string icon, Action? action, string unavailable, string device = "", string tipKey = "")
     {
-        Button button = row.Add(LinkButton(Said(labelKey), icon, () => action?.Invoke()));
+        Button button = row.Add(LinkButton(Said(labelKey, ("device", device)), icon, () => action?.Invoke()));
+        if (action is not null && tipKey.Length > 0)
+            button.Tooltip = Said(tipKey);
         button.Enabled = action is not null;
         if (action is null)
             button.Tooltip = Said(unavailable);
@@ -340,7 +360,7 @@ internal sealed partial class DawnScene
             badge.Text = text;
         badge.Tone = state?.Connecting == true ? UIBadgeTone.Info : key == "link.devices_refused" ? UIBadgeTone.Danger
             : reason is not null ? UIBadgeTone.Warning : UIBadgeTone.Neutral;
-        badge.Colour = badge.Tone == UIBadgeTone.Info ? LinkBadgeInfoColour : null;
+        badge.Colour = LinkBadgeColour(badge.Tone);
         string action = reason is null
             ? Said(!LinkOn ? "link.pair_off_text" : LinkHeldOff(id) ? "link.devices_held_help" : "link.devices_offline_help")
             : LinkDialFailureSaid(reason);
