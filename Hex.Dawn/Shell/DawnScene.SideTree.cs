@@ -317,7 +317,7 @@ internal sealed partial class DawnScene
         {
             IconColor = explorer.FileIconColor(file),
             Tooltip = file,
-            Tag = new SideTag(Pressed: () => explorer.ExplorerPressed(entry), Menu: _ => explorer.ShowExplorerMenu(entry))
+            Tag = new SideTag(Pressed: () => explorer.ExplorerPressed(entry), Menu: _ => LinkExplorerFileMenu(entry))
         };
 
         row.Pip = openInTabs.Contains(file) ? openInTabMark : null;

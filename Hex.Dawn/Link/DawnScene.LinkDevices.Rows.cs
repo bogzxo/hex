@@ -74,6 +74,7 @@ internal sealed partial class DawnScene
         else if (platform.Length > 0)
             column.Add(LinkLine(platform));
 
+        DrawLinkClaimCount(column, id);
         if (peer is not null)
             LinkDeviceSyncRows(column, peer);
 
