@@ -62,9 +62,24 @@ internal sealed partial class DawnScene
     {
         IReadOnlyList<HexLinkPeer> peers = LinkPeers;
         HexLinkPeer? now = LinkPredictSource is { ServesPredictions: true } kept && peers.Contains(kept) ? kept : peers.FirstOrDefault(peer => peer.ServesPredictions);
+        HexPredictionRelay.WhyNoRemote = now is null ? LinkPredictWhyNone(peers) : null;
         if (now == LinkPredictSource)
             return;
         LinkPredictSource = now;
         LinkPredictSourceChanged?.Invoke(now);
+    }
+
+    /// <summary>
+    /// Why none of the linked devices serves this one's predictions, said so the user knows what to change and where:
+    /// nothing connected, a device that gave this one Autocomplete but doesn't share its model, or one that hasn't given
+    /// this one Autocomplete at all. "Predictions refused" with nothing more was all a client saw before.
+    /// </summary>
+    internal string LinkPredictWhyNone(IReadOnlyList<HexLinkPeer> peers)
+    {
+        if (peers.Count == 0)
+            return Said("prediction.why_no_device");
+        if (peers.FirstOrDefault(peer => peer.Granted.HasFlag(HexLinkRights.Predict)) is { } granted)
+            return Said("prediction.why_not_shared", ("device", granted.Device.Name));
+        return Said("prediction.why_not_granted", ("device", peers[0].Device.Name));
     }
 }

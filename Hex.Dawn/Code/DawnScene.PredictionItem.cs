@@ -226,9 +226,10 @@ internal sealed partial class DawnScene
 
         // A server or model that isn't there is said once in a notice, not only in the item's tooltip; again only when
         // the server, the model or the way it failed changes
-        if (state == PredictionItemState.Failed && status is PredictionStatus.NoSuchModel or PredictionStatus.Unreachable && predictions.StatusText.Length > 0)
+        if (state == PredictionItemState.Failed && status is PredictionStatus.NoSuchModel or PredictionStatus.Unreachable or PredictionStatus.Refused && predictions.StatusText.Length > 0)
         {
-            string failure = $"{status}|{settings.EditPredictionsApiUrl}|{settings.EditPredictionsModel}";
+            // Refused over Hex Link says why in its text, so a different reason is noticed again
+            string failure = $"{status}|{settings.EditPredictionsApiUrl}|{settings.EditPredictionsModel}|{(status == PredictionStatus.Refused ? predictions.StatusText : string.Empty)}";
             if (failure != predictionFailureNoticed)
             {
                 predictionFailureNoticed = failure;

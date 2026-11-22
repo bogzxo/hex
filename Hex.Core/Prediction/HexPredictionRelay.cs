@@ -23,6 +23,12 @@ public static class HexPredictionRelay
     /// <summary>The name of the device <see cref="Remote"/> reaches, for the status bar's "from ...".</summary>
     public static string? RemoteName { get; set; }
 
+    /// <summary>
+    /// Why no linked device serves this one while <see cref="Remote"/> is null, in words the user can act on (nothing
+    /// connected, a device that hasn't given this one Autocomplete, one that doesn't share). Null when it isn't known.
+    /// </summary>
+    public static string? WhyNoRemote { get; set; }
+
     /// <summary>The provider served with in place of the one the settings make, for the tests.</summary>
     internal static IPredictionProvider? ProviderOverride { get; set; }
 

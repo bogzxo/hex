@@ -24,7 +24,8 @@ internal sealed class LinkProvider : IPredictionProvider
     public async IAsyncEnumerable<string> Complete(PredictionWireRequest request, [EnumeratorCancellation] CancellationToken cancel)
     {
         if (remote is null)
-            throw new PredictionException(PredictionStatus.Refused, "No device that shares its predictions is attached over Hex Link.");
+            throw new PredictionException(PredictionStatus.Refused,
+                HexPredictionRelay.WhyNoRemote ?? "No device that shares its predictions is attached over Hex Link.");
 
         await foreach (string piece in remote(request, cancel).WithCancellation(cancel).ConfigureAwait(false))
             yield return piece;

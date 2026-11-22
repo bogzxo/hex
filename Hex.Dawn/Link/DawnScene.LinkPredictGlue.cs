@@ -36,13 +36,22 @@ internal sealed partial class DawnScene
     /// <summary>Connect an enabled predictor or explicitly shared model to this machine's Link service.</summary>
     private void BindLinkPredictions()
     {
-        HexPredictionRelay.Configure(() => MakePredictionOptions(settings), () => !HexAi.Off && PredictionSettings.Share(settings));
+        HexPredictionRelay.Configure(() => MakeShareOptions(settings), () => !HexAi.Off && PredictionSettings.Share(settings));
         LinkPredictServing = () => HexPredictionRelay.Serving;
         LinkPredictServe = LinkPredictionGlue.Serve;
         LinkPredictSourceChanged -= LinkPredictTakeSource;
         LinkPredictSourceChanged += LinkPredictTakeSource;
         LinkPredictTakeSource(LinkPredictSource);
     }
+
+    // The options this machine's model is shared with: its provider and model as set up, whether or not predictions are
+    // switched on for its own typing. A machine that only lends its model to paired devices refused them all before.
+    // Never Hex Link itself, a device asked over a link is never passed on to another
+    internal static PredictionOptions? MakeShareOptions(HexSettings from) =>
+        !HexAi.Off && PredictionSettings.Configured(from) && from.EditPredictionsProvider != PredictionProviders.LINK
+            ? new PredictionOptions(true, from.EditPredictionsProvider, from.EditPredictionsApiUrl, PredictionSettings.ApiKey(from),
+                from.EditPredictionsModel, from.EditPredictionsPromptFormat, from.EditPredictionsMaxTokens, from.EditPredictionsDebounce)
+            : null;
 
     // The device that serves this one now, or none, handed to the relay; on the editor's thread
     private void LinkPredictTakeSource(HexLinkPeer? source)
