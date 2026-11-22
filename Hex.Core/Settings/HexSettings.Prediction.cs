@@ -85,35 +85,27 @@ internal sealed partial class HexSettings
     /// </summary>
     public string EditPredictionsApiKey
     {
-        get;
+        get => savedApiKey?.Value.Key ?? plainApiKey;
         set
         {
-            if (field == value)
+            if (savedApiKey is null && plainApiKey == value)
                 return;
-            field = value;
+            plainApiKey = value;
+            savedApiKey = null;
             apiKeyOnDisk = null;
-            apiKeyKept = null;
-            EditPredictionsApiKeyUnreadable = false;
         }
-    } = string.Empty;
+    }
 
-    /// <summary>
-    /// Whether the settings file had a protected key that couldn't be read back (made by another user or on another
-    /// machine, or changed), so the key is empty and the user should be told to enter it again.
-    /// </summary>
-    public bool EditPredictionsApiKeyUnreadable { get; private set; }
+    public bool EditPredictionsApiKeyUnreadable => savedApiKey?.Value.Unreadable == true;
 
-    // The key as the file has it, protected, made once for the key it is so each save doesn't protect it again
+    private string plainApiKey = string.Empty;
     private string? apiKeyOnDisk;
+    private Lazy<(string Key, bool Unreadable)>? savedApiKey;
 
-    // A protected key whose store can't be reached now (the Keychain locked), kept as it was so a save doesn't lose it
-    private string? apiKeyKept;
-
-    // What the file is given for the key: the protected text, the one kept, or nothing
+    // Saving other settings keeps an existing protected key without opening the system credential store.
     private string ApiKeyOnDisk() =>
-        EditPredictionsApiKey.Length > 0 ? apiKeyOnDisk ??= PredictionKey.Wrap(EditPredictionsApiKey) : apiKeyKept ?? string.Empty;
+        apiKeyOnDisk ??= plainApiKey.Length > 0 ? PredictionKey.Wrap(plainApiKey) : string.Empty;
 
-    // The key read out of the file: protected is unwrapped, anything else is a key typed in by hand, protected at the next save
     private void ReadApiKey(Dictionary<string, IRuntimeValue> values)
     {
         if (values.GetValueOrDefault("edit_predictions_api_key") is not StringValue text)
@@ -126,19 +118,20 @@ internal sealed partial class HexSettings
             return;
         }
 
-        try
+        plainApiKey = string.Empty;
+        apiKeyOnDisk = stored;
+        savedApiKey = new(() =>
         {
-            string key = PredictionKey.Unwrap(stored, out bool failed);
-            EditPredictionsApiKey = key;
-            EditPredictionsApiKeyUnreadable = failed;
-            if (!failed)
-                apiKeyOnDisk = stored;
-        }
-        catch (HexLinkSecretsUnavailableException)
-        {
-            EditPredictionsApiKey = string.Empty;
-            apiKeyKept = stored;
-        }
+            try
+            {
+                string key = PredictionKey.Unwrap(stored, out bool failed);
+                return (key, failed);
+            }
+            catch (HexLinkSecretsUnavailableException)
+            {
+                return (string.Empty, false);
+            }
+        });
     }
 
     // The rows of edit prediction, one block of HexSettings.Rows

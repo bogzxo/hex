@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>true</IsAotCompatible>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <WarningsAsErrors>$(WarningsAsErrors);IL2026;IL3050</WarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Using Include="Horizon.Core.Platform" />
+    <Compile Include="../Hex.Core/Link/HexLinkTransport*.cs;../Hex.Core/Link/HexLinkDns.cs;../Hex.Core/Link/HexLinkDiscovery.cs;../Hex.Core/Link/HexLinkPortMapping.cs;../Hex.Core/Link/HexRouterPortMapper*.cs" />
+    <ProjectReference Include="../Hex.Core/Hex.Core.csproj" />
+    <InternalsVisibleTo Include="Hex.Dawn" />
+    <InternalsVisibleTo Include="Hex.Shell" />
+    <InternalsVisibleTo Include="Hex.Tests" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>true</IsAotCompatible>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <WarningsAsErrors>$(WarningsAsErrors);IL2026;IL3050</WarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Using Include="Horizon.Core.Platform" />
+    <Compile Include="../Hex.Core/Prediction/*.cs" Exclude="../Hex.Core/Prediction/PredictionSettings.cs;../Hex.Core/Prediction/PredictionKey.cs;../Hex.Core/Prediction/PredictionStatus.cs;../Hex.Core/Prediction/PredictionTiming.cs" />
+    <ProjectReference Include="../Hex.Core/Hex.Core.csproj" />
+    <InternalsVisibleTo Include="Hex.Dawn" />
+    <InternalsVisibleTo Include="Hex.Shell" />
+    <InternalsVisibleTo Include="Hex.Tests" />
+  </ItemGroup>
+</Project>

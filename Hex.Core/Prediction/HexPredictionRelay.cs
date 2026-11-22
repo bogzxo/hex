@@ -30,7 +30,7 @@ public static class HexPredictionRelay
     public static bool Serving => shared?.Invoke() == true && Provider() is not null;
 
     /// <summary>Where the settings are read from, called once by the glue.</summary>
-    internal static void Configure(Func<PredictionOptions?> options, Func<bool> shared)
+    internal static void Configure(Func<PredictionOptions?>? options, Func<bool>? shared)
     {
         HexPredictionRelay.options = options;
         HexPredictionRelay.shared = shared;

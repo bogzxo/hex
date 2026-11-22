@@ -33,7 +33,7 @@ namespace Hex.Core;
 internal sealed partial class HexLinkTransport : IDisposable
 {
     /// <summary>The port Link listens on unless the <c>link_port</c> setting says another.</summary>
-    public const int DEFAULT_PORT = 47833;
+    public const int DEFAULT_PORT = HexSettings.DefaultLinkPort;
 
     // How long the handshake and the first lines may take, from the connection coming in or going out
     private const int HANDSHAKE_MS = 10000;

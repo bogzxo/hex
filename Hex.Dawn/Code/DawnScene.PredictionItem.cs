@@ -98,7 +98,7 @@ internal sealed partial class DawnScene
         if (HexAi.Off)
             return;
         settings.EditPredictions = !settings.EditPredictions;
-        if (!settings.EditPredictions && predictions is not null)
+        if (!settings.EditPredictions && predictionSession is not null)
             StopPredictions();
         SaveSettings();
         SettingsPage?.Refresh("edit_predictions");
@@ -119,7 +119,7 @@ internal sealed partial class DawnScene
         if (!off)
         {
             code.ClearPrediction();
-            predictions?.Forget(document);
+            predictionSession?.Engine.Forget(document);
         }
         SaveSettings();
         SettingsPage?.Refresh("edit_predictions_disabled_languages");
@@ -132,7 +132,7 @@ internal sealed partial class DawnScene
     {
         if (!PredictionSettings.On(settings) || LayoutTools || !IsPredictedCode(document))
             return;
-        if (predictions is null)
+        if (predictionSession is null)
             StartPredictions();
         predictions.ShortcutOnly = settings.PredictionShortcutOnly;
         predictions.Edited(document, code.Document.Version);

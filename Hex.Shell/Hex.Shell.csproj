@@ -32,6 +32,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Hex.Core\Hex.Core.csproj" />
+    <ProjectReference Include="..\Hex.Prediction.Runtime\Hex.Prediction.Runtime.csproj" />
     <ProjectReference Include="$(HorizonRoot)Horizon\Horizon.csproj" />
     <ProjectReference Include="$(HorizonRoot)Horizon.UI\Horizon.UI.csproj" />
     <ProjectReference Include="$(HorizonRoot)Horizon.HIDL\Horizon.HIDL.csproj" />

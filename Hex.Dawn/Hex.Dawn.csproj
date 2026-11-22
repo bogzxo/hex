@@ -50,6 +50,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Hex.Core\Hex.Core.csproj" />
+    <ProjectReference Include="..\Hex.Link.Transport\Hex.Link.Transport.csproj" />
     <ProjectReference Include="..\Hex.Installation\Hex.Installation.csproj" />
     <ProjectReference Include="..\Hex.Shell\Hex.Shell.csproj" />
     <!-- The engine is a submodule at horizon/, the language a submodule inside of that. A workspace above this repo
