@@ -37,7 +37,7 @@ internal sealed partial class HexLinkSync
             return true;
         }
 
-        if (SameText(localBytes, remoteFile.Bytes))
+        if (SameText(localBytes, remoteFile.Bytes, ignoreUtf8Bom: true))
         {
             lock (gate)
                 SetBase(wire, AgreedOf(localBytes, remoteFile.Bytes) with { Executable = remoteFile.Executable });

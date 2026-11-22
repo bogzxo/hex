@@ -59,9 +59,9 @@ internal sealed partial class HexLinkSync
     /// A wire path made a full path of this side's folder through the jail every request of the other side's goes
     /// through, the state file refused besides. Throws a <see cref="HexLinkException"/> (not allowed) with why.
     /// </summary>
-    private string Jailed(string wire)
+    private string Jailed(string wire, bool respectLinkIgnore = true)
     {
-        string full = HexLinkFiles.Resolve([folder], wire, respectLinkIgnore: true);
+        string full = HexLinkFiles.Resolve([folder], wire, respectLinkIgnore: respectLinkIgnore);
         if (BlockedRepository(wire))
             throw new HexLinkException(HexLinkErrors.NOT_ALLOWED, $"{wire} is in a repository missing on one device.");
         if (PlatformPaths.Same(full, StateFile) || Ours(wire, includeMissing: false))

@@ -37,7 +37,7 @@ internal sealed partial class HexLinkSync
     // The text hash folds CRLF into LF and ignores a UTF-8 BOM. The original encoding still controls writes.
     private readonly record struct TextInfo(HexLinkEol Eol, string? Norm, string? Text, string? Encoding);
 
-    private static TextInfo TextOf(byte[] bytes)
+    private static TextInfo TextOf(byte[] bytes, bool ignoreUtf8Bom = true)
     {
         if (HexLinkFiles.Decode(bytes) is not { } decoded)
             return new TextInfo(HexLinkEol.Binary, null, null, null);
@@ -71,7 +71,7 @@ internal sealed partial class HexLinkSync
             _ => HexLinkEol.Mixed
         };
         string norm = crlf > 0 ? text.Replace("\r\n", "\n", StringComparison.Ordinal) : text;
-        string encoding = decoded.Encoding == "utf-8-bom" ? "utf-8" : decoded.Encoding;
+        string encoding = ignoreUtf8Bom && decoded.Encoding == "utf-8-bom" ? "utf-8" : decoded.Encoding;
         return new TextInfo(eol, HexLinkFiles.Hash(Encoding.UTF8.GetBytes(encoding + "\n" + norm)), text, decoded.Encoding);
     }
 
@@ -93,11 +93,13 @@ internal sealed partial class HexLinkSync
     }
 
     /// <summary>
-    /// Whether two files are the same as far as the sync's concerned: the same bytes, or both text that only differs
-    /// in line endings or a UTF-8 BOM.
+    /// Whether two files have the same bytes or text that differs only in line endings.
     /// </summary>
-    public static bool SameText(byte[] one, byte[] other) =>
-        one.AsSpan().SequenceEqual(other) || (TextOf(one) is { Norm: { } a } && TextOf(other) is { Norm: { } b } && a == b);
+    public static bool SameText(byte[] one, byte[] other) => SameText(one, other, ignoreUtf8Bom: false);
+
+    private static bool SameText(byte[] one, byte[] other, bool ignoreUtf8Bom) =>
+        one.AsSpan().SequenceEqual(other) || (TextOf(one, ignoreUtf8Bom) is { Norm: { } a } &&
+            TextOf(other, ignoreUtf8Bom) is { Norm: { } b } && a == b);
 
     // A text file with one kind of line end made the receiver's, when the receiver's is known and the other kind; a
     // binary file, a mixed one or one with no line ends goes exactly as it is

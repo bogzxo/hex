@@ -741,6 +741,17 @@ internal sealed partial class HexLinkSync
     {
         if (BlockedRepository(wire))
             return;
+        string full;
+        try
+        {
+            full = Jailed(wire, respectLinkIgnore: !ignored);
+        }
+        catch (HexLinkException e)
+        {
+            Skip(wire, e.Message);
+            return;
+        }
+
         // Keep the path eligible for another comparison if the local rules are later relaxed.
         if (ignored)
         {
@@ -749,17 +760,6 @@ internal sealed partial class HexLinkSync
                 lock (gate)
                     ignoredByLink.Add(wire);
             }
-            return;
-        }
-
-        string full;
-        try
-        {
-            full = Jailed(wire);
-        }
-        catch (HexLinkException e)
-        {
-            Skip(wire, e.Message);
             return;
         }
 
@@ -987,7 +987,7 @@ internal sealed partial class HexLinkSync
 
         // The same here already, or the same but for line ends: what changed there was only its line ends, nothing's
         // written and each side keeps its own
-        if (local is not null && SameText(local, file.Bytes))
+        if (local is not null && SameText(local, file.Bytes, ignoreUtf8Bom: true))
         {
             lock (gate)
                 SetBase(wire, AgreedOf(local, file.Bytes));
@@ -1140,7 +1140,7 @@ internal sealed partial class HexLinkSync
                             return;
                         }
 
-                        if (SameText(bytes, now.Bytes))
+                        if (SameText(bytes, now.Bytes, ignoreUtf8Bom: true))
                         {
                             lock (gate)
                                 SetBase(wire, AgreedOf(bytes, now.Bytes));
@@ -1233,7 +1233,7 @@ internal sealed partial class HexLinkSync
             }
 
             // The same, or the same but for line ends (a CRLF checkout against an LF one): agreed as each side has it
-            if (SameText(local, file.Bytes))
+            if (SameText(local, file.Bytes, ignoreUtf8Bom: true))
             {
                 lock (gate)
                     SetBase(wire, AgreedOf(local, file.Bytes));
