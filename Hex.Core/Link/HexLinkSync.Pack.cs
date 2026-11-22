@@ -7,11 +7,14 @@ namespace Hex.Core;
 /// <summary>A bounded pack of small files. Each entry is a little-endian JSON header length, header and raw bytes.</summary>
 internal static class HexLinkFilePack
 {
-    public const int MaximumFiles = 32;
+    public const int MaximumFiles = 128;
     public const int MaximumFile = 512 * 1024;
     public const int MaximumSingle = HexLinkFiles.MOST_READ;
     public const int MaximumLength = 18 * 1024 * 1024;
     private const int MaximumHeader = 48 * 1024;
+
+    // Allow for UTF-8 JSON escapes, the SHA-256 and the length prefix before constructing the headers.
+    public static int WireCost(string path, int bytes) => checked(256 + 6 * path.Length + bytes);
 
     internal sealed record Entry(string Path, byte[] Bytes, string? Base = null, bool? Executable = null);
 
@@ -173,7 +176,7 @@ internal static class HexLinkFilePack
 
 internal sealed partial class HexLinkSync
 {
-    private sealed record PendingRead(string Path, CancellationToken Cancel, TaskCompletionSource<HexLinkFile> Answer);
+    private sealed record PendingRead(string Path, int Size, CancellationToken Cancel, TaskCompletionSource<HexLinkFile> Answer);
     private sealed record PendingWrite(HexLinkFilePack.Entry Entry, CancellationToken Cancel, TaskCompletionSource<string> Answer);
     private PackBatcher<PendingRead>? packedReads;
     private PackBatcher<PendingWrite>? packedWrites;
@@ -191,7 +194,7 @@ internal sealed partial class HexLinkSync
                 if (size <= HexLinkFilePack.MaximumFile)
                 {
                     var answer = new TaskCompletionSource<HexLinkFile>(TaskCreationOptions.RunContinuationsAsynchronously);
-                    packedReads.Add(new PendingRead(path, cancel, answer));
+                    packedReads.Add(new PendingRead(path, (int)size, cancel, answer));
                     try
                     {
                         return await answer.Task.WaitAsync(cancel);
@@ -292,7 +295,7 @@ internal sealed partial class HexLinkSync
     }
 
     // One reader and writer per folder pair form packs from the paths already admitted by the work loop.
-    private sealed class PackBatcher<T>(Func<T[], Task> send)
+    private sealed class PackBatcher<T>(Func<T[], Task> send, Func<T, int> cost)
     {
         private readonly Queue<T> queued = new();
         private bool draining;
@@ -323,9 +326,17 @@ internal sealed partial class HexLinkSync
                         return;
                     }
 
-                    batch = new T[Math.Min(queued.Count, HexLinkFilePack.MaximumFiles)];
-                    for (int i = 0; i < batch.Length; i++)
-                        batch[i] = queued.Dequeue();
+                    var next = new List<T>(Math.Min(queued.Count, HexLinkFilePack.MaximumFiles));
+                    int bytes = 0;
+                    while (next.Count < HexLinkFilePack.MaximumFiles && queued.TryPeek(out T? item))
+                    {
+                        int entry = cost(item);
+                        if (next.Count > 0 && bytes + entry > HexLinkFilePack.MaximumLength)
+                            break;
+                        bytes += entry;
+                        next.Add(queued.Dequeue());
+                    }
+                    batch = [.. next];
                 }
                 await send(batch).ConfigureAwait(false);
             }

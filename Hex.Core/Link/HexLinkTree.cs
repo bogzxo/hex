@@ -698,7 +698,8 @@ internal sealed class HexLinkTreeWatch : IDisposable
     private void Moved(string full)
     {
         string relative = Path.GetRelativePath(tree.Root, full).Replace(Path.DirectorySeparatorChar, '/');
-        if (relative.StartsWith("..", StringComparison.Ordinal) || relative.Split('/').Any(part => part.Equals(".git", StringComparison.OrdinalIgnoreCase)))
+        if (relative.StartsWith("..", StringComparison.Ordinal) || HexLinkTree.SyncArtifact(relative) ||
+            relative.Split('/').Any(part => part.Equals(".git", StringComparison.OrdinalIgnoreCase)))
             return;
         lock (pending)
         {

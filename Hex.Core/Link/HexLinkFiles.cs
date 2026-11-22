@@ -143,9 +143,16 @@ internal static partial class HexLinkFiles
     {
         try
         {
-            FileSystemInfo info = Directory.Exists(path) ? new DirectoryInfo(path) : new FileInfo(path);
-            if (info.Exists && info.LinkTarget is not null && info.ResolveLinkTarget(true) is { } target)
-                return Path.GetFullPath(target.FullName);
+            var file = new FileInfo(path);
+            FileAttributes attributes = file.Attributes;
+            if (attributes == (FileAttributes)(-1) || (attributes & FileAttributes.ReparsePoint) == 0)
+                return path;
+            FileSystemInfo info = (attributes & FileAttributes.Directory) != 0 ? new DirectoryInfo(path) : file;
+            return info.LinkTarget is not null && info.ResolveLinkTarget(true) is { } target
+                ? Path.GetFullPath(target.FullName) : path;
+        }
+        catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException)
+        {
             return path;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -411,6 +418,7 @@ internal static partial class HexLinkFiles
                     await gate.Turn.WaitAsync(cancel).ConfigureAwait(false);
                 entered = true;
                 await ReplaceChecked(full, wire, baseHash, temp, executable, cancel).ConfigureAwait(false);
+                temp = null;
                 return next;
             }
             finally
@@ -558,6 +566,14 @@ internal static partial class HexLinkFiles
         string? now = null;
         try
         {
+            if (OperatingSystem.IsWindows() && baseHash is null && temp is not null)
+            {
+                // A same-directory move with overwrite disabled atomically checks absence and publishes.
+                using var publication = HexLinkSyncTiming.Measure("cas.rename-or-delete");
+                File.Move(temp, full, overwrite: false);
+                return;
+            }
+
             DateTime written;
             using (HexLinkSyncTiming.Measure("cas.destination-stat"))
                 written = File.GetLastWriteTimeUtc(full);

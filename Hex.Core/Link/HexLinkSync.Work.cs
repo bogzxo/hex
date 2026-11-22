@@ -526,7 +526,7 @@ internal sealed partial class HexLinkSync
                 lock (gate)
                 {
                     taking++;
-                    while (batch.Count < MOST_BATCH && queue.TryDequeue(out string? wire))
+                    while (batch.Count < (peer.Session.SupportsBulk ? 2 * HexLinkFilePack.MaximumFiles : MOST_BATCH) && queue.TryDequeue(out string? wire))
                     {
                         queued.Remove(wire);
                         running.Add(wire);

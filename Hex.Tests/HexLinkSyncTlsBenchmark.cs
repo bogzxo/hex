@@ -119,6 +119,11 @@ public sealed class HexLinkSyncTlsBenchmark(ITestOutputHelper output)
             EndProfile("cold");
             foreach (HexLinkSyncSkipped skipped in sync.Skipped)
                 Write($"{label} skipped {skipped.Path}: {skipped.Why}");
+            if (capability != HexLinkBulkSupport.None)
+            {
+                Assert.Empty(sync.Skipped);
+                Assert.Equal(files, sync.Sent + sync.Received);
+            }
             await sync.Flush(stop);
         }
 
@@ -132,6 +137,7 @@ public sealed class HexLinkSyncTlsBenchmark(ITestOutputHelper output)
             await Idle(sync, stop);
             Write($"{label} warm restart: {elapsed.Elapsed.TotalSeconds:F3} s, {sync.Sent + sync.Received} files transferred.");
             EndProfile("warm restart");
+            Assert.Equal(0, sync.Sent + sync.Received);
 
             string remoteLive = Path.Combine(there.Work, "hexlink-benchmark-live.txt");
             BeginProfile();
@@ -180,6 +186,10 @@ public sealed class HexLinkSyncTlsBenchmark(ITestOutputHelper output)
     private static List<(string Relative, string Full, string Commit)> Repositories(string source)
     {
         var repositories = new List<(string, string, string)>();
+        var pinned = (Environment.GetEnvironmentVariable("HEX_LINK_SYNC_BENCH_PINS") ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(each => each.Split('@', 2))
+            .ToDictionary(each => each[0], each => each[1], StringComparer.Ordinal);
         foreach (string relative in Candidates)
         {
             string path = Path.GetFullPath(Path.Combine(source, relative));
@@ -187,7 +197,7 @@ public sealed class HexLinkSyncTlsBenchmark(ITestOutputHelper output)
                 continue;
             GitResult top = GitProcess.Run(path, ["rev-parse", "--show-toplevel"]);
             if (top.Ok && PlatformPaths.Same(path, top.Output.Trim()))
-                repositories.Add((relative, path, Git(path, "rev-parse", "HEAD").Trim()));
+                repositories.Add((relative, path, pinned.GetValueOrDefault(relative) ?? Git(path, "rev-parse", "HEAD").Trim()));
         }
 
         return repositories;
