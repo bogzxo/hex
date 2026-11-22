@@ -474,7 +474,9 @@ internal sealed partial class DawnScene
         if (!nearby.Visible)
             return;
         IReadOnlyList<HexLinkNearby> found = LinkNearby;
-        nearby.Add(LinkHeading(Said("link.nearby_heading")));
+        nearby.Add(LinkStep(1, Said("link.devices_join_step_nearby")));
+        if (LinkOn && found.Count > 0)
+            nearby.Add(LinkLine(Said("link.devices_nearby_hint")));
         if (!LinkOn || found.Count == 0)
         {
             nearby.Add(LinkLine(LinkNearbyOff is { } off ? Said("link.nearby_off", ("why", off)) : Said(LinkOn ? "link.devices_nearby_empty" : "link.pair_off_text")));

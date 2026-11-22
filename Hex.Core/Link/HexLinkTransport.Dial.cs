@@ -183,7 +183,7 @@ internal sealed partial class HexLinkTransport
                 "unknown" => "the other device doesn't know this one, pair first",
                 "busy" => "there's a link between the two already",
                 "full" => "the other device has as many links as it may",
-                "closed" => "the other device isn't pairing now",
+                "closed" => "the other device isn't inviting anyone right now",
                 "version" => "the other device speaks another version of Link",
                 "route" => "the other device has selected a different route here",
                 "mismatch" => "the pairing's numbers didn't agree",

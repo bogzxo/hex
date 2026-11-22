@@ -16,6 +16,60 @@ internal sealed partial class HexLinkTransport
         public Func<HexLinkPairingTerms>? Terms { get; } = terms;
         public Timer? Timer { get; set; }
         public int WrongProofs { get; set; }
+
+        /// <summary>A device that came without the token is being asked about with the code now, one at a time.</summary>
+        public bool CodeUnderWay { get; set; }
+
+        /// <summary>How many devices came without the token, so a neighbour can't keep the person answering dialogs.</summary>
+        public int CodeTries { get; set; }
+    }
+
+    // How many devices may come to an invitation without its token before only the token is taken
+    private const int MOST_CODE_TRIES = 3;
+
+    /// <summary>
+    /// An invitation is the person saying a device may pair now. One that came by its address or from Nearby rather than
+    /// with the token is therefore asked about the way an open pairing window asks, with the six digits on both screens,
+    /// and the person still decides. The invitation stays as it is for the token meanwhile: only the person's yes uses
+    /// it up (<see cref="ClaimInvite"/>). Null when there's no invitation, one is being asked about already, or too
+    /// many came.
+    /// </summary>
+    private InviteWindow? TakeInviteForCode()
+    {
+        lock (gate)
+        {
+            if (invitation is not { } open || DateTimeOffset.UtcNow >= open.Token.Until || open.CodeUnderWay || open.CodeTries >= MOST_CODE_TRIES)
+                return null;
+            open.CodeUnderWay = true;
+            open.CodeTries++;
+            return open;
+        }
+    }
+
+    /// <summary>
+    /// The person said yes to the device that came by the code, which uses the invitation up, if it is still this one
+    /// and still open. A token proved meanwhile took it first, and so did Cancel and a new invitation, and then the yes
+    /// counts for nothing: one invitation lets one device in, whichever way it came.
+    /// </summary>
+    private bool ClaimInvite(InviteWindow lent)
+    {
+        lock (gate)
+        {
+            if (invitation != lent || DateTimeOffset.UtcNow >= lent.Token.Until)
+                return false;
+            invitation = null;
+        }
+
+        lent.Timer?.Dispose();
+        Changed?.Invoke();
+        return true;
+    }
+
+    // The pairing by code is over, so the invitation, when it's still there, takes the next that comes
+    private void ReturnInvite(InviteWindow taken)
+    {
+        lock (gate)
+            taken.CodeUnderWay = false;
     }
 
     public HexLinkInvite? ActiveInvite

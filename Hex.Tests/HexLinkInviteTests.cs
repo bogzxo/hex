@@ -303,6 +303,187 @@ public sealed class HexLinkInviteTests : IDisposable
         Assert.Equal(HexLinkRights.View, host.Trust.Find(joiner.Device.Id)!.Rights);
     }
 
+    // What a person does who opens Invite on one machine and picks it under Nearby on the other, never touching the token
+    [Fact]
+    public async Task A_device_picked_nearby_pairs_by_the_code_while_an_invitation_is_open()
+    {
+        int port = host.Listen();
+        HexLinkPairing? hostSaw = null;
+        Assert.True(host.Transport.OpenInvite([IPAddress.Loopback], HexLinkTestMachine.WAIT, shown =>
+        {
+            hostSaw = shown;
+            return Task.FromResult<HexLinkRights?>(HexLinkRights.View);
+        }, () => new HexLinkPairingTerms(HexLinkPreset.Viewer, HexLinkRights.View, HexLinkRights.None)));
+
+        HexLinkPairing? joinerSaw = null;
+        HexLinkPairResult result = await ByAddress(port, shown =>
+        {
+            joinerSaw = shown;
+            return Task.FromResult<HexLinkRights?>(HexLinkRights.None);
+        });
+
+        Assert.True(result.Paired, result.Reason);
+        Assert.NotNull(hostSaw);
+        Assert.NotNull(joinerSaw);
+        Assert.False(hostSaw.Invited);
+        Assert.False(joinerSaw.Invited);
+        Assert.NotEmpty(hostSaw.Code);
+        Assert.Equal(hostSaw.Code, joinerSaw.Code);
+        Assert.Equal(HexLinkPreset.Viewer, hostSaw.Terms?.Preset);
+        Assert.Equal(HexLinkRights.View, host.Trust.Find(joiner.Device.Id)!.Rights);
+        Assert.Equal(HexLinkRights.None, joiner.Trust.Find(host.Device.Id)!.Rights);
+
+        // It was the invitation's one device, so the token is used up with it
+        Assert.Null(host.Transport.ActiveInvite);
+        Assert.False(host.Transport.PairingOpen);
+    }
+
+    [Fact]
+    public async Task A_pairing_by_the_code_that_is_declined_leaves_the_invitation_for_its_token()
+    {
+        int port = host.Listen();
+        bool decline = true;
+        Assert.True(host.Transport.OpenInvite([IPAddress.Loopback], HexLinkTestMachine.WAIT,
+            _ => Task.FromResult<HexLinkRights?>(decline ? null : HexLinkRights.View)));
+        HexLinkInvite invite = host.Transport.ActiveInvite!;
+
+        HexLinkPairResult declined = await ByAddress(port);
+        Assert.False(declined.Paired);
+        Assert.Same(invite, host.Transport.ActiveInvite);
+        Assert.Empty(host.Trust.Known);
+        Assert.Empty(joiner.Trust.Known);
+
+        decline = false;
+        HexLinkPairResult paired = await Pair(invite, _ => Task.FromResult<HexLinkRights?>(HexLinkRights.None));
+        Assert.True(paired.Paired, paired.Reason);
+        Assert.Null(host.Transport.ActiveInvite);
+    }
+
+    [Fact]
+    public async Task Only_a_few_devices_may_come_to_an_invitation_without_its_token()
+    {
+        int port = host.Listen();
+        int asked = 0;
+        bool decline = true;
+        Assert.True(host.Transport.OpenInvite([IPAddress.Loopback], HexLinkTestMachine.WAIT, _ =>
+        {
+            Interlocked.Increment(ref asked);
+            return Task.FromResult<HexLinkRights?>(decline ? null : HexLinkRights.View);
+        }));
+        HexLinkInvite invite = host.Transport.ActiveInvite!;
+
+        for (int i = 0; i < 3; i++)
+            Assert.False((await ByAddress(port)).Paired);
+        HexLinkPairResult fourth = await ByAddress(port);
+        Assert.Equal("closed", fourth.Reason);
+        Assert.Equal(3, asked);
+
+        // The token is still good: whoever holds it was never the one being turned away
+        Assert.Same(invite, host.Transport.ActiveInvite);
+        decline = false;
+        HexLinkPairResult paired = await Pair(invite, _ => Task.FromResult<HexLinkRights?>(HexLinkRights.None));
+        Assert.True(paired.Paired, paired.Reason);
+    }
+
+    [Fact]
+    public async Task One_device_at_a_time_is_asked_about_by_the_code()
+    {
+        int port = host.Listen();
+        var asking = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var decision = new TaskCompletionSource<HexLinkRights?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Assert.True(host.Transport.OpenInvite([IPAddress.Loopback], HexLinkTestMachine.WAIT, _ =>
+        {
+            asking.TrySetResult();
+            return decision.Task;
+        }));
+
+        Task<HexLinkPairResult> first = ByAddress(port);
+        await asking.Task.WaitAsync(HexLinkTestMachine.WAIT);
+        using var other = new HexLinkTestMachine("Other");
+        using var cancel = new CancellationTokenSource(HexLinkTestMachine.WAIT);
+        HexLinkPairResult second = await other.Transport.Pair("127.0.0.1", port,
+            _ => Task.FromResult<HexLinkRights?>(HexLinkRights.None), cancel.Token);
+        Assert.Equal("closed", second.Reason);
+
+        decision.SetResult(HexLinkRights.View);
+        Assert.True((await first).Paired);
+        Assert.Null(host.Trust.Find(other.Device.Id));
+    }
+
+    // One invitation, one device: a token proved while somebody is being asked about by the code takes the invitation,
+    // and the yes that comes after for the other counts for nothing
+    [Fact]
+    public async Task A_token_and_a_code_pairing_that_overlap_let_only_one_device_in()
+    {
+        int port = host.Listen();
+        var byCode = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var codeDecision = new TaskCompletionSource<HexLinkRights?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Assert.True(host.Transport.OpenInvite([IPAddress.Loopback], HexLinkTestMachine.WAIT, shown =>
+        {
+            if (shown.Invited)
+                return Task.FromResult<HexLinkRights?>(HexLinkRights.View);
+            byCode.TrySetResult();
+            return codeDecision.Task;
+        }));
+        HexLinkInvite invite = host.Transport.ActiveInvite!;
+
+        Task<HexLinkPairResult> code = ByAddress(port);
+        await byCode.Task.WaitAsync(HexLinkTestMachine.WAIT);
+
+        using var other = new HexLinkTestMachine("Other");
+        using var cancel = new CancellationTokenSource(HexLinkTestMachine.WAIT);
+        HexLinkPairResult token = await other.Transport.Pair(string.Empty, invite.Port,
+            _ => Task.FromResult<HexLinkRights?>(HexLinkRights.None), cancel.Token, invite);
+        Assert.True(token.Paired, token.Reason);
+
+        codeDecision.SetResult(HexLinkRights.View);
+        HexLinkPairResult late = await code;
+        Assert.False(late.Paired);
+        Assert.NotNull(host.Trust.Find(other.Device.Id));
+        Assert.Null(host.Trust.Find(joiner.Device.Id));
+        Assert.Empty(joiner.Trust.Known);
+        Assert.Single(host.Trust.Known);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_yes_by_the_code_counts_for_nothing_once_the_invitation_was_cancelled_or_replaced(bool replaced)
+    {
+        int port = host.Listen();
+        var asking = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var decision = new TaskCompletionSource<HexLinkRights?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Assert.True(host.Transport.OpenInvite([IPAddress.Loopback], HexLinkTestMachine.WAIT, _ =>
+        {
+            asking.TrySetResult();
+            return decision.Task;
+        }));
+
+        Task<HexLinkPairResult> code = ByAddress(port);
+        await asking.Task.WaitAsync(HexLinkTestMachine.WAIT);
+        if (replaced)
+            Assert.True(host.Transport.OpenInvite([IPAddress.Loopback], HexLinkTestMachine.WAIT, _ => Task.FromResult<HexLinkRights?>(HexLinkRights.View)));
+        else
+            host.Transport.ClosePairing();
+        HexLinkInvite? after = host.Transport.ActiveInvite;
+
+        decision.SetResult(HexLinkRights.View);
+        HexLinkPairResult result = await code;
+        Assert.False(result.Paired);
+        Assert.Empty(host.Trust.Known);
+        Assert.Empty(joiner.Trust.Known);
+
+        // The new invitation is untouched by the old one's late answer
+        Assert.Equal(replaced, after is not null);
+        Assert.Same(after, host.Transport.ActiveInvite);
+    }
+
+    private async Task<HexLinkPairResult> ByAddress(int port, Func<HexLinkPairing, Task<HexLinkRights?>>? ask = null)
+    {
+        using var cancel = new CancellationTokenSource(HexLinkTestMachine.WAIT);
+        return await joiner.Transport.Pair("127.0.0.1", port, ask ?? (_ => Task.FromResult<HexLinkRights?>(HexLinkRights.None)), cancel.Token);
+    }
+
     private async Task<HexLinkPairResult> Pair(HexLinkInvite invite, Func<HexLinkPairing, Task<HexLinkRights?>>? ask = null,
         HexLinkInviteRoute? overrideRoute = null)
     {

@@ -130,6 +130,27 @@ internal sealed partial class HexLinkTransport
         HexLinkPairingTerms? terms = null)
     {
         Func<HexLinkPairing, Task<HexLinkRights?>>? ask = invited ?? TakePairing();
+
+        // No window, but an invitation is open and this device came without its token (picked under Nearby, or typed the
+        // address): it pairs by the code, the invitation lending who to ask and what was proposed
+        InviteWindow? lent = null;
+        bool lost = false;
+        if (ask is null && (lent = TakeInviteForCode()) is not null)
+        {
+            // The yes is only a yes while the invitation is still this one: it is claimed before the other side hears
+            // "confirm", so a token that was proved meanwhile and this device can't both be let in on one invitation
+            InviteWindow window = lent;
+            ask = async shown =>
+            {
+                HexLinkRights? granted = await window.Ask(shown);
+                if (granted is null || ClaimInvite(window))
+                    return granted;
+                lost = true;
+                return null;
+            };
+            terms ??= lent.Terms?.Invoke();
+        }
+
         if (ask is null)
         {
             using var quick = CancellationTokenSource.CreateLinkedTokenSource(stop);
@@ -174,7 +195,7 @@ internal sealed partial class HexLinkTransport
             (string verdict, HexLinkRights granted) = await Decide(ssl, ask, new HexLinkPairing(device, code, address, ended.Token, Invited: invited is not null, Terms: terms), ended);
             if (verdict != "paired")
             {
-                result = HexLinkPairResult.Failed(verdict, device, code);
+                result = HexLinkPairResult.Failed(lost ? "closed" : verdict, device, code);
                 return false;
             }
 
@@ -207,6 +228,8 @@ internal sealed partial class HexLinkTransport
         {
             if (!result.Paired)
                 ended.Cancel();
+            if (lent is not null)
+                ReturnInvite(lent);
             Audit?.Write(result.Paired ? "paired" : "pairing failed", device.Id, $"{address}, \"{device.Name}\", {result.Reason}{(result.Paired ? ", granted " + string.Join(' ', HexLinkTrust.RightsNames(result.Granted)) : "")}");
             try
             {

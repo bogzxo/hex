@@ -214,29 +214,14 @@ internal sealed partial class DawnScene
         if (LinkPairingUntil is not null)
         {
             HexLinkInvite? token = LinkActiveInvite;
-            body.Add(LinkLine(Said(token is null ? "link.pair_addresses" : "link.devices_invite_help")));
-            if (token is not null)
-                DrawInviteToken(body, token);
-
-            IReadOnlyList<IPAddress> addresses = token?.Addresses ?? InviteAddresses();
-            if (addresses.Count == 0 && token?.PublicRoute is null)
-                body.Add(LinkLine(Said("link.pair_addresses_none", ("port", LinkPort.ToString(CultureInfo.InvariantCulture)))));
-            else if (addresses.Count > 0)
-                body.Add(LinkLine(string.Join("   ·   ", addresses.Select(address =>
-                    Said(LinkIsVpn(address) ? "link.devices_endpoint_vpn" : "link.devices_endpoint_lan",
-                        ("address", new IPEndPoint(address, LinkPort).ToString()))))));
-
-            if (token is not null)
-            {
-                DrawInviteRoute(body, token);
-                if (linkInviteError is not null)
-                    body.Add(LinkLine(linkInviteError));
-            }
-            StackPanel commands = LinkActionRow(body);
-            linkPairingCountdown = commands.Add(new Label { TextScale = LINK_TEXT, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left, Size = new Vector2(110, LINK_ROW) });
             if (token is null)
             {
-                commands.Add(LinkButton(Said("link.pair_stop"), "debug-stop", () =>
+                // The older window, opened by the Pair command: the addresses to type on the other machine
+                body.Add(LinkLine(Said("link.pair_addresses")));
+                DrawInviteAddresses(body, null);
+                StackPanel stop = LinkActionRow(body);
+                linkPairingCountdown = stop.Add(LinkCountdown());
+                stop.Add(LinkButton(Said("link.pair_stop"), "debug-stop", () =>
                 {
                     LinkClosePairing();
                     linkWindowStale = true;
@@ -244,6 +229,8 @@ internal sealed partial class DawnScene
                 return;
             }
 
+            // One: what the other device may do here, decided before it arrives
+            body.Add(LinkStep(1, Said("link.devices_invite_step_grant")));
             LinkGrantControls(body, linkInvitePreset, linkInviteRights, (preset, rights) =>
             {
                 linkInviteOptions = linkInviteOptions with
@@ -261,6 +248,26 @@ internal sealed partial class DawnScene
             share.OnPressed = () => linkInviteOptions = linkInviteOptions with { Share = share.State };
             if (!linkAutoShareAvailable)
                 body.Add(LinkLine(Said("link.devices_auto_share_unavailable")));
+
+            // Two: the two ways across, both open at once. Picked under Nearby it pairs by the six digits, with the
+            // invite it pairs by the invite, and whichever comes first is the invitation's one device
+            body.Add(LinkStep(2, Said("link.devices_invite_step_connect")));
+            string name = HexLinkNames.Clean(LinkDevice?.Name) ?? string.Empty;
+            body.Add(LinkLine(Said("link.devices_invite_way_nearby", ("name", name))));
+            body.Add(LinkLine(Said("link.devices_invite_way_token")));
+            DrawInviteToken(body, token);
+            DrawInviteAddresses(body, token);
+            DrawInviteRoute(body, token);
+            if (linkInviteError is not null)
+                body.Add(LinkLine(linkInviteError));
+
+            StackPanel waiting = LinkActionRow(body);
+            waiting.Add(new Label
+            {
+                Text = $"$(plug) {UIRichText.Literal(Said("link.devices_invite_waiting"))}", TextScale = LINK_TEXT, Dim = true,
+                Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left
+            });
+            linkPairingCountdown = waiting.Add(LinkCountdown());
         }
         else
         {
@@ -269,6 +276,31 @@ internal sealed partial class DawnScene
             row.Add(LinkButton(Said("link.devices_create_invite"), "add", LinkCreateInvite)).Primary = true;
             DrawInviteRoute(body, null);
         }
+    }
+
+    // Where this machine can be reached, for somebody typing an address on the other
+    private void DrawInviteAddresses(StackPanel body, HexLinkInvite? token)
+    {
+        IReadOnlyList<IPAddress> addresses = token?.Addresses ?? InviteAddresses();
+        if (addresses.Count == 0 && token?.PublicRoute is null)
+            body.Add(LinkLine(Said("link.pair_addresses_none", ("port", LinkPort.ToString(CultureInfo.InvariantCulture)))));
+        else if (addresses.Count > 0)
+            body.Add(LinkLine(string.Join("   ·   ", addresses.Select(address =>
+                Said(LinkIsVpn(address) ? "link.devices_endpoint_vpn" : "link.devices_endpoint_lan",
+                    ("address", new IPEndPoint(address, LinkPort).ToString()))))));
+    }
+
+    // How long the invitation has left, written by the window's tick
+    private static Label LinkCountdown() =>
+        new() { TextScale = LINK_TEXT, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left, Size = new Vector2(110, LINK_ROW) };
+
+    // A numbered step of a guided dialog: its number in a badge, then what to do in it
+    private static StackPanel LinkStep(int number, string text)
+    {
+        var row = new StackPanel { Direction = UIDirection.Horizontal, Spacing = 8.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, LINK_ROW), Padding = new UIEdges(0, 6, 0, 0) };
+        row.Add(new Badge { Text = number.ToString(CultureInfo.InvariantCulture), TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left });
+        row.Add(new Label { Text = $"[b]{UIRichText.Literal(text)}[/b]", TextScale = LINK_HEADING, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left });
+        return row;
     }
 
     private void LinkStartAddressPairing()
@@ -312,6 +344,9 @@ internal sealed partial class DawnScene
 
     private void BuildLinkJoin(StackPanel body)
     {
+        // One: a device on this network is picked from the list. Two: anything else is pasted or typed
+        linkWindowNearby = body.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 5 });
+        body.Add(LinkStep(2, Said("link.devices_join_step_typed")));
         StackPanel row = LinkActionRow(body);
         linkJoinField = row.Add(new Panel
         {
@@ -336,7 +371,6 @@ internal sealed partial class DawnScene
         linkJoinRouteBox.OnSubmitted = _ => JoinTyped();
         linkJoinRouteBox.OnChanged = _ => LinkSetJoinMessage(null);
         linkJoinStatus = body.Add(LinkLine(string.Empty));
-        linkWindowNearby = body.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 5 });
     }
 
     private void DrawLinkJoinStatus()

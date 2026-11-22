@@ -792,6 +792,7 @@ internal sealed partial class DawnScene
         clickWindow("link.devices_cancel_invite");
         test.Check("link-ui: Cancel invite revokes the invitation", () => LinkActiveInvite is null && LinkPairingUntil is null);
 
+        var codeAnswer = new TaskCompletionSource<HexLinkRights?>(TaskCreationOptions.RunContinuationsAsynchronously);
         test.Run(() =>
         {
             identity = HexLinkIdentity.LoadOrCreate(Path.Combine(home, "invite-fixture"), Device, fileOnly: true);
@@ -818,7 +819,9 @@ internal sealed partial class DawnScene
                 }
             }.Start());
             other.Start(0, loopbackOnly: true);
-            other.OpenInvite([IPAddress.Loopback], TimeSpan.FromMinutes(1), _ => Task.FromResult<HexLinkRights?>(HexLinkRights.View | HexLinkRights.Steer));
+            // By its invite it is let in at once. By the six digits its person answers when the test says
+            other.OpenInvite([IPAddress.Loopback], TimeSpan.FromMinutes(1), shown => shown.Invited
+                ? Task.FromResult<HexLinkRights?>(HexLinkRights.View | HexLinkRights.Steer) : codeAnswer.Task);
             token = other.ActiveInvite;
         });
         clickWindow("link.devices_join");
@@ -834,6 +837,27 @@ internal sealed partial class DawnScene
         test.Check("link-ui: a malformed invite gives recovery instructions in the join card", () =>
             linkJoinStatus?.Text.Contains(Said("link.devices_bad_invite"), StringComparison.Ordinal) == true && linkJoinSubmit?.Enabled == false);
         shot("link_ui_join.png");
+
+        // What somebody does who opens Invite on one machine and picks it under Nearby on the other: the row's Join
+        // joins by the address, never seeing the invite
+        test.Run(() => TypeJoin($"127.0.0.1:{other?.Port}"));
+        clickWindow("link.devices_join_submit");
+        test.WaitFor(() => linkPairingDialog is { IsOpen: true }, 12);
+        test.Settle(0.35f);
+        test.Check("link-ui: joined by its address while it invites, a device pairs by the six digits", () =>
+            LinkPairingPending is { Invited: false, Other.Name: Device, Code.Length: > 0 } && ReferenceEquals(other?.ActiveInvite, token));
+        shot("link_ui_join_code.png");
+        test.Run(() => codeAnswer.TrySetResult(null));
+        test.WaitFor(() => linkPairingDialog is not { IsOpen: true } && !linkJoining, 12);
+        test.Settle(0.35f);
+        test.Check("link-ui: declined on the inviting device, its invite is still good", () =>
+            ReferenceEquals(other?.ActiveInvite, token) && !LinkPeers.Any(peer => peer.Device.Name == Device));
+        test.Run(() =>
+        {
+            if (linkAddressBox is null)
+                ShowLinkDevicePage(LinkDevicePage.Join);
+        });
+        test.WaitFor(() => linkAddressBox is not null, 5);
         test.Run(() => TypeJoin(token?.Encode() ?? string.Empty));
         clickWindow("link.devices_join_submit");
         test.WaitFor(() => linkPairingDialog is { IsOpen: true }, 12);
