@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Hex.Core;
 
 namespace Hex.Tests;
@@ -30,6 +31,43 @@ public sealed class HexLinkAuthorityTests
             var resumed = new HexLinkAuthorityStore(file);
             resumed.Require(folder, moved);
             Assert.Equal(moved, Assert.Single(resumed.Advertise(workspace).Folders).Authority);
+        }
+        finally
+        {
+            File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void Upgrading_an_unmarked_profile_removes_election_pins_and_keeps_proven_authority()
+    {
+        string file = Path.Combine(Path.GetTempPath(), $"hex-link-upgrade-{Guid.NewGuid():N}.json");
+        string source = new('A', 64), wrong = new('B', 64);
+        var root = new HexLinkFolder("workspace", Path.Combine(Path.GetTempPath(), "upgrade-root"));
+        var replica = new HexLinkFolder("replica", Path.Combine(Path.GetTempPath(), "upgrade-replica"));
+        var transferred = new HexLinkFolder("transferred", Path.Combine(Path.GetTempPath(), "upgrade-transfer"));
+        var explicitFolder = new HexLinkFolder("explicit", Path.Combine(Path.GetTempPath(), "upgrade-explicit"));
+        try
+        {
+            // Old files held only the authority and epoch; Get saved its source separately.
+            File.WriteAllText(file, new JsonObject
+            {
+                [root.Path] = new HexLinkAuthority(wrong, 1).ToJson(),
+                [replica.Path] = new HexLinkAuthority(source, 1).ToJson(),
+                [transferred.Path] = new HexLinkAuthority(source, 2).ToJson()
+            }.ToJsonString());
+            var store = new HexLinkAuthorityStore(file);
+            store.Bind(explicitFolder, new HexLinkAuthority(source, 1));
+            Assert.Equal(1, store.MigrateLegacy([(replica, source)]));
+            var reopened = new HexLinkAuthorityStore(file);
+            Assert.Null(reopened.Of(root));
+            Assert.Equal(new HexLinkAuthority(source, 1), reopened.Of(replica));
+            Assert.Equal(new HexLinkAuthority(source, 2), reopened.Of(transferred));
+            Assert.Equal(new HexLinkAuthority(source, 1), reopened.Of(explicitFolder));
+            var kept = JsonNode.Parse(File.ReadAllText(file))!;
+            Assert.Equal("provisioned", kept[replica.Path]!["provenance"]!.GetValue<string>());
+            Assert.Equal("explicit", kept[transferred.Path]!["provenance"]!.GetValue<string>());
+            Assert.Equal(0, reopened.MigrateLegacy([]));
         }
         finally
         {

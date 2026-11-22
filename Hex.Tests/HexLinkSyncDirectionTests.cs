@@ -92,6 +92,6 @@ internal sealed partial class LinkServices : IHexLinkSyncActivation
 {
     public Func<HexLinkPeer, HexLinkFolder, string, Task<HexLinkSyncReport?>>? SyncActivation { get; set; }
 
-    public Task<HexLinkSyncReport?> ActivateSync(HexLinkPeer peer, HexLinkFolder folder, string action, CancellationToken cancel) =>
+    public Task<HexLinkSyncReport?> ActivateSync(HexLinkPeer peer, HexLinkFolder folder, string action, bool resume, CancellationToken cancel) =>
         SyncActivation?.Invoke(peer, folder, action) ?? throw HexLinkException.NotAllowed("No activation fixture.");
 }

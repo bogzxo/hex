@@ -31,6 +31,12 @@ internal sealed partial class DawnScene
         List<string> folders = LinkSharedFolders(peer);
         IReadOnlyList<LinkSyncShown> syncs = LinkSyncs;
         IReadOnlyList<LinkSyncShown> ownerSyncs = LinkRemoteSyncs(peer);
+        var paused = LinkPausedSyncs(peer).ToDictionary(choice => choice.Folder, choice => choice.Reason, PlatformPaths.Comparer);
+        foreach (string folder in paused.Keys)
+        {
+            if (!folders.Contains(folder, PlatformPaths.Comparer))
+                folders.Add(folder);
+        }
         // A sync kept for a folder that isn't open on both now still shows, to be stopped
         foreach (LinkSyncShown kept in syncs.Concat(ownerSyncs))
         {
@@ -50,12 +56,14 @@ internal sealed partial class DawnScene
             LinkSyncShown? owner = sync is null || sync.State is HexLinkSyncState.Off or HexLinkSyncState.Failed
                 ? ownerSyncs.FirstOrDefault(each => each.Folder.Equals(folder, StringComparison.OrdinalIgnoreCase) && each.State != HexLinkSyncState.Off)
                 : null;
-            column.Add(LinkSyncRow(peer, folder, owner ?? sync, reportedByOwner: owner is not null));
+            column.Add(LinkSyncRow(peer, folder, owner ?? sync, reportedByOwner: owner is not null,
+                pausedOn: (sync is null or { State: HexLinkSyncState.Off }) && owner is null ? paused.GetValueOrDefault(folder) : null));
         }
     }
 
     // A folder's sync with a device: its name and state, what it says, the counts, and its buttons
-    private UIComponent LinkSyncRow(HexLinkPeer peer, string folder, LinkSyncShown? sync, bool reportedByOwner = false)
+    private UIComponent LinkSyncRow(HexLinkPeer peer, string folder, LinkSyncShown? sync, bool reportedByOwner = false,
+        string? pausedOn = null)
     {
         string id = peer.Device.Id;
         var holder = new StackPanel { Spacing = 2.0f, Fill = UIFill.Horizontal, Padding = new UIEdges(12, 0, 0, 0) };
@@ -64,7 +72,7 @@ internal sealed partial class DawnScene
         HexLinkSyncState state = sync?.State ?? HexLinkSyncState.Off;
         row.Add(new Badge
         {
-            Text = Said("link.sync_state_" + state.ToString().ToLowerInvariant()),
+            Text = pausedOn is null ? Said("link.sync_state_" + state.ToString().ToLowerInvariant()) : Said("link.sync_paused"),
             Tone = state switch
             {
                 HexLinkSyncState.Idle => UIBadgeTone.Success,
@@ -95,7 +103,8 @@ internal sealed partial class DawnScene
             if (running)
                 row.Add(LinkButton(Said("link.sync_stop"), "debug-stop", () => LinkSyncStop(id, folder)));
             else
-                row.Add(LinkButton(Said(state == HexLinkSyncState.Failed ? "link.devices_try_now" : "link.sync_start"), "sync", () => LinkSyncGo(id, folder, force: false))).Enabled = HexLinkAllowed.Has(peer.Granted, HexLinkRights.View);
+                row.Add(LinkButton(Said(pausedOn is not null ? "link.sync_resume" : state == HexLinkSyncState.Failed ? "link.devices_try_now" : "link.sync_start"),
+                    "sync", () => LinkSyncGo(id, folder, force: false))).Enabled = HexLinkAllowed.Has(peer.Granted, HexLinkRights.View);
             if (state == HexLinkSyncState.NeedsGit)
                 row.Add(LinkButton(Said("link.sync_anyway"), "warning", () => LinkSyncGo(id, folder, force: true)));
         }
@@ -106,7 +115,7 @@ internal sealed partial class DawnScene
         string? follow = LinkSyncOf(id, folder)?.GitFollowIssue;
         if (follow is not null)
             row.Add(LinkButton(Said("link.provision.align_button", ("device", peer.Device.Name)), "git-merge", () => LinkAlignWorkspaceCommand(id, folder)));
-        string said = follow ?? sync?.Why ?? string.Empty;
+        string said = pausedOn ?? follow ?? sync?.Why ?? string.Empty;
         if (said.Length > 0)
             holder.Add(new Label { Text = UIRichText.Literal(said), TextScale = LINK_SMALL, Dim = true, Wrap = true, Align = Origin.Left, Fill = UIFill.Horizontal, Padding = new UIEdges(18, 0, 0, 0) });
         DrawLinkFolderAuthority(holder, peer, folder);
@@ -190,7 +199,7 @@ internal sealed partial class DawnScene
             string? why;
             try
             {
-                why = await LinkSyncStart(deviceId, folder, force);
+                why = await LinkSyncStart(deviceId, folder, force, resume: true);
             }
             catch (Exception e)
             {

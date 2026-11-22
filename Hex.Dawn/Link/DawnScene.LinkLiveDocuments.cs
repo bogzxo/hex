@@ -90,7 +90,6 @@ internal sealed partial class DawnScene
                 return;
             }
 
-            pin = services.FolderAuthorities.Bind(folder, pin);
             linkLivePaused.Remove(wire);
             var room = services.Documents.Rooms.Open(wire, tab.Editor.Text,
                 new HexDocFileBasis(tab.DiskText, tab.DiskEncoding, tab.SavedCrLf));
@@ -221,16 +220,13 @@ internal sealed partial class DawnScene
                 }
                 if (!documents.Contains(tab) || linkLiveDocuments.ContainsKey(tab))
                     return;
-                if (LiveFolder(wire) is { } localFolder && linkServices is { } services)
+                if (LiveFolder(wire) is { } localFolder &&
+                    linkServices?.FolderAuthorities.Of(localFolder) is { } current && current != pin)
                 {
-                    try { services.FolderAuthorities.Bind(localFolder, pin); }
-                    catch (HexLinkException e)
-                    {
-                        if (explicitly)
-                            Say(e.Message, error: true);
-                        _ = LinkLiveLeave(peer, wire, relay);
-                        return;
-                    }
+                    if (explicitly)
+                        Say(Said("link.sync_authority_required", ("folder", localFolder.Name)), error: true);
+                    _ = LinkLiveLeave(peer, wire, relay);
+                    return;
                 }
                 LinkLiveAttach(tab, wire, pin, replica, null, peer);
                 if (explicitly)

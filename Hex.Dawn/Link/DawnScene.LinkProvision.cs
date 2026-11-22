@@ -166,6 +166,45 @@ internal sealed partial class DawnScene
         LinkReadProvisionedFolders().FirstOrDefault(binding => binding.DeviceId == deviceId
             && PlatformPaths.Comparer.Equals(binding.Folder.Name, name) && Directory.Exists(binding.Folder.Path))?.Folder;
 
+    // Older Get saved the authenticated source and local alias before it saved any folder authority.
+    private async Task LinkRecoverProvisionedAuthority(HexLinkPeer peer)
+    {
+        if (linkServices is not { } services)
+            return;
+        var saved = LinkReadProvisionedFolders();
+        var cancel = peer.Session.Closing;
+        foreach (HexLinkFolder folder in services.Workspace.Folders)
+        {
+            if (folder.Authority is not null || !saved.Any(binding => binding.DeviceId == peer.Device.Id &&
+                    PlatformPaths.Same(binding.Folder.Path, folder.Path) && PlatformPaths.Comparer.Equals(binding.Folder.Name, folder.Name)) ||
+                saved.Any(binding => binding.DeviceId != peer.Device.Id && PlatformPaths.Same(binding.Folder.Path, folder.Path)))
+                continue;
+            if (peer.Workspace.Folders.FirstOrDefault(remote => PlatformPaths.Comparer.Equals(remote.Name, folder.Name)) is not { } exported ||
+                exported.FolderAuthorityId is { } owner && owner != peer.Device.Id)
+                continue;
+            try
+            {
+                HexLinkAuthority? pin = exported.Authority ?? await peer.ProvisionSyncAuthority(folder.Name, cancel).ConfigureAwait(false);
+                if (pin?.DeviceId != peer.Device.Id)
+                    continue;
+                if (exported.Authority is null)
+                    await peer.RefreshWorkspace(cancel).ConfigureAwait(false);
+                if (services != linkServices || peer.IsClosed || !HexLinkAllowed.Has(peer.Granted, HexLinkRights.View) ||
+                    !peer.Workspace.Folders.Any(remote => PlatformPaths.Comparer.Equals(remote.Name, folder.Name) && remote.Authority == pin))
+                    return;
+                if (LinkSyncOf(peer.Device.Id, folder.Name) is { } legacy && !legacy.BoundPullMirror)
+                    await LinkDrainBoundEngine(peer.Device.Id, folder.Name, cancel).ConfigureAwait(false);
+                services.FolderAuthorities.Bind(folder, pin, HexLinkAuthorityProvenance.Provisioned);
+                link?.WorkspaceMoved();
+                services.Audit("authority migration", peer.Device, $"Recovered the Get binding for {folder.Name}, epoch {pin.Epoch}.");
+            }
+            catch (Exception error) when (error is HexLinkException or IOException or UnauthorizedAccessException or OperationCanceledException)
+            {
+                services.Audit("authority migration", peer.Device, $"{folder.Name}: {error.Message}");
+            }
+        }
+    }
+
     private List<ProvisionedFolder> LinkReadProvisionedFolders()
     {
         if (linkKeys.Length == 0)

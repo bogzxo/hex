@@ -48,9 +48,9 @@ internal sealed partial class DawnScene
         bool elected = !boundOnly && LinkAutoSyncOwner(peer.Session.Connection.Dialled, peer.Session.Connection.Rights, peer.Granted);
         string[] common = [.. services.Workspace.Folders
             .Where(local => peer.Workspace.Folders.Any(remote => PlatformPaths.Comparer.Equals(local.Name, remote.Name)
-                && (local.Authority is { } pin
+                && (local.Authority is { } pin && remote.Authority is not null
                     ? pin == remote.Authority && pin.DeviceId == peer.Device.Id
-                    : elected && remote.Authority is null && !peer.ChosenSyncFolders.Contains(local.Name, PlatformPaths.Comparer))))
+                    : elected && !peer.ChosenSyncFolders.Contains(local.Name, PlatformPaths.Comparer))))
             .Select(local => local.Name)];
         if (common.Length == 0)
             return;

@@ -118,7 +118,7 @@ internal sealed partial class DawnScene
     /// have different commits checked out.
     /// </summary>
     internal async Task<string?> LinkSyncStart(string deviceId, string folder, bool force = false, bool remember = true, bool automatic = false,
-        bool boundEngine = false, CancellationToken cancel = default)
+        bool boundEngine = false, CancellationToken cancel = default, bool resume = false)
     {
         if (link is not { } links || linkServices is not { } services)
             return Said("link.off");
@@ -128,24 +128,43 @@ internal sealed partial class DawnScene
             return Said("link.sync_no_folder_here", ("folder", folder));
         HexLinkAuthority? authority = services.FolderAuthorities.Of(local);
         HexLinkFolder? remote = peer.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(local.Name, each.Name));
-        if (authority is not null || remote?.Authority is not null)
+        if (resume || authority is not null || remote?.Authority is not null)
         {
-            bool refreshed = await TryRefreshLinkWorkspace(peer).WaitAsync(cancel).ConfigureAwait(false);
+            if (!await TryRefreshLinkWorkspace(peer).WaitAsync(cancel).ConfigureAwait(false))
+                return Said("link.sync_authority_required", ("folder", local.Name));
             remote = peer.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(local.Name, each.Name));
-            if (!refreshed || authority is null || authority != remote?.Authority ||
-                (authority.DeviceId != services.Device.Id && authority.DeviceId != peer.Device.Id))
+        }
+        bool pairedAuthority = authority is not null && remote?.Authority is not null;
+        if (LinkSyncPaused(deviceId).FirstOrDefault(pause => PlatformPaths.Comparer.Equals(pause.Folder, local.Name)) is { } localPause)
+        {
+            if (!resume)
+                return LinkStoppedOn(localPause, LinkDevice?.Name ?? "this device");
+        }
+        if (!pairedAuthority && peer.PausedSyncFolders.FirstOrDefault(pause =>
+                PlatformPaths.Comparer.Equals(pause.Folder, local.Name) && (resume || pause.By is not null)) is { } remotePause)
+        {
+            if (!resume || !HexLinkAllowed.Has(peer.Granted, HexLinkRights.Steer))
+                return LinkStoppedOn(remotePause, peer.Device.Name) + " " + Said("link.sync_start_there");
+            try { await peer.ResumeLegacyPair(local.Name, cancel).ConfigureAwait(false); }
+            catch (HexLinkException error) { return error.Message; }
+        }
+        if (boundEngine && !pairedAuthority)
+            return Said("link.sync_authority_required", ("folder", local.Name));
+        if (pairedAuthority && authority is not null)
+        {
+            if (authority != remote?.Authority || (authority.DeviceId != services.Device.Id && authority.DeviceId != peer.Device.Id))
                 return Said("link.sync_authority_required", ("folder", local.Name));
             if (!boundEngine)
             {
-                if (remember)
+                if (remember || resume)
                     LinkSyncRemember(deviceId, local.Name, on: true);
                 if (authority.DeviceId == peer.Device.Id)
-                    return await LinkStartBoundReplica(peer, local.Name, authority, cancel);
-                if (LinkSyncOf(deviceId, local.Name) is { State: HexLinkSyncState.Syncing or HexLinkSyncState.Idle })
+                    return await LinkStartBoundReplica(peer, local.Name, authority, cancel, resume);
+                if (!resume && LinkSyncOf(deviceId, local.Name) is { State: HexLinkSyncState.Syncing or HexLinkSyncState.Idle })
                     return null;
                 try
                 {
-                    await peer.ActivateSync(local.Name, authority, "recheck", cancel);
+                    await peer.ActivateSync(local.Name, authority, "recheck", cancel, resume);
                     return null;
                 }
                 catch (HexLinkException error)
@@ -181,7 +200,7 @@ internal sealed partial class DawnScene
             else
             {
                 entry.Sync?.Dispose();
-                var sync = new HexLinkSync(peer, local with { Authority = authority }, Path.Combine(linkData, LINK_SYNC_STATES))
+                var sync = new HexLinkSync(peer, local with { Authority = pairedAuthority ? authority : null }, Path.Combine(linkData, LINK_SYNC_STATES))
                 {
                     ApplyLocal = LinkCompareAndReplace,
                     ApplyStream = LinkCompareAndReplaceStream,
@@ -190,7 +209,8 @@ internal sealed partial class DawnScene
                     TreeCacheDirectory = services.TreeCacheDirectory,
                     BoundAuthorityEngine = boundEngine && authority?.DeviceId == services.Device.Id,
                     BoundPullMirror = boundEngine && authority?.DeviceId == peer.Device.Id,
-                    GitFollowEnabled = LinkGitFollowChoice(local, peer, !automatic),
+                    GitFollowEnabled = !pairedAuthority && (authority is not null || remote?.Authority is not null)
+                        ? static () => false : LinkGitFollowChoice(local, peer, !automatic),
                     GitFollowData = linkData,
                     GitFollowAudited = detail => services.Audit("git", peer.Device, detail)
                 };
@@ -223,7 +243,7 @@ internal sealed partial class DawnScene
         && sync.State is not HexLinkSyncState.Off and not HexLinkSyncState.Failed;
 
     /// <summary>A device's folder no longer synced, by the person or an agent, and not started again when it links. False when it wasn't.</summary>
-    internal bool LinkSyncStop(string deviceId, string folder)
+    internal bool LinkSyncStop(string deviceId, string folder, string? stoppedBy = null)
     {
         LinkSyncEntry? entry;
         lock (linkSyncGate)
@@ -233,7 +253,7 @@ internal sealed partial class DawnScene
                 entry.Sync?.Dispose();
         }
 
-        LinkSyncRemember(deviceId, folder, on: false);
+        LinkSyncRemember(deviceId, folder, on: false, stoppedBy: stoppedBy ?? Environment.UserName);
         bool remote = LinkStopBoundReplica(deviceId, folder);
         if (entry is not null)
             LinkReportSync(deviceId);
@@ -252,9 +272,18 @@ internal sealed partial class DawnScene
             {
                 try
                 {
-                    if (linkServices is { } services && services.Workspace.Folders.Any(local =>
-                            PlatformPaths.Comparer.Equals(local.Name, folder) && local.FolderAuthorityId == services.Device.Id))
-                        return; // The replica requests activation after advertising its binding.
+                    if (linkServices is not { } services)
+                        return;
+                    var local = services.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, folder));
+                    var remote = peer.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, folder));
+                    if (local?.Authority is { } pin && remote?.Authority is not null)
+                    {
+                        if (pin != remote.Authority || pin.DeviceId != peer.Device.Id)
+                            return; // The replica requests activation after advertising its binding.
+                    }
+                    else if (peer.ChosenSyncFolders.Contains(folder, PlatformPaths.Comparer) &&
+                        !LinkAutoSyncOwner(peer.Session.Connection.Dialled, peer.Session.Connection.Rights, peer.Granted))
+                        return; // If both saved the legacy choice, the elected engine resumes.
                     if (await LinkSyncStart(peer.Device.Id, folder, remember: false, cancel: peer.Session.Closing) is { } why)
                         PostLink(() => Say(Said("link.sync_not_resumed", ("folder", folder), ("device", peer.Device.Name), ("why", why))));
                 }
@@ -286,6 +315,12 @@ internal sealed partial class DawnScene
     // The folders chosen to be synced with a device
     private List<string> LinkSyncChosen(string deviceId) => LinkSyncChosenIn(LinkSyncChoices(), deviceId);
 
+    private List<HexLinkSyncPause> LinkSyncPaused(string deviceId) =>
+        [.. LinkSyncChoices().Where(choice => HexLinkData.String(choice, "device", 200) == deviceId &&
+            HexLinkData.Bool(choice, "enabled") == false)
+            .Select(choice => (Folder: HexLinkData.String(choice, "folder", 200), By: HexLinkData.String(choice, "stoppedBy", 120)))
+            .Where(choice => choice.Folder is { Length: > 0 }).Select(choice => new HexLinkSyncPause(choice.Folder!, choice.By))];
+
     /// <summary>The folders a list of kept choices says are synced with a device.</summary>
     internal static List<string> LinkSyncChosenIn(IEnumerable<JsonObject> choices, string deviceId)
     {
@@ -316,13 +351,13 @@ internal sealed partial class DawnScene
     }
 
     // A device's folder kept as synced, or no longer
-    private void LinkSyncRemember(string deviceId, string folder, bool on)
+    private void LinkSyncRemember(string deviceId, string folder, bool on, string? stoppedBy = null, bool keepDisabled = true)
     {
         if (linkKeys.Length == 0)
             return;
         lock (linkSyncGate)
         {
-            JsonObject kept = LinkSyncChoicesWith(LinkSyncChoices(), deviceId, folder, on, keepDisabled: true);
+            JsonObject kept = LinkSyncChoicesWith(LinkSyncChoices(), deviceId, folder, on, keepDisabled, stoppedBy);
             try
             {
                 Directory.CreateDirectory(linkKeys);
@@ -331,18 +366,35 @@ internal sealed partial class DawnScene
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
                 Console.WriteLine($"[Hex] Link couldn't keep which folders are synced, {e.Message}");
+                return;
             }
         }
+        link?.WorkspaceMoved();
+        LinkMoved();
     }
 
     /// <summary>The kept choices with a device's folder turned on or off, once at most, as the file keeps them.</summary>
-    internal static JsonObject LinkSyncChoicesWith(List<JsonObject> choices, string deviceId, string folder, bool on, bool keepDisabled = false)
+    internal static JsonObject LinkSyncChoicesWith(List<JsonObject> choices, string deviceId, string folder, bool on, bool keepDisabled = false,
+        string? stoppedBy = null)
     {
         choices.RemoveAll(each => HexLinkData.String(each, "device", 200) == deviceId && PlatformPaths.Comparer.Equals(HexLinkData.String(each, "folder", 200) ?? string.Empty, folder));
         if (on || keepDisabled)
-            choices.Add(new JsonObject { ["device"] = deviceId, ["folder"] = folder, ["enabled"] = on });
+        {
+            var choice = new JsonObject { ["device"] = deviceId, ["folder"] = folder, ["enabled"] = on };
+            if (!on && !string.IsNullOrWhiteSpace(stoppedBy))
+                choice["stoppedBy"] = stoppedBy.Length > 120 ? stoppedBy[..120] : stoppedBy;
+            choices.Add(choice);
+        }
         return new JsonObject { ["syncs"] = new JsonArray([.. choices.Select(each => (JsonNode)each)]) };
     }
+
+    private static string LinkStoppedOn(HexLinkSyncPause pause, string device) =>
+        Said("link.sync_stopped_on", ("by", pause.By ?? Said("link.sync_stopped_unknown")), ("device", device));
+
+    private IEnumerable<(string Folder, string Reason)> LinkPausedSyncs(HexLinkPeer peer) =>
+        LinkSyncPaused(peer.Device.Id).Select(pause => (pause.Folder, Reason: LinkStoppedOn(pause, LinkDevice?.Name ?? "this device")))
+            .Concat(peer.PausedSyncFolders.Select(pause => (pause.Folder, Reason: LinkStoppedOn(pause, peer.Device.Name))))
+            .DistinctBy(choice => choice.Folder, PlatformPaths.Comparer);
 
     /* Writing here what came from there */
 

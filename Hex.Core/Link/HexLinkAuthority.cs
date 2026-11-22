@@ -17,12 +17,15 @@ internal sealed record HexLinkAuthority(string DeviceId, long Epoch)
         Of(authority.ToJson()) ?? throw HexLinkException.Invalid("The folder authority identity or epoch is invalid.");
 }
 
+internal enum HexLinkAuthorityProvenance { None, Provisioned, Explicit }
+
 /// <summary>Local bindings are pinned by provision/share and survive disconnects and restarts.</summary>
 internal sealed class HexLinkAuthorityStore
 {
     private readonly string file;
     private readonly Lock gate = new();
-    private Dictionary<string, HexLinkAuthority> bindings;
+    private sealed record Binding(HexLinkAuthority Authority, HexLinkAuthorityProvenance Provenance);
+    private Dictionary<string, Binding> bindings;
     private HexLinkWorkspace? advertisedSource, advertised;
 
     public HexLinkAuthorityStore(string file)
@@ -34,22 +37,24 @@ internal sealed class HexLinkAuthorityStore
     public HexLinkAuthority? Of(HexLinkFolder folder)
     {
         lock (gate)
-            return bindings.GetValueOrDefault(Key(folder));
+            return bindings.GetValueOrDefault(Key(folder))?.Authority;
     }
 
-    public HexLinkAuthority Bind(HexLinkFolder folder, HexLinkAuthority authority)
+    public HexLinkAuthority Bind(HexLinkFolder folder, HexLinkAuthority authority,
+        HexLinkAuthorityProvenance provenance = HexLinkAuthorityProvenance.Explicit)
     {
         authority = HexLinkAuthority.Validate(authority);
         string path = Key(folder);
         lock (gate)
         {
-            if (bindings.TryGetValue(path, out HexLinkAuthority? pinned))
+            if (bindings.TryGetValue(path, out Binding? pinned))
             {
-                if (pinned != authority)
+                if (pinned.Authority != authority)
                     throw new HexLinkException(HexLinkErrors.CONFLICT, "This folder already has a different authority binding.");
-                return pinned;
+                if (pinned.Provenance != HexLinkAuthorityProvenance.None)
+                    return pinned.Authority;
             }
-            Keep(path, authority);
+            Keep(path, new Binding(authority, provenance));
             return authority;
         }
     }
@@ -64,13 +69,13 @@ internal sealed class HexLinkAuthorityStore
         string path = Key(folder);
         lock (gate)
         {
-            if (bindings.GetValueOrDefault(path) == next)
+            if (bindings.GetValueOrDefault(path)?.Authority == next)
                 return next;
-            if (bindings.GetValueOrDefault(path) != expected)
+            if (bindings.GetValueOrDefault(path)?.Authority != expected)
                 throw new HexLinkException(HexLinkErrors.CONFLICT, "The folder authority has already changed.");
             if (next.DeviceId == expected.DeviceId)
                 throw HexLinkException.Invalid("This device is already the folder authority.");
-            Keep(path, next);
+            Keep(path, new Binding(next, HexLinkAuthorityProvenance.Explicit));
             return next;
         }
     }
@@ -89,28 +94,69 @@ internal sealed class HexLinkAuthorityStore
                 return advertised!;
             advertised = bindings.Count == 0 ? workspace : workspace with
             {
-                Folders = [.. workspace.Folders.Select(folder => folder with { Authority = bindings.GetValueOrDefault(Key(folder)) })]
+                Folders = [.. workspace.Folders.Select(folder => folder with { Authority = bindings.GetValueOrDefault(Key(folder))?.Authority })]
             };
             advertisedSource = workspace;
             return advertised;
         }
     }
 
-    private void Keep(string path, HexLinkAuthority authority)
+    /// <summary>Retains provable legacy Get bindings and transfers, and drops unmarked first-epoch election pins.</summary>
+    public int MigrateLegacy(IEnumerable<(HexLinkFolder Folder, string Source)> provisioned)
     {
-        var next = new Dictionary<string, HexLinkAuthority>(bindings, PlatformPaths.Comparer) { [path] = authority };
+        lock (gate)
+        {
+            if (bindings.Values.All(binding => binding.Provenance != HexLinkAuthorityProvenance.None))
+                return 0;
+
+            var savedSources = provisioned.ToLookup(binding => Key(binding.Folder), binding => binding.Source, PlatformPaths.Comparer);
+            var next = new Dictionary<string, Binding>(PlatformPaths.Comparer);
+            foreach (var (path, binding) in bindings)
+            {
+                var provenance = binding.Provenance;
+                if (provenance == HexLinkAuthorityProvenance.None)
+                {
+                    if (binding.Authority.Epoch > 1)
+                        provenance = HexLinkAuthorityProvenance.Explicit;
+                    else if (savedSources[path].Contains(binding.Authority.DeviceId, StringComparer.OrdinalIgnoreCase))
+                        provenance = HexLinkAuthorityProvenance.Provisioned;
+                    else
+                        continue;
+                }
+                next.Add(path, binding with { Provenance = provenance });
+            }
+            int removed = bindings.Count - next.Count;
+            Keep(next);
+            return removed;
+        }
+    }
+
+    private void Keep(string path, Binding binding) =>
+        Keep(new Dictionary<string, Binding>(bindings, PlatformPaths.Comparer) { [path] = binding });
+
+    private void Keep(Dictionary<string, Binding> next)
+    {
         var values = new JsonObject();
         foreach (var (folder, binding) in next)
-            values[folder] = binding.ToJson();
+        {
+            JsonObject item = binding.Authority.ToJson();
+            item["provenance"] = binding.Provenance switch
+            {
+                HexLinkAuthorityProvenance.Provisioned => "provisioned",
+                HexLinkAuthorityProvenance.Explicit => "explicit",
+                _ => "none"
+            };
+            values[folder] = item;
+        }
         Directory.CreateDirectory(Path.GetDirectoryName(file)!);
         HexLinkFiles.WriteAtomic(file, Encoding.UTF8.GetBytes(values.ToJsonString()));
         bindings = next;
         advertisedSource = advertised = null;
     }
 
-    private static Dictionary<string, HexLinkAuthority> Load(string file)
+    private static Dictionary<string, Binding> Load(string file)
     {
-        var found = new Dictionary<string, HexLinkAuthority>(PlatformPaths.Comparer);
+        var found = new Dictionary<string, Binding>(PlatformPaths.Comparer);
         byte[] bytes;
         try
         {
@@ -126,7 +172,13 @@ internal sealed class HexLinkAuthorityStore
         {
             if (!Path.IsPathFullyQualified(path) || value is not JsonObject item || HexLinkAuthority.Of(item) is not { } authority)
                 throw new IOException("The folder authority bindings contain an invalid entry.");
-            found.Add(Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)), authority);
+            var provenance = HexLinkData.String(item, "provenance", 20) switch
+            {
+                "provisioned" => HexLinkAuthorityProvenance.Provisioned,
+                "explicit" => HexLinkAuthorityProvenance.Explicit,
+                _ => HexLinkAuthorityProvenance.None
+            };
+            found.Add(Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)), new Binding(authority, provenance));
         }
         return found;
     }

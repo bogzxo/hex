@@ -4386,6 +4386,12 @@ let strings = {
         device_own_name: "Use Its Own Name",
         sync_heading: "Folders both have open",
         sync_state_off: "Not synced",
+        sync_paused: "Paused",
+        sync_resume: "Resume",
+        sync_paused_on: "Sync is paused on {device}.",
+        sync_stopped_on: "Sync was stopped by {by} on {device}.",
+        sync_stopped_unknown: "an unknown caller",
+        sync_start_there: "Start it there to resume."
         sync_state_comparing: "Comparing",
         sync_state_needsgit: "different commits",
         sync_state_syncing: "syncing",

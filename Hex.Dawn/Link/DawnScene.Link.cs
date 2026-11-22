@@ -199,6 +199,10 @@ internal sealed partial class DawnScene
             linkTrust = new HexLinkTrust(keys);
             linkRedial.Open(keys, linkTrust.Known.Select(known => known.Device.Id).ToArray());
             linkServices = new LinkServices(this);
+            int unpinned = linkServices.FolderAuthorities.MigrateLegacy(
+                LinkReadProvisionedFolders().Select(binding => (binding.Folder, binding.DeviceId)));
+            if (unpinned > 0)
+                linkAudit.Write("authority migration", string.Empty, $"Cleared {unpinned} unverified first-epoch folder binding(s).");
             linkCancel = new CancellationTokenSource();
             link = new HexLink(linkServices)
             {
@@ -476,6 +480,13 @@ internal sealed partial class DawnScene
         linkTrust?.Seen(peer.Device.Id, peer.Device, string.Empty);
         RememberLinkAddresses(peer);
         peer.AddressesMoved += () => PostLink(() => RememberLinkAddresses(peer));
+        peer.SyncPausesChanged = () => PostLink(() => LinkAcceptRemotePauses(peer));
+        peer.WorkspaceChanged = () => PostLink(() =>
+        {
+            if (LinkPeerOf(peer.Device.Id) == peer)
+                LinkLearnAuthority(peer);
+        });
+        LinkAcceptRemotePauses(peer);
         peer.RightsChanged += () =>
         {
             if (LinkPeerOf(peer.Device.Id) == peer)

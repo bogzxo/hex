@@ -14,8 +14,17 @@ internal sealed partial class DawnScene
     /// </summary>
     private sealed class LinkServices(DawnScene hex) : IHexLinkServices, IHexLinkProvisionOffers, IHexLinkRepositoryReady, IHexLinkGitFollowing, IHexLinkSyncActivation
     {
-        public Task<HexLinkSyncReport?> ActivateSync(HexLinkPeer peer, HexLinkFolder folder, string action, CancellationToken cancel) =>
-            hex.LinkReceiveSyncActivation(peer, folder, action, cancel);
+        public Task<HexLinkSyncReport?> ActivateSync(HexLinkPeer peer, HexLinkFolder folder, string action, bool resume, CancellationToken cancel) =>
+            hex.LinkReceiveSyncActivation(peer, folder, action, resume, cancel);
+
+        public HexLinkAuthority? BindProvisionSource(HexLinkFolder folder)
+        {
+            if (FolderAuthorities.Of(folder) is { } known)
+                return known.DeviceId == Device.Id ? known : null;
+            HexLinkAuthority pin = FolderAuthorities.Bind(folder, new HexLinkAuthority(Device.Id, 1), HexLinkAuthorityProvenance.Provisioned);
+            hex.link?.WorkspaceMoved();
+            return pin;
+        }
         public string GitFollowData => hex.linkData;
         public bool GitFollows(HexLinkFolder folder, HexLinkDevice device) => hex.LinkGitFollowPolicy(folder, device);
 
@@ -34,7 +43,17 @@ internal sealed partial class DawnScene
             set => hex.LinkWorkspaceAdvertised(Interlocked.Exchange(ref workspace, value), value);
         }
 
+        public void AuthorityChanged()
+        {
+            hex.link?.WorkspaceMoved();
+            hex.LinkMoved();
+        }
+
         public IReadOnlyList<string> ChosenSyncFolders(string deviceId) => hex.LinkSyncChosen(deviceId);
+        public IReadOnlyList<HexLinkSyncPause> PausedSyncFolders(string deviceId) => hex.LinkSyncPaused(deviceId);
+
+        public Task ResumeLegacyPair(HexLinkPeer peer, HexLinkFolder folder, CancellationToken cancel) =>
+            hex.LinkResumeLegacyPair(peer, folder, cancel);
 
         public void RepositoryReady(HexLinkDevice device, string folder, string path) => hex.LinkRepositoryReady(device, folder, path);
 

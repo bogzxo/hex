@@ -93,6 +93,8 @@ internal sealed partial class HexLinkHost : IDisposable
         "sync/unwatch" => Task.FromResult<JsonNode?>(SyncUnwatch(parameters)),
         "sync/flush" => SyncFlush(parameters),
         "sync/activate" => SyncActivate(parameters, cancel),
+        "sync/provision-authority" => Task.FromResult<JsonNode?>(SyncProvisionAuthority(parameters)),
+        "sync/resume-pair" => SyncResumeLegacyPair(parameters, cancel),
         "git/bundle" => GitBundle(parameters, cancel),
         "provision/bulk" => ProvisionBulk(parameters, cancel),
         "patch/offer" => PatchOffer(parameters),
@@ -219,6 +221,8 @@ internal sealed partial class HexLinkHost : IDisposable
             ["serves"] = Serves(),
             ["syncChosen"] = new JsonArray([.. (HexLinkAllowed.Has(rights, HexLinkRights.View) ? services.ChosenSyncFolders(Device.Id) : [])
                 .Take(MOST_TREES).Select(folder => (JsonNode)folder)]),
+            ["syncPaused"] = new JsonArray([.. (HexLinkAllowed.Has(rights, HexLinkRights.View) ? services.PausedSyncFolders(Device.Id) : [])
+                .Take(MOST_TREES).Select(pause => new JsonObject { ["folder"] = pause.Folder, ["by"] = pause.By })]),
             ["workspace"] = new JsonObject
             {
                 ["name"] = workspace.Name,

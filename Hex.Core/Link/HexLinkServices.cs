@@ -75,6 +75,10 @@ internal interface IHexLinkServices
     /// <summary>Folders this device is already responsible for syncing with this peer.</summary>
     IReadOnlyList<string> ChosenSyncFolders(string deviceId) => [];
 
+    /// <summary>Folders explicitly stopped for this peer.</summary>
+    IReadOnlyList<HexLinkSyncPause> PausedSyncFolders(string deviceId) => [];
+    void AuthorityChanged() { }
+
     /// <summary>Buffers explicitly shared by the host editor, across all its connections.</summary>
     HexLinkDocuments? Documents => null;
 

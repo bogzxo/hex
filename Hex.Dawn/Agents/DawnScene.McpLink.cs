@@ -235,7 +235,7 @@ internal sealed partial class DawnScene
         {
             using var patience = CancellationTokenSource.CreateLinkedTokenSource(cancel);
             patience.CancelAfter(LINK_SYNC_PATIENCE);
-            if (start && await LinkSyncStart(peer.Device.Id, folder, force, cancel: patience.Token) is { } why)
+            if (start && await LinkSyncStart(peer.Device.Id, folder, force, cancel: patience.Token, resume: true) is { } why)
                 return why;
             if (await LinkFlushBoundReplica(peer, folder, patience.Token))
                 return null;
@@ -296,9 +296,9 @@ internal sealed partial class DawnScene
                 return await LinkAlignWorkspace(peer.Device.Id, folder!, cancel: cancel) is { } alignmentError
                     ? McpToolResult.Error(alignmentError) : McpToolResult.Text($"{folder} aligned to {peer.Device.Name} and sync started.");
             case "stop":
-                return McpToolResult.Text(LinkSyncStop(peer.Device.Id, folder!)
-                    ? $"{folder} is no longer synced with {peer.Device.Name}, and won't be when it links again."
-                    : $"{folder} wasn't synced with {peer.Device.Name}.");
+                LinkSyncStop(peer.Device.Id, folder!, HexLinkClaimCaller.Of(args)?.Name ??
+                    (McpServer.CallingChat.Value is { } caller ? $"chat #{caller}" : null));
+                return McpToolResult.Text($"{folder} is paused with {peer.Device.Name}. Use hex_link_sync start to resume.");
             case "resolve":
             {
                 string path = (args.String("path") ?? string.Empty).Trim();
@@ -338,7 +338,15 @@ internal sealed partial class DawnScene
                 PlatformPaths.Comparer.Equals(sync.Folder, row.Report.Folder))).ToList();
         local.RemoveAll(sync => sync.State is (HexLinkSyncState.Off or HexLinkSyncState.Failed) && remote.Any(row => row.Peer.Device.Id == sync.DeviceId &&
             PlatformPaths.Comparer.Equals(sync.Folder, row.Report.Folder)));
-        if (local.Count == 0 && remote.Count == 0)
+        var paused = LinkPeers.Where(peer => deviceId is null || peer.Device.Id == deviceId)
+            .SelectMany(peer => LinkPausedSyncs(peer).Where(choice =>
+                !local.Any(sync => sync.DeviceId == peer.Device.Id && sync.State != HexLinkSyncState.Off &&
+                    PlatformPaths.Comparer.Equals(sync.Folder, choice.Folder)) &&
+                !remote.Any(sync => sync.Peer.Device.Id == peer.Device.Id && PlatformPaths.Comparer.Equals(sync.Report.Folder, choice.Folder))))
+            .ToArray();
+        foreach (var (folder, reason) in paused)
+            said.Append("- ").Append(folder).Append(" [paused]. ").AppendLine(reason);
+        if (local.Count == 0 && remote.Count == 0 && paused.Length == 0)
             return "No folder is synced" + (deviceId is null ? "." : " with that device.") + " hex_link_sync start turns it on for one.";
         foreach (LinkSyncShown sync in local)
         {

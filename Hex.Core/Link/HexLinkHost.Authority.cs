@@ -20,6 +20,7 @@ internal sealed partial class HexLinkHost
             ?? throw new HexLinkException(HexLinkErrors.NOT_ALLOWED, "This device cannot change folder authority.");
         cancel.ThrowIfCancellationRequested();
         HexLinkAuthority next = store.Transfer(folder, expected, Device.Id);
+        services.AuthorityChanged();
         services.Audit("authority-transfer", Device, $"{folder.Name} moved from {expected.DeviceId} to {next.DeviceId}, epoch {next.Epoch}");
         return Task.FromResult<JsonNode?>(next.ToJson());
     }

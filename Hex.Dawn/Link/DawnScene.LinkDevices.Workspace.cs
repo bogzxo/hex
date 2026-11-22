@@ -14,6 +14,8 @@ internal sealed partial class DawnScene
     private async Task LinkPrepareSharedWorkspace(HexLinkPeer peer)
     {
         bool refreshed = await TryRefreshLinkWorkspace(peer).ConfigureAwait(false);
+        if (refreshed)
+            await LinkRecoverProvisionedAuthority(peer).ConfigureAwait(false);
         PostLink(() =>
         {
             if (peer.IsClosed || LinkPeerOf(peer.Device.Id) != peer || !HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))

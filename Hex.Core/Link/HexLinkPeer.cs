@@ -56,6 +56,8 @@ internal sealed partial class HexLinkPeer : IDisposable
     public HexLinkWorkspace Workspace { get; private set; } = HexLinkWorkspace.Empty;
 
     internal IReadOnlyList<string> ChosenSyncFolders { get; private set; } = [];
+    internal IReadOnlyList<HexLinkSyncPause> PausedSyncFolders { get; private set; } = [];
+    internal Action? SyncPausesChanged { get; set; }
 
     /// <summary>The protocol the other end speaks.</summary>
     public int Protocol { get; private set; }
@@ -109,7 +111,7 @@ internal sealed partial class HexLinkPeer : IDisposable
         granted = HexLinkData.RightsOf(said, "granted");
         Workspace = WorkspaceOf(HexLinkData.Object(said, "workspace"));
         TakeAddresses(HexLinkData.Object(said, "redial"));
-        ChosenSyncFolders = HexLinkData.Strings(said, "syncChosen", HexLinkHost.MOST_TREES, 200);
+        TakeSyncChoices(said);
         TakeServes(said);
         Changed?.Invoke();
     }
@@ -208,6 +210,8 @@ internal sealed partial class HexLinkPeer : IDisposable
                 FleetVersion = 0;
                 Tools = [];
                 Workspace = HexLinkWorkspace.Empty;
+                ChosenSyncFolders = [];
+                PausedSyncFolders = [];
                 remoteSyncReport = [];
             }
         }

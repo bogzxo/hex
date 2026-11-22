@@ -35,9 +35,15 @@ internal sealed partial class DawnScene
             return Said("link.off");
         HexLinkFolder folder = services.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, name))
             ?? throw HexLinkException.NotFound(Said("link.sync_no_folder_here", ("folder", name)));
-        HexLinkAuthority previous = services.FolderAuthorities.Of(folder)
-            ?? throw HexLinkException.Invalid(Said("link.authority_unbound"));
         string mine = services.Device.Id;
+        if (services.FolderAuthorities.Of(folder) is not { } previous)
+        {
+            services.FolderAuthorities.Bind(folder, new HexLinkAuthority(mine, 1), HexLinkAuthorityProvenance.Explicit);
+            linkAudit?.Write("authority-transfer", mine, $"{folder.Name} bound to {mine}, epoch 1");
+            connected.WorkspaceMoved();
+            LinkMoved();
+            return Said("link.authority_changed", ("folder", folder.Name), ("epoch", "1"));
+        }
         if (previous.DeviceId.Equals(mine, StringComparison.OrdinalIgnoreCase))
             return Said("link.authority_changed", ("folder", folder.Name), ("epoch", previous.Epoch.ToString(System.Globalization.CultureInfo.InvariantCulture)));
 
@@ -48,6 +54,7 @@ internal sealed partial class DawnScene
 
         HexLinkAuthority next = services.FolderAuthorities.Transfer(folder, previous, mine);
         linkAudit?.Write("authority-transfer", mine, $"{folder.Name}, {previous.DeviceId} -> {mine}, epoch {next.Epoch}");
+        connected.WorkspaceMoved();
         PostLink(() => { linkDirty = true; LinkMoved(); });
         return Said("link.authority_changed", ("folder", folder.Name), ("epoch", next.Epoch.ToString(System.Globalization.CultureInfo.InvariantCulture)));
     }

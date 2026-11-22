@@ -24,7 +24,7 @@ internal sealed partial class DawnScene
         foreach (HexLinkFolder folder in services.Workspace.Folders.Where(folder => selection is null || folder.Name == selection))
         {
             if (services.FolderAuthorities.Of(folder) is null)
-                services.FolderAuthorities.Bind(folder, new HexLinkAuthority(services.Device.Id, 1));
+                services.FolderAuthorities.Bind(folder, new HexLinkAuthority(services.Device.Id, 1), HexLinkAuthorityProvenance.Provisioned);
         }
         return services.Workspace;
     }
@@ -38,7 +38,7 @@ internal sealed partial class DawnScene
             HexLinkAuthority authority = folder.Authority
                 ?? source.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, folder.Name))?.Authority
                 ?? new HexLinkAuthority(source.Device.Id, 1);
-            services.FolderAuthorities.Bind(folder, authority);
+            services.FolderAuthorities.Bind(folder, authority, HexLinkAuthorityProvenance.Provisioned);
         }
     }
 

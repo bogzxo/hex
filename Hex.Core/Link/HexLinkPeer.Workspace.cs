@@ -4,6 +4,7 @@ namespace Hex.Core;
 
 internal sealed partial class HexLinkPeer
 {
+    internal Action? WorkspaceChanged { get; set; }
     private HexLinkCoalesce? workspaceRefresh;
     private readonly SemaphoreSlim workspaceRefreshGate = new(1, 1);
 
@@ -25,16 +26,36 @@ internal sealed partial class HexLinkPeer
                 throw HexLinkException.NotAllowed("view");
 
             HexLinkWorkspace fresh = WorkspaceOf(HexLinkData.Object(hello, "workspace"));
-            if (!SameWorkspace(Workspace, fresh))
+            bool choicesChanged = TakeSyncChoices(hello);
+            bool workspaceChanged = !SameWorkspace(Workspace, fresh);
+            if (workspaceChanged)
             {
                 Workspace = fresh;
-                Changed?.Invoke();
+                WorkspaceChanged?.Invoke();
             }
+            if (workspaceChanged || choicesChanged)
+                Changed?.Invoke();
         }
         finally
         {
             workspaceRefreshGate.Release();
         }
+    }
+
+    private bool TakeSyncChoices(JsonObject hello)
+    {
+        var chosen = HexLinkData.Strings(hello, "syncChosen", HexLinkHost.MOST_TREES, 200);
+        HexLinkSyncPause[] paused = [.. HexLinkData.Objects(hello, "syncPaused", HexLinkHost.MOST_TREES)
+            .Select(item => (Folder: HexLinkData.String(item, "folder", 200), By: HexLinkData.String(item, "by", 120)))
+            .Where(item => item.Folder is { Length: > 0 })
+            .Select(item => new HexLinkSyncPause(item.Folder!, item.By))];
+        bool pauseChanged = !PausedSyncFolders.SequenceEqual(paused);
+        bool changed = pauseChanged || !ChosenSyncFolders.SequenceEqual(chosen);
+        ChosenSyncFolders = chosen;
+        PausedSyncFolders = paused;
+        if (pauseChanged)
+            SyncPausesChanged?.Invoke();
+        return changed;
     }
 
     internal static bool SameWorkspace(HexLinkWorkspace one, HexLinkWorkspace other) =>
