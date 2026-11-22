@@ -176,6 +176,8 @@ internal sealed class LinkServices : IHexLinkServices, IDisposable
 
     public string Root { get; }
 
+    public string? TreeCacheDirectory { get; set; }
+
     public string Work => Workspace.Folders[0].Path;
 
     public HexLinkDevice Device { get; }
@@ -217,6 +219,10 @@ internal sealed class LinkServices : IHexLinkServices, IDisposable
         Answers.Enqueue((chat, answer));
         return Task.FromResult(true);
     }
+
+    public Task<string?> CompareAndReplacePacked(string full, string wire, string? baseHash, byte[] bytes,
+        CancellationToken cancel, bool? executable, HexLinkFiles.PackDirectories directories) =>
+        HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel, executable, directories);
 
     public void Presence(HexLinkDevice device, HexLinkPresence? presence) => Presences.Enqueue((device, presence));
 

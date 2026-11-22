@@ -100,7 +100,8 @@ internal sealed partial class HexLinkSync
                         else if (kept is JsonObject pair && HashIn(pair["local"]) is { } local && HashIn(pair["remote"]) is { } remote)
                         {
                             keptBases[path] = new HexLinkSyncAgreed(local, remote, HashIn(pair["text"]),
-                                EolIn(HexLinkData.String(pair, "local_eol", 10)), EolIn(HexLinkData.String(pair, "remote_eol", 10)));
+                                EolIn(HexLinkData.String(pair, "local_eol", 10)), EolIn(HexLinkData.String(pair, "remote_eol", 10)),
+                                HexLinkData.Bool(pair, "executable"));
                         }
                     }
                 }
@@ -179,6 +180,7 @@ internal sealed partial class HexLinkSync
     // The bases and the conflicts written, whole or not at all
     internal void Save()
     {
+        using var timing = HexLinkSyncTiming.Measure("state.save");
         JsonObject state;
         long version;
         lock (gate)
@@ -193,7 +195,8 @@ internal sealed partial class HexLinkSync
                     ["remote"] = agreed.Remote,
                     ["text"] = agreed.Text,
                     ["local_eol"] = EolWord(agreed.LocalEol),
-                    ["remote_eol"] = EolWord(agreed.RemoteEol)
+                    ["remote_eol"] = EolWord(agreed.RemoteEol),
+                    ["executable"] = agreed.Executable
                 };
             }
             state = new JsonObject
@@ -221,7 +224,8 @@ internal sealed partial class HexLinkSync
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(StateFile)!);
-                HexLinkFiles.WriteAtomic(StateFile, Encoding.UTF8.GetBytes(state.ToJsonString()));
+                using (HexLinkSyncTiming.Measure("state.serialize-write"))
+                    HexLinkFiles.WriteAtomic(StateFile, Encoding.UTF8.GetBytes(state.ToJsonString()));
                 writtenVersion = version;
                 Volatile.Write(ref savedAt, Environment.TickCount64);
             }
@@ -232,11 +236,23 @@ internal sealed partial class HexLinkSync
         }
     }
 
-    // Saved now and then while a lot is moving, so a link dropping halfway through a burst loses little
+    private int periodicSave;
+
+    // Only one completing worker schedules the periodic snapshot. An idle or conflict save can still publish its own.
     private void MaybeSave()
     {
-        if (Environment.TickCount64 - Volatile.Read(ref savedAt) > SAVE_EVERY_MS)
-            Save();
+        if (Environment.TickCount64 - Volatile.Read(ref savedAt) <= SAVE_EVERY_MS ||
+            Interlocked.CompareExchange(ref periodicSave, 1, 0) != 0)
+            return;
+        try
+        {
+            if (Environment.TickCount64 - Volatile.Read(ref savedAt) > SAVE_EVERY_MS)
+                Save();
+        }
+        finally
+        {
+            Volatile.Write(ref periodicSave, 0);
+        }
     }
 
     // When each of the last requests went, to keep under MOST_ASKS_A_SECOND over any second

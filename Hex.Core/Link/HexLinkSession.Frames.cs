@@ -89,7 +89,8 @@ internal sealed partial class HexLinkSession
         byte[] bytes = ArrayPool<byte>.Shared.Rent(header.WireLength);
         try
         {
-            await input.Exact(bytes.AsMemory(0, header.WireLength));
+            using (HexLinkSyncTiming.Measure("wire.tls-payload-read", header.WireLength))
+                await input.Exact(bytes.AsMemory(0, header.WireLength));
             if (download.Enqueue(new BulkFrame(header, bytes)))
                 return;
             throw new InvalidDataException("The Link bulk receive window closed.");

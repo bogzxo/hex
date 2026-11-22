@@ -36,6 +36,34 @@ public sealed class HexLinkFilesTests : IDisposable
         try { Directory.Delete(root, true); } catch (Exception) { }
     }
 
+
+    [Fact]
+    public async Task A_streamed_replace_checks_large_destination_and_source_hashes()
+    {
+        string full = Path.Combine(work, "large.bin");
+        const string wire = "work/large.bin";
+        byte[] old = new byte[HexLinkFiles.MOST_READ + 1];
+        byte[] next = new byte[old.Length];
+        next[^1] = 42;
+        File.WriteAllBytes(full, old);
+        string oldHash = HexLinkFiles.Hash(old), nextHash = HexLinkFiles.Hash(next);
+
+        using var proposed = new MemoryStream(next);
+        string? wrote = await HexLinkFiles.CompareAndReplace(full, wire, oldHash, proposed, next.Length, nextHash, CancellationToken.None);
+        Assert.Equal(nextHash, wrote);
+        proposed.Position = 0;
+        HexLinkException conflict = await Assert.ThrowsAsync<HexLinkException>(() =>
+            HexLinkFiles.CompareAndReplace(full, wire, oldHash, proposed, next.Length, nextHash, CancellationToken.None));
+        Assert.Equal(HexLinkErrors.CONFLICT, conflict.Code);
+        Assert.Equal(nextHash, HexLinkPeer.ConflictHash(conflict));
+        proposed.Position = 0;
+        HexLinkException wrongHash = await Assert.ThrowsAsync<HexLinkException>(() =>
+            HexLinkFiles.CompareAndReplace(full, wire, nextHash, proposed, next.Length, oldHash, CancellationToken.None));
+        Assert.Equal(HexLinkErrors.INVALID_PARAMS, wrongHash.Code);
+        Assert.Equal(next, File.ReadAllBytes(full));
+        Assert.Empty(Directory.EnumerateFiles(work, "*.hexlink"));
+    }
+
     private void Refused(string wire)
     {
         var refused = Assert.Throws<HexLinkException>(() => HexLinkFiles.Resolve(folders, wire));

@@ -15,6 +15,9 @@ internal interface IHexLinkBulkSink : IAsyncDisposable
 
     /// <summary>Publishes staged data after the session verifies length and SHA-256.</summary>
     ValueTask CommitAsync(CancellationToken cancel);
+
+    /// <summary>An optional result returned by the verified commit.</summary>
+    JsonNode? Result => null;
 }
 
 internal sealed partial class HexLinkSession
@@ -47,8 +50,8 @@ internal sealed partial class HexLinkSession
     /// Opens an ordered upload of exactly <paramref name="length"/> bytes to a registered purpose. Up to four uploads
     /// in each direction share the connection. Each upload has eight credits for frames of up to 256 KiB, so at most
     /// 2 MiB per upload is outstanding. The open is subject to RPC admission. Data and credits use the byte window
-    /// independently of RPC admission. The token also cancels subsequent writes and completion. Dispose an unfinished
-    /// upload to abort it and release its slot.
+    /// independently of RPC admission. A caller waits for capacity before allocating a stream ID. The token also
+    /// cancels subsequent writes and completion. Dispose an unfinished upload to abort it and release its slot.
     /// </summary>
     public async Task<BulkUpload> OpenBulkAsync(string purpose, long length, JsonObject? metadata = null, CancellationToken cancel = default)
     {
@@ -58,9 +61,15 @@ internal sealed partial class HexLinkSession
         if (purpose.Length > 80)
             throw new ArgumentException("A bulk purpose takes at most 80 characters.", nameof(purpose));
         ArgumentOutOfRangeException.ThrowIfNegative(length);
-        cancel.ThrowIfCancellationRequested();
-        if (!uploadSlots.Wait(0))
-            throw new HexLinkException(HexLinkErrors.BUSY, "Too many Link bulk uploads are already open.");
+        using var waiting = CancellationTokenSource.CreateLinkedTokenSource(cancel, closing.Token);
+        try
+        {
+            await uploadSlots.WaitAsync(waiting.Token);
+        }
+        catch (OperationCanceledException) when (IsClosed && !cancel.IsCancellationRequested)
+        {
+            throw new HexLinkException(HexLinkErrors.CLOSED, $"The link closed, {Why}");
+        }
 
         long id = Interlocked.Increment(ref lastBulkId);
         BulkUpload upload;
@@ -131,8 +140,7 @@ internal sealed partial class HexLinkSession
             HexLinkData.String(parameters, "sha256", 65) is not { Length: 64 } hash ||
             !hash.All(Uri.IsHexDigit))
             throw HexLinkException.Invalid("Invalid Link bulk completion.");
-        await download.Complete(hash);
-        return null;
+        return await download.Complete(hash);
     }
 
     /// <summary>An ordered bulk upload. Call WriteAsync, CompleteAsync and DisposeAsync serially.</summary>
@@ -249,7 +257,7 @@ internal sealed partial class HexLinkSession
         }
 
         /// <summary>Finishes the upload and waits until the receiver verifies SHA-256 and commits its sink.</summary>
-        public async Task CompleteAsync(CancellationToken cancel = default)
+        public async Task<JsonNode?> CompleteAsync(CancellationToken cancel = default)
         {
             ObjectDisposedException.ThrowIf(disposed, this);
             if (finished || written != length)
@@ -263,8 +271,9 @@ internal sealed partial class HexLinkSession
                     throw new HexLinkException(HexLinkErrors.TIMED_OUT, "The Link bulk receiver stopped returning credit.");
             }
             string digest = Convert.ToHexString(hash.GetHashAndReset());
-            await session.Ask("link/bulk/complete", new JsonObject { ["stream"] = id, ["sha256"] = digest }, stop);
+            JsonNode? result = await session.Ask("link/bulk/complete", new JsonObject { ["stream"] = id, ["sha256"] = digest }, stop);
             finished = true;
+            return result;
         }
 
         private CancellationTokenSource? LinkExtraCancellation(CancellationToken cancel) =>
@@ -311,7 +320,7 @@ internal sealed partial class HexLinkSession
         private readonly BulkReceiver receiver;
         private readonly CancellationTokenSource stop;
         private readonly Channel<BulkFrame> frames = Bounded<BulkFrame>(HexLinkFrameHeader.Window);
-        private readonly TaskCompletionSource<Exception?> completed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<(JsonNode? Result, Exception? Error)> completed = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private long received;
         private uint sequence;
         private int outstanding;
@@ -361,14 +370,16 @@ internal sealed partial class HexLinkSession
 
         public bool Enqueue(BulkFrame frame) => frames.Writer.TryWrite(frame);
 
-        public async Task Complete(string hash)
+        public async Task<JsonNode?> Complete(string hash)
         {
             if (Volatile.Read(ref received) != length || Volatile.Read(ref outstanding) != 0 ||
                 Interlocked.CompareExchange(ref expectedHash, hash, null) is not null)
                 throw HexLinkException.Invalid("Link bulk completion arrived before the declared bytes were consumed.");
             frames.Writer.TryComplete();
-            if (await completed.Task.WaitAsync(session.Closing) is { } error)
+            var (result, error) = await completed.Task.WaitAsync(session.Closing);
+            if (error is not null)
                 throw error;
+            return result;
         }
 
         public void Abort()
@@ -387,6 +398,7 @@ internal sealed partial class HexLinkSession
         {
             CancellationToken cancel = stop.Token;
             Exception? failure = null;
+            JsonNode? result = null;
             try
             {
                 await using (sink)
@@ -426,6 +438,7 @@ internal sealed partial class HexLinkSession
                         if (!string.Equals(Convert.ToHexString(hash.GetHashAndReset()), expectedHash, StringComparison.OrdinalIgnoreCase))
                             throw HexLinkException.Invalid("The Link bulk hash did not match.");
                         await sink.CommitAsync(cancel);
+                        result = sink.Result;
                     }
                 }
             }
@@ -441,7 +454,7 @@ internal sealed partial class HexLinkSession
                 while (frames.Reader.TryRead(out BulkFrame frame))
                     frame.Release();
                 Release();
-                completed.TrySetResult(failure);
+                completed.TrySetResult((result, failure));
             }
         }
 

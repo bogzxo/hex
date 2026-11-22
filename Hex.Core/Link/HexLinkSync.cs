@@ -88,13 +88,13 @@ internal sealed partial class HexLinkSync : IDisposable
 
     private readonly HexLinkPeer peer;
     private readonly HexLinkFolder folder;
-    private readonly HexLinkTree tree;
+    private HexLinkTree tree;
     private readonly string slug;
 
     // Everything below that more than one thread touches is kept under this
     private readonly Lock gate = new();
 
-    private HexLinkTreeWatch? local;
+    private HexLinkTreeSubscription? local;
     private CancellationTokenSource stopping = new();
     private bool live, remoteWatched, ready;
     private volatile bool pullOnly;
@@ -113,10 +113,19 @@ internal sealed partial class HexLinkSync : IDisposable
     {
         this.peer = peer;
         this.folder = folder;
-        tree = new HexLinkTree(folder, () => Excludes());
+        if (peer.Session.SupportsBulk)
+            Quiet = TimeSpan.FromMilliseconds(120);
+        int inFlight = peer.Session.SupportsBulk ? HexLinkFilePack.MaximumFiles : MOST_IN_FLIGHT;
+        slots = new SemaphoreSlim(inFlight, inFlight);
+        if (peer.CanReadFilePacks)
+            packedReads = new PackBatcher<PendingRead>(ReadPacked, each => HexLinkFilePack.WireCost(each.Path, each.Size));
+        if (peer.CanWriteFilePacks)
+            packedWrites = new PackBatcher<PendingWrite>(WritePacked, each => HexLinkFilePack.WireCost(each.Entry.Path, each.Entry.Bytes.Length));
+        tree = new HexLinkTree(folder, () => Excludes(), stateFolder, peer.Session.SupportsBulk);
         slug = HexLinkGit.Slug(peer.Device.Name);
         StateFile = Path.GetFullPath(Path.Combine(stateFolder, StateName(peer.Device.Id, folder.Name)));
         ApplyLocal = HexLinkFiles.CompareAndReplace;
+        ApplyStream = HexLinkFiles.CompareAndReplace;
         RenameLocal = (from, to, expected, cancel) => Task.Run(() => HexLinkTree.RenameCase(from, to, expected), cancel);
     }
 
@@ -133,6 +142,8 @@ internal sealed partial class HexLinkSync : IDisposable
 
     /// <summary>Apply a checked incoming change, optionally through the editor's dirty-tab guard.</summary>
     public Func<string, string, string?, byte[]?, CancellationToken, bool?, Task<string?>> ApplyLocal { get; init; }
+
+    public Func<string, string, string?, Stream?, long, string?, CancellationToken, bool?, Task<string?>> ApplyStream { get; init; }
 
     public Func<string, string, string, CancellationToken, Task> RenameLocal { get; init; }
 
@@ -188,7 +199,7 @@ internal sealed partial class HexLinkSync : IDisposable
     private Task<HexLinkFile> Fetch(string wire, CancellationToken cancel)
     {
         Interlocked.Increment(ref reads);
-        return Asked(() => peer.Read(wire, cancel), cancel);
+        return FetchPacked(wire, cancel);
     }
 
     /// <summary>The files that don't travel and why, by path.</summary>
@@ -289,7 +300,7 @@ internal sealed partial class HexLinkSync : IDisposable
         }
 
         Set(HexLinkSyncState.Comparing, null);
-        HexLinkTreeWatch? watch = null;
+        HexLinkTreeSubscription? watch = null;
         try
         {
             if (peer.IsClosed)
@@ -313,10 +324,20 @@ internal sealed partial class HexLinkSync : IDisposable
 
             peer.Session.Closed += LinkClosed;
 
-            HexLinkManifest theirs = await peer.WatchTree(folder.Name, Heard, cancel);
-            remoteWatched = true;
-            watch = new HexLinkTreeWatch(tree, Saw, Quiet, Rescan);
-            HexLinkManifest mine = await Task.Run(tree.Manifest, cancel);
+            tree = HexLinkTree.Shared(folder, () => Excludes(), Path.GetDirectoryName(StateFile), peer.Session.SupportsBulk);
+            watch = new HexLinkTreeSubscription(tree, Saw, Quiet, Rescan);
+            // The previous snapshot is only a digest offer. The remote still verifies each offered directory
+            // against its current snapshot, so both current listings can run concurrently.
+            HexLinkManifest? previous = tree.PreviousManifest;
+            Task<HexLinkManifest> scanMine = HexLinkSyncTiming.MeasureAsync("start.local-manifest",
+                () => Task.Run(tree.Manifest, cancel));
+            Task<HexLinkManifest> scanTheirs = HexLinkSyncTiming.MeasureAsync("start.manifest-round-trip",
+                () => peer.WatchTree(folder.Name, Heard, cancel, previous));
+            try { await Task.WhenAll(scanMine, scanTheirs); }
+            finally { remoteWatched = scanTheirs.IsCompletedSuccessfully; }
+            HexLinkManifest actual = (await scanMine) with { Authority = folder.Authority };
+            HexLinkManifest mine = peer.Session.SupportsBulk ? actual : HexLinkTree.ForLegacy(actual);
+            HexLinkManifest theirs = await scanTheirs;
             LocalHead = mine.Head;
             RemoteHead = theirs.Head;
 
@@ -351,7 +372,7 @@ internal sealed partial class HexLinkSync : IDisposable
             }
 
             await Task.Run(() => Load(mine, theirs, cancel), cancel);
-            Begin(mine, theirs, watch);
+            Begin(mine, theirs, watch, actual);
             watch = null;
         }
         catch (Exception e) when (e is HexLinkException or IOException or UnauthorizedAccessException or OperationCanceledException or InvalidOperationException)
@@ -382,7 +403,7 @@ internal sealed partial class HexLinkSync : IDisposable
     /// </summary>
     public async Task Flush(CancellationToken cancel = default)
     {
-        HexLinkTreeWatch? watch;
+        HexLinkTreeSubscription? watch;
         lock (gate)
         {
             if (!live || !ready)
@@ -545,7 +566,7 @@ internal sealed partial class HexLinkSync : IDisposable
     // Everything let go of and the state saved, said as it ended
     private void Halt(HexLinkSyncState state, string? why)
     {
-        HexLinkTreeWatch? watch;
+        HexLinkTreeSubscription? watch;
         TaskCompletionSource? waiting;
         bool was;
         lock (gate)
@@ -586,7 +607,7 @@ internal sealed partial class HexLinkSync : IDisposable
             return;
         try
         {
-            await peer.UnwatchTree(folder.Name);
+            await peer.UnwatchTree(folder.Name, expected: Heard);
         }
         catch (HexLinkException)
         {
@@ -606,6 +627,7 @@ internal sealed partial class HexLinkSync : IDisposable
 
     private void Notify()
     {
+        using var timing = HexLinkSyncTiming.Measure("sync.notify");
         try
         {
             Changed?.Invoke();

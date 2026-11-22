@@ -6,7 +6,7 @@ internal sealed partial class HexLinkTree
 {
     private const int MOST_PROVISION_ISSUES = 512;
 
-    internal HexLinkManifest ProvisionManifest() => Manifest(provision: true);
+    internal HexLinkManifest ProvisionManifest() => Manifest(verify: false, reuse: false, provision: true);
 
     private string? ProvisionFileProblem(string relative)
     {

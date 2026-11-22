@@ -7,6 +7,7 @@ internal sealed partial class HexLinkPeer
 {
     // What hears of the changes of each watched tree of the other machine's, by folder
     private readonly ConcurrentDictionary<string, Action<IReadOnlyList<HexLinkTreeChange>>> trees = new(StringComparer.Ordinal);
+    private readonly SemaphoreSlim treeWatchLifecycle = new(1, 1);
 
     /// <summary>
     /// A folder of the other machine's workspace as the working-tree sync sees it: every file git would carry there
@@ -19,35 +20,61 @@ internal sealed partial class HexLinkPeer
     /// A folder of the other machine's watched: its manifest now, then <paramref name="changes"/> told of every batch of
     /// files that changed there (on the reading task), a short while after they did.
     /// </summary>
-    public async Task<HexLinkManifest> WatchTree(string folder, Action<IReadOnlyList<HexLinkTreeChange>> changes, CancellationToken cancel = default)
+    public async Task<HexLinkManifest> WatchTree(string folder, Action<IReadOnlyList<HexLinkTreeChange>> changes,
+        CancellationToken cancel = default, HexLinkManifest? basis = null) =>
+        (await OpenTreeWatch(folder, changes, cancel, basis, restoring: false))!;
+
+    private async Task<HexLinkManifest?> OpenTreeWatch(string folder, Action<IReadOnlyList<HexLinkTreeChange>> changes,
+        CancellationToken cancel, HexLinkManifest? basis, bool restoring)
     {
-        trees[folder] = changes;
+        await treeWatchLifecycle.WaitAsync(cancel);
         try
         {
-            HexLinkManifest manifest = await ReadManifest("sync/watch", folder, cancel);
-            RememberTree(folder, manifest);
-            return manifest;
+            if (restoring && trees.GetValueOrDefault(folder) != changes)
+                return null;
+            trees[folder] = changes;
+            try
+            {
+                HexLinkManifest manifest = await ReadManifest("sync/watch", folder, cancel, basis);
+                RememberTree(folder, manifest);
+                return manifest;
+            }
+            catch (Exception)
+            {
+                try { await RemoveTreeWatch(folder, CancellationToken.None); } catch (HexLinkException) { }
+                throw;
+            }
         }
-        catch (Exception)
+        finally
         {
-            trees.TryRemove(folder, out _);
-            try { await UnwatchTree(folder); } catch (HexLinkException) { }
-            throw;
+            treeWatchLifecycle.Release();
         }
     }
 
     internal Task<HexLinkManifest> ProvisionManifest(string folder, CancellationToken cancel) =>
         ReadManifest("sync/manifest", folder, cancel, provision: true);
 
-    private async Task<HexLinkManifest> ReadManifest(string method, string folder, CancellationToken cancel, bool provision = false)
+    private async Task<HexLinkManifest> ReadManifest(string method, string folder, CancellationToken cancel,
+        HexLinkManifest? basis = null, bool provision = false)
     {
         var patience = TimeSpan.FromMinutes(5);
-        JsonObject said = await AskObject(method, new JsonObject { ["folder"] = folder, ["paged"] = true, ["provision"] = provision }, cancel, patience);
+        var parameters = new JsonObject { ["folder"] = folder, ["paged"] = true };
+        if (provision)
+            parameters["provision"] = true;
+        HexLinkDirectoryDigests? digests = session.SupportsBulk && basis is { Certified: true } ? HexLinkDirectoryDigests.From(basis) : null;
+        JsonObject? offer = digests?.Offer();
+        if (offer is { Count: > 0 })
+            parameters["directories"] = offer;
+        JsonObject said = await AskObject(method, parameters, cancel, patience);
         HexLinkManifest first = HexLinkTree.Of(said);
         if (first.Folder != folder)
             throw HexLinkException.Invalid("The peer sent a manifest for a different folder.");
+        JsonArray? equal = said["equal_directories"] as JsonArray;
+        int fullCount = HexLinkData.Int(said, "full_count") ?? -1;
+        if (said.ContainsKey("equal_directories") && (equal is null || digests is null || offer is null))
+            throw HexLinkException.Invalid("The peer sent unsolicited directory digests.");
         if (HexLinkData.String(said, "snapshot", 64) is not { } id)
-            return first;
+            return Restore(first);
 
         int total = HexLinkData.Int(said, "total") ?? -1;
         HexLinkTree.CheckCount(total);
@@ -76,11 +103,28 @@ internal sealed partial class HexLinkPeer
             }
         }
 
-        return first with { Files = files };
+        return Restore(first with { Files = files });
+
+        HexLinkManifest Restore(HexLinkManifest paged) => equal is null ? paged : digests!.Reconstruct(paged, equal, offer!, fullCount);
     }
 
     /// <summary>A folder of the other machine's no longer watched.</summary>
-    public Task UnwatchTree(string folder, CancellationToken cancel = default)
+    public async Task UnwatchTree(string folder, CancellationToken cancel = default,
+        Action<IReadOnlyList<HexLinkTreeChange>>? expected = null)
+    {
+        await treeWatchLifecycle.WaitAsync(cancel);
+        try
+        {
+            if (expected is null || trees.GetValueOrDefault(folder) == expected)
+                await RemoveTreeWatch(folder, cancel);
+        }
+        finally
+        {
+            treeWatchLifecycle.Release();
+        }
+    }
+
+    private Task RemoveTreeWatch(string folder, CancellationToken cancel)
     {
         trees.TryRemove(folder, out _);
         treeWatchFiles.TryRemove(folder, out _);

@@ -482,7 +482,11 @@ internal sealed partial class HexLinkTransport : IDisposable
     private HexLinkConnection Up(Slot slot, SslStream ssl, HexLinkDevice said, string address, int port, bool dialled, HexLinkBulkSupport bulk)
     {
         string id = said.Id;
-        trust.Seen(id, said, address, port);
+        try { trust.Seen(id, said, address, port); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            Audit?.Write("link metadata", id, $"Can't save the address for {said.Name}: {error.Message}");
+        }
         HexLinkDevice device = trust.Find(id)?.Device ?? said;
         HexLinkConnection? connection = null;
         connection = new HexLinkConnection(ssl, device, address, dialled, () => trust.Find(id)?.Rights ?? HexLinkRights.None, () =>

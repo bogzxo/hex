@@ -78,8 +78,18 @@ internal sealed partial class DawnScene
         public Task RenameCase(string from, string to, string expected, CancellationToken cancel) =>
             hex.LinkRenameCase(from, to, expected, cancel);
 
-        public Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes, CancellationToken cancel) =>
-            hex.LinkCompareAndReplace(full, wire, baseHash, bytes, cancel);
+        public string? TreeCacheDirectory => hex.linkData is { } data ? Path.Combine(data, LINK_SYNC_STATES) : null;
+
+        public Task<string?> CompareAndReplace(string full, string wire, string? baseHash, Stream? source,
+            long length, string? expectedHash, CancellationToken cancel, bool? executable) =>
+            hex.LinkCompareAndReplaceStream(full, wire, baseHash, source, length, expectedHash, cancel, executable);
+
+        public Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes, CancellationToken cancel, bool? executable = null) =>
+            hex.LinkCompareAndReplace(full, wire, baseHash, bytes, cancel, executable);
+
+        public Task<string?> CompareAndReplacePacked(string full, string wire, string? baseHash, byte[] bytes,
+            CancellationToken cancel, bool? executable, HexLinkFiles.PackDirectories directories) =>
+            hex.LinkCompareAndReplace(full, wire, baseHash, bytes, cancel, executable, directories);
 
         public void Presence(HexLinkDevice device, HexLinkPresence? presence) => hex.PostLink(() =>
         {
@@ -106,8 +116,12 @@ internal sealed partial class DawnScene
         public IAsyncEnumerable<string> Predict(HexLinkPrediction request, CancellationToken cancel) => hex.LinkPredictMake(request, cancel);
     }
 
-    internal async Task<string?> LinkCompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes,
-        CancellationToken cancel, bool? executable = null)
+    internal Task<string?> LinkCompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes,
+        CancellationToken cancel, bool? executable = null) =>
+        LinkCompareAndReplace(full, wire, baseHash, bytes, cancel, executable, directories: null);
+
+    private async Task<string?> LinkCompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes,
+        CancellationToken cancel, bool? executable, HexLinkFiles.PackDirectories? directories)
     {
         var (before, inRoom) = await OnEditorForLink(() =>
         {
@@ -119,7 +133,7 @@ internal sealed partial class DawnScene
             if (bytes is not null && HexLinkFiles.Decode(bytes) is { } incoming &&
                 await LinkLiveKnownSyncSave(before.Document, HexLinkFiles.Hash(bytes), cancel).ConfigureAwait(false))
             {
-                string? saved = await HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel, executable).ConfigureAwait(false);
+                string? saved = await HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel, executable, directories).ConfigureAwait(false);
                 PostLink(() =>
                 {
                     if (before.Document is { } tab && Context.Documents.Find(full) == tab && tab.DiskText == before.DiskText)
@@ -134,7 +148,7 @@ internal sealed partial class DawnScene
             throw new HexLinkException(HexLinkErrors.CONFLICT, $"{wire} has unsaved changes in the editor.",
                 new JsonObject { ["hash"] = HexLinkFiles.HashOf(full), ["editor_dirty"] = true });
 
-        string? hash = await HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel, executable).ConfigureAwait(false);
+        string? hash = await HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel, executable, directories).ConfigureAwait(false);
         if (bytes is not null && HexLinkFiles.Decode(bytes) is { } decoded &&
             await OnEditorForLink(() => LinkTakeIntoTab(full, decoded.Text, before)).ConfigureAwait(false))
         {

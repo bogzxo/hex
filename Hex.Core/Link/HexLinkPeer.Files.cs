@@ -12,7 +12,7 @@ internal sealed record HexLinkEntry(string Name, bool Folder, long Size);
 /// utf-8, utf-8-bom, utf-16le, utf-16be, or binary, and its line ends), the hash of its bytes, which a write back gives as
 /// its base, and when it was last changed (Unix milliseconds).
 /// </summary>
-internal sealed record HexLinkFile(string Path, byte[] Bytes, string? Text, string Encoding, string Eol, string Hash, long Modified);
+internal sealed record HexLinkFile(string Path, byte[] Bytes, string? Text, string Encoding, string Eol, string Hash, long Modified, bool? Executable = null);
 
 internal sealed partial class HexLinkPeer
 {

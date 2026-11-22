@@ -10,7 +10,7 @@ internal sealed partial class HexLinkHost
 
     // The trees of the workspace's folders, kept for their hashes, and those the device watches
     private readonly ConcurrentDictionary<string, HexLinkTree> trees = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, HexLinkTreeWatch> treeWatches = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, HexLinkTreeSubscription> treeWatches = new(StringComparer.Ordinal);
 
     /// <summary>How long after the last change in a watched tree its batch goes, 150 ms unless a test says.</summary>
     public TimeSpan TreeQuiet { get; init; } = TimeSpan.FromMilliseconds(150);
@@ -25,9 +25,16 @@ internal sealed partial class HexLinkHost
     private JsonObject FirstPage(JsonObject parameters, HexLinkManifest manifest, bool watch)
     {
         bool paged = HexLinkData.Bool(parameters, "paged") == true;
+        HexLinkAuthority? authority = Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, manifest.Folder))?.Authority;
+        manifest = manifest with { Authority = authority };
+        if (!session.SupportsBulk)
+            manifest = HexLinkTree.ForLegacy(manifest);
+        int fullCount = manifest.Files.Count;
+        var (changed, equal) = HexLinkDirectoryDigests.Select(manifest, parameters);
+        manifest = changed;
         int end = PageEnd(manifest, 0);
         if (end == manifest.Files.Count)
-            return HexLinkTree.Json(manifest);
+            return WithDirectories(HexLinkTree.Json(manifest));
         if (!paged)
             throw new HexLinkException(HexLinkErrors.TOO_BIG, "The manifest requires a peer that can read it in pages.");
 
@@ -42,7 +49,17 @@ internal sealed partial class HexLinkHost
             manifests[key] = snapshot;
         }
 
-        return ManifestPage(snapshot, 0, end);
+        return WithDirectories(ManifestPage(snapshot, 0, end));
+
+        JsonObject WithDirectories(JsonObject page)
+        {
+            if (equal is not null)
+            {
+                page["equal_directories"] = equal;
+                page["full_count"] = fullCount;
+            }
+            return page;
+        }
     }
 
     private JsonObject ContinueManifest(HexLinkTree tree, JsonObject parameters, string id, bool watch)
@@ -91,9 +108,9 @@ internal sealed partial class HexLinkHost
             ?? throw HexLinkException.NotFound($"The workspace has no folder called {name}.");
         // Through the jail like any path, so a folder that's itself a link out is refused the same way
         HexLinkFiles.Resolve(Folders, folder.Name);
-        HexLinkTree tree = trees.GetOrAdd(folder.Name, _ => new HexLinkTree(folder, () => services.Excludes));
+        HexLinkTree tree = trees.GetOrAdd(folder.Name, _ => HexLinkTree.Shared(folder, () => services.Excludes, services.TreeCacheDirectory, session.SupportsBulk));
         if (tree.Folder != folder)
-            trees[folder.Name] = tree = new HexLinkTree(folder, () => services.Excludes);
+            trees[folder.Name] = tree = HexLinkTree.Shared(folder, () => services.Excludes, services.TreeCacheDirectory, session.SupportsBulk);
         return tree;
     }
 
@@ -156,12 +173,13 @@ internal sealed partial class HexLinkHost
             throw new HexLinkException(HexLinkErrors.TOO_BIG, $"A device may watch {MOST_TREES} folders at once.");
 
         string folder = tree.Folder.Name;
-        var watch = new HexLinkTreeWatch(tree, changes => TreeMoved(folder, changes), TreeQuiet, TreeRescan);
+        TimeSpan quiet = session.SupportsBulk && TreeQuiet == TimeSpan.FromMilliseconds(150) ? TimeSpan.FromMilliseconds(120) : TreeQuiet;
+        var watch = new HexLinkTreeSubscription(tree, changes => TreeMoved(folder, changes), quiet, TreeRescan);
         try
         {
             HexLinkManifest manifest = await Task.Run(tree.Manifest, cancel);
             JsonObject answer = FirstPage(parameters, manifest, watch: true);
-            if (treeWatches.TryGetValue(folder, out HexLinkTreeWatch? was))
+            if (treeWatches.TryGetValue(folder, out HexLinkTreeSubscription? was))
                 was.Dispose();
             treeWatches[folder] = watch;
             watch.Seed(manifest);
@@ -179,7 +197,7 @@ internal sealed partial class HexLinkHost
         string name = HexLinkData.Need(parameters, "folder", 200);
         lock (paging)
             manifests.Remove((name, true));
-        if (treeWatches.TryRemove(name, out HexLinkTreeWatch? watch))
+        if (treeWatches.TryRemove(name, out HexLinkTreeSubscription? watch))
             watch.Dispose();
         return [];
     }
@@ -189,7 +207,7 @@ internal sealed partial class HexLinkHost
     {
         Need(HexLinkRights.View, "sync/flush");
         string name = HexLinkData.Need(parameters, "folder", 200);
-        if (!treeWatches.TryGetValue(name, out HexLinkTreeWatch? watch))
+        if (!treeWatches.TryGetValue(name, out HexLinkTreeSubscription? watch))
             throw HexLinkException.NotFound($"{name} isn't watched, sync/watch it first.");
         await watch.Flush();
         return new JsonObject { ["folder"] = name };
@@ -197,11 +215,12 @@ internal sealed partial class HexLinkHost
 
     private void TreeMoved(string folder, IReadOnlyList<HexLinkTreeChange> changes)
     {
+        using var timing = HexLinkSyncTiming.Measure("watch.send-to-peer", changes.Count);
         if (!HexLinkAllowed.Has(Rights, HexLinkRights.View))
             return;
         var said = new JsonArray();
         foreach (HexLinkTreeChange change in changes)
-            said.Add((JsonNode)HexLinkTree.ChangeJson(change));
+            said.Add((JsonNode)HexLinkTree.ChangeJson(session.SupportsBulk ? change : HexLinkTree.ForLegacy(change)));
 
         session.Tell("sync/changed", new JsonObject { ["folder"] = folder, ["changes"] = said });
     }

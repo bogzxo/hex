@@ -79,6 +79,8 @@ internal static partial class HexLinkFiles
         {
             if (part.Equals(".git", StringComparison.OrdinalIgnoreCase))
                 throw Refused(wire, "git's own folder is never shared");
+            if (HexLinkTree.CacheArtifact(part))
+                throw Refused(wire, "Link's cache and staging files are never shared");
         }
 
         if (excludes is not null && parts.Length > 1)
@@ -141,9 +143,16 @@ internal static partial class HexLinkFiles
     {
         try
         {
-            FileSystemInfo info = Directory.Exists(path) ? new DirectoryInfo(path) : new FileInfo(path);
-            if (info.Exists && info.LinkTarget is not null && info.ResolveLinkTarget(true) is { } target)
-                return Path.GetFullPath(target.FullName);
+            var file = new FileInfo(path);
+            FileAttributes attributes = file.Attributes;
+            if (attributes == (FileAttributes)(-1) || (attributes & FileAttributes.ReparsePoint) == 0)
+                return path;
+            FileSystemInfo info = (attributes & FileAttributes.Directory) != 0 ? new DirectoryInfo(path) : file;
+            return info.LinkTarget is not null && info.ResolveLinkTarget(true) is { } target
+                ? Path.GetFullPath(target.FullName) : path;
+        }
+        catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException)
+        {
             return path;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -363,9 +372,28 @@ internal static partial class HexLinkFiles
     /// hash it has now, when it isn't. A null base is a new file, which conflicts with one that's there. The bytes are
     /// written as they came, so whatever encoding and mark they were in stays. Hands back the new hash.
     /// </summary>
-    public static async Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes,
-        CancellationToken cancel, bool? executable = null)
+    public static Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes,
+        CancellationToken cancel, bool? executable = null) =>
+        CompareAndReplace(full, wire, baseHash, bytes, cancel, executable, directories: null);
+
+    internal sealed class PackDirectories
     {
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<DirectoryInfo>> created = new(PlatformPaths.Comparer);
+
+        public void Ensure(string directory) =>
+            _ = created.GetOrAdd(directory, static path => new Lazy<DirectoryInfo>(() => MakeDirectory(path))).Value;
+    }
+
+    private static DirectoryInfo MakeDirectory(string directory)
+    {
+        using var timing = HexLinkSyncTiming.Measure("cas.create-directory");
+        return Directory.CreateDirectory(directory);
+    }
+
+    internal static async Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes,
+        CancellationToken cancel, bool? executable, PackDirectories? directories)
+    {
+        using var duration = HexLinkSyncTiming.Measure("cas.small-total");
         if (bytes is { Length: > MOST_READ })
             throw new HexLinkException(HexLinkErrors.TOO_BIG, $"A link writes files of up to {MOST_READ / 1024 / 1024} MB.");
         full = Path.GetFullPath(full);
@@ -379,20 +407,45 @@ internal static partial class HexLinkFiles
             if (bytes is not null)
             {
                 string folder = Path.GetDirectoryName(full)!;
-                Directory.CreateDirectory(folder);
+                if (directories is null)
+                    MakeDirectory(folder);
+                else
+                    directories.Ensure(folder);
                 temp = Path.Combine(folder, $".{Path.GetFileName(full)}.{Guid.NewGuid():N}.hexlink");
-                await using var staged = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, useAsync: true);
-                await staged.WriteAsync(bytes, cancel).ConfigureAwait(false);
+                bool asyncIo = directories is null || bytes.Length > 64 * 1024;
+                FileStream staged;
+                using (HexLinkSyncTiming.Measure("cas.open-stage"))
+                    staged = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, useAsync: asyncIo);
+                try
+                {
+                    using var write = HexLinkSyncTiming.Measure("cas.write-stage", bytes.Length);
+                    if (asyncIo)
+                        await staged.WriteAsync(bytes, cancel).ConfigureAwait(false);
+                    else
+                        staged.Write(bytes);
+                }
+                finally
+                {
+                    using var close = HexLinkSyncTiming.Measure("cas.close-stage");
+                    if (asyncIo)
+                        await staged.DisposeAsync().ConfigureAwait(false);
+                    else
+                        staged.Dispose();
+                }
             }
 
-            string? next = bytes is null ? null : Hash(bytes);
+            string? next;
+            using (HexLinkSyncTiming.Measure("cas.hash-new"))
+                next = bytes is null ? null : Hash(bytes);
             PathWrite gate = JoinPath(full);
             bool entered = false;
             try
             {
-                await gate.Turn.WaitAsync(cancel).ConfigureAwait(false);
+                using (HexLinkSyncTiming.Measure("cas.path-lock-wait"))
+                    await gate.Turn.WaitAsync(cancel).ConfigureAwait(false);
                 entered = true;
                 await ReplaceChecked(full, wire, baseHash, temp, executable, cancel).ConfigureAwait(false);
+                temp = null;
                 return next;
             }
             finally
@@ -404,8 +457,85 @@ internal static partial class HexLinkFiles
         {
             if (temp is not null)
             {
+                using var cleanup = HexLinkSyncTiming.Measure("cas.clean-stage");
                 try { File.Delete(temp); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
             }
+        }
+    }
+
+
+    /// <summary>
+    /// Stages a length- and hash-checked stream beside the destination and publishes it through the same
+    /// compare-and-replace gate as a small linked write. The caller owns the source stream.
+    /// </summary>
+    internal static async Task<string?> CompareAndReplace(string full, string wire, string? baseHash, Stream? source,
+        long length, string? expectedHash, CancellationToken cancel, bool? executable = null)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(length);
+        full = Path.GetFullPath(full);
+        cancel.ThrowIfCancellationRequested();
+        if (Directory.Exists(full))
+            throw HexLinkException.Invalid($"{wire} is a folder.");
+
+        if (source is null)
+        {
+            if (baseHash is null)
+                throw HexLinkException.Invalid("A streamed deletion needs a base hash.");
+            await PublishStreamed(full, wire, baseHash, null, executable, cancel).ConfigureAwait(false);
+            return null;
+        }
+
+        string folder = Path.GetDirectoryName(full)!;
+        Directory.CreateDirectory(folder);
+        string temp = Path.Combine(folder, $".{Path.GetFileName(full)}.{Guid.NewGuid():N}.hexlink");
+        byte[] buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(256 * 1024);
+        try
+        {
+            string next;
+            using (var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
+            {
+                await using var staged = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1, useAsync: true);
+                long remaining = length;
+                while (remaining != 0)
+                {
+                    int count = await source.ReadAsync(buffer.AsMemory(0, (int)Math.Min(remaining, buffer.Length)), cancel).ConfigureAwait(false);
+                    if (count == 0)
+                        throw HexLinkException.Invalid($"The streamed file {wire} ended early.");
+                    hash.AppendData(buffer, 0, count);
+                    await staged.WriteAsync(buffer.AsMemory(0, count), cancel).ConfigureAwait(false);
+                    remaining -= count;
+                }
+                if (await source.ReadAsync(buffer.AsMemory(0, 1), cancel).ConfigureAwait(false) != 0)
+                    throw HexLinkException.Invalid($"The streamed file {wire} exceeded its declared length.");
+                next = Convert.ToHexStringLower(hash.GetHashAndReset());
+                if (!string.Equals(next, expectedHash, StringComparison.OrdinalIgnoreCase))
+                    throw HexLinkException.Invalid($"The streamed file {wire} did not match its SHA-256.");
+            }
+
+            await PublishStreamed(full, wire, baseHash, temp, executable, cancel).ConfigureAwait(false);
+            return next;
+        }
+        finally
+        {
+            System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
+            try { File.Delete(temp); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        }
+    }
+
+    private static async Task PublishStreamed(string full, string wire, string? baseHash, string? temp,
+        bool? executable, CancellationToken cancel)
+    {
+        PathWrite gate = JoinPath(full);
+        bool entered = false;
+        try
+        {
+            await gate.Turn.WaitAsync(cancel).ConfigureAwait(false);
+            entered = true;
+            await ReplaceChecked(full, wire, baseHash, temp, executable, cancel, fullHash: true).ConfigureAwait(false);
+        }
+        finally
+        {
+            LeavePath(full, gate, entered);
         }
     }
 
@@ -457,17 +587,35 @@ internal static partial class HexLinkFiles
     }
 
     private static async Task ReplaceChecked(string full, string wire, string? baseHash, string? temp,
-        bool? executable, CancellationToken cancel)
+        bool? executable, CancellationToken cancel, bool fullHash = false)
     {
         cancel.ThrowIfCancellationRequested();
         string? now = null;
         try
         {
-            DateTime written = File.GetLastWriteTimeUtc(full);
-            using FileStream? current = OpenForComparison(full);
+            if (OperatingSystem.IsWindows() && baseHash is null && temp is not null)
+            {
+                // A same-directory move with overwrite disabled atomically checks absence and publishes.
+                using var publication = HexLinkSyncTiming.Measure("cas.rename-or-delete");
+                File.Move(temp, full, overwrite: false);
+                return;
+            }
+
+            DateTime written;
+            using (HexLinkSyncTiming.Measure("cas.destination-stat"))
+                written = File.GetLastWriteTimeUtc(full);
+            FileStream? opened;
+            using (HexLinkSyncTiming.Measure("cas.destination-open"))
+                opened = OpenForComparison(full);
+            using FileStream? current = opened;
             long length = current?.Length ?? 0;
-            if (current is not null && length <= MOST_READ)
-                now = await HashForComparison(current, cancel).ConfigureAwait(false);
+            if (current is not null && (fullHash || length <= MOST_READ))
+            {
+                using var rehash = HexLinkSyncTiming.Measure("cas.destination-rehash");
+                now = fullHash
+                    ? Convert.ToHexStringLower(await SHA256.HashDataAsync(current, cancel).ConfigureAwait(false))
+                    : await HashForComparison(current, cancel).ConfigureAwait(false);
+            }
 
             if (baseHash is null ? current is not null : !string.Equals(baseHash, now, StringComparison.OrdinalIgnoreCase))
                 throw Conflict(wire, now);
@@ -491,6 +639,7 @@ internal static partial class HexLinkFiles
 
             // The open handle denies writers on Windows, while sharing delete for the rename itself. Unix sharing
             // is advisory. The metadata recheck also catches ordinary saves there, up to the final rename window.
+            using var publish = HexLinkSyncTiming.Measure("cas.rename-or-delete");
             if (temp is not null)
             {
                 if (OperatingSystem.IsWindows() && current is not null)

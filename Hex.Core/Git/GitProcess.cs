@@ -105,30 +105,26 @@ internal static class GitProcess
                 return new GitResult(-1, string.Empty, "git didn't start");
 
             using var cancellation = cancel.UnsafeRegister(static state => Kill((Process)state!), git);
-            if (input is not null)
-            {
-                // Without a BOM, git reads the first line of a blame's contents as having three bytes of nonsense in front
-                using (var writer = new StreamWriter(git.StandardInput.BaseStream, new UTF8Encoding(false)))
-                    writer.Write(input);
-            }
-
             // Closed here rather than left to the process's own Dispose, which leaves its pipes to the finalizer. An idle
             // Hex makes so little garbage that the collector hardly comes round, and a status every few seconds had
             // hundreds of pipe handles open within minutes
             using StreamReader outputReader = git.StandardOutput, errorReader = git.StandardError;
             Task<string> output = outputReader.ReadToEndAsync();
             Task<string> error = errorReader.ReadToEndAsync();
+            // Git can emit a result while it is still consuming stdin, as check-ignore --stdin does.
+            Task writing = input is not null ? WriteInput(git.StandardInput.BaseStream, input) : Task.CompletedTask;
             if (!git.WaitForExit(patience ?? Patience))
             {
                 Kill(git);
                 cancel.ThrowIfCancellationRequested();
 
                 // The reads end once git has gone, before their pipes are closed under them
-                try { Task.WaitAll([output, error], TimeSpan.FromSeconds(1)); } catch (AggregateException) { }
+                try { Task.WaitAll([output, error, writing], TimeSpan.FromSeconds(1)); } catch (AggregateException) { }
                 return new GitResult(-1, string.Empty, $"git {string.Join(' ', arguments)} took longer than {(patience ?? Patience).TotalSeconds:0} seconds");
             }
 
             cancel.ThrowIfCancellationRequested();
+            writing.GetAwaiter().GetResult();
             return new GitResult(git.ExitCode, output.Result, error.Result);
         }
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
@@ -136,6 +132,14 @@ internal static class GitProcess
             cancel.ThrowIfCancellationRequested();
             return new GitResult(-1, string.Empty, e.Message);
         }
+    }
+
+    private static async Task WriteInput(Stream input, string content)
+    {
+        // Git must see EOF without a byte-order mark in front of the caller's content.
+        var writer = new StreamWriter(input, new UTF8Encoding(false));
+        await using (writer.ConfigureAwait(false))
+            await writer.WriteAsync(content).ConfigureAwait(false);
     }
 
     private static void Kill(Process git)

@@ -125,6 +125,15 @@ internal sealed partial class DawnScene
             return Said("link.sync_not_linked", ("device", LinkKnown.FirstOrDefault(known => known.Device.Id == deviceId)?.Device.Name ?? deviceId));
         if ((LinkProvisionedLocal(deviceId, folder) ?? services.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, folder))) is not { } local)
             return Said("link.sync_no_folder_here", ("folder", folder));
+        HexLinkAuthority? authority = services.FolderAuthorities.Of(local);
+        HexLinkFolder? remote = peer.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(local.Name, each.Name));
+        if (authority is not null || remote?.Authority is not null)
+        {
+            bool refreshed = await TryRefreshLinkWorkspace(peer).ConfigureAwait(false);
+            remote = peer.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(local.Name, each.Name));
+            if (!refreshed || LinkBoundSyncOwner(services.Device.Id, authority, remote?.Authority) is false)
+                return Said("link.sync_authority_required", ("folder", local.Name));
+        }
 
         Task starting;
         LinkSyncEntry entry;
@@ -148,9 +157,10 @@ internal sealed partial class DawnScene
             else
             {
                 entry.Sync?.Dispose();
-                var sync = new HexLinkSync(peer, local with { Authority = services.FolderAuthorities.Of(local) }, Path.Combine(linkData, LINK_SYNC_STATES))
+                var sync = new HexLinkSync(peer, local with { Authority = authority }, Path.Combine(linkData, LINK_SYNC_STATES))
                 {
                     ApplyLocal = LinkCompareAndReplace,
+                    ApplyStream = LinkCompareAndReplaceStream,
                     RenameLocal = LinkRenameCase,
                     Excludes = () => services.Excludes
                 };

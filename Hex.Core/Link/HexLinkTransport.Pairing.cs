@@ -313,7 +313,7 @@ internal sealed partial class HexLinkTransport
     /// Says this side's answer as soon as there is one. "paired" with what this side granted when both confirmed, else
     /// declined-here or declined-there.
     /// </summary>
-    private static async Task<(string Verdict, HexLinkRights Granted)> Decide(SslStream ssl, Func<HexLinkPairing, Task<HexLinkRights?>> ask, HexLinkPairing shown, CancellationTokenSource ended)
+    internal static async Task<(string Verdict, HexLinkRights Granted)> Decide(Stream ssl, Func<HexLinkPairing, Task<HexLinkRights?>> ask, HexLinkPairing shown, CancellationTokenSource ended)
     {
         Task<string?> theirs = ReadLine(ssl, ended.Token);
         Task<HexLinkRights?> mine = AskSafely(ask, shown);
@@ -326,7 +326,21 @@ internal sealed partial class HexLinkTransport
         }
 
         HexLinkRights? granted = await mine.WaitAsync(ended.Token);
-        await Say(ssl, granted is null ? "deny" : "confirm", ended.Token);
+        try
+        {
+            await Say(ssl, granted is null ? "deny" : "confirm", ended.Token);
+        }
+        catch (Exception error) when (granted is not null && error is IOException or SocketException or ObjectDisposedException)
+        {
+            // The peer may close after sending its decision while our confirm is still in flight.
+            string? decision = null;
+            try { decision = await theirs.WaitAsync(TimeSpan.FromSeconds(1), ended.Token); }
+            catch (Exception read) when (read is IOException or SocketException or ObjectDisposedException or TimeoutException) { }
+            ended.Token.ThrowIfCancellationRequested();
+            if (decision == "deny")
+                return ("declined-there", HexLinkRights.None);
+            throw;
+        }
         if (granted is null)
             return ("declined-here", HexLinkRights.None);
 

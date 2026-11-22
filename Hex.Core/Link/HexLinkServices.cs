@@ -56,9 +56,20 @@ internal interface IHexLinkServices
     Task RenameCase(string from, string to, string expected, CancellationToken cancel) =>
         Task.Run(() => HexLinkTree.RenameCase(from, to, expected), cancel);
 
+    /// <summary>Where working-tree stat and hash caches survive a reconnect.</summary>
+    string? TreeCacheDirectory => null;
+
+    Task<string?> CompareAndReplace(string full, string wire, string? baseHash, Stream? source, long length,
+        string? expectedHash, CancellationToken cancel, bool? executable) =>
+        HexLinkFiles.CompareAndReplace(full, wire, baseHash, source, length, expectedHash, cancel, executable);
+
     /// <summary>Applies a linked write or deletion only if the local file still matches its base hash.</summary>
-    Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes, CancellationToken cancel) =>
-        HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel);
+    Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes, CancellationToken cancel, bool? executable = null) =>
+        HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel, executable);
+
+    Task<string?> CompareAndReplacePacked(string full, string wire, string? baseHash, byte[] bytes,
+        CancellationToken cancel, bool? executable, HexLinkFiles.PackDirectories directories) =>
+        CompareAndReplace(full, wire, baseHash, bytes, cancel, executable);
 
     /// <summary>Folders this device is already responsible for syncing with this peer.</summary>
     IReadOnlyList<string> ChosenSyncFolders(string deviceId) => [];

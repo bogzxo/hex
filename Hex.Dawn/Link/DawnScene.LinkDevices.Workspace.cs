@@ -18,7 +18,7 @@ internal sealed partial class DawnScene
             if (refreshed)
                 LinkLearnAuthority(peer);
             LinkSyncResume(peer);
-            if (refreshed && LinkAutoSyncOwner(peer.Session.Connection.Dialled, peer.Session.Connection.Rights, peer.Granted))
+            if (refreshed)
                 LinkSyncStartSharedFolders(peer);
         });
     }

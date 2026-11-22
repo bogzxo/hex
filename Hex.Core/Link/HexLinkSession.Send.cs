@@ -178,6 +178,7 @@ internal sealed partial class HexLinkSession
 
     private async ValueTask WriteFrame(BulkFrame frame, byte[] headerBuffer, CancellationToken cancel)
     {
+        using var timing = HexLinkSyncTiming.Measure("wire.tls-frame-write", frame.Header.WireLength);
         try
         {
             if (frame.Bytes is { } packet)

@@ -4696,6 +4696,7 @@ let strings = {
         authority_unbound: "This folder needs an authority set by sharing or provisioning it first.",
         sync_not_linked: "{device} isn't linked now",
         sync_no_folder_here: "this workspace has no folder called {folder}",
+  sync_authority_required: "only the pinned authority can start syncing {folder}, and both devices must agree on its epoch",
         sync_not_resumed: "{folder} wasn't synced with {device} again, {why}",
         sync_took_over_tab: "{name} changed on the other machine, what you hadn't saved is a step back in its undo",
         sync_failed: "The sync of {folder} with {device} stopped, {why}",

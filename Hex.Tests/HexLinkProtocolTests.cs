@@ -275,6 +275,45 @@ public sealed class HexLinkProtocolTests
     }
 
     [Fact]
+    public async Task Bulk_upload_slots_wait_and_cancel_without_skipping_the_upload()
+    {
+        var (end, other) = Pair();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(WAIT_MS));
+        using var a = Session(end, true, HexLinkBulkSupport.Raw).Start();
+        using var b = Session(other, false, HexLinkBulkSupport.Raw);
+        b.RegisterBulkReceiver("test/window", HexLinkRights.Edit, (_, _, _) =>
+            ValueTask.FromResult<IHexLinkBulkSink>(new MemorySink()));
+        b.Start();
+
+        var occupied = new List<HexLinkSession.BulkUpload>();
+        try
+        {
+            for (int i = 0; i < 4; i++)
+                occupied.Add(await a.OpenBulkAsync("test/window", 0, cancel: timeout.Token));
+
+            using var cancel = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token);
+            Task<HexLinkSession.BulkUpload> waiting = a.OpenBulkAsync("test/window", 0, cancel: cancel.Token);
+            Assert.False(waiting.IsCompleted);
+            cancel.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => waiting.WaitAsync(timeout.Token));
+
+            Task<HexLinkSession.BulkUpload> next = a.OpenBulkAsync("test/window", 0, cancel: timeout.Token);
+            Assert.False(next.IsCompleted);
+            Assert.NotNull(await a.Ask("link/ping", cancel: timeout.Token));
+            await occupied[0].CompleteAsync(timeout.Token);
+            await occupied[0].DisposeAsync();
+            occupied.RemoveAt(0);
+            await using HexLinkSession.BulkUpload admitted = await next.WaitAsync(timeout.Token);
+            await admitted.CompleteAsync(timeout.Token);
+        }
+        finally
+        {
+            foreach (HexLinkSession.BulkUpload upload in occupied)
+                await upload.DisposeAsync();
+        }
+    }
+
+    [Fact]
     public async Task Bulk_open_requires_the_registered_right_and_frames_recheck_revocation()
     {
         var (end, other) = Pair();
