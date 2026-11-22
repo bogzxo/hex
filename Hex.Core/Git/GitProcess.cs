@@ -137,8 +137,9 @@ internal static class GitProcess
     private static async Task WriteInput(Stream input, string content)
     {
         // Git must see EOF without a byte-order mark in front of the caller's content.
-        await using var writer = new StreamWriter(input, new UTF8Encoding(false));
-        await writer.WriteAsync(content).ConfigureAwait(false);
+        var writer = new StreamWriter(input, new UTF8Encoding(false));
+        await using (writer.ConfigureAwait(false))
+            await writer.WriteAsync(content).ConfigureAwait(false);
     }
 
     private static void Kill(Process git)
