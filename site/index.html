@@ -44,8 +44,10 @@
           <li><a href="#numbers">Numbers</a></li>
           <li><a href="#gallery">Gallery</a></li>
           <li><a href="#features">Features</a></li>
+          <li><a href="#predict">Predictions</a></li>
           <li class="dusk"><a href="#dusk">Dusk</a></li>
           <li class="noon"><a href="#agents">Agents</a></li>
+          <li><a href="#link">Hex Link</a></li>
           <li><a href="#looks">Looks</a></li>
           <li><a href="#build">Build</a></li>
           <li class="menu-only"><a href="https://github.com/bogzxo/hex">GitHub</a></li>
@@ -427,6 +429,54 @@
       </div>
     </section>
 
+    <section id="predict">
+      <div class="wrap">
+        <p class="eyebrow">Dawn, inline AI predictions</p>
+        <h2>Predictions from a model on your own GPU</h2>
+        <div class="pair">
+          <div>
+            <p class="intro">As you pause, Hex shows what comes next as faint text at the caret: the rest of the line, or several lines. <kbd>Tab</kbd> takes it, <kbd>Ctrl+Right</kbd> takes the next word, <kbd>Escape</kbd> or typing something else drops it. Type what it says and it stays.</p>
+            <p>It also predicts the next edit. Rename something and the other call sites show what would go struck through and what would come in the addition colour, on the lines they change. <kbd>Tab</kbd> applies the edit as one undo step.</p>
+            <p class="note">Measured with a warm model on an RTX 3060, 4 to 5 runs each, on a machine shared with other agents, so give or take 20%. The first piece is Zeta 2 streaming its answer. The full edit is until the whole change is in.</p>
+          </div>
+          <div>
+            <ul class="receipts" aria-label="Edit prediction, measured on an RTX 3060">
+              <li><b>~60 ms</b><span>to the first piece of a prediction (61 to 68 ms, Zeta 2)</span></li>
+              <li><b>~0.8 s</b><span>for a full edit, Zeta 2 (730 to 840 ms on C#)</span></li>
+              <li><b>~0.4 s</b><span>for a full edit, Qwen2.5-Coder 14B (400 to 450 ms on C#)</span></li>
+              <li><b>0</b><span>bytes leave the machine with a local model</span></li>
+            </ul>
+            <p class="note">Typing stays smooth while the model loads: 80 keys typed during a cold load, the editor's update interval was 4.2 ms at the median and the 95th percentile, with one 99 ms spike.</p>
+          </div>
+        </div>
+
+        <ul class="features row swipe" data-label="Edit predictions">
+          <li class="rise">
+            <h3>Your models, through Ollama</h3>
+            <p>Hex runs no model itself. Point it at an Ollama server, or any server with an OpenAI-style completions API, and a model. <strong>Zeta 2</strong> and <strong>Qwen2.5-Coder</strong> are the two tried. It's off until you switch it on, and the first time it says what is sent and where.</p>
+          </li>
+          <li class="rise">
+            <h3>Nothing leaves the machine</h3>
+            <p>With a local model the lines around the caret, your recent edits and excerpts of recently edited files go to the address in your settings, and that's this computer. Files that hold secrets are never sent: <code>.env</code>, keys, certificates, anything named like a secret or a credential. A folder can switch predictions off for itself. A folder can't switch them on.</p>
+          </li>
+          <li class="rise">
+            <h3>No GPU here? Use another machine's</h3>
+            <p>With Hex Link, a device without a GPU can ask a linked machine to run the model. The machine that has it has to switch sharing on first. Your code goes to the device you chose, over its pinned, encrypted link, and to nowhere else.</p>
+          </li>
+          <li class="rise">
+            <h3>No AI means none</h3>
+            <p>The <a href="#no-ai">No AI</a> switch takes predictions out with the agents: no request, no status bar item. A remote address is called out in the status bar's tooltip, and a plain <code>http</code> one to a host that isn't local gets a warning in Settings.</p>
+          </li>
+        </ul>
+        <details class="fold">
+          <summary>What it can't do yet, and the rest of the numbers</summary>
+          <p>The first request after the model was unloaded waits for it to load: 13.5 s for Zeta 2, 23 s for Qwen2.5-Coder 14B. Hex asks Ollama to load it as soon as predictions are on and a code file is open, so that wait is usually spent before you type. A 12 GB card holds one of the two at a time, and switching evicts the other.</p>
+          <p>Zeta 2 writes its editable region again around the change, so it's about twice as slow as Qwen's fill-in-the-middle on the same card, but it is the one that predicts the next edit away from the caret. Qwen2.5-Coder ran on into three invented entries on JSON, and Zeta 2 gave no edit for Hex's own <code>.hor</code> files. Markdown and plain text are off by default.</p>
+          <p>Prediction through a linked machine is built and tested in-process and in the self tests. It hasn't been timed between real devices yet, so there's no number for it here. Not in this version: Copilot, Zed's hosted service, several predictions to step through, and predictions in notebook cells and the terminal.</p>
+        </details>
+      </div>
+    </section>
+
     <section id="dusk" class="dusk">
       <div class="wrap">
         <p class="eyebrow">Dusk, the terminal</p>
@@ -512,6 +562,65 @@
         <p class="note">Any MCP client can use them, not only the agents Hex runs. The server is off until you switch it on.</p>
 
         <p class="note"><a href="https://github.com/bogzxo/hex/blob/master/docs/agents.md">Agents, MCP and No AI, the long version</a>.</p>
+      </div>
+    </section>
+
+    <section id="link">
+      <div class="wrap">
+        <p class="eyebrow">Hex Link</p>
+        <h2>Your machines, one workspace</h2>
+        <div class="pair">
+          <div>
+            <p class="intro">Hex Link joins Hex on your own machines: the desktop with the GPU, the laptop on the sofa, the Mac you build for. Every connection is mutually authenticated TLS with each device's key pinned, there's no account and no server of ours in the middle, and each device decides what the others may do on it.</p>
+            <p>It's off until you switch it on in your own settings, and a repository can't switch it on for you. Pair with a six-digit code you check against the other screen, or with an invite. Link finds devices on your <strong>LAN</strong>, or reaches them over <strong>Tailscale</strong> or another private VPN address. One hop through a third device can relay permitted control requests.</p>
+          </div>
+          <div>
+            <ul class="receipts" aria-label="Hex Link, measured over Wi-Fi">
+              <li><b>17.4 s</b><span>first sync of 3,951 files, 72.6 MB</span></li>
+              <li><b>~0.3 s</b><span>for a saved file to reach the other machine (0.308 s)</span></li>
+              <li><b>26.9 s</b><span>for a 1 GiB file, 38 MiB/s</span></li>
+              <li><b>1.0 s</b><span>to reconnect and find nothing changed</span></li>
+            </ul>
+            <p class="note">Two Windows machines on the same Wi-Fi, a 6 ms round trip, no tunnel, pinned TLS with compression, taken in one run. The 1 GiB file was checked byte for byte by SHA-256 on arrival, outside the timing. These are single runs, not medians, and the rest of the evidence is in <a href="https://github.com/bogzxo/hex/blob/master/docs/hex-link-test-evidence.md">the test evidence</a>.</p>
+          </div>
+        </div>
+
+        <ul class="features row swipe" data-label="Hex Link">
+          <li class="rise">
+            <h3>Shared folders, kept in step</h3>
+            <p>Live two-way sync of a folder, with one device as its <strong>source of truth</strong> and a permission for each other device, View or Edit. Edits that don't collide merge cleanly. When they do, the originals are kept and you get a three-way diff to resolve. A deletion goes across too.</p>
+          </li>
+          <li class="rise">
+            <h3>Commits follow you</h3>
+            <p>Commit or switch branch on one machine and the linked devices' checkouts follow, history and index with the files. The Mac that builds your release is on the commit you just made.</p>
+          </li>
+          <li class="rise">
+            <h3>Send a whole workspace to a new device</h3>
+            <p><strong>Get workspace</strong> brings a workspace's repositories, history included, to another machine, nested repositories too. A Mac got nine repositories, about 413 MB of Git bundles, in 170 to 224 s, then built them in 50 s. An oversized file or a missing repository is skipped with the reason, and the rest carries on.</p>
+          </li>
+          <li class="rise">
+            <h3>Run agents on the machine that has what they need</h3>
+            <p>Start a Claude Code or Codex chat on another device, steer it and stop it from here. When it asks leave to run something, the request arrives on your screen, and you allow or deny it. Its owner can refuse to let a remote starter pre-approve a command.</p>
+          </li>
+          <li class="rise">
+            <h3>Agents don't edit over each other</h3>
+            <p>An agent <strong>claims</strong> a file before it changes it. A second agent that tries gets a refusal in 37 ms saying who holds it, since when, and its options: wait, message the holder, or use an isolated worktree. Overriding is possible, and audited.</p>
+          </li>
+          <li class="rise">
+            <h3>Isolated worktrees, with a pre-publish check</h3>
+            <p>An agent can work in its own <strong>isolated worktree</strong> and publish into the source of truth only when the <strong>pre-publish check</strong> passes. With a build as the check, a file with a compile error was refused in 14.2 s and reached no machine. After the fix, publishing two files took 10.3 s.</p>
+          </li>
+          <li class="rise">
+            <h3>Edit the same file from several devices</h3>
+            <p>Several devices can have the same file open and type in it at once, each seeing the others' carets. The edits converge on every machine, a View-only device can follow along, and one save writes the file on all of them, line endings kept.</p>
+          </li>
+        </ul>
+        <details class="fold">
+          <summary>Limits, stated plainly</summary>
+          <p>A hop through a third device carries permitted control requests. Publishing a large batch needs a direct link to the device that is the source of truth. A device can hold up to 64 links at once. A case-only rename of a folder has to be handled by hand.</p>
+          <p>Shared editing took 11.7 ms at the median (31.1 ms at the 95th percentile) from a keystroke to the other editor on one machine over loopback, which meets the 50 ms target. With the CPU saturated it missed it. The 0.3 s above is a save across Wi-Fi, a different thing.</p>
+          <p>Not done yet: a live test with 64 devices, key storage in the macOS Keychain and in <code>secret-tool</code> on Linux checked on real machines, and the isolated-worktree publish check repeated on the final build. Tailscale was only tried on a pair of machines that have it. What Hex Link's windows say is being reworded as this page goes up, so the screenshots are left out until it settles.</p>
+        </details>
       </div>
     </section>
 
