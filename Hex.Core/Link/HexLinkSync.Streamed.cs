@@ -83,6 +83,8 @@ internal sealed partial class HexLinkSync
 
     private async Task PullStreamed(string wire, string full, string? expected, HexLinkTreeFile? theirs, CancellationToken cancel)
     {
+        if (await ReconcileHold(wire, cancel))
+            return;
         try
         {
             if (theirs is null)
@@ -146,6 +148,8 @@ internal sealed partial class HexLinkSync
 
     private async Task PushStreamed(string wire, string full, HexLinkTreeFile? mine, string? expected, CancellationToken cancel)
     {
+        if (Holds?.IsHeld(wire) == true)
+            return;
         if (!remoteCertified)
         {
             Skip(wire, "The peer does not support checked working-tree writes.");

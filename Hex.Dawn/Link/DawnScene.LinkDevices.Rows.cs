@@ -325,6 +325,7 @@ internal sealed partial class DawnScene
         {
             ChooseFrom(Said("link.devices_conflict_title"), conflict.Path,
             [
+                ("Open merge editor", () => LinkOpenConflictMerge(conflict.DeviceId, conflict.Path)),
                 (Said("link.conflict_difference"), () => LinkOpenConflictDifference(conflict.DeviceId, conflict.Path)),
                 (Said("link.conflict_mine"), () => LinkResolveGo(conflict, HexLinkSyncKeep.Mine)),
                 (Said("link.conflict_theirs"), () => LinkResolveGo(conflict, HexLinkSyncKeep.Theirs))

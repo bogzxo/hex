@@ -3,9 +3,9 @@ namespace Hex.Core;
 internal sealed partial class HexLinkTree
 {
     private static readonly Lock sharedTrees = new();
-    private static readonly Dictionary<(string Root, string Name, string? Cache, HexExcludes Rules, bool IncludeSystemFiles), WeakReference<HexLinkTree>> trees = [];
+    private static readonly Dictionary<(string Root, string Name, string? Cache, HexExcludes Rules, bool IncludeSystemFiles, HexLinkHoldStore? Holds), WeakReference<HexLinkTree>> trees = [];
     private bool shareFreshScans;
-    private long scanVersion, lastScanVersion, scannedAt;
+    private long scanVersion, lastScanVersion, lastHoldRevision, scannedAt;
     private HexLinkManifest? lastScan;
     private int publishingPacks;
     private long packQuietAt;
@@ -30,11 +30,12 @@ internal sealed partial class HexLinkTree
         }
     }
 
-    public static HexLinkTree Shared(HexLinkFolder folder, Func<HexExcludes> excludes, string? cacheDirectory, bool streamLarge)
+    public static HexLinkTree Shared(HexLinkFolder folder, Func<HexExcludes> excludes, string? cacheDirectory, bool streamLarge,
+        HexLinkHoldStore? holds = null)
     {
         string full = Path.GetFullPath(folder.Path);
         string keyRoot = PlatformPaths.Comparison == StringComparison.OrdinalIgnoreCase ? full.ToUpperInvariant() : full;
-        var key = (keyRoot, folder.Name, cacheDirectory is null ? null : Path.GetFullPath(cacheDirectory), excludes(), folder.IncludeSystemFiles);
+        var key = (keyRoot, folder.Name, cacheDirectory is null ? null : Path.GetFullPath(cacheDirectory), excludes(), folder.IncludeSystemFiles, holds);
         lock (sharedTrees)
         {
             if (trees.TryGetValue(key, out WeakReference<HexLinkTree>? known) && known.TryGetTarget(out HexLinkTree? tree))
@@ -53,7 +54,8 @@ internal sealed partial class HexLinkTree
                     trees.Remove(old);
             }
 
-            tree = new HexLinkTree(folder, excludes, cacheDirectory, streamLarge) { shareFreshScans = true };
+            tree = new HexLinkTree(folder, excludes, holds is null ? cacheDirectory : null, streamLarge)
+            { shareFreshScans = true, Holds = holds };
             trees[key] = new WeakReference<HexLinkTree>(tree);
             return tree;
         }

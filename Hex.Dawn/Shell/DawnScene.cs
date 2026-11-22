@@ -297,6 +297,7 @@ internal sealed partial class DawnScene : Scene
         BuildDiffs();
         BuildHistory();
         BuildConflicts();
+        BuildMergeEditor();
         BuildPeek();
         AddLanguageModeCommands();
         BuildPredictions();

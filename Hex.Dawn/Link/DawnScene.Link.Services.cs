@@ -36,6 +36,23 @@ internal sealed partial class DawnScene
         public IHexLinkPublicationService? Publication => hex.CurrentLinkPublication?.Publication;
         public HexLinkWorktreeGatePolicy? WorktreeGate(HexLinkFolder folder) => hex.LinkReadOwnedWorktreeGate(this, folder);
 
+        private readonly Lock holdStoresGate = new();
+        private readonly Dictionary<(string Name, string Path), HexLinkHoldStore> holdStores = new();
+
+        public HexLinkHoldStore Holds(HexLinkFolder folder)
+        {
+            string full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder.Path));
+            if (PlatformPaths.Comparison == StringComparison.OrdinalIgnoreCase)
+                full = full.ToUpperInvariant();
+            var key = (folder.Name, full);
+            lock (holdStoresGate)
+            {
+                if (!holdStores.TryGetValue(key, out HexLinkHoldStore? store))
+                    holdStores.Add(key, store = new HexLinkHoldStore(folder, Path.Combine(hex.linkData, LINK_SYNC_STATES)));
+                return store;
+            }
+        }
+
         public HexLinkAuthorityStore FolderAuthorities { get; } = new(Path.Combine(hex.linkData, "folder-authority.json"));
 
         public HexLinkWorkspace Workspace

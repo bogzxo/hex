@@ -396,7 +396,10 @@ internal sealed partial class DawnScene
             said.Append("- ").Append(report.Folder).Append(" managed by ").Append(peer.Device.Name)
                 .Append(" [").Append(report.State.ToString().ToLowerInvariant()).Append("]: ")
                 .Append(report.Received).Append(" sent, ").Append(report.Sent).Append(" received, ")
-                .Append(report.Conflicts).Append(" conflicts, ").Append(report.Skipped).AppendLine(" skipped");
+                .Append(report.Conflicts).Append(" conflicts, ").Append(report.Skipped).Append(" skipped");
+            if (report.Held > 0)
+                said.Append(", ").Append(report.Held).Append(" held on ").Append(peer.Device.Name);
+            said.AppendLine();
             if (!CanSendToAuthority(peer))
                 said.AppendLine("  Changes saved here are not sent: view only.");
             if (report.Why is { Length: > 0 } why)

@@ -59,6 +59,11 @@ internal sealed partial class HexLinkSync
                 throw new HexLinkException(HexLinkErrors.TOO_BIG, "Too many paths changed during the manifest read. Retry the sync.");
             stop = stopping.Token;
             remote.Clear();
+            remoteHeld.Clear();
+            remoteHeld.UnionWith(theirs.HeldPaths ?? []);
+            offeredWhileHeld.Clear();
+            remoteSeenWhileHeld.Clear();
+            releasedPeerOffers.Clear();
             remoteCertified = theirs.Certified;
             CompareHeads(mine, theirs);
             insensitivePaths = mine.CaseSensitive != true || theirs.CaseSensitive != true;
@@ -87,11 +92,13 @@ internal sealed partial class HexLinkSync
             paths.UnionWith(remote.Keys);
             paths.UnionWith(bases.Keys);
             paths.UnionWith(conflicts.Keys);
+            paths.UnionWith(holdPaths);
+            paths.UnionWith(remoteHeld);
             foreach (string path in paths)
             {
                 if (BlockedRepository(path) || conflicts.GetValueOrDefault(path)?.HasUnsavedChanges == true)
                     continue;
-                if (CaseDiffers(path))
+                if (holdPaths.Contains(path) || remoteHeld.Contains(path) || CaseDiffers(path))
                 {
                     differ.Add(path, TransferSize(here.GetValueOrDefault(path), remote.GetValueOrDefault(path)));
                     continue;
@@ -197,7 +204,7 @@ internal sealed partial class HexLinkSync
                     ? agreed is null && theirs is null
                     : change.Hash is not null && agreed is not null && change.Hash == agreed.Local && theirs?.Hash == agreed.Remote &&
                         (change.Executable is null || change.Executable == agreed.Executable);
-                if (!settled || change.PreviousPath is not null || CaseDiffers(change.Path))
+                if (!settled || remoteHeld.Contains(change.Path) || change.PreviousPath is not null || CaseDiffers(change.Path))
                     dirty.Add(change.Path);
             }
         }
@@ -239,11 +246,18 @@ internal sealed partial class HexLinkSync
                 if (Ours(change.Path) || (change.Deleted && !remoteCertified))
                     continue;
                 There(change);
+                if (change.HoldNotice is not null)
+                {
+                    dirty.Add(change.Path);
+                    continue;
+                }
                 bases.TryGetValue(change.Path, out HexLinkSyncAgreed? agreed);
                 bool settled = change.Deleted ? agreed is null : change.Hash is not null && change.Hash == agreed?.Remote &&
                     (change.Executable is null || change.Executable == agreed.Executable);
-                if (!settled)
+                if (!settled || holdPaths.Contains(change.Path) || remoteHeld.Contains(change.Path))
                     dirty.Add(change.Path);
+                if (change.PreviousPath is { } previous && holdPaths.Contains(previous))
+                    dirty.Add(previous);
             }
         }
 
@@ -254,6 +268,11 @@ internal sealed partial class HexLinkSync
     // What the other side has of a path now, noted (under the gate)
     private void There(HexLinkTreeChange change)
     {
+        if (change.HoldNotice is { } held)
+        {
+            NoteRemoteHold(change.Path, held, fromNotice: true);
+            return;
+        }
         ObserveDuringPublication(change.Path);
         if (change.PreviousPath is { } previous && remoteCertified)
         {
@@ -371,6 +390,8 @@ internal sealed partial class HexLinkSync
             Skip(wire, "Its name collides with another path that differs only in case.");
             return true;
         }
+        if (Holds?.IsHeld(before) == true || Holds?.IsHeld(after) == true)
+            return false;
         if (wire != after)
             return true;
 
@@ -708,7 +729,7 @@ internal sealed partial class HexLinkSync
             return;
         }
 
-        if (DefersPublication(wire))
+        if (DefersPublication(wire) || await ReconcileHold(wire, stop))
             return;
         await EnsureLocalGitFollowFile(full, stop);
         if (await ReconcileCase(wire, stop))
@@ -764,6 +785,9 @@ internal sealed partial class HexLinkSync
         }
 
         Unskip(wire);
+        if (await ReconcilePeerHold(wire, full, mine, theirs, agreed, localBytes, stop)
+            || await TakeReleasedPeerChange(wire, full, mine, theirs, stop))
+            return;
         if (!CanReceive && await ReconcileWithoutReplicaEdits(wire, full, mine, theirs, agreed, localBytes, stop))
             return;
         if (held?.HasUnsavedChanges != true && mine is not null && theirs is not null &&
@@ -870,6 +894,8 @@ internal sealed partial class HexLinkSync
     // (expected) by the time it's written
     private async Task Pull(string wire, string full, string? expected, HexLinkTreeFile? theirs, CancellationToken stop)
     {
+        if (await ReconcileHold(wire, stop))
+            return;
         if (theirs is null)
         {
             if (!remoteCertified || !await Asked(() => peer.ConfirmAbsent(folder.Name, wire, stop), stop))
@@ -960,6 +986,8 @@ internal sealed partial class HexLinkSync
     // the other side refuses it if it moved on meanwhile
     private async Task Push(string wire, string full, HexLinkSyncAgreed? agreed, byte[]? bytes, string? expectedLocal, string? theirs, CancellationToken stop)
     {
+        if (Holds?.IsHeld(wire) == true)
+            return;
         if (!remoteCertified)
         {
             Skip(wire, "The peer does not support checked working-tree writes.");
@@ -1102,7 +1130,9 @@ internal sealed partial class HexLinkSync
         }
         catch (HexLinkException e) when (e.Code == HexLinkErrors.NOT_ALLOWED)
         {
-            if (HexLinkData.String(e.Detail as JsonObject, "needs", 40) != HexLinkData.Word(HexLinkRights.Edit))
+            if (HexLinkData.Bool(e.Detail as JsonObject, "held") == true)
+                RecordHeldOffer(wire, expectedLocal);
+            else if (HexLinkData.String(e.Detail as JsonObject, "needs", 40) != HexLinkData.Word(HexLinkRights.Edit))
                 Skip(wire, e.Message);
             else
                 HoldDeniedPush(wire, grantedAt);

@@ -67,7 +67,11 @@ internal sealed partial class HexLinkPeer
     /// </summary>
     public async Task<string> Write(string path, string? baseHash, byte[] bytes, CancellationToken cancel = default)
     {
-        JsonObject said = await AskObject("fs/write", new JsonObject { ["path"] = path, ["base"] = baseHash, ["base64"] = Convert.ToBase64String(bytes) }, cancel);
+        JsonObject said = await AskObject("fs/write", new JsonObject
+        {
+            ["path"] = path, ["base"] = baseHash, ["base64"] = Convert.ToBase64String(bytes), ["accept_held"] = true,
+        }, cancel);
+        HexLinkHoldReply.Check(said, Device);
         return HexLinkData.String(said, "hash", 64) ?? HexLinkFiles.Hash(bytes);
     }
 

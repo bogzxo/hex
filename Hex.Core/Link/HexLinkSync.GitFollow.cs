@@ -260,12 +260,17 @@ internal sealed partial class HexLinkSync
             string wire = repo.Path.Length == 0 ? folder.Name : folder.Name + "/" + repo.Path;
             using var allowed = ReceiveLease(cancel);
             await HexLinkGitFollow.Fetch(peer, wire, repo.Root, here, there, allowed?.Token ?? cancel);
+            var heldChanges = await HexLinkHoldGit.Changes(Holds, repo.Root, here.Head, there.Head, allowed?.Token ?? cancel);
             move = await HexLinkGitFollow.Move(repo.Root, here, there, fastForwardOnly ? null : common, allowed?.Token ?? cancel);
+            if (move.Why is null)
+                HexLinkHoldGit.Take(Holds, heldChanges, Device.Name);
             if (move.Backup is { } backup)
                 GitFollowAudited?.Invoke($"HEAD follow {display} from {here.Head} to {there.Head}; backup {backup}" + (move.Rewrite ? " (rewrite)" : ""));
         }
         else
         {
+            if (Holds?.InRepository(repo.Root).Count is > 0 and var held)
+                return (observed, $"{display}: {HexLinkHoldGit.HeldCommit(held)}.");
             if (BoundPullMirror || !HexLinkAllowed.Has(peer.Granted, HexLinkRights.Edit))
                 return (observed, $"{display}: local Git change not sent: view only.");
             try { move = await peer.AdoptGitFollow(folder.Name, repo.Path, there, here, cancel); }

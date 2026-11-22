@@ -68,11 +68,21 @@ internal sealed partial class HexLinkPeer
             opened = HexLinkFileTransfer.Read(full);
         // A checked replacement can rename this path after the open. The handle keeps the opened contents.
         await using FileStream file = opened;
-        JsonNode? result = await transfer.Send(session, "sync/file/write", transfer.Json(), file, checkpoint, cancel);
+        JsonObject metadata = transfer.Json();
+        metadata["accept_held"] = true;
+        JsonNode? result = await transfer.Send(session, "sync/file/write", metadata, file, checkpoint, cancel);
+        if (result is JsonObject reply)
+            HexLinkHoldReply.Check(reply, Device);
         if (result is not JsonObject committed || HexLinkData.String(committed, "hash", 64) != transfer.Hash)
             throw HexLinkException.Invalid("The peer did not confirm the streamed file hash.");
     }
 
-    internal Task DeleteStreamedFile(string path, string baseHash, CancellationToken cancel) =>
-        session.Ask("sync/file/delete", new JsonObject { ["path"] = path, ["base"] = baseHash }, cancel);
+    internal async Task DeleteStreamedFile(string path, string baseHash, CancellationToken cancel)
+    {
+        JsonObject reply = await AskObject("sync/file/delete", new JsonObject
+        {
+            ["path"] = path, ["base"] = baseHash, ["accept_held"] = true,
+        }, cancel);
+        HexLinkHoldReply.Check(reply, Device);
+    }
 }

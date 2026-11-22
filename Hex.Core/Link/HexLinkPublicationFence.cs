@@ -1,6 +1,6 @@
 namespace Hex.Core;
 
-internal enum HexLinkFenceKind { Publication, GitFollow, BulkApply }
+internal enum HexLinkFenceKind { Publication, GitFollow, BulkApply, Hold }
 
 internal readonly record struct HexLinkFenceStatus(HexLinkFenceKind Kind, bool Recovering);
 

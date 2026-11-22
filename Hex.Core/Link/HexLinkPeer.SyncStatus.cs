@@ -4,7 +4,7 @@ namespace Hex.Core;
 
 internal sealed record HexLinkSyncReport(string Folder, HexLinkSyncState State, string? Why, int Sent, int Received,
     int Conflicts, int Skipped, bool PullOnly, int FilesDone, int FilesTotal, long BytesDone, long BytesTotal, int Queued,
-    string? Detail, IReadOnlyList<HexLinkSyncSkipped> ConflictSamples, IReadOnlyList<HexLinkSyncSkipped> SkipSamples)
+    string? Detail, IReadOnlyList<HexLinkSyncSkipped> ConflictSamples, IReadOnlyList<HexLinkSyncSkipped> SkipSamples, int Held = 0)
 {
     internal const int MAX_SAMPLES = 20;
 
@@ -13,7 +13,7 @@ internal sealed record HexLinkSyncReport(string Folder, HexLinkSyncState State, 
         ["folder"] = Folder, ["state"] = (int)State, ["why"] = Clip(Why, 512),
         ["sent"] = Sent, ["received"] = Received, ["conflicts"] = Conflicts, ["skipped"] = Skipped, ["pull"] = PullOnly,
         ["files_done"] = FilesDone, ["files_total"] = FilesTotal, ["bytes_done"] = BytesDone, ["bytes_total"] = BytesTotal,
-        ["queued"] = Queued, ["detail"] = Clip(Detail, 512),
+        ["queued"] = Queued, ["detail"] = Clip(Detail, 512), ["held"] = Held > 0 ? Held : null,
         ["conflict_paths"] = Samples(ConflictSamples), ["skip_paths"] = Samples(SkipSamples)
     };
 
@@ -28,7 +28,7 @@ internal sealed record HexLinkSyncReport(string Folder, HexLinkSyncState State, 
         return new HexLinkSyncReport(folder, (HexLinkSyncState)state, HexLinkData.String(json, "why", 512),
             Count("sent"), Count("received"), Count("conflicts"), Count("skipped"), HexLinkData.Bool(json, "pull") == true,
             Count("files_done"), Count("files_total"), Bytes("bytes_done"), Bytes("bytes_total"),
-            Count("queued"), HexLinkData.String(json, "detail", 512), ReadSamples(json, "conflict_paths"), ReadSamples(json, "skip_paths"));
+            Count("queued"), HexLinkData.String(json, "detail", 512), ReadSamples(json, "conflict_paths"), ReadSamples(json, "skip_paths"), Count("held"));
     }
 
     private static JsonArray Samples(IEnumerable<HexLinkSyncSkipped> rows) =>

@@ -363,6 +363,7 @@ internal sealed partial class DawnScene
         {
             codeScroll.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, codeScroll) - panelLag));
             FitSplit();
+            FitMergeEditor();
         }
         else
             canvas.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, canvas) - panelLag));

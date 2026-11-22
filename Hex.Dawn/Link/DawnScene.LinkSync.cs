@@ -69,7 +69,7 @@ internal sealed partial class DawnScene
         if (sync is null)
             return new LinkSyncShown(entry.DeviceId, entry.DeviceName, entry.Folder, HexLinkSyncState.Off, $"Sync of {entry.Folder} with {entry.DeviceName} waits for it to link", null, 0, 0, 0, 0, false);
         return new LinkSyncShown(entry.DeviceId, entry.DeviceName, entry.Folder, sync.State, sync.Summary, sync.Why, sync.Sent, sync.Received, sync.Conflicts.Count, sync.Skipped.Count, sync.PullOnly,
-            sync.FilesDone, sync.FilesTotal, sync.BytesDone, sync.BytesTotal, sync.Queued, sync.Detail);
+            sync.FilesDone, sync.FilesTotal, sync.BytesDone, sync.BytesTotal, sync.Queued, sync.Detail, sync.Held);
     }
 
     /// <summary>The files in conflict across every sync, each with where the other machine's version was put beside it.</summary>
@@ -202,6 +202,7 @@ internal sealed partial class DawnScene
                 entry.Sync?.Dispose();
                 var sync = new HexLinkSync(peer, local with { Authority = pairedAuthority ? authority : null }, Path.Combine(linkData, LINK_SYNC_STATES))
                 {
+                    Holds = services.Holds(local),
                     ApplyLocal = LinkCompareAndReplace,
                     ApplyStream = LinkCompareAndReplaceStream,
                     RenameLocal = LinkRenameCase,
@@ -515,7 +516,8 @@ internal sealed partial class DawnScene
         UINotification? card = null;
         var buttons = new List<(string Label, Action Pressed)>();
         if (conflict.Copy is not null)
-            buttons.Add((Said("link.sync_open_difference"), () => LinkOpenConflictDifference(id, path)));
+            buttons.Add(("Open merge editor", () => LinkOpenConflictMerge(id, path)));
+        buttons.Add((Said("link.sync_open_difference"), () => LinkOpenConflictDifference(id, path)));
         buttons.Add((Said("link.sync_keep_mine"), () =>
         {
             card?.Close();
@@ -593,7 +595,7 @@ internal sealed partial class DawnScene
 /// </summary>
 internal sealed record LinkSyncShown(string DeviceId, string DeviceName, string Folder, HexLinkSyncState State, string Summary, string? Why,
     int Sent, int Received, int Conflicts, int Skipped, bool PullOnly,
-    int FilesDone = 0, int FilesTotal = 0, long BytesDone = 0, long BytesTotal = 0, int Queued = 0, string? Detail = null);
+    int FilesDone = 0, int FilesTotal = 0, long BytesDone = 0, long BytesTotal = 0, int Queued = 0, string? Detail = null, int Held = 0);
 
 /// <summary>A file in conflict as the Link window lists it, the device and folder it's synced with, its wire path, what happened and the copy of theirs beside it.</summary>
 internal sealed record LinkConflictShown(string DeviceId, string DeviceName, string Folder, string Path, string Kind, string? Copy);

@@ -41,7 +41,8 @@ internal sealed partial class HexLinkHost
                 HexLinkWorkspace workspace = services is IHexLinkProvisionOffers offers && folder is null
                     ? offers.WorkspaceForProvision(folder) : services.Workspace;
                 bool defer = folder is null && HexLinkData.Bool(parameters, "defer_worktree") == true;
-                HexLinkHostedProvision hosted = await Task.Run(() => HexLinkWorkspaces.Provision(workspace, folder, transfer.Token, repositoryPath, defer), transfer.Token);
+                HexLinkHostedProvision hosted = await Task.Run(() => HexLinkWorkspaces.Provision(workspace, folder, transfer.Token, repositoryPath, defer,
+                    path => HoldOf(path)?.Entry), transfer.Token);
                 hostedProvision = hosted;
                 return hosted.Plan.ToJson();
             }
@@ -77,6 +78,7 @@ internal sealed partial class HexLinkHost
             }
 
             List<string> have = HexLinkData.Strings(parameters, "have", HexLinkGit.MOST_HAVE, 64);
+            RequirePublishableGit(repository);
             services.Audit("git", Device, $"git/bundle {followWire ?? planned?.Path ?? name}");
             HexLinkGit.Made? made = await Task.Run(() =>
             {

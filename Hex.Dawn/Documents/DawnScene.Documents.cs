@@ -302,6 +302,11 @@ internal sealed partial class DawnScene
 
     private void Save()
     {
+        if (document.Merge is not null)
+        {
+            Say("Use Complete merge to write the result.");
+            return;
+        }
         // A picture or a diff is looked at, there's nothing of Hex's in it to write
         if (document.Picture is not null || document.DiffOf is not null || document.Editor.ReadOnly)
             return;
@@ -499,6 +504,11 @@ internal sealed partial class DawnScene
 
     private void Close()
     {
+        if (document.Merge is not null)
+        {
+            CancelMergeEditor(document);
+            return;
+        }
         // A scratchpad is saved or thrown out without asking
         if (ClosedScratchpad())
             return;
