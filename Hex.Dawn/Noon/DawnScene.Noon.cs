@@ -458,7 +458,7 @@ internal sealed partial class DawnScene
                 if (!FinishedShown && chatsFinished.Count > 0 && filter.Length == 0)
                     noonFleetRows.Add(FinishedHead(alone: order.Count == 0, inset: 0.0f));
                 // Then a section for each linked device's agents (DawnScene.LinkFleet)
-                LinkFleetSections(noonFleetRows, noonCards);
+                LinkFleetSections(noonFleetRows, noonCards, inset: 0.0f);
                 SlideCards(noonFleetPlaces, cardsPlaced);
             }
 

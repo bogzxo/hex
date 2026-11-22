@@ -28,100 +28,29 @@ internal sealed partial class DawnScene
     private readonly Dictionary<HexAgentChat, LinkRemoteCard> linkRemoteOf = [];
     private readonly Dictionary<string, (long Version, string Name)> linkStandInsAt = new(StringComparer.OrdinalIgnoreCase);
 
-    // How much the cards of a device's section are indented, and how tall its heading is
-    private const float LINK_SECTION_HEAD = 34.0f;
-
     /// <summary>Whether the cards carry the badge of the machine they run on, while any device is linked.</summary>
     private bool LinkBadgesShown => link is not null && LinkPeers.Count > 0;
 
-    /// <summary>The devices whose agents the lists show: linked, and letting this one see.</summary>
-    private List<HexLinkPeer> LinkFleetPeers()
-    {
-        var shown = new List<HexLinkPeer>();
-        if (link is null)
-            return shown;
-        foreach (HexLinkPeer peer in LinkPeers)
-        {
-            if (!peer.IsClosed && HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))
-                shown.Add(peer);
-        }
-
-        return shown;
-    }
-
-    /// <summary>
-    /// What the devices' sections are made from as a number, for the lists' keys: who's linked, what each grants, the
-    /// version of each fleet, and which remote chat is open. Nothing to work out while nothing is linked.
-    /// </summary>
+    /// <summary>Tracks the linked fleets and the open remote chat without building a list of devices.</summary>
     private long LinkFleetKey()
     {
-        if (link is null || LinkPeers.Count == 0)
+        IReadOnlyList<HexLinkPeer> peers = LinkPeers;
+        if (peers.Count == 0)
             return 0;
         long key = 23 + (linkRemoteOpen is { } open ? string.GetHashCode(open.DeviceId, StringComparison.Ordinal) * 31L + open.Id : 0);
-        foreach (HexLinkPeer peer in LinkPeers)
+        for (int i = 0; i < peers.Count; i++)
         {
+            HexLinkPeer peer = peers[i];
             key = key * 31 + string.GetHashCode(peer.Device.Id, StringComparison.Ordinal);
             key = key * 31 + string.GetHashCode(LinkNameOf(peer.Device.Id, peer.Device.Name), StringComparison.Ordinal);
-            key = key * 31 + (int)peer.Granted + (peer.IsClosed ? 8 : 0);
-            key = key * 31 + peer.FleetVersion + peer.Fleet.Count;
+            key = key * 31 + (int)peer.Granted;
+            key = key * 31 + (peer.IsClosed ? 1 : 0);
+            key = key * 31 + peer.FleetVersion;
+            key = key * 31 + peer.Fleet.Count;
+            key = key * 31 + string.GetHashCode(peer.Session.Connection.Address, StringComparison.Ordinal);
         }
 
         return key;
-    }
-
-    /// <summary>Whether any device's section has anything to show, which makes the Agents view's list worth having.</summary>
-    private bool LinkFleetShown => link is not null && LinkPeers.Count > 0 && LinkFleetPeers().Count > 0;
-
-    /// <summary>
-    /// A section for each device that lets this one see put on the end of a list (the fleet's or the Agents view's),
-    /// its cards' refreshes with the others'. How tall it all is, for the list that sizes itself.
-    /// </summary>
-    private float LinkFleetSections(StackPanel rows, List<Action<float>> refreshes)
-    {
-        List<HexLinkPeer> peers = LinkFleetPeers();
-        if (peers.Count == 0)
-            return 0.0f;
-
-        float tall = 0.0f;
-        foreach (HexLinkPeer peer in peers)
-        {
-            rows.Add(LinkSectionHead(peer));
-            tall += LINK_SECTION_HEAD + rows.Spacing;
-            List<(HexLinkRow Row, int Step)> ordered = LinkFleetInOrder(peer.Fleet);
-            if (ordered.Count == 0)
-            {
-                rows.Add(new Label { Text = Said("link.fleet_none", ("device", UIRichText.Literal(LinkNameOf(peer.Device.Id, peer.Device.Name)))), TextScale = 0.125f, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal, Padding = new UIEdges(10, 0, 0, 0), Size = new Vector2(0, 22) });
-                tall += 22 + rows.Spacing;
-                continue;
-            }
-
-            foreach (var (row, step) in ordered)
-            {
-                HexAgentChat standIn = LinkStandIn(peer, row);
-                var remote = new LinkRemoteCard(peer.Device.Id, LinkNameOf(peer.Device.Id, peer.Device.Name), row.Id);
-                AgentCard card = AgentCardOf(standIn, step, closable: false, rail: row.Waiting, remote: remote, approval: row.Approvals.FirstOrDefault());
-                rows.Add(card.Root);
-                refreshes.Add(card.Refresh);
-                tall += AGENT_CARD + rows.Spacing;
-            }
-        }
-
-        return tall;
-    }
-
-    // A device's heading: its glyph and name in its colour, and what this machine may do there as chips
-    private UIComponent LinkSectionHead(HexLinkPeer peer)
-    {
-        Vector4 tint = LinkDeviceTint(peer.Device.Id, Skin);
-        var head = new StackPanel { Direction = UIDirection.Horizontal, Spacing = 6.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, LINK_SECTION_HEAD), Padding = new UIEdges(10, 10, 0, 2) };
-        head.Add(new Label
-        {
-            Text = $"[color:{HexColour(tint)}]$(vm)[/color] [b]{UIRichText.Literal(LinkNameOf(peer.Device.Id, peer.Device.Name))}[/b]", TextScale = 0.13f, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left,
-            Tooltip = Said("link.fleet_head_tip", ("device", LinkNameOf(peer.Device.Id, peer.Device.Name)), ("there", LinkRightsSaid(peer.Granted)))
-        });
-        foreach (Badge chip in LinkRightsChips(peer.Granted))
-            head.Add(chip);
-        return head;
     }
 
     /// <summary>
@@ -169,11 +98,10 @@ internal sealed partial class DawnScene
     /// agent and model, who started it, how it's doing (running, stopped, failed, done with its last reply) and what it
     /// cost, as the row says. Only ever drawn, never in the hub.
     /// </summary>
-    private HexAgentChat LinkStandIn(HexLinkPeer peer, HexLinkRow row)
+    private HexAgentChat LinkStandIn(string device, string name, long version, HexLinkRow row)
     {
-        string device = peer.Device.Id;
         // Made again when its fleet moved or it's shown by another name now
-        var now = (peer.FleetVersion, LinkNameOf(device, peer.Device.Name));
+        var now = (version, name);
         if (linkStandInsAt.GetValueOrDefault(device, (-1, string.Empty)) != now)
         {
             // A new version of the fleet, every stand-in of the device made again from it
