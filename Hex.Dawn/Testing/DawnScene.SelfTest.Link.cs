@@ -327,6 +327,8 @@ internal sealed partial class DawnScene
             return wasLinked;
         });
 
+        TestLinkWorktreePeer(test, syncFolder);
+
         // Serving: what A asks for by the files it writes here done, until A cuts the link and the redial is refused
         bool rowAdded = false, viewOnly = false, presenceSet = false, pointerAway = false;
         int uiLooked = 0;

@@ -45,6 +45,7 @@ internal interface IHexLinkServices
     HexLinkWorkspace Workspace { get; }
 
     HexLinkAuthorityStore? FolderAuthorities => null;
+    IHexLinkPublicationService? Publication => null;
 
     /// <summary>The workspace's current files.exclude patterns.</summary>
     HexExcludes Excludes => HexExcludes.Usual;

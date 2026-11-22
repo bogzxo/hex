@@ -11,6 +11,7 @@ internal sealed partial class DawnScene
         if (HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))
             _ = LinkPrepareSharedWorkspace(peer);
         LinkFilesJoined(peer);
+        CurrentLinkPublication?.Pump.Poke();
         LinkPresenceJoined(peer);
     }
 

@@ -123,6 +123,8 @@ internal sealed partial class HexAgentChat(int id, string agent)
 
     public int Id { get; } = id;
 
+    public Guid? LinkDraft { get; set; }
+
     /// <summary>The id of the agent profile it's with.</summary>
     public string Agent { get; set; } = agent;
 

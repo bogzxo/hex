@@ -146,6 +146,7 @@ internal sealed partial class DawnScene
         // agent starts once it's taken, started alongside it its first writes could be in what was taken as before
         HexAgentEntry turn = chat.Ask(prompt, asked, contextLocation is null ? null : asked, contextLocation);
         agentsStarting.Add(chat);
+        if (chat.LinkDraft is not null) { LaunchAgent(chat, extension, run, prompt); return; }
         TakeCheckpoint(turn, () =>
         {
             // Stopped while the checkpoint was taken, it isn't started at all. Left in agentsStarting through the launch,
@@ -214,6 +215,8 @@ internal sealed partial class DawnScene
         if (mcpHost is null && StartMcp())
             chat.Note(Said("agents_panel.mcp_started"));
 
+        string? folder = LinkAgentFolder(chat);
+        if (folder is null) { agentsStarting.Remove(chat); chat.Error("The private worktree is unavailable."); chat.Done(); return; }
         ObjectValue chatObject = ChatObject(chat, extension);
         List<string> arguments = [];
         if (HexExtensions.FunctionOf(run, "arguments") is { } making)
@@ -247,8 +250,6 @@ internal sealed partial class DawnScene
 
             input = first + "\n";
         }
-
-        string folder = explorer.workspace.Folders.FirstOrDefault() ?? Directory.GetCurrentDirectory();
 
         // Starting it makes a process and writes the prompt down its stdin, which waits when the program is slow to take it
         // (a scanner looking it over first, a prompt bigger than the pipe), so it's off the editor's thread. What went wrong
@@ -567,7 +568,7 @@ internal sealed partial class DawnScene
 
     /// <summary>What an extension says what its agent did on, a chat's rows, a turn that went wrong marked so on its run.</summary>
     private ObjectValue ChatObject(HexAgentChat chat, HexExtension extension) =>
-        HexAgentChatApi.Of(chat, explorer.workspace.Folders.FirstOrDefault() ?? Directory.GetCurrentDirectory(), () =>
+        HexAgentChatApi.Of(chat, LinkAgentFolder(chat) ?? string.Empty, () =>
         {
             foreach (AgentRun run in agentRuns.Where(run => run.Chat == chat))
                 run.SaidWrong = true;

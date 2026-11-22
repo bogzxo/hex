@@ -18,6 +18,7 @@ internal sealed partial class DawnScene
     private IEnumerable<HexMcpTool> LinkTools() =>
     [
         LinkAuthorityTool(),
+        LinkPublishTool(),
         new(new McpTool("hex_link_devices", "Linked devices",
             "The other machines Hex Link joins this Hex to: those connected now, each with what it lets this machine do there (view, steer, edit), its workspace's folders and repositories and how many agents it has; and the paired ones that aren't connected. hex_link_call calls one's tools.",
             McpSchema.Empty(), ReadOnly: true),
@@ -37,6 +38,8 @@ internal sealed partial class DawnScene
                 ("name", McpSchema.String("A short name for it there.")),
                 ("agent", McpSchema.String("The agent system there, as hex_agent_list there says, that machine's own by default.")),
                 ("model", McpSchema.String("The model, that agent system's setting there by default.")),
+                ("worktree", McpSchema.OneOf("Live workspace or a private worktree.", "live", "private")),
+                ("folder", McpSchema.String("Shared folder for a private worktree.")),
                 ("sync", McpSchema.Flag("Sync the folder it runs in first (hex_link_sync start, then flush), so it works on the code as it is here."))], "device", "prompt")),
             null, RunAway: LinkSpawnTool, NeedsEditor: false),
         new(new McpTool("hex_link_sync", "Keep a folder the same on another machine",
@@ -150,14 +153,14 @@ internal sealed partial class DawnScene
         if (LinkPeerOf(links!.Peers, args.String("device") ?? string.Empty, out string? wrong) is not { } peer)
             return McpToolResult.Error(wrong!);
         var arguments = new JsonObject { ["prompt"] = args.String("prompt") ?? string.Empty };
-        foreach (string optional in (string[])["name", "agent", "model"])
+        foreach (string optional in (string[])["name", "agent", "model", "worktree", "folder"])
         {
             if (args.String(optional) is { Length: > 0 } value)
                 arguments[optional] = value;
         }
 
         // Where it'll run there is that machine's first workspace folder, the one hex_agent_spawn starts agents in
-        string? runsIn = peer.Workspace.Folders.Count > 0 ? peer.Workspace.Folders[0].Name : null;
+        string? runsIn = args.String("folder") ?? peer.Workspace.Folders.FirstOrDefault()?.Name;
         string synced;
         if (args.Flag("sync"))
         {

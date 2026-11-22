@@ -6,7 +6,7 @@ namespace Hex.Core;
 internal sealed record HexLinkCommittedFile(string Path, string? Base, string? Hash, bool? Executable = null);
 
 internal sealed record HexLinkCommittedSet(Guid Id, string Folder, string Scope, long Epoch, HexLinkFenceKind Kind,
-    IReadOnlyList<HexLinkCommittedFile> Files)
+    IReadOnlyList<HexLinkCommittedFile> Files, string? Author = null)
 {
     // Payload bytes are retained by the producer's journal until delivery. The receipt binds their expected hashes.
     public JsonObject ToJson()
@@ -14,11 +14,14 @@ internal sealed record HexLinkCommittedSet(Guid Id, string Folder, string Scope,
         var files = new JsonArray();
         foreach (var file in Files.OrderBy(file => file.Path, StringComparer.Ordinal))
             files.Add((JsonNode)new JsonObject { ["path"] = file.Path, ["base"] = file.Base, ["hash"] = file.Hash, ["exec"] = file.Executable });
-        return new JsonObject
+        var said = new JsonObject
         {
             ["id"] = Id.ToString("N"), ["folder"] = Folder, ["scope"] = Scope, ["epoch"] = Epoch,
             ["kind"] = Kind.ToString(), ["files"] = files
         };
+        if (Author is not null)
+            said["author"] = Author;
+        return said;
     }
 
     public static HexLinkCommittedSet Read(JsonObject value)
@@ -47,7 +50,7 @@ internal sealed record HexLinkCommittedSet(Guid Id, string Folder, string Scope,
                 throw HexLinkException.Invalid("A committed file mode is invalid.");
             files.Add(new(path, from, to, executable));
         }
-        return new(id, folder, scope, epoch, kind, files.AsReadOnly());
+        return new(id, folder, scope, epoch, kind, files.AsReadOnly(), HexLinkNames.Clean(HexLinkData.String(value, "author", 80)));
     }
 
     private static string? ReadHash(JsonObject row, string name) => row[name] is null ? null :
@@ -74,7 +77,7 @@ internal sealed class HexLinkCommittedSets
         Directory.CreateDirectory(this.directory);
     }
 
-    public void Queue(HexLinkCommittedSet set, IEnumerable<string> recipients)
+    public IReadOnlyList<string> Queue(HexLinkCommittedSet set, IEnumerable<string> recipients)
     {
         JsonObject body = Canonical(set);
         string path = PathFor(set.Id, outgoing: true);
@@ -83,7 +86,9 @@ internal sealed class HexLinkCommittedSets
             if (Load(path) is { } existing)
             {
                 RequireMatch(body, existing);
-                return;
+                return existing["pending"] is JsonArray pending
+                    ? [.. pending.Select(peer => peer!.GetValue<string>())]
+                    : throw new IOException("The committed set outbox is invalid.");
             }
 
             long sequence = Directory.EnumerateFiles(directory, "out-*.json")
@@ -91,6 +96,7 @@ internal sealed class HexLinkCommittedSets
             string[] peers = [.. recipients.Distinct(StringComparer.OrdinalIgnoreCase)];
             Write(path, new JsonObject { ["set"] = body, ["sequence"] = sequence,
                 ["pending"] = new JsonArray([.. peers.Select(peer => (JsonNode)JsonValue.Create(peer)!)]) });
+            return peers;
         }
     }
 
@@ -106,11 +112,13 @@ internal sealed class HexLinkCommittedSets
 
     // Delivery retries after disconnect by calling this with the same authenticated peer ID.
     public async Task Deliver(string peer, Func<HexLinkCommittedSet, CancellationToken, Task<HexLinkCommittedAck>> send,
-        CancellationToken cancel)
+        CancellationToken cancel, Action<HexLinkCommittedSet>? acknowledged = null, Predicate<HexLinkCommittedSet>? canSend = null)
     {
         foreach (HexLinkCommittedSet set in Pending(peer))
         {
             cancel.ThrowIfCancellationRequested();
+            if (canSend?.Invoke(set) == false)
+                continue;
             HexLinkCommittedAck ack = await send(set, cancel);
             if (ack != Acknowledge(set))
                 throw HexLinkException.Invalid("The receiver acknowledged a different committed set.");
@@ -129,6 +137,31 @@ internal sealed class HexLinkCommittedSets
                     break;
                 }
             }
+            acknowledged?.Invoke(set);
+        }
+    }
+
+    public (bool Prepared, HexLinkCommittedAck? Ack) Incoming(HexLinkCommittedSet set)
+    {
+        JsonObject body = Canonical(set);
+        lock (gate)
+        {
+            if (Load(PathFor(set.Id, outgoing: false)) is not { } row)
+                return (false, null);
+            RequireMatch(body, row);
+            return (true, HexLinkData.Bool(row, "complete") == true ? Acknowledge(body) : null);
+        }
+    }
+
+    public HexLinkCommittedAck? Receipt(Guid id, string folder, long epoch)
+    {
+        lock (gate)
+        {
+            if (Load(PathFor(id, outgoing: false)) is not { } row || HexLinkData.Bool(row, "complete") != true)
+                return null;
+            JsonObject body = Body(row);
+            return HexLinkData.String(body, "folder", 201) == folder && HexLinkData.Long(body, "epoch") == epoch
+                ? Acknowledge(body) : null;
         }
     }
 
@@ -176,6 +209,8 @@ internal sealed class HexLinkCommittedSets
             return Acknowledge(body);
         }
     }
+
+    public bool MatchesReceipt(HexLinkCommittedSet set, HexLinkCommittedAck receipt) => Acknowledge(set) == receipt;
 
     private static JsonObject Canonical(HexLinkCommittedSet set) => HexLinkCommittedSet.Read(set.ToJson()).ToJson();
     private static HexLinkCommittedAck Acknowledge(HexLinkCommittedSet set) => Acknowledge(Canonical(set));

@@ -28,6 +28,7 @@ internal sealed partial class HexLinkHost : IDisposable
         this.services = services;
         fleet = new HexLinkCoalesce(FLEET_GAP, SendFleet);
         InstallFilePacks();
+        RegisterPublicationReceiver();
     }
 
     /// <summary>Who's asking, as the connection proved it.</summary>
@@ -84,6 +85,8 @@ internal sealed partial class HexLinkHost : IDisposable
         "sync/file/resume" => ResumeStreamedWrite(parameters, cancel),
         "sync/file/delete" => DeleteStreamedFile(parameters, cancel),
         "authority/transfer" => AuthorityTransfer(parameters, cancel),
+        "publish/status" => PublicationStatus(parameters, cancel),
+        "publish/presence" => PublicationPresence(parameters, cancel),
         "sync/manifest" => SyncManifest(parameters, cancel),
         "sync/watch" => SyncWatch(parameters, cancel),
         "sync/unwatch" => Task.FromResult<JsonNode?>(SyncUnwatch(parameters)),
