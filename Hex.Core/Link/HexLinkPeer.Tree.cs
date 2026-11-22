@@ -37,10 +37,16 @@ internal sealed partial class HexLinkPeer
         }
     }
 
-    private async Task<HexLinkManifest> ReadManifest(string method, string folder, CancellationToken cancel, HexLinkManifest? basis = null)
+    internal Task<HexLinkManifest> ProvisionManifest(string folder, CancellationToken cancel) =>
+        ReadManifest("sync/manifest", folder, cancel, provision: true);
+
+    private async Task<HexLinkManifest> ReadManifest(string method, string folder, CancellationToken cancel,
+        HexLinkManifest? basis = null, bool provision = false)
     {
         var patience = TimeSpan.FromMinutes(5);
         var parameters = new JsonObject { ["folder"] = folder, ["paged"] = true };
+        if (provision)
+            parameters["provision"] = true;
         HexLinkDirectoryDigests? digests = session.SupportsBulk && basis is { Certified: true } ? HexLinkDirectoryDigests.From(basis) : null;
         JsonObject? offer = digests?.Offer();
         if (offer is { Count: > 0 })

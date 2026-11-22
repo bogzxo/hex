@@ -121,6 +121,7 @@ internal sealed partial class DawnScene
         {
             LinkSayGrantsMoved();
             TickLinkAutoShare();
+            TickLinkWorkspaceOffers();
         }
         if (linkWindow is null)
             return;

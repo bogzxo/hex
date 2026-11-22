@@ -517,10 +517,14 @@ public sealed class HexLinkTransportTests(ITestOutputHelper output) : IDisposabl
         mac.Transport.Stop();
         Assert.False(mac.Transport.Listening);
 
-        using var cancel = new CancellationTokenSource(HexLinkTestMachine.WAIT);
+        using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         using var client = new System.Net.Sockets.TcpClient(System.Net.Sockets.AddressFamily.InterNetwork);
-        await Assert.ThrowsAnyAsync<System.Net.Sockets.SocketException>(() =>
+        // A closed loopback port can refuse the attempt or leave the bounded probe unanswered.
+        Exception? error = await Record.ExceptionAsync(() =>
             client.ConnectAsync(IPAddress.Loopback, port, cancel.Token).AsTask());
+        Assert.True(error is System.Net.Sockets.SocketException ||
+            (error is OperationCanceledException && cancel.IsCancellationRequested),
+            error?.ToString() ?? "A fresh loopback client connected after Stop.");
     }
 
     [Fact]

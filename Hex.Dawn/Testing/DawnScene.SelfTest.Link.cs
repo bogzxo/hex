@@ -30,6 +30,7 @@ internal sealed partial class DawnScene
 
     // B, while it runs, what it printed, and the folders the part made
     private Process? linkTestPeer;
+    private readonly ConcurrentBag<Process> linkTestAdditionalPeers = new();
     private readonly ConcurrentQueue<string> linkTestPeerSaid = new();
     private readonly List<string> linkTestFolders = [];
 
@@ -418,7 +419,8 @@ internal sealed partial class DawnScene
     /// B started: this Hex again with a home, a pipe and a key of its own, told to dial and pair with A, what it prints
     /// kept for the checks and said after "B|". Killed in the tidy after the part (and as this process exits) whatever happened.
     /// </summary>
-    private void LinkStartPeer(string peerHome, string dial, IReadOnlyDictionary<string, string>? also = null, string suite = "link-peer")
+    private void LinkStartPeer(string peerHome, string dial, IReadOnlyDictionary<string, string>? also = null, string suite = "link-peer",
+        bool additional = false)
     {
         var start = new ProcessStartInfo(System.Environment.ProcessPath!)
         {
@@ -451,7 +453,7 @@ internal sealed partial class DawnScene
                 return;
             linkTestPeerSaid.Enqueue(line);
             if (line.Contains("[Hex self-test]", StringComparison.Ordinal))
-                Console.WriteLine($"  B| {line.Replace("[Hex self-test] ", string.Empty, StringComparison.Ordinal)}");
+                Console.WriteLine($"  {(additional ? "C" : "B")}| {line.Replace("[Hex self-test] ", string.Empty, StringComparison.Ordinal)}");
         }
 
         process.OutputDataReceived += Heard;
@@ -459,7 +461,10 @@ internal sealed partial class DawnScene
         process.Start();
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
-        linkTestPeer = process;
+        if (additional)
+            linkTestAdditionalPeers.Add(process);
+        else
+            linkTestPeer = process;
         AppDomain.CurrentDomain.ProcessExit -= KillLinkTestPeer;
         AppDomain.CurrentDomain.ProcessExit += KillLinkTestPeer;
     }
@@ -512,7 +517,13 @@ internal sealed partial class DawnScene
 
     private void KillLinkTestPeer()
     {
-        Process? peer = Interlocked.Exchange(ref linkTestPeer, null);
+        KillStartedLinkPeer(Interlocked.Exchange(ref linkTestPeer, null));
+        while (linkTestAdditionalPeers.TryTake(out var additional))
+            KillStartedLinkPeer(additional);
+    }
+
+    private static void KillStartedLinkPeer(Process? peer)
+    {
         if (peer is null)
             return;
         try

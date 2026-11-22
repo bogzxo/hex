@@ -23,7 +23,9 @@ public sealed partial class HexLinkSyncTests
         File.WriteAllText(alternates, Path.Combine(pair.B.Root, "missing-objects").Replace('\\', '/') + "\n");
         GitResult listed = GitProcess.Run(right, ["ls-files", "-co", "--exclude-standard", "-z"]);
         Assert.True(listed.Ok, listed.Why);
-        Assert.Contains("alternate", listed.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("kept.txt\0", listed.Output, StringComparison.Ordinal);
+        // Git builds differ in whether this missing alternate produces a diagnostic.
+        bool reportsAlternate = listed.Error.Contains("alternate", StringComparison.OrdinalIgnoreCase);
 
         string relative = rootRepository ? "added.txt" : "nested/added.txt";
         Put(pair.B, relative, "from the checkout with the warning");
@@ -33,8 +35,11 @@ public sealed partial class HexLinkSyncTests
         await Settled(sync);
 
         Assert.Equal("from the checkout with the warning", File.ReadAllText(Path.Combine(pair.A.Work, relative)));
-        Assert.Contains("Git warning", sync.Summary, StringComparison.Ordinal);
-        Assert.Contains("alternate", sync.Summary, StringComparison.OrdinalIgnoreCase);
+        if (reportsAlternate)
+        {
+            Assert.Contains("Git warning", sync.Summary, StringComparison.Ordinal);
+            Assert.Contains("alternate", sync.Summary, StringComparison.OrdinalIgnoreCase);
+        }
         Assert.Empty(sync.MissingRepositories.Unavailable!);
     }
 

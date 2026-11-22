@@ -55,6 +55,8 @@ internal sealed partial class DawnScene
                 File.WriteAllText(Path.Combine(submodule, "committed.txt"), "Uncommitted submodule edit.\n");
                 Directory.CreateDirectory(Path.Combine(root, "out"));
                 File.WriteAllText(Path.Combine(root, "out", "built.dll"), "Ignored build output.");
+                using (FileStream oversized = File.Create(Path.Combine(root, "outside-limit.tar")))
+                    oversized.SetLength(HexLinkFiles.MOST_READ + 20L);
 
                 linkTestPeerSaid.Clear();
                 StopLink();
@@ -105,7 +107,8 @@ internal sealed partial class DawnScene
             ReadProvisionTestFile(Path.Combine(joiner, "committed.txt")) == "Uncommitted root edit.\n"
             && ReadProvisionTestFile(Path.Combine(joinedNested, "untracked.txt")) == "Untracked nested file.\n"
             && ReadProvisionTestFile(Path.Combine(joinedModule, "committed.txt")) == "Uncommitted submodule edit.\n"
-            && !Directory.Exists(Path.Combine(joiner, "out")));
+            && !Directory.Exists(Path.Combine(joiner, "out"))
+            && !File.Exists(Path.Combine(joiner, "outside-limit.tar")));
 
         HexLinkPeer? replacement = null;
         test.Run(() =>
@@ -176,7 +179,8 @@ internal sealed partial class DawnScene
         test.Check("link-provision: one MCP action got the workspace with View", () => ReadProvisionTestFile(ready) == "ready");
         test.Check("link-provision: MCP listed the skipped submodule and its reason", () =>
             getting is { IsCompletedSuccessfully: true, Result.IsError: false }
-            && getting.Result.AllText().Contains($"Skipped nested/module/{PROVISION_TEST_UNINITIALIZED}. Submodule is uninitialized", StringComparison.Ordinal));
+            && getting.Result.AllText().Contains($"Skipped nested/module/{PROVISION_TEST_UNINITIALIZED}. Submodule is uninitialized", StringComparison.Ordinal)
+            && getting.Result.AllText().Contains("Skipped outside-limit.tar. The working file exceeds", StringComparison.Ordinal));
 
         string changed = Path.Combine(destination, "nested", "module", "committed.txt");
         test.WaitFor(() => ReadProvisionTestFile(changed) == PROVISION_TEST_AFTER

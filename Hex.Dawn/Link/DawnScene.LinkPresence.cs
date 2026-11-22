@@ -112,9 +112,9 @@ internal sealed partial class DawnScene
             return;
         linkPresenceSampled = now;
         HexLinkPresence? mine = LinkPresenceHere();
-        if (mine is not null && document.Editor.PointerTextPosition is { } pointer)
+        if (mine is not null && !mine.SharedDocument && document.Editor.PointerTextPosition is { } pointer)
             mine = mine with { PointerLine = pointer.Line, PointerColumn = pointer.Column };
-        string key = mine is null ? "-" : $"{mine.File}:{mine.Line}:{mine.Column}:{mine.ToLine}:{mine.ToColumn}:{mine.PointerLine}:{mine.PointerColumn}";
+        string key = mine is null ? "-" : $"{mine.File}:{mine.Line}:{mine.Column}:{mine.ToLine}:{mine.ToColumn}:{mine.PointerLine}:{mine.PointerColumn}:{mine.SharedDocument}";
         if (key == linkPresenceSent)
             return;
         linkPresenceSent = key;
@@ -130,6 +130,8 @@ internal sealed partial class DawnScene
     {
         if (document is not { IsText: true, Path: { } path, DiffOf: null } || LinkWireOf(path) is not { } wire)
             return null;
+        if (LinkLiveOf(document) is { Offline: false, Draft: null })
+            return new HexLinkPresence(wire, 0, 0, SharedDocument: true);
         UITextPosition caret = document.Editor.Document.Caret, anchor = document.Editor.Document.Anchor;
         return caret == anchor
             ? new HexLinkPresence(wire, caret.Line, caret.Column, null, null)
@@ -139,6 +141,9 @@ internal sealed partial class DawnScene
     /// <summary>A file here as a wire path, folder-name/relative/path: of a workspace folder, or the file of a remote tab; null otherwise.</summary>
     internal string? LinkWireOf(string path)
     {
+        foreach (var live in linkLiveDocuments.Values)
+            if (live.Tab.Path is { } livePath && PlatformPaths.Same(livePath, path))
+                return live.Wire;
         if (linkDocument is { } shared && shared.Tab.Path is { } sharedPath && PlatformPaths.Same(sharedPath, path))
             return shared.Base.Path;
         if (linkRemote.TryGetValue(path, out LinkRemoteTab? remote))
@@ -182,7 +187,7 @@ internal sealed partial class DawnScene
     // The others' carets drawn into the tabs that have their files, when something of them moved
     private void LinkPresenceDraw()
     {
-        string key = string.Join("|", linkPresence.Values.Select(seen => $"{seen.Device.Id}:{seen.Presence?.File}:{seen.Presence?.Line}:{seen.Presence?.Column}:{seen.Presence?.ToLine}:{seen.Presence?.ToColumn}:{seen.Presence?.PointerLine}:{seen.Presence?.PointerColumn}:{seen.Device.Name}"))
+        string key = string.Join("|", linkPresence.Values.Select(seen => $"{seen.Device.Id}:{seen.Presence?.File}:{seen.Presence?.Line}:{seen.Presence?.Column}:{seen.Presence?.ToLine}:{seen.Presence?.ToColumn}:{seen.Presence?.PointerLine}:{seen.Presence?.PointerColumn}:{seen.Presence?.SharedDocument}:{seen.Device.Name}"))
             + "#" + documents.Count;
         if (key == linkPresenceDrawnKey && linkPresenceDrawn.All(documents.Contains))
             return;
@@ -192,12 +197,14 @@ internal sealed partial class DawnScene
         var carets = new Dictionary<HexDocument, List<UICodeRemoteCaret>>();
         foreach (LinkPresenceSeen seen in linkPresence.Values)
         {
-            if (seen.Presence is not { File: not null } where || LinkDocumentOf(seen.Device.Id, where.File) is not { IsText: true } open)
+            if (seen.Presence is not { File: not null, SharedDocument: false } where ||
+                LinkDocumentOf(seen.Device.Id, where.File) is not { IsText: true } open)
+                continue;
+            if (LinkLiveOf(open) is { Offline: false, Draft: null })
                 continue;
             if (!carets.TryGetValue(open, out var participants))
                 carets[open] = participants = [];
-            participants.Add(new(seen.Device.Id, seen.Device.Name, where.Line, where.Column, where.ToLine ?? where.Line,
-                where.ToColumn ?? where.Column, LinkDeviceColour(seen.Device.Id), where.PointerLine, where.PointerColumn));
+            participants.Add(LinkPresenceCaret(seen.Device, where));
         }
 
         foreach (var (open, participants) in carets)
@@ -207,10 +214,29 @@ internal sealed partial class DawnScene
         }
     }
 
+    private static UICodeRemoteCaret LinkPresenceCaret(HexLinkDevice device, HexLinkPresence where) =>
+        new(device.Id, device.Name, where.Line, where.Column, where.ToLine ?? where.Line, where.ToColumn ?? where.Column,
+            LinkDeviceColour(device.Id), where.PointerLine, where.PointerColumn);
+
+    private IReadOnlyList<UICodeRemoteCaret> LinkCaretsForShared(LinkLiveDocument shared, IReadOnlyList<UICodeRemoteCaret> scoped)
+    {
+        List<UICodeRemoteCaret>? combined = null;
+        foreach (var seen in linkPresence.Values)
+        {
+            if (seen.Presence is not { File: { } file, SharedDocument: false } where ||
+                !PlatformPaths.Comparer.Equals(file, shared.Wire) || scoped.Any(caret => caret.Id == seen.Device.Id))
+                continue;
+            combined ??= [.. scoped];
+            combined.Add(LinkPresenceCaret(seen.Device, where));
+        }
+        return combined ?? scoped;
+    }
+
     private void LinkPresenceClear()
     {
         foreach (HexDocument open in linkPresenceDrawn)
-            open.Editor.RemoteCarets = [];
+            if (LinkLiveOf(open) is not { Offline: false, Draft: null })
+                open.Editor.RemoteCarets = [];
         linkPresenceDrawn.Clear();
     }
 
@@ -227,9 +253,33 @@ internal sealed partial class DawnScene
             return;
         }
 
-        if (!linkPresence.TryGetValue(id, out LinkPresenceSeen? seen) || seen.Presence is not { File: not null } where)
+        linkPresence.TryGetValue(id, out LinkPresenceSeen? seen);
+        var where = seen?.Presence;
+        foreach (var shared in linkLiveDocuments.Values)
+        {
+            if (shared is { Offline: true } or { Draft: not null } ||
+                where?.File is { } activeFile && !PlatformPaths.Comparer.Equals(activeFile, shared.Wire))
+                continue;
+            var caret = shared.Tab.Editor.RemoteCarets.FirstOrDefault(remote => remote.Id == id);
+            if (caret.Id is null)
+                continue;
+
+            string liveKey = $"room:{shared.Wire}:{caret.Line}:{caret.Column}";
+            if (liveKey == linkFollowSeen)
+                return;
+            linkFollowSeen = liveKey;
+            if (document != shared.Tab)
+                Show(shared.Tab);
+            shared.Tab.Editor.GoTo(caret.Line, caret.Column);
+            linkFollowDocument = shared.Tab;
+            linkFollowCaret = shared.Tab.Editor.Document.Caret;
+            linkFollowVersion = shared.Tab.Editor.Document.Version;
             return;
-        string key = $"{where.File}:{where.Line}:{where.Column}";
+        }
+
+        if (where?.File is not { } file)
+            return;
+        string key = where.SharedDocument ? $"opening-room:{file}" : $"{file}:{where.Line}:{where.Column}";
         if (key == linkFollowSeen)
             return;
         linkFollowSeen = key;
@@ -258,7 +308,8 @@ internal sealed partial class DawnScene
 
         if (document != open)
             Show(open);
-        open.Editor.GoTo(where.Line, where.Column);
+        if (!where.SharedDocument)
+            open.Editor.GoTo(where.Line, where.Column);
         linkFollowDocument = open;
         linkFollowCaret = open.Editor.Document.Caret;
         linkFollowVersion = open.Editor.Document.Version;

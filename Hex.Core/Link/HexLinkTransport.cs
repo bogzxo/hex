@@ -42,7 +42,7 @@ internal sealed partial class HexLinkTransport : IDisposable
     private const int MOST_HANDSHAKES = 4;
 
     // How many links at once
-    private const int MOST_LINKS = 8;
+    private const int MOST_LINKS = HexLink.MOST;
 
     // The longest first line, the device's name is the most of it
     private const int LINE_MOST = 4096;

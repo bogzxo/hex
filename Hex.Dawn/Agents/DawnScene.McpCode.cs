@@ -1147,7 +1147,9 @@ internal sealed partial class DawnScene
             yield return McpToolResult.Error("The declaration is outside the shared workspace.");
             yield break;
         }
-        HexDocument? open = Context.Documents.Find(path) is { Modified: true } modified ? modified : null;
+        HexDocument? candidate = Context.Documents.Find(path);
+        var live = LinkLiveOf(candidate);
+        HexDocument? open = candidate is { Modified: true } || live is not null ? candidate : null;
         string raw;
         bool bom = false;
         if (open is not null)
@@ -1185,6 +1187,12 @@ internal sealed partial class DawnScene
         string[] changed = put.Length == 0 ? WithoutLines(lines, first, last) : [.. lines.Take(first), .. put, .. lines.Skip(last + 1)];
         string text = string.Join('\n', changed);
         string done = $"{(put.Length == 0 ? "Deleted" : "Replaced")} {here.Symbol.Kind} {here.Symbol.Full}, {found.File.Relative}:{first + 1}-{last + 1} ({last - first + 1} lines, now {put.Length}).{(here.AlsoSaid.Length > 0 ? $" {here.AlsoSaid}" : string.Empty)}";
+        if (live is not null)
+        {
+            foreach (var step in LinkLiveAgentWrite(args, live, raw, text, done))
+                yield return step;
+            yield break;
+        }
         if (open is not null)
         {
             Context.Documents.Rewrite(open, text);

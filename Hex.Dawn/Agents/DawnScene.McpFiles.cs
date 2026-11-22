@@ -42,8 +42,10 @@ internal sealed partial class DawnScene
             yield break;
         }
 
-        // Open with changes nobody saved, the editor's text is the one that counts
-        if (Context.Documents.Find(path) is { Modified: true } open)
+        // Shared text and unsaved text are edited in their open editor.
+        HexDocument? open = Context.Documents.Find(path);
+        var live = LinkLiveOf(open);
+        if (open is not null && (open.Modified || live is not null))
         {
             string text = open.Editor.Text.Replace("\r\n", "\n");
             if (Replaced(text, old, with, all, out string changed, out int count, out int line) is { } wrong)
@@ -52,6 +54,12 @@ internal sealed partial class DawnScene
                 yield break;
             }
 
+            if (live is not null)
+            {
+                foreach (var step in LinkLiveAgentWrite(args, live, text, changed, $"Edited {path}:{line} ({Places(count)})."))
+                    yield return step;
+                yield break;
+            }
             Context.Documents.Rewrite(open, changed);
             string edited = $"Edited {path}:{line} in the editor ({Places(count)}), it has changes nobody saved yet, so it isn't on the disk until it's saved.";
             foreach (McpToolResult? step in McpThenCheck(args, path, edited)) yield return step;
@@ -124,7 +132,14 @@ internal sealed partial class DawnScene
     {
         string path = McpPath(args.String("path") ?? string.Empty);
         string content = args.String("content") ?? string.Empty;
-        if (Context.Documents.Find(path) is { Modified: true } open)
+        HexDocument? open = Context.Documents.Find(path);
+        if (LinkLiveOf(open) is { } live)
+        {
+            foreach (var step in LinkLiveAgentWrite(args, live, open!.Editor.Text, content.ReplaceLineEndings("\n"), $"Wrote {path}."))
+                yield return step;
+            yield break;
+        }
+        if (open is { Modified: true })
         {
             Context.Documents.Rewrite(open, content.Replace("\r\n", "\n"));
             string wrote = $"Wrote {path} in the editor, it had changes nobody saved yet, so it isn't on the disk until it's saved.";

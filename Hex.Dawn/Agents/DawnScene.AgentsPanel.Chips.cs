@@ -89,7 +89,7 @@ internal sealed partial class DawnScene
             foreach (HexAgentProfile agent in agents)
             {
                 string id = agent.Id;
-                menu.Add($"{agent.Name} · {AgentState(agent)}", () =>
+                menu.Add($"{agent.Name} · {AgentState(agent, refresh: true)}", () =>
                 {
                     agentPicked = id;
                     if (agentChat is { Entries.Count: > 0 } busy && busy.Agent != id) NewAgentChat();
@@ -109,51 +109,45 @@ internal sealed partial class DawnScene
     private readonly Dictionary<string, (long Checked, string Program, bool Missing)> agentPrograms = [];
     private const long AGENT_PROGRAM_EVERY = 15_000;
 
-    // What the looks on the pool found, by agent, waiting to be taken in on the editor's thread
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (string Program, bool Missing)> agentProgramsLooked = new();
-
     private enum AgentStates { Ready, Running, Missing }
 
-    private AgentStates StateOf(HexAgentProfile agent)
+    private AgentStates StateOf(HexAgentProfile agent, bool refresh = false)
     {
-        // A loop rather than Any with a lambda, which made a closure every time the chips were looked at
         for (int i = 0; i < agentChats.Count; i++)
         {
             if (agentChats[i] is { Running: true } chat && chat.Agent == agent.Id)
                 return AgentStates.Running;
         }
-        if (!extensions.AgentRuns.TryGetValue(agent.Id, out var run)) return AgentStates.Missing;
+        if (!extensions.AgentRuns.TryGetValue(agent.Id, out var run))
+            return AgentStates.Missing;
+
         string program = HexExtensions.Text(run.Run, "program") ?? string.Empty;
         long now = System.Environment.TickCount64;
-        // Looked for again every fifteen seconds, soon enough to see one installed meanwhile. Each look goes through every
-        // folder of PATH and the system's PATH as it is now, and every two seconds it was most of what the panel made
-        // A look that came back from the pool since, taken in
-        if (agentProgramsLooked.TryRemove(agent.Id, out var looked) && agentPrograms.TryGetValue(agent.Id, out var had) && had.Program == looked.Program)
-            agentPrograms[agent.Id] = had with { Missing = looked.Missing };
-
-        if (!agentPrograms.TryGetValue(agent.Id, out var cached) || cached.Program != program)
+        if (!agentPrograms.TryGetValue(agent.Id, out var cached) || cached.Program != program
+            || refresh || now - cached.Checked > AGENT_PROGRAM_EVERY)
         {
-            // The first look is here and now, the panel has to say something
-            cached = (now, program, HexAgentProcess.Find(program) is null);
-            agentPrograms[agent.Id] = cached;
-        }
-        else if (now - cached.Checked > AGENT_PROGRAM_EVERY)
-        {
-            // Every look after on the pool, what it was standing until it comes back. Here it was a tick of 28 ms and 194 KB
-            // every fifteen seconds with nothing else going on, the worst tick of an idle Hex
-            agentPrograms[agent.Id] = cached with { Checked = now };
+            bool missing = cached.Program == program && cached.Missing;
+            agentPrograms[agent.Id] = cached = (now, program, missing);
             string id = agent.Id;
-            OffThread("looking for an agent's program", () =>
-            {
-                agentProgramsLooked[id] = (program, HexAgentProcess.Find(program) is null);
-                Engine.WindowManager.RequestFrames();
-            });
+            InBackground<string?>("finding an agent's program", () => HexAgentProcess.Find(program),
+                found => RememberAgentProgram(id, program, found is null, now), quiet: true);
         }
         return cached.Missing ? AgentStates.Missing : AgentStates.Ready;
     }
 
+    private void RememberAgentProgram(string id, string program, bool missing, long checkedAt)
+    {
+        if (extensions.AgentRuns.TryGetValue(id, out var run)
+            && (HexExtensions.Text(run.Run, "program") ?? string.Empty) == program
+            && (!agentPrograms.TryGetValue(id, out var cached) || cached.Checked <= checkedAt))
+        {
+            agentPrograms[id] = (checkedAt, program, missing);
+            Engine.WindowManager.RequestFrames();
+        }
+    }
+
     // Whether an agent can be asked, is busy, or isn't there to run, in words
-    private string AgentState(HexAgentProfile agent) => StateOf(agent) switch
+    private string AgentState(HexAgentProfile agent, bool refresh = false) => StateOf(agent, refresh) switch
     {
         AgentStates.Running => Said("agents_panel.running"),
         AgentStates.Missing => Said("agents_panel.missing"),

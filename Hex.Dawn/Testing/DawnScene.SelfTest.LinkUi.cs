@@ -197,6 +197,15 @@ internal sealed partial class DawnScene
 
         // The pairing dialog, the code large and grouped, nothing ticked, Pair waiting for View
         test.WaitFor(() => linkPairingDialog is { IsOpen: true } || linkTestPeer is { HasExited: true }, 90.0f);
+        test.Run(() =>
+        {
+            if (linkPairingDialog is { IsOpen: true })
+                return;
+            string state = linkTestPeer is { HasExited: true } process ? $"exited with {process.ExitCode}" : "did not reach pairing";
+            Console.WriteLine($"[Hex self-test] link-ui: fixture B {state}");
+            foreach (string line in linkTestPeerSaid.TakeLast(12))
+                Console.WriteLine($"[Hex self-test] link-ui: fixture B output: {line}");
+        });
         test.Settle(0.4f);
         test.Check("link-ui: the pairing dialog shows B, its code grouped three and three, nothing ticked and Pair greyed", () =>
             linkPairingDialog is { IsOpen: true } dialog && LinkPairingPending is { } asked && asked.Other.Name == LINK_PEER_NAME
@@ -285,9 +294,25 @@ internal sealed partial class DawnScene
             wroteRemote = peer?.Write($"{LINK_PEER_FOLDER}/{ConflictName}", null, "the other device\n"u8.ToArray());
         });
         test.WaitFor(() => wroteRemote?.IsCompleted == true, 5);
+        test.Run(() => LinkSaySyncError(peerId!, LINK_PEER_NAME, LINK_PEER_FOLDER, "fixture interruption"));
+        test.Check("link-ui: a sync failure is visible in the status bar", () =>
+            saidError && messageItem.Text.Contains("fixture interruption", StringComparison.Ordinal));
         ClickWindow("link.sync_start");
-        test.WaitFor(() => peerId is not null && LinkSyncs.Any(sync => sync.DeviceId == peerId && sync.State is HexLinkSyncState.Idle or HexLinkSyncState.PullOnly), 12);
-        test.WaitFor(() => LinkConflicts.Any(conflict => conflict.Path.EndsWith(ConflictName, StringComparison.Ordinal)), 6);
+        bool SyncRecovered() => peerId is not null && LinkSyncs.Any(sync =>
+            sync.DeviceId == peerId && sync.State is HexLinkSyncState.Idle or HexLinkSyncState.PullOnly)
+            && linkSyncStatusError is null && !messageItem.Text.Contains("fixture interruption", StringComparison.Ordinal);
+        test.WaitFor(SyncRecovered, 40);
+        test.Check("link-ui: a recovered sync clears its failure from the status bar", SyncRecovered);
+        test.Run(() =>
+        {
+            LinkSaySyncError(peerId!, LINK_PEER_NAME, LINK_PEER_FOLDER, "fixture interruption");
+            Say("unrelated fixture failure", error: true);
+            LinkClearRecoveredSyncError(peerId!, LINK_PEER_FOLDER, HexLinkSyncState.Idle);
+        });
+        test.Check("link-ui: sync recovery keeps a newer, unrelated status error", () =>
+            saidError && messageItem.Text.Contains("unrelated fixture failure", StringComparison.Ordinal));
+        test.Run(() => Say(string.Empty));
+        test.WaitFor(() => LinkConflicts.Any(conflict => conflict.Path.EndsWith(ConflictName, StringComparison.Ordinal)), 20);
         Shot("link_ui_conflict.png");
         ClickWindowLabel(Said("link.devices_resolve", ("count", "1")));
         test.WaitFor(() => chrome.Root.Children.OfType<UIDialog>().Any(dialog => dialog is { IsOpen: true, IsPalette: true }), 4);
@@ -375,17 +400,20 @@ internal sealed partial class DawnScene
         });
 
         // Typed in the box and sent, it reaches B
+        bool InFixtureMirror() => peerId is not null && agentChat is { } shown && shown == linkRemoteMirror && LinkRemoteOf(shown)?.DeviceId == peerId;
         test.Run(() =>
         {
+            if (!InFixtureMirror())
+                return;
             agentsInput.Focus();
             agentsInput.Text = LINK_UI_SENT;
         });
         test.Settle(0.3f);
-        test.Check("link-ui: the box can send to B's chat while B lets this one steer", () => agentsSend.Enabled && !agentsInput.ReadOnly);
+        test.Check("link-ui: the box can send to B's chat while B lets this one steer", () => InFixtureMirror() && agentsSend.Enabled && !agentsInput.ReadOnly);
         // A notification left by an earlier suite can cover Send until dismissed.
         test.Run(ClearToasts);
         test.WaitFor(() => toasts.Cards.Count == 0, 2.0f);
-        test.Click(() => Centre(agentsSend));
+        test.Click(() => InFixtureMirror() ? Centre(agentsSend) : Vector2.Zero);
         test.WaitFor(() => LinkTestPeerSaid("steered tool hex_agent_send"), 20.0f);
         test.Check("link-ui: what was sent reached B as hex_agent_send to its chat", () =>
             LinkTestPeerSaid("steered tool hex_agent_send") && LinkTestPeerLine("steered tool hex_agent_send").Contains(LINK_UI_SENT, StringComparison.Ordinal));
@@ -714,7 +742,44 @@ internal sealed partial class DawnScene
         test.WaitFor(() => textDialog is { IsOpen: true }, 5);
         test.Check("link-ui: Get workspace opens the destination prompt", () =>
             textDialog is { IsOpen: true } destination && destination.Buttons[0].Label == Said("link.provision.get_button"));
+        test.Run(() =>
+        {
+            textDialog?.Close();
+            linkWindow?.Close();
+            foreach (string folder in explorer.workspace.Folders.ToArray())
+                explorer.RemoveFolder(folder);
+            LinkLookAtWorkspace(force: true);
+        });
+        Task<JsonNode?>? sentOffer = null;
+        bool IsWorkspaceOffer(UIDialog dialog) => dialog.Buttons.Any(button => button.Label == Said("link.devices_workspace_offer_get"));
+        test.WaitFor(() => linkServices?.Workspace.Folders.Count == 0 && linkWindow is null && OpenDialog() is null, 8);
+        test.Settle(0.35f);
+        test.Run(() =>
+        {
+            if (sessions.TryPeek(out HexLinkSession? session))
+                sentOffer = session.Ask("git/bundle", new JsonObject { ["operation"] = "offer", ["workspace"] = "Fixture workspace" });
+        });
+        test.WaitFor(() => sentOffer is { IsCompletedSuccessfully: true } && OpenDialog() is { } dialog && IsWorkspaceOffer(dialog), 8);
+        test.Settle(0.45f);
+        test.Check("link-ui: a received workspace offer opens a choice with no workspace or Devices window open", () =>
+            sentOffer is { IsCompletedSuccessfully: true } && explorer.workspace.Folders.Count == 0 &&
+            linkWindow is null && OpenDialog() is { } dialog && IsWorkspaceOffer(dialog));
+        shot("link_ui_workspace_offer.png");
+        test.Click(() => centre(OpenDialog()?.Buttons.FirstOrDefault(button => button.Label == Said("link.devices_workspace_offer_later"))));
+        test.WaitFor(() => OpenDialog() is null, 5);
+        test.Settle(0.3f);
+        test.Run(ShowLinkWindowForTest);
+        test.Settle(0.25f);
+        test.Check("link-ui: Not now keeps the workspace offer on the device row", () =>
+            linkWindowDevices is { } rows && Descendants(rows).OfType<Label>().Any(label =>
+                label.Text == Said("link.devices_workspace_offer", ("device", Device), ("workspace", "Fixture workspace"))));
+        clickWindow("link.devices_get");
+        test.WaitFor(() => textDialog is { IsOpen: true }, 5);
+        test.Check("link-ui: getting a deferred workspace offer opens the folder chooser", () =>
+            textDialog is { IsOpen: true } picker && picker.Buttons.Any(button => button.Label == Said("explorer_workspace.add")));
         test.Run(() => textDialog?.Close());
+        test.WaitFor(() => OpenDialog() is null, 5);
+        test.Settle(0.3f);
         clickWindow("link.devices_open_files");
         test.WaitFor(() => OpenDialog() is { IsPalette: true }, 5);
         test.Check("link-ui: Open its files opens a browser for the connected device", () => OpenDialog() is { IsOpen: true, IsPalette: true });

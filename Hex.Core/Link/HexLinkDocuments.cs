@@ -5,6 +5,8 @@ internal sealed record HexLinkDocSnapshot(string Path, string Session, long Revi
 /// <summary>Only the editor can publish a buffer. Its session survives reconnects and ends when the editor closes it.</summary>
 internal sealed class HexLinkDocuments
 {
+    public HexLinkDocumentRooms Rooms { get; } = new();
+
     public const int MOST_TEXT = 128 * 1024;
     private const int MOST_DOCUMENTS = 8, HISTORY = 32;
     private readonly Lock gate = new();

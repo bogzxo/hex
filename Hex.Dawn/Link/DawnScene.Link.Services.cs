@@ -32,6 +32,19 @@ internal sealed partial class DawnScene
         public void RepositoryReady(HexLinkDevice device, string folder, string path) => hex.LinkRepositoryReady(device, folder, path);
 
         public HexLinkDocuments Documents { get; } = new();
+        public bool LegacyDocumentFixture => hex.linkByTest;
+
+        public Task<HexLinkDocumentRoom> OpenSharedDocument(string path, string full, HexLinkDevice caller, bool automatic,
+            CancellationToken cancel) => hex.LinkLiveOpenRoom(this, path, full, caller, automatic, cancel);
+
+        public HexLinkPeer? SharedDocumentPeer(string id) => hex.link?.PeerOf(id);
+
+        public bool OwnsSharedDocument(string wire)
+        {
+            int slash = wire.IndexOf('/');
+            var folder = slash > 0 ? Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, wire[..slash])) : null;
+            return folder?.Authority is not { } authority || authority.DeviceId == Device.Id;
+        }
 
         public HexHubSnapshot Fleet => hex.hub.Snapshot;
 
@@ -110,7 +123,30 @@ internal sealed partial class DawnScene
     private async Task<string?> LinkCompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes,
         CancellationToken cancel, bool? executable, HexLinkFiles.PackDirectories? directories)
     {
-        LinkTabStamp before = await LinkTabForCheckedWrite(full, wire, cancel);
+        var (before, inRoom) = await OnEditorForLink(() =>
+        {
+            LinkTabStamp stamp = LinkTabBeforeWrite(full);
+            return (stamp, stamp.Document is { } tab && linkLiveDocuments.ContainsKey(tab));
+        }).WaitAsync(cancel);
+        if (inRoom)
+        {
+            if (bytes is not null && HexLinkFiles.Decode(bytes) is { } incoming &&
+                await LinkLiveKnownSyncSave(before.Document, HexLinkFiles.Hash(bytes), cancel).ConfigureAwait(false))
+            {
+                string? saved = await HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel, executable, directories).ConfigureAwait(false);
+                PostLink(() =>
+                {
+                    if (before.Document is { } tab && Context.Documents.Find(full) == tab && tab.DiskText == before.DiskText)
+                        tab.DiskText = incoming.Text;
+                });
+                return saved;
+            }
+            throw new HexLinkException(HexLinkErrors.CONFLICT, $"{wire} is open in a shared document.",
+                new JsonObject { ["hash"] = HexLinkFiles.HashOf(full), ["editor_dirty"] = true });
+        }
+        if (before.Dirty)
+            throw new HexLinkException(HexLinkErrors.CONFLICT, $"{wire} has unsaved changes in the editor.",
+                new JsonObject { ["hash"] = HexLinkFiles.HashOf(full), ["editor_dirty"] = true });
 
         string? hash = await HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel, executable, directories).ConfigureAwait(false);
         if (bytes is not null && HexLinkFiles.Decode(bytes) is { } decoded &&

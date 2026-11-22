@@ -25,7 +25,7 @@ internal sealed record HexLinkTreeFile(string Path, string? Hash, long Size, str
 /// </summary>
 internal sealed record HexLinkManifest(string Folder, string? Head, IReadOnlyList<HexLinkTreeFile> Files, string? Root = null,
     bool Certified = true, IReadOnlyDictionary<string, string?>? NestedHeads = null, bool? CaseSensitive = null,
-    string? Checkout = null, HexLinkAuthority? Authority = null, IReadOnlyDictionary<string, HexLinkGitIssue>? GitIssues = null);
+    string? Checkout = null, HexLinkAuthority? Authority = null, IReadOnlyDictionary<string, HexLinkGitIssue>? GitIssues = null, IReadOnlyList<HexLinkProvisionSkip>? ProvisionIssues = null);
 
 /// <summary>
 /// A file of a watched tree that changed, its new hash (null with <see cref="Deleted"/> when it went, or when it's too
@@ -85,20 +85,20 @@ internal sealed partial class HexLinkTree
     /// </summary>
     public HexLinkManifest Manifest() => Manifest(verify: false);
 
-    internal HexLinkManifest Manifest(bool verify, bool reuse = true)
+    internal HexLinkManifest Manifest(bool verify, bool reuse = true, bool provision = false)
     {
         using var timing = HexLinkSyncTiming.Measure("tree.scan-total");
         lock (scan)
         {
             RequireRoot();
             long version = Volatile.Read(ref scanVersion);
-            if (shareFreshScans && reuse && !verify && lastScan is { } previous &&
+            if (shareFreshScans && reuse && !verify && !provision && lastScan is { } previous &&
                 version == lastScanVersion && Environment.TickCount64 - scannedAt < 250)
                 return previous;
             LoadCache();
-            HexLinkManifest manifest = Scan(verify);
+            HexLinkManifest manifest = Scan(verify, provision);
             SaveCache(manifest.Files);
-            if (shareFreshScans)
+            if (shareFreshScans && !provision)
             {
                 lastScan = manifest;
                 lastScanVersion = version;
@@ -108,7 +108,7 @@ internal sealed partial class HexLinkTree
         }
     }
 
-    private HexLinkManifest Scan(bool verify)
+    private HexLinkManifest Scan(bool verify, bool provision)
     {
         RequireRoot();
         string? head = null, root = null;
@@ -146,12 +146,19 @@ internal sealed partial class HexLinkTree
         relative ??= Walk();
         // Detect a capped root listing before nested repositories replace any of its entries.
         CheckCount(relative.Count);
-        var nested = AddNestedGitFiles(relative, issues);
+        var nested = AddNestedGitFiles(relative, issues, provision);
         CheckCount(relative.Count);
         var actual = new HashSet<string>(StringComparer.Ordinal);
         var paths = new List<string>(relative.Count);
+        List<HexLinkProvisionSkip>? fileIssues = provision ? [] : null;
         foreach (string each in relative)
         {
+            if (fileIssues is not null && (!Plain(each) || Folder.Name.Length + 1 + each.Length > HexLinkFiles.MOST_PATH))
+            {
+                if (fileIssues.Count < MOST_PROVISION_ISSUES)
+                    fileIssues.Add(new(each, "The file name cannot be used by Link.", File: true));
+                continue;
+            }
             string path = onDiskNames ? each : CanonicalCase(each);
             if (path != each && IsSoleSpelling(each))
             {
@@ -183,6 +190,12 @@ internal sealed partial class HexLinkTree
             }
         }
         List<HexLinkTreeFile> files = [.. found.OfType<HexLinkTreeFile>()];
+        if (fileIssues is not null)
+        {
+            for (int i = 0; i < paths.Count && fileIssues.Count < MOST_PROVISION_ISSUES; i++)
+                if (found[i] is null && ProvisionFileProblem(paths[i]) is { } reason)
+                    fileIssues.Add(new(paths[i], reason, File: true));
+        }
 
         // What's cached of files no longer there let go of
         if (hashes.Count > files.Count * 2 + 1000)
@@ -194,7 +207,7 @@ internal sealed partial class HexLinkTree
         string location = PlatformPaths.Comparison == StringComparison.Ordinal ? Root : Root.ToUpperInvariant();
         string checkout = HexLinkFiles.Hash(Encoding.UTF8.GetBytes(FormattableString.Invariant($"{location}\n{Directory.GetCreationTimeUtc(Root).Ticks}")));
         return new HexLinkManifest(Folder.Name, head, files, root, NestedHeads: nested,
-            CaseSensitive: PlatformPaths.Comparison == StringComparison.Ordinal, Checkout: checkout, Authority: Folder.Authority, GitIssues: issues.Count == 0 ? null : issues);
+            CaseSensitive: PlatformPaths.Comparison == StringComparison.Ordinal, Checkout: checkout, Authority: Folder.Authority, GitIssues: issues.Count == 0 ? null : issues, ProvisionIssues: fileIssues);
     }
 
     // The first commit of the repository, worked out once per head (it only moves if history is rewritten). A history
@@ -522,6 +535,8 @@ internal sealed partial class HexLinkTree
             said["authority"] = authority.ToJson();
         if (manifest.GitIssues is { Count: > 0 } issues)
             said["git_issues"] = GitIssuesJson(issues);
+        if (manifest.ProvisionIssues is { Count: > 0 } problems)
+            said["provision_issues"] = ProvisionIssuesJson(problems);
         return said;
     }
 
@@ -568,7 +583,7 @@ internal sealed partial class HexLinkTree
             checkout = null;
         return new HexLinkManifest(folder, head is not null && HexLinkGit.IsCommitId(head) ? head : null, files,
             root is not null && HexLinkGit.IsCommitId(root) ? root : null, certified, NestedHeadsOf(said),
-            HexLinkData.Bool(said, "case_sensitive"), checkout, HexLinkAuthority.Of(HexLinkData.Object(said, "authority")), GitIssuesOf(said));
+            HexLinkData.Bool(said, "case_sensitive"), checkout, HexLinkAuthority.Of(HexLinkData.Object(said, "authority")), GitIssuesOf(said), ProvisionIssuesOf(said));
     }
 
     // A file's text hash and line ends said beside its hash, when it has them; a peer from before they were said sends

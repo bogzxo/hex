@@ -81,8 +81,10 @@ internal sealed partial class HexLinkTransport
         Slot? slot = Claim(device.Id, socket, dialledByMe: true, out string refusal);
         if (slot is null)
         {
-            await Say(ssl, "NO " + refusal, cancel);
-            throw new HexLinkRefused(refusal, refusal == "busy" ? "there's a link to that device already" : "there are as many links as there may be");
+            IOException? lost = null;
+            try { await Say(ssl, "NO " + refusal, cancel); }
+            catch (IOException error) { lost = error; }
+            throw new HexLinkRefused(refusal, refusal == "busy" ? "there's a link to that device already" : "there are as many links as there may be", lost);
         }
 
         try

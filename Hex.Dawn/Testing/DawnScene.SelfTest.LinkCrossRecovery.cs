@@ -75,7 +75,7 @@ internal sealed partial class DawnScene
             if (previous is { IsClosed: false } peer && now >= nextJoin)
             {
                 nextJoin = now + 2;
-                LinkDocumentJoin(peer, wire);
+                LinkLegacyDocumentJoin(peer, wire);
             }
             return false;
         }, 30);

@@ -1,5 +1,3 @@
-using Hex.Core.Git;
-
 namespace Hex.Dawn;
 
 internal sealed partial class DawnScene
@@ -17,43 +15,8 @@ internal sealed partial class DawnScene
     private SharedEditor? linkDocument;
     private int linkJoinGeneration;
 
-    private void LinkDocumentCommands(List<(string Text, Action Picked)> commands)
-    {
-        if (linkDocument is { } shared)
-        {
-            commands.Add((Said("link.doc_leave", ("path", shared.Base.Path)), LinkDocumentStop));
-            if (shared.Conflict)
-            {
-                commands.Add((Said("link.doc_compare"), () =>
-                    OpenDiff(shared.Tab.Path!, "link-document", Said("link.doc_compare"),
-                        GitDiffText.Of(shared.Base.Text, shared.Tab.Editor.Text), -1)));
-                commands.Add((Said("link.doc_resume"), () => shared.Conflict = false));
-            }
-            return;
-        }
-        if (document is { IsText: true, Path: { } path, DiffOf: null } && !linkRemote.ContainsKey(path) && LinkWireOf(path) is { } wire)
-            commands.Add((Said("link.doc_host", ("path", wire)), () => LinkDocumentHost(document, wire)));
-        foreach (HexLinkPeer peer in LinkPeers.Where(p => HexLinkAllowed.Has(p.Granted, HexLinkRights.Edit)))
-            commands.Add((Said("link.doc_join", ("device", peer.Device.Name)), () =>
-                AskText(Said("link.doc_title"), Said("link.doc_prompt"), string.Empty, Said("link.doc_button"),
-                    path => LinkDocumentJoin(peer, path.Trim()))));
-    }
 
-    private void LinkDocumentHost(HexDocument tab, string wire)
-    {
-        if (linkDocument != null || linkServices is null || tab.Path is null || LinkWireOf(tab.Path) != wire)
-            return;
-        try
-        {
-            var snapshot = linkServices.Documents.Share(wire, tab.Editor.Text);
-            ++linkJoinGeneration;
-            linkDocument = new(tab, null, snapshot);
-            Say(Said("link.doc_hosted", ("path", wire)));
-        }
-        catch (Exception error) { Say(error.Message, error: true); }
-    }
-
-    private async void LinkDocumentJoin(HexLinkPeer peer, string wire)
+    private async void LinkLegacyDocumentJoin(HexLinkPeer peer, string wire)
     {
         int generation = ++linkJoinGeneration;
         try

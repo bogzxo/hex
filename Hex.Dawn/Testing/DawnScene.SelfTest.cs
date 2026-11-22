@@ -530,7 +530,7 @@ internal sealed partial class DawnScene
         ("link-files", "sharing the code over Hex Link with a second Hex: a folder synced both ways, a conflict kept and resolved, what git ignores left, hex_link_sync flush, a remote file opened and saved back, the repository cloned and fetched, pull-only, a patch offered", TestLinkFiles),
         ("link-provision", "a second editor gets a workspace with nested Git history and a submodule, then syncs both ways", TestLinkProvision),
         ("link-missing-repository", "two editors sync common files while a nested checkout awaits its own Get", TestLinkMissingRepository),
-        ("link-documents", "two editors share unsaved text, concurrent changes and carets", TestLinkDocuments),
+        ("link-documents", "three linked editors share unsaved text, edit ownership, carets and saves", TestLinkDocuments),
         ("link-peer", "the other end of the link part, or a Hex to link to from another machine (HEX_LINK_TEST_DIAL or HEX_LINK_TEST_LISTEN)", TestLinkPeer),
         ("link-cross", "Hex Link across two machines, one command a side (HEX_LINK_TEST_LISTEN on one, HEX_LINK_TEST_DIAL on the other): each pairs, watches and steers the other, writes into its workspace, has its rights dropped, and the listener forgets the dialler", TestLinkCross),
         ("link-nearby", "Hex Link's discovery on the real LAN, run on two machines at once: Link up with link_discoverable on, passing once another Hex is heard", TestLinkNearby),

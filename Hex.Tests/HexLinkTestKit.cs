@@ -186,6 +186,9 @@ internal sealed class LinkServices : IHexLinkServices, IDisposable
     public HexLinkAuthorityStore? FolderAuthorities { get; set; }
 
     public HexLinkDocuments Documents { get; } = new();
+    public bool LegacyDocumentFixture => true;
+    public Func<string, HexLinkPeer?>? DocumentRoute { get; set; }
+    public HexLinkPeer? SharedDocumentPeer(string id) => DocumentRoute?.Invoke(id);
 
     public HexHubSnapshot Fleet => Hub.Snapshot;
 

@@ -42,6 +42,20 @@ public sealed class HexLinkPeerTests
     }
 
     [Fact]
+    public void Shared_presence_announces_the_file_without_exposing_a_position()
+    {
+        var room = HexLinkHost.PresenceJson(new("work/a.cs", 4, 2, 4, 9, 8, 13, SharedDocument: true));
+        Assert.Equal(2, room.Count);
+        Assert.Equal(new HexLinkPresence("work/a.cs", 0, 0, SharedDocument: true), HexLinkHost.PresenceOf(Wire(room)));
+
+        var plain = new HexLinkPresence("work/a.cs", 4, 2, 4, 9, 8, 13);
+        Assert.Equal(plain, HexLinkHost.PresenceOf(Wire(HexLinkHost.PresenceJson(plain))));
+
+        // Link receives parsed JSON numbers, not the typed values added to the outgoing object.
+        static JsonObject Wire(JsonObject message) => JsonNode.Parse(message.ToJsonString())!.AsObject();
+    }
+
+    [Fact]
     public async Task The_fleet_mirror_follows_a_changing_hub()
     {
         using var pair = await LinkedPair.Up(HexLinkRights.View);

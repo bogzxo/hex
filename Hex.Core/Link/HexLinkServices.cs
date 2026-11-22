@@ -28,7 +28,7 @@ internal sealed record HexLinkChatExtra(bool Waiting, string? PlanStep);
 /// Where somebody is in a file, said by a device as its caret moves: the file as a wire path, its line and column (from
 /// 0), and the other end of a selection when there is one. A null file is nowhere, the device closed it.
 /// </summary>
-internal sealed record HexLinkPresence(string? File, int Line, int Column, int? ToLine = null, int? ToColumn = null, int? PointerLine = null, int? PointerColumn = null);
+internal sealed record HexLinkPresence(string? File, int Line, int Column, int? ToLine = null, int? ToColumn = null, int? PointerLine = null, int? PointerColumn = null, bool SharedDocument = false);
 
 /// <summary>
 /// Everything a link needs of the editor it's part of, which Hex.Dawn gives it. Called from the links' own threads,
@@ -76,6 +76,17 @@ internal interface IHexLinkServices
 
     /// <summary>Buffers explicitly shared by the host editor, across all its connections.</summary>
     HexLinkDocuments? Documents => null;
+
+    // Cross-version self-test fixtures exercise the pre-release protocol.
+    bool LegacyDocumentFixture => false;
+
+    /// <summary>Checks the folder authority and opens an eligible live document across links.</summary>
+    Task<HexLinkDocumentRoom> OpenSharedDocument(string path, string full, HexLinkDevice caller, bool automatic, CancellationToken cancel) =>
+        Task.FromResult(Documents?.Rooms.Find(path) ?? throw HexLinkException.NotFound("No documents are shared."));
+
+    HexLinkPeer? SharedDocumentPeer(string id) => null;
+
+    bool OwnsSharedDocument(string wire) => true;
 
     /// <summary>The fleet as of the hub's last pump (HexAgentHub.Snapshot), read off the editor's thread as hex_agent_wait does.</summary>
     HexHubSnapshot Fleet { get; }

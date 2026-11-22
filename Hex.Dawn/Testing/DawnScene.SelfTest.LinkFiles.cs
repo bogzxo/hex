@@ -174,13 +174,14 @@ internal sealed partial class DawnScene
             _ = peer?.Write($"{LINK_PEER_FOLDER}/{LINK_FLAG_PRESENCE}", null, [1]);
         });
         test.WaitFor(() => peerId is not null && LinkPresence.TryGetValue(peerId, out LinkPresenceSeen? seen) && seen.Presence?.File == $"{LINK_SYNC_FOLDER}/README.md", 20.0f);
-        test.Check("link-files: B's caret arrives as presence with its file as folder/path, line and column", () =>
-            peerId is not null && LinkPresence.TryGetValue(peerId, out LinkPresenceSeen? seen) && seen.Presence is { Line: 0, Column: 2 });
-        test.Settle(0.3f);
-        test.Check("link-files: B's caret is drawn in A's open tab of the file, in B's colour with its name", () =>
-            Context.Documents.Find(readme) is { } open && peerId is not null
+        test.Check("link-files: B advertises its file with either a plain caret or a shared session", () =>
+            peerId is not null && LinkPresence.TryGetValue(peerId, out LinkPresenceSeen? seen)
+            && seen.Presence is { Line: 0, Column: 2, SharedDocument: false } or { SharedDocument: true });
+        bool DrawsBInReadme() => Context.Documents.Find(readme) is { } open && peerId is not null
             && open.Editor.RemoteCarets.Any(caret => caret is { Line: 0, Column: 2, Label: LINK_PEER_NAME } && caret.Id == peerId
-                && caret.Colour == LinkDeviceColour(peerId)));
+                && caret.Colour == LinkDeviceColour(peerId));
+        test.WaitFor(DrawsBInReadme, 8);
+        test.Check("link-files: B's caret is drawn in A's open tab of the file, in B's colour with its name", DrawsBInReadme);
         test.WaitFor(() => Context.Documents.Find(readme)?.Editor.RemoteCarets.Any(remote => remote.Id == peerId && remote.PointerColumn == 4) == true, 5);
         test.Check("link-files: B's mouse pointer reaches A independently of its text caret", () =>
             Context.Documents.Find(readme)?.Editor.RemoteCarets.Any(remote => remote.Id == peerId
@@ -198,9 +199,10 @@ internal sealed partial class DawnScene
             if (peerId is not null)
                 LinkFollow(peerId);
         });
-        test.WaitFor(() => document.Path is { } path && PlatformPaths.Same(path, readme), 10.0f);
-        test.Check("link-files: following B opens its file here with the caret on B's", () =>
-            LinkFollowing == peerId && document.Path is { } path && PlatformPaths.Same(path, readme) && document.Editor.Document.Caret == new UITextPosition(0, 2));
+        bool FollowingBInReadme() => peerId is not null && LinkFollowing == peerId
+            && document.Path is { } path && PlatformPaths.Same(path, readme) && document.Editor.Document.Caret == new UITextPosition(0, 2);
+        test.WaitFor(FollowingBInReadme, 10.0f);
+        test.Check("link-files: following B opens its file here with the caret on B's", FollowingBInReadme);
         test.Run(() => document.Editor.GoTo(0, 0));
         test.Settle(0.2f);
         test.Check("link-files: moving the caret here lets go of following", () => LinkFollowing is null);

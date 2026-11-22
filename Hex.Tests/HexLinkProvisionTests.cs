@@ -295,12 +295,86 @@ public sealed class HexLinkProvisionTests
         Assert.True(File.Exists(Path.Combine(host, "skipped", "private.txt")));
     }
 
-    private sealed class RefuseBundle(IHexLinkBundleSource next, string suffix) : IHexLinkBundleSource
+    [Fact]
+    public async Task Get_reports_individual_files_and_keeps_the_rest_of_the_checkout()
+    {
+        if (HexLinkGit.Why() is not null)
+            return;
+
+        using var pair = await LinkedPair.Up(HexLinkRights.View);
+        string host = pair.A.Work;
+        MakeRepo(host);
+        string head = Head(host);
+        string blob = Git(host, "rev-parse", "HEAD:tracked.txt");
+        string tree = InputGit(["mktree"],
+            $"100644 blob {blob}\ttracked.txt\n100644 blob {blob}\tMark\n100644 blob {blob}\tmark\n"
+            + $"100644 blob {blob}\tbad?name\n120000 blob {blob}\tshortcut\n");
+        string rewritten = InputGit(["commit-tree", tree, "-p", head, "-m", "Names requiring a partial checkout"], "");
+        Git(host, "update-ref", "HEAD", rewritten, head);
+        string large = Path.Combine(host, "outside-limit.tar"), vanished = Path.Combine(host, "vanishes.txt");
+        using (var big = File.Create(large))
+            big.SetLength(HexLinkFiles.MOST_READ + 20L);
+        File.WriteAllText(vanished, "Gone after the listing.");
+        File.WriteAllText(Path.Combine(host, "survives.txt"), "Keep this file.");
+        string locked = Path.Combine(host, "locked.txt");
+        using FileStream? lockedFile = OperatingSystem.IsWindows() ? File.Open(locked, FileMode.Create, FileAccess.ReadWrite, FileShare.None) : null;
+        lockedFile?.WriteByte(42);
+        lockedFile?.Flush();
+
+        string destination = Path.Combine(pair.B.Root, "partial-files");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(4));
+        int removed = 0;
+        HexLinkProvisionResult got = await HexLinkProvision.Get(pair.PeerA, destination, Path.Combine(pair.B.Root, "view.json"),
+            new InlineProgress(progress =>
+            {
+                if (progress is { Phase: HexLinkProvisionPhase.Files, FilesDone: 0 } && Interlocked.Exchange(ref removed, 1) == 0)
+                    File.Delete(vanished);
+            }), timeout.Token);
+        Assert.Equal(rewritten, Head(destination));
+        Assert.Equal("Keep this file.", File.ReadAllText(Path.Combine(destination, "survives.txt")));
+        foreach (var (path, word) in new[]
+        {
+            ("outside-limit.tar", "8 MB"), ("Mark", "collide"), ("mark", "collide"), ("bad?name", "Windows"),
+            ("shortcut", "Symbolic link"), ("vanishes.txt", "vanishes.txt")
+        })
+        {
+            HexLinkProvisionSkip reason = Assert.Single(got.Skipped, entry => entry.Path == path);
+            Assert.True(reason.File);
+            Assert.Contains(word, reason.Reason, StringComparison.OrdinalIgnoreCase);
+            Assert.False(File.Exists(Path.Combine(destination, path)));
+        }
+        if (OperatingSystem.IsWindows())
+            Assert.Contains(got.Skipped, entry => entry.Path == "locked.txt" && entry.Reason.Contains("read", StringComparison.OrdinalIgnoreCase));
+
+        string InputGit(string[] args, string input)
+        {
+            GitResult result = GitProcess.Run(host, args, input, patience: TimeSpan.FromMinutes(2));
+            Assert.True(result.Ok, result.Error);
+            return result.Output.Trim();
+        }
+    }
+
+    [Fact]
+    public async Task A_full_disk_remains_fatal_even_when_the_failed_bundle_is_nested()
+    {
+        if (HexLinkGit.Why() is not null)
+            return;
+        using var pair = await LinkedPair.Up(HexLinkRights.View);
+        MakeRepo(pair.A.Work, "/nested/\n");
+        MakeRepo(Path.Combine(pair.A.Work, "nested"));
+        string destination = Path.Combine(pair.B.Root, "disk-full");
+        await Assert.ThrowsAsync<IOException>(() => HexLinkProvision.Get(pair.PeerA, destination,
+            Path.Combine(pair.B.Root, "disk-full.json"), null, CancellationToken.None,
+            new RefuseBundle(pair.PeerA, "-1", new IOException("Not enough disk space.", 112))));
+        Assert.False(Directory.Exists(destination));
+    }
+
+    private sealed class RefuseBundle(IHexLinkBundleSource next, string suffix, IOException? problem = null) : IHexLinkBundleSource
     {
         public Task<string?> TransferBundle(string repository, IReadOnlyList<string> have, Action<long, long> progress,
             string? verifyIn, CancellationToken cancel) =>
             repository.EndsWith(suffix, StringComparison.Ordinal)
-                ? Task.FromException<string?>(new IOException("Git could not make this bundle."))
+                ? Task.FromException<string?>(problem ?? new IOException("Git could not make this bundle."))
                 : next.TransferBundle(repository, have, progress, verifyIn, cancel);
     }
 

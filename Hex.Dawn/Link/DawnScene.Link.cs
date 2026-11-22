@@ -274,6 +274,7 @@ internal sealed partial class DawnScene
         }
 
         // What's shared over the links let go of before they go (DawnScene.LinkSync, LinkFiles, LinkPresence)
+        LinkLiveStopAll();
         LinkDocumentStop();
         LinkShareStopAll();
         link?.Dispose();
@@ -378,6 +379,7 @@ internal sealed partial class DawnScene
         if (link is not null)
         {
             UpdateLinkDocument(dt);
+            UpdateLinkLiveDocuments(dt);
             UpdateLinkPresence();
         }
 

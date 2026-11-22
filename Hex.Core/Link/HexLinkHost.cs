@@ -54,7 +54,8 @@ internal sealed partial class HexLinkHost : IDisposable
                 throw HexLinkException.Invalid("The Link relay identity or hop count is invalid.");
             string name = HexLinkNames.Clean(HexLinkData.String(relay, "name", 100)) ?? origin;
             string operation = method == "tools/call" ? $"tool {HexLinkData.String(parameters, "name", 100)}" : Cut(method, 60);
-            services.Audit("relay", Device, $"{operation} for {name} ({origin}) via {Device.Name} ({Device.Id})");
+            if (method != "doc2/exchange" || parameters["ops"] is JsonArray { Count: > 0 })
+                services.Audit("relay", Device, $"{operation} for {name} ({origin}) via {Device.Name} ({Device.Id})");
         }
         return Dispatch(method, parameters, cancel);
     }
@@ -70,6 +71,8 @@ internal sealed partial class HexLinkHost : IDisposable
         "tools/list" => Task.FromResult<JsonNode?>(ToolsList()),
         "tools/call" => ToolsCall(parameters, cancel),
         "doc/join" or "doc/poll" or "doc/edit" => Task.FromResult<JsonNode?>(DocumentRequest(method, parameters)),
+        "doc2/open" or "doc2/exchange" or "doc2/leave" or "doc2/save" or "doc2/agent" => Document2Request(method, parameters, cancel),
+        "doc2/relay" => Document2Relay(parameters, cancel),
         "fs/list" => Task.FromResult<JsonNode?>(FsList(parameters)),
         "fs/read" => Task.FromResult<JsonNode?>(FsRead(parameters)),
         "fs/write" => FsWrite(parameters, cancel),
@@ -139,7 +142,7 @@ internal sealed partial class HexLinkHost : IDisposable
         return new HexLinkPresence(file, Math.Max(0, HexLinkData.Int(said, "line") ?? 0), Math.Max(0, HexLinkData.Int(said, "column") ?? 0),
             HexLinkData.Int(selection, "line") is { } toLine && toLine >= 0 ? toLine : null,
             HexLinkData.Int(selection, "column") is { } toColumn && toColumn >= 0 ? toColumn : null,
-            pointerLine, pointerColumn);
+            pointerLine, pointerColumn, SharedDocument: HexLinkData.Bool(said, "sharedDocument") == true);
     }
 
     /// <summary>A presence as the wire says it.</summary>
@@ -148,6 +151,11 @@ internal sealed partial class HexLinkHost : IDisposable
         var said = new JsonObject { ["file"] = presence?.File };
         if (presence is null)
             return said;
+        if (presence.SharedDocument)
+        {
+            said["sharedDocument"] = true;
+            return said;
+        }
         said["line"] = presence.Line;
         said["column"] = presence.Column;
         if (presence.ToLine is { } toLine && presence.ToColumn is { } toColumn)
@@ -420,6 +428,7 @@ internal sealed partial class HexLinkHost : IDisposable
     // The watches of chats and files let go of, when the link goes or may no longer see
     private void StopWatching()
     {
+        services.Documents?.Rooms.Disconnect(this);
         fleetAsked = false;
         ForgetFetchedChats();
         foreach (var (_, watched) in chats)
