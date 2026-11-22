@@ -100,6 +100,7 @@ internal sealed partial class DawnScene
         string said = follow ?? sync?.Why ?? string.Empty;
         if (said.Length > 0)
             holder.Add(new Label { Text = UIRichText.Literal(said), TextScale = LINK_SMALL, Dim = true, Wrap = true, Align = Origin.Left, Fill = UIFill.Horizontal, Padding = new UIEdges(18, 0, 0, 0) });
+        DrawLinkFolderAuthority(holder, peer, folder);
         LinkMissingRepositoryRow(holder, peer, folder, state);
         DrawLinkPrivateWorktreePresence(holder, peer, folder);
         DrawLinkPrivateWorktree(holder, folder, LinkProvisionedLocal(peer.Device.Id, folder));
@@ -134,6 +135,40 @@ internal sealed partial class DawnScene
         if (detail is { Length: > 0 })
             holder.Add(LinkLine(detail));
     }
+
+    private void DrawLinkFolderAuthority(StackPanel holder, HexLinkPeer peer, string folder)
+    {
+        HexLinkAuthority? local = linkServices?.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, folder))?.Authority;
+        HexLinkAuthority? authority = local ?? peer.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, folder))?.Authority;
+        if (authority is null)
+            return;
+
+        bool here = string.Equals(authority.DeviceId, LinkDevice?.Id, StringComparison.OrdinalIgnoreCase);
+        string name = here ? Said("link.runs_on_here") : LinkNameOf(authority.DeviceId);
+        holder.Add(LinkLine(Said("link.devices_folder_authority", ("device", name))));
+        if (local is not null && !here)
+            LinkActionRow(holder).Add(LinkButton(Said("link.authority_make"), "shield", () => ConfirmLinkFolderAuthority(folder, local)));
+    }
+
+    private void ConfirmLinkFolderAuthority(string folder, HexLinkAuthority previous)
+    {
+        if (LinkPeerOf(previous.DeviceId) is null or { IsClosed: true })
+        {
+            // The existing transfer command asks explicitly about taking over from an unavailable owner.
+            LinkMakeAuthorityCommand(folder);
+            return;
+        }
+
+        string confirm = Said("link.authority_make");
+        Context.Windows.Ask(confirm, Said("link.devices_authority_confirm", ("folder", folder)),
+            [Said("link.pair_cancel"), confirm], answer =>
+            {
+                if (answer == confirm)
+                    LinkMakeAuthorityCommand(folder);
+            }, risky: confirm);
+    }
+
+    partial void LinkPrivateWorktreeRow(StackPanel holder, HexLinkPeer peer, string folder);
 
     // Worker A supplies counters for the active pass when the sync engine reports them.
     partial void LinkDeviceSyncProgress(LinkSyncShown sync, ref int filesDone, ref int filesTotal, ref long bytesDone, ref long bytesTotal, ref int queued, ref string? detail);

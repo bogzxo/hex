@@ -54,7 +54,7 @@ internal sealed partial class DawnScene
     /// folder is open here, otherwise their file over the link) and the caret kept on theirs until the person here types
     /// or moves it. Following the one followed already stops.
     /// </summary>
-    internal void LinkFollow(string deviceId)
+    internal void LinkFollow(string deviceId, string? shownName = null)
     {
         if (linkFollowing == deviceId)
         {
@@ -65,10 +65,10 @@ internal sealed partial class DawnScene
         linkFollowing = deviceId;
         linkFollowDocument = null;
         linkFollowSeen = string.Empty;
-        string name = LinkPeers.FirstOrDefault(peer => peer.Device.Id == deviceId)?.Device.Name ?? deviceId;
-        Say(linkPresence.TryGetValue(deviceId, out LinkPresenceSeen? seen) && seen.Presence is not null
-            ? Said("link.following", ("device", name))
-            : Said("link.following_nowhere", ("device", name)));
+        string name = shownName ?? LinkPeers.FirstOrDefault(peer => peer.Device.Id == deviceId)?.Device.Name ?? deviceId;
+        string status = shownName is not null ? "link.devices_session_following"
+            : linkPresence.TryGetValue(deviceId, out LinkPresenceSeen? seen) && seen.Presence is not null ? "link.following" : "link.following_nowhere";
+        Say(Said(status, ("device", name)));
         linkDirty = true;
     }
 

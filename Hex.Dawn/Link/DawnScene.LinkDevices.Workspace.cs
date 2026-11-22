@@ -5,7 +5,10 @@ internal sealed partial class DawnScene
     private void LinkWorkspaceAdvertised(HexLinkWorkspace previous, HexLinkWorkspace current)
     {
         if (!HexLinkPeer.SameWorkspace(previous, current))
+        {
+            linkDirty = true;
             link?.WorkspaceMoved();
+        }
     }
 
     private async Task LinkPrepareSharedWorkspace(HexLinkPeer peer)
