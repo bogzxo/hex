@@ -16,6 +16,7 @@ public sealed class HexLinkSyncTlsBenchmark(ITestOutputHelper output)
     private static readonly string[] Candidates = [".", "hex", "horizon", "dusk", "Fighter2D", "hidl", "hex/hex-extensions", "horizon/Horizon.HIDL"];
     private static readonly TimeSpan Limit = TimeSpan.FromMinutes(30);
     private readonly string? progress = Environment.GetEnvironmentVariable("HEX_LINK_SYNC_BENCH_LOG");
+    private readonly bool profile = Environment.GetEnvironmentVariable("HEX_LINK_SYNC_BENCH_PROFILE") == "1";
 
     [Fact]
     public async Task Benchmark_working_tree_over_loopback_TLS()
@@ -39,6 +40,21 @@ public sealed class HexLinkSyncTlsBenchmark(ITestOutputHelper output)
         output.WriteLine(message);
         if (!string.IsNullOrEmpty(progress))
             File.AppendAllText(progress, message + Environment.NewLine);
+    }
+
+    private void BeginProfile()
+    {
+        if (profile)
+            HexLinkSyncTiming.Start();
+    }
+
+    private void EndProfile(string phase)
+    {
+        if (!profile)
+            return;
+        Write($"{phase} timings (aggregate wall time across workers and endpoints):");
+        foreach (string line in HexLinkSyncTiming.Finish())
+            Write(line);
     }
 
     private async Task Run(List<(string Relative, string Full, string Commit)> repositories, HexLinkBulkSupport capability)
@@ -93,12 +109,21 @@ public sealed class HexLinkSyncTlsBenchmark(ITestOutputHelper output)
                 if (sync.BytesTotal > bytes)
                     bytes = sync.BytesTotal;
             };
+            BeginProfile();
             var elapsed = Stopwatch.StartNew();
             await sync.Start(cancel: stop);
             await Idle(sync, stop, () => Write($"{label} cold progress: {sync.Sent} sent, {sync.FilesDone}/{sync.FilesTotal} complete, {sync.Summary}"));
             Assert.Empty(sync.Conflicts);
             Write($"{label} cold: {elapsed.Elapsed.TotalSeconds:F3} s, {files} files compared for transfer, " +
                 $"{bytes / 1_000_000d:F1} MB, {sync.Sent} files sent, {sync.Skipped.Count} skipped.");
+            EndProfile("cold");
+            foreach (HexLinkSyncSkipped skipped in sync.Skipped)
+                Write($"{label} skipped {skipped.Path}: {skipped.Why}");
+            if (capability != HexLinkBulkSupport.None)
+            {
+                Assert.Empty(sync.Skipped);
+                Assert.Equal(files, sync.Sent + sync.Received);
+            }
             await sync.Flush(stop);
         }
 
@@ -106,22 +131,29 @@ public sealed class HexLinkSyncTlsBenchmark(ITestOutputHelper output)
         {
             HexLinkPeer peer = await transport.Start(stop);
             using var sync = new HexLinkSync(peer, here.Workspace.Folders[0], state);
+            BeginProfile();
             var elapsed = Stopwatch.StartNew();
             await sync.Start(cancel: stop);
             await Idle(sync, stop);
             Write($"{label} warm restart: {elapsed.Elapsed.TotalSeconds:F3} s, {sync.Sent + sync.Received} files transferred.");
+            EndProfile("warm restart");
+            Assert.Equal(0, sync.Sent + sync.Received);
 
             string remoteLive = Path.Combine(there.Work, "hexlink-benchmark-live.txt");
+            BeginProfile();
             elapsed.Restart();
             File.WriteAllText(Path.Combine(here.Work, "hexlink-benchmark-live.txt"), "one saved file\n");
             await Until(() => Read(remoteLive) == "one saved file\n", stop);
             Write($"{label} one saved file: {elapsed.Elapsed.TotalSeconds:F3} s.");
+            EndProfile("one save");
 
+            BeginProfile();
             elapsed.Restart();
             Git(here.Work, "checkout", "--detach", switched);
             await Until(() => Enumerable.Range(0, 500).All(i =>
                 Read(Path.Combine(there.Work, branchFiles, $"{i:0000}.txt")) == $"switched {i}\n"), stop);
             Write($"{label} branch switch, 500 paths: {elapsed.Elapsed.TotalSeconds:F3} s.");
+            EndProfile("branch switch");
 
             const int size = 200 * 1024 * 1024;
             string next = Path.Combine(here.Root, "benchmark-medium.bin");
@@ -133,6 +165,7 @@ public sealed class HexLinkSyncTlsBenchmark(ITestOutputHelper output)
                     file.Write((i & 1) == 0 ? random : zero);
             }
             string large = Path.Combine(there.Work, "hexlink-benchmark-big.bin");
+            BeginProfile();
             elapsed.Restart();
             File.Move(next, Path.Combine(here.Work, Path.GetFileName(large)));
             if (capability == HexLinkBulkSupport.None)
@@ -146,12 +179,17 @@ public sealed class HexLinkSyncTlsBenchmark(ITestOutputHelper output)
                 Assert.Equal(size, new FileInfo(large).Length);
                 Write($"{label} 200 MiB: {elapsed.Elapsed.TotalSeconds:F3} s.");
             }
+            EndProfile("200 MiB");
         }
     }
 
     private static List<(string Relative, string Full, string Commit)> Repositories(string source)
     {
         var repositories = new List<(string, string, string)>();
+        var pinned = (Environment.GetEnvironmentVariable("HEX_LINK_SYNC_BENCH_PINS") ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(each => each.Split('@', 2))
+            .ToDictionary(each => each[0], each => each[1], StringComparer.Ordinal);
         foreach (string relative in Candidates)
         {
             string path = Path.GetFullPath(Path.Combine(source, relative));
@@ -159,7 +197,7 @@ public sealed class HexLinkSyncTlsBenchmark(ITestOutputHelper output)
                 continue;
             GitResult top = GitProcess.Run(path, ["rev-parse", "--show-toplevel"]);
             if (top.Ok && PlatformPaths.Same(path, top.Output.Trim()))
-                repositories.Add((relative, path, Git(path, "rev-parse", "HEAD").Trim()));
+                repositories.Add((relative, path, pinned.GetValueOrDefault(relative) ?? Git(path, "rev-parse", "HEAD").Trim()));
         }
 
         return repositories;

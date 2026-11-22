@@ -7,11 +7,14 @@ namespace Hex.Core;
 /// <summary>A bounded pack of small files. Each entry is a little-endian JSON header length, header and raw bytes.</summary>
 internal static class HexLinkFilePack
 {
-    public const int MaximumFiles = 32;
+    public const int MaximumFiles = 128;
     public const int MaximumFile = 512 * 1024;
     public const int MaximumSingle = HexLinkFiles.MOST_READ;
     public const int MaximumLength = 18 * 1024 * 1024;
     private const int MaximumHeader = 48 * 1024;
+
+    // Allow for UTF-8 JSON escapes, the SHA-256 and the length prefix before constructing the headers.
+    public static int WireCost(string path, int bytes) => checked(256 + 6 * path.Length + bytes);
 
     internal sealed record Entry(string Path, byte[] Bytes, string? Base = null, bool? Executable = null);
 
@@ -42,6 +45,7 @@ internal static class HexLinkFilePack
         if (entries.Count > MaximumFiles)
             throw new ArgumentException("A Link file pack contains too many files.", nameof(entries));
 
+        var prepare = HexLinkSyncTiming.Measure("pack.build-headers", entries.Count);
         var headers = new byte[entries.Count][];
         int maximum = entries.Count == 1 ? MaximumSingle : MaximumFile;
         int length = 0;
@@ -59,7 +63,11 @@ internal static class HexLinkFilePack
         if (length > MaximumLength)
             throw new HexLinkException(HexLinkErrors.TOO_BIG, "The Link file pack is too large.");
 
+        prepare.Dispose();
+        var opening = HexLinkSyncTiming.Measure("pack.open");
         await using HexLinkSession.BulkUpload upload = await session.OpenBulkAsync(purpose, length, metadata, cancel);
+        opening.Dispose();
+        var frames = HexLinkSyncTiming.Measure("pack.copy-and-send", length);
         // A full frame carries many small files. Never allocate a contiguous buffer the size of the pack.
         byte[] buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(HexLinkFrameHeader.MaximumPayload);
         try
@@ -97,6 +105,8 @@ internal static class HexLinkFilePack
             System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
         }
 
+        frames.Dispose();
+        using var completing = HexLinkSyncTiming.Measure("pack.commit-round-trip", entries.Count);
         return await upload.CompleteAsync(cancel);
     }
 
@@ -146,10 +156,19 @@ internal static class HexLinkFilePack
 
         public JsonNode? Result { get; private set; }
 
-        public ValueTask WriteAsync(ReadOnlyMemory<byte> data, CancellationToken cancel) => staging.WriteAsync(data, cancel);
+        public async ValueTask WriteAsync(ReadOnlyMemory<byte> data, CancellationToken cancel)
+        {
+            using var timing = HexLinkSyncTiming.Measure("pack.receiver-stage", data.Length);
+            await staging.WriteAsync(data, cancel);
+        }
 
-        public async ValueTask CommitAsync(CancellationToken cancel) =>
-            Result = await commit(Parse(staging.GetBuffer().AsSpan(0, (int)staging.Length)), cancel);
+        public async ValueTask CommitAsync(CancellationToken cancel)
+        {
+            List<Entry> entries;
+            using (HexLinkSyncTiming.Measure("pack.receiver-parse", (int)staging.Length))
+                entries = Parse(staging.GetBuffer().AsSpan(0, (int)staging.Length));
+            Result = await commit(entries, cancel);
+        }
 
         public ValueTask DisposeAsync() => staging.DisposeAsync();
     }
@@ -157,7 +176,7 @@ internal static class HexLinkFilePack
 
 internal sealed partial class HexLinkSync
 {
-    private sealed record PendingRead(string Path, CancellationToken Cancel, TaskCompletionSource<HexLinkFile> Answer);
+    private sealed record PendingRead(string Path, int Size, CancellationToken Cancel, TaskCompletionSource<HexLinkFile> Answer);
     private sealed record PendingWrite(HexLinkFilePack.Entry Entry, CancellationToken Cancel, TaskCompletionSource<string> Answer);
     private PackBatcher<PendingRead>? packedReads;
     private PackBatcher<PendingWrite>? packedWrites;
@@ -175,7 +194,7 @@ internal sealed partial class HexLinkSync
                 if (size <= HexLinkFilePack.MaximumFile)
                 {
                     var answer = new TaskCompletionSource<HexLinkFile>(TaskCreationOptions.RunContinuationsAsynchronously);
-                    packedReads.Add(new PendingRead(path, cancel, answer));
+                    packedReads.Add(new PendingRead(path, (int)size, cancel, answer));
                     try
                     {
                         return await answer.Task.WaitAsync(cancel);
@@ -276,7 +295,7 @@ internal sealed partial class HexLinkSync
     }
 
     // One reader and writer per folder pair form packs from the paths already admitted by the work loop.
-    private sealed class PackBatcher<T>(Func<T[], Task> send)
+    private sealed class PackBatcher<T>(Func<T[], Task> send, Func<T, int> cost)
     {
         private readonly Queue<T> queued = new();
         private bool draining;
@@ -307,9 +326,17 @@ internal sealed partial class HexLinkSync
                         return;
                     }
 
-                    batch = new T[Math.Min(queued.Count, HexLinkFilePack.MaximumFiles)];
-                    for (int i = 0; i < batch.Length; i++)
-                        batch[i] = queued.Dequeue();
+                    var next = new List<T>(Math.Min(queued.Count, HexLinkFilePack.MaximumFiles));
+                    int bytes = 0;
+                    while (next.Count < HexLinkFilePack.MaximumFiles && queued.TryPeek(out T? item))
+                    {
+                        int entry = cost(item);
+                        if (next.Count > 0 && bytes + entry > HexLinkFilePack.MaximumLength)
+                            break;
+                        bytes += entry;
+                        next.Add(queued.Dequeue());
+                    }
+                    batch = [.. next];
                 }
                 await send(batch).ConfigureAwait(false);
             }

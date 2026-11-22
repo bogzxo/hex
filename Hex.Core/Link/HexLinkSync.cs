@@ -113,12 +113,14 @@ internal sealed partial class HexLinkSync : IDisposable
     {
         this.peer = peer;
         this.folder = folder;
+        if (peer.Session.SupportsBulk)
+            Quiet = TimeSpan.FromMilliseconds(120);
         int inFlight = peer.Session.SupportsBulk ? HexLinkFilePack.MaximumFiles : MOST_IN_FLIGHT;
         slots = new SemaphoreSlim(inFlight, inFlight);
         if (peer.CanReadFilePacks)
-            packedReads = new PackBatcher<PendingRead>(ReadPacked);
+            packedReads = new PackBatcher<PendingRead>(ReadPacked, each => HexLinkFilePack.WireCost(each.Path, each.Size));
         if (peer.CanWriteFilePacks)
-            packedWrites = new PackBatcher<PendingWrite>(WritePacked);
+            packedWrites = new PackBatcher<PendingWrite>(WritePacked, each => HexLinkFilePack.WireCost(each.Entry.Path, each.Entry.Bytes.Length));
         tree = new HexLinkTree(folder, () => Excludes(), stateFolder, peer.Session.SupportsBulk);
         slug = HexLinkGit.Slug(peer.Device.Name);
         StateFile = Path.GetFullPath(Path.Combine(stateFolder, StateName(peer.Device.Id, folder.Name)));
@@ -307,8 +309,11 @@ internal sealed partial class HexLinkSync : IDisposable
 
             tree = HexLinkTree.Shared(folder, () => Excludes(), Path.GetDirectoryName(StateFile), peer.Session.SupportsBulk);
             watch = new HexLinkTreeSubscription(tree, Saw, Quiet, Rescan);
-            HexLinkManifest mine = await Task.Run(tree.Manifest, cancel);
-            HexLinkManifest theirs = await peer.WatchTree(folder.Name, Heard, cancel, mine);
+            HexLinkManifest mine, theirs;
+            using (HexLinkSyncTiming.Measure("start.local-manifest"))
+                mine = await Task.Run(tree.Manifest, cancel);
+            using (HexLinkSyncTiming.Measure("start.manifest-round-trip"))
+                theirs = await peer.WatchTree(folder.Name, Heard, cancel, mine);
             remoteWatched = true;
             LocalHead = mine.Head;
             RemoteHead = theirs.Head;
@@ -598,6 +603,7 @@ internal sealed partial class HexLinkSync : IDisposable
 
     private void Notify()
     {
+        using var timing = HexLinkSyncTiming.Measure("sync.notify");
         try
         {
             Changed?.Invoke();

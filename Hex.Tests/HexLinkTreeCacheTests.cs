@@ -1,11 +1,43 @@
 using System.Text;
 
 using Hex.Core;
+using Hex.Core.Git;
 
 namespace Hex.Tests;
 
 public sealed class HexLinkTreeCacheTests
 {
+    [Fact]
+    public void Verified_index_membership_does_not_reuse_an_untracked_path_after_index_changes()
+    {
+        if (HexLinkGit.Why() is not null)
+            return;
+
+        using var site = new LinkServices(HexLinkTestKit.DeviceA);
+        Run("init", "-q");
+        File.WriteAllText(Path.Combine(site.Work, ".gitignore"), "*.txt\n");
+        File.WriteAllText(Path.Combine(site.Work, "old.txt"), "tracked");
+        File.WriteAllText(Path.Combine(site.Work, "new.txt"), "ignored");
+        Run("add", "-f", "old.txt");
+        string index = Path.Combine(site.Work, ".git", "index");
+        DateTime initialStamp = File.GetLastWriteTimeUtc(index);
+
+        var tree = new HexLinkTree(site.Workspace.Folders[0]);
+        tree.Manifest();
+        Assert.Equal("new.txt", Assert.Single(tree.Ignored(["old.txt", "new.txt"])));
+
+        Run("update-index", "--force-remove", "old.txt");
+        Run("add", "-f", "new.txt");
+        File.SetLastWriteTimeUtc(index, initialStamp);
+        Assert.Equal("old.txt", Assert.Single(tree.Ignored(["old.txt", "new.txt"])));
+
+        void Run(params string[] args)
+        {
+            GitResult result = GitProcess.Run(site.Work, args);
+            Assert.True(result.Ok, result.Why);
+        }
+    }
+
     [Fact]
     public async Task Shared_watchers_fan_out_changes_and_catch_up_new_subscribers()
     {

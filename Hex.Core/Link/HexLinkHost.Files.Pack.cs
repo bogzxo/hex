@@ -4,6 +4,8 @@ namespace Hex.Core;
 
 internal sealed partial class HexLinkHost
 {
+    private static readonly SemaphoreSlim packedWrites = new(16, 16);
+
     private void InstallFilePacks()
     {
         if (session.SupportsBulk)
@@ -17,41 +19,83 @@ internal sealed partial class HexLinkHost
 
     private async Task<JsonNode?> ApplyFilePack(JsonObject metadata, IReadOnlyList<HexLinkFilePack.Entry> entries, CancellationToken cancel)
     {
+        using var total = HexLinkSyncTiming.Measure("pack.receiver-apply", entries.Count);
         Need(HexLinkRights.Edit, "sync/pack/write");
         HexLinkTree tree = TreeOf(metadata);
         string prefix = tree.Folder.Name + "/";
         if (entries.Any(entry => !entry.Path.StartsWith(prefix, StringComparison.Ordinal) || entry.Path.Length == prefix.Length))
             throw HexLinkException.Invalid("A packed file path is outside its workspace folder.");
 
-        HashSet<string> ignored = tree.Ignored([.. entries.Select(entry => entry.Path[prefix.Length..])]);
+        HashSet<string> ignored;
+        using (HexLinkSyncTiming.Measure("pack.receiver-ignore", entries.Count))
+            ignored = tree.Ignored([.. entries.Select(entry => entry.Path[prefix.Length..])]);
         services.Audit("edit", Device, $"sync/pack/write {tree.Folder.Name}, {entries.Count} files");
-        var results = new JsonArray();
-        foreach (HexLinkFilePack.Entry entry in entries)
+        var paths = new string?[entries.Count];
+        var results = new HexLinkFilePack.Outcome?[entries.Count];
+        var targets = new HashSet<string>(PlatformPaths.Comparer);
+        for (int i = 0; i < entries.Count; i++)
         {
             cancel.ThrowIfCancellationRequested();
-            HexLinkFilePack.Outcome result;
+            HexLinkFilePack.Entry entry = entries[i];
             try
             {
-                Need(HexLinkRights.Edit, "sync/pack/write");
-                string full = ResolveFile(entry.Path);
                 if (ignored.Contains(entry.Path[prefix.Length..]))
                     throw new HexLinkException(HexLinkErrors.NOT_ALLOWED, "Link cannot write an ignored file.");
-                string? hash = await services.CompareAndReplace(full, entry.Path, entry.Base, entry.Bytes, cancel, entry.Executable);
-                tree.RememberMode(full, entry.Executable);
-                result = new(entry.Path, hash);
+                using var resolve = HexLinkSyncTiming.Measure("pack.receiver-resolve");
+                paths[i] = ResolveFile(entry.Path);
             }
             catch (HexLinkException error)
             {
-                result = new(entry.Path, null, error);
+                results[i] = new(entry.Path, null, error);
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
-                result = new(entry.Path, null, new HexLinkException(HexLinkErrors.INTERNAL_ERROR, error.Message));
+                results[i] = new(entry.Path, null, new HexLinkException(HexLinkErrors.INTERNAL_ERROR, error.Message));
             }
-            results.Add((JsonNode)result.Json());
+            if (paths[i] is { } path && !targets.Add(path))
+                throw HexLinkException.Invalid("Packed paths resolve to the same file.");
         }
 
-        return new JsonObject { ["outcomes"] = results };
+        foreach (string path in targets)
+        {
+            for (string? parent = Path.GetDirectoryName(path); parent is not null && PlatformPaths.IsUnder(parent, tree.Root);
+                parent = Path.GetDirectoryName(parent))
+            {
+                if (targets.Contains(parent))
+                    throw HexLinkException.Invalid("Packed paths overlap.");
+            }
+        }
+
+        var options = new ParallelOptions { CancellationToken = cancel, MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount - 1, 1, 6) };
+        await Parallel.ForEachAsync(Enumerable.Range(0, entries.Count), options, async (i, stop) =>
+        {
+            if (paths[i] is not { } full)
+                return;
+
+            HexLinkFilePack.Entry entry = entries[i];
+            await packedWrites.WaitAsync(stop);
+            try
+            {
+                Need(HexLinkRights.Edit, "sync/pack/write");
+                string? hash = await services.CompareAndReplace(full, entry.Path, entry.Base, entry.Bytes, stop, entry.Executable);
+                tree.RememberMode(full, entry.Executable);
+                results[i] = new(entry.Path, hash);
+            }
+            catch (HexLinkException error)
+            {
+                results[i] = new(entry.Path, null, error);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                results[i] = new(entry.Path, null, new HexLinkException(HexLinkErrors.INTERNAL_ERROR, error.Message));
+            }
+            finally
+            {
+                packedWrites.Release();
+            }
+        });
+
+        return new JsonObject { ["outcomes"] = new JsonArray([.. results.Select(each => (JsonNode?)each!.Json())]) };
     }
 
     private async Task<JsonNode?> ReadFilePack(JsonObject parameters, CancellationToken cancel)
@@ -70,6 +114,7 @@ internal sealed partial class HexLinkHost
         var files = new List<HexLinkFilePack.Entry>(paths.Count);
         var errors = new JsonArray();
         int maximum = paths.Count == 1 ? HexLinkFilePack.MaximumSingle : HexLinkFilePack.MaximumFile;
+        int length = 0;
         foreach (string path in paths)
         {
             cancel.ThrowIfCancellationRequested();
@@ -80,8 +125,10 @@ internal sealed partial class HexLinkHost
                 if (info.Length > maximum)
                     throw new HexLinkException(HexLinkErrors.TOO_BIG, $"The file {path} has outgrown a Link file pack.");
                 byte[] bytes = await HexLinkFiles.ReadSharedAsync(full, cancel);
-                if (bytes.Length > maximum)
-                    throw new HexLinkException(HexLinkErrors.TOO_BIG, $"The file {path} has outgrown a Link file pack.");
+                int cost = HexLinkFilePack.WireCost(path, bytes.Length);
+                if (bytes.Length > maximum || length + cost > HexLinkFilePack.MaximumLength)
+                    throw new HexLinkException(HexLinkErrors.TOO_BIG, $"The file {path} needs a separate Link file pack.");
+                length += cost;
                 int slash = path.IndexOf('/');
                 HexLinkTree tree = TreeOf(new JsonObject { ["folder"] = path[..slash] });
                 files.Add(new HexLinkFilePack.Entry(path, bytes, Executable: tree.Mode(full)));

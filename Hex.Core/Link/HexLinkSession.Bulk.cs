@@ -50,8 +50,8 @@ internal sealed partial class HexLinkSession
     /// Opens an ordered upload of exactly <paramref name="length"/> bytes to a registered purpose. Up to four uploads
     /// in each direction share the connection. Each upload has eight credits for frames of up to 256 KiB, so at most
     /// 2 MiB per upload is outstanding. The open is subject to RPC admission. Data and credits use the byte window
-    /// independently of RPC admission. The token also cancels subsequent writes and completion. Dispose an unfinished
-    /// upload to abort it and release its slot.
+    /// independently of RPC admission. A caller waits for capacity before allocating a stream ID. The token also
+    /// cancels subsequent writes and completion. Dispose an unfinished upload to abort it and release its slot.
     /// </summary>
     public async Task<BulkUpload> OpenBulkAsync(string purpose, long length, JsonObject? metadata = null, CancellationToken cancel = default)
     {
@@ -61,9 +61,15 @@ internal sealed partial class HexLinkSession
         if (purpose.Length > 80)
             throw new ArgumentException("A bulk purpose takes at most 80 characters.", nameof(purpose));
         ArgumentOutOfRangeException.ThrowIfNegative(length);
-        cancel.ThrowIfCancellationRequested();
-        if (!uploadSlots.Wait(0))
-            throw new HexLinkException(HexLinkErrors.BUSY, "Too many Link bulk uploads are already open.");
+        using var waiting = CancellationTokenSource.CreateLinkedTokenSource(cancel, closing.Token);
+        try
+        {
+            await uploadSlots.WaitAsync(waiting.Token);
+        }
+        catch (OperationCanceledException) when (IsClosed && !cancel.IsCancellationRequested)
+        {
+            throw new HexLinkException(HexLinkErrors.CLOSED, $"The link closed, {Why}");
+        }
 
         long id = Interlocked.Increment(ref lastBulkId);
         BulkUpload upload;

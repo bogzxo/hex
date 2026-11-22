@@ -58,24 +58,42 @@ internal sealed partial class HexLinkTree
         relative.RemoveAll(path => RepositoryContaining(path, repositories) is not null);
         var heads = new Dictionary<string, string?>(StringComparer.Ordinal);
         var folders = new[] { Folder };
-        foreach (string path in repositories)
+        var scans = new (string Output, string? Head, Exception? Error)[repositories.Length];
+        var options = new ParallelOptions { MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount - 1, 1, 4) };
+        Parallel.For(0, repositories.Length, options, i =>
         {
-            string directory = HexLinkFiles.Resolve(folders, Folder.Name + "/" + path);
-            GitResult listed = GitProcess.Run(directory, ["ls-files", "-co", "--exclude-standard", "-z"], patience: TimeSpan.FromMinutes(2));
-            if (!listed.Ok || !string.IsNullOrWhiteSpace(listed.Error))
-                throw new IOException($"Couldn't list Git files in {path}: {listed.Why}");
-            foreach (string file in listed.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.Ordinal))
+            string path = repositories[i];
+            try
+            {
+                string directory = HexLinkFiles.Resolve(folders, Folder.Name + "/" + path);
+                GitResult listed = GitProcess.Run(directory, ["ls-files", "-co", "--exclude-standard", "-z"], patience: TimeSpan.FromMinutes(2));
+                if (!listed.Ok || !string.IsNullOrWhiteSpace(listed.Error))
+                    throw new IOException($"Couldn't list Git files in {path}: {listed.Why}");
+                GitResult head = GitProcess.Run(directory, ["rev-parse", "--verify", "--quiet", "HEAD"]);
+                string commit = head.Output.Trim();
+                if (head.Exit != 1 && (!head.Ok || !HexLinkGit.IsCommitId(commit)))
+                    throw new IOException($"Couldn't read HEAD in {path}: {head.Why}");
+                scans[i] = (listed.Output, head.Ok ? commit : null, null);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or HexLinkException)
+            {
+                scans[i] = ("", null, error);
+            }
+        });
+
+        for (int i = 0; i < repositories.Length; i++)
+        {
+            var (output, head, error) = scans[i];
+            if (error is not null)
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error).Throw();
+            string path = repositories[i];
+            foreach (string file in output.Split('\0', StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.Ordinal))
             {
                 string full = path + "/" + file;
                 if (RepositoryContaining(full, repositories) == path)
                     relative.Add(full);
             }
-
-            GitResult head = GitProcess.Run(directory, ["rev-parse", "--verify", "--quiet", "HEAD"]);
-            string commit = head.Output.Trim();
-            if (head.Exit != 1 && (!head.Ok || !HexLinkGit.IsCommitId(commit)))
-                throw new IOException($"Couldn't read HEAD in {path}: {head.Why}");
-            heads.Add(path, head.Ok ? commit : null);
+            heads.Add(path, head);
         }
 
         nestedRepositories = repositories;
@@ -111,7 +129,9 @@ internal sealed partial class HexLinkTree
 
             string prefix = repository is null ? string.Empty : repository + "/";
             string directory = repository is null ? Root : Path.Combine(Root, repository);
-            string[] ask = [.. paths.Where(path => path != repository).Select(path => path[prefix.Length..])];
+            IReadOnlySet<string>? tracked = TrackedNow(directory);
+            string[] ask = [.. paths.Where(path => path != repository).Select(path => path[prefix.Length..])
+                .Where(path => tracked?.Contains(path) != true)];
             if (ask.Length == 0)
                 continue;
 

@@ -152,7 +152,8 @@ internal sealed partial class HexLinkHost
             throw new HexLinkException(HexLinkErrors.TOO_BIG, $"A device may watch {MOST_TREES} folders at once.");
 
         string folder = tree.Folder.Name;
-        var watch = new HexLinkTreeSubscription(tree, changes => TreeMoved(folder, changes), TreeQuiet, TreeRescan);
+        TimeSpan quiet = session.SupportsBulk && TreeQuiet == TimeSpan.FromMilliseconds(150) ? TimeSpan.FromMilliseconds(120) : TreeQuiet;
+        var watch = new HexLinkTreeSubscription(tree, changes => TreeMoved(folder, changes), quiet, TreeRescan);
         try
         {
             HexLinkManifest manifest = await Task.Run(tree.Manifest, cancel);
@@ -193,6 +194,7 @@ internal sealed partial class HexLinkHost
 
     private void TreeMoved(string folder, IReadOnlyList<HexLinkTreeChange> changes)
     {
+        using var timing = HexLinkSyncTiming.Measure("watch.send-to-peer", changes.Count);
         if (!HexLinkAllowed.Has(Rights, HexLinkRights.View))
             return;
         var said = new JsonArray();

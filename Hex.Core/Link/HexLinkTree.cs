@@ -87,6 +87,7 @@ internal sealed partial class HexLinkTree
 
     internal HexLinkManifest Manifest(bool verify, bool reuse = true)
     {
+        using var timing = HexLinkSyncTiming.Measure("tree.scan-total");
         lock (scan)
         {
             RequireRoot();
@@ -112,6 +113,7 @@ internal sealed partial class HexLinkTree
         RequireRoot();
         string? head = null, root = null;
         List<string>? relative = null;
+        var listing = HexLinkSyncTiming.Measure("tree.list-and-git");
         if (HexLinkGit.Why() is null)
         {
             GitResult listed = GitProcess.Run(Root, ["ls-files", "-co", "--exclude-standard", "-z"], patience: TimeSpan.FromMinutes(2));
@@ -155,6 +157,7 @@ internal sealed partial class HexLinkTree
                 paths.Add(path);
         }
 
+        listing.Dispose();
         var found = new HexLinkTreeFile?[paths.Count];
         if (paths.Count < 48)
         {
@@ -402,6 +405,7 @@ internal sealed partial class HexLinkTree
             known.Length == length && known.Written == written && known.Created == created)
             return (known.Hash, known.Text, known.Eol);
 
+        using var timing = HexLinkSyncTiming.Measure("tree.hash-miss");
         string hash;
         string? text = null, eol = null;
         if (length > HexLinkFiles.MOST_READ)
@@ -413,11 +417,16 @@ internal sealed partial class HexLinkTree
         }
         else
         {
-            byte[] bytes = HexLinkFiles.ReadShared(full);
+            byte[] bytes;
+            using (HexLinkSyncTiming.Measure("tree.read-and-open"))
+                bytes = HexLinkFiles.ReadShared(full);
             if (bytes.LongLength != length)
                 throw new IOException($"{full} changed while Link read its manifest.");
-            hash = HexLinkFiles.Hash(bytes);
-            (text, eol) = HexLinkSync.TextAndEol(bytes);
+            using (HexLinkSyncTiming.Measure("tree.sha-and-normalize"))
+            {
+                hash = HexLinkFiles.Hash(bytes);
+                (text, eol) = HexLinkSync.TextAndEol(bytes);
+            }
         }
 
         info.Refresh();
@@ -463,6 +472,7 @@ internal sealed partial class HexLinkTree
     /// </summary>
     public HashSet<string> Ignored(IReadOnlyCollection<string> relative)
     {
+        using var timing = HexLinkSyncTiming.Measure("tree.git-ignore", relative.Count);
         var ignored = new HashSet<string>(StringComparer.Ordinal);
         foreach (string each in relative)
         {
@@ -477,6 +487,7 @@ internal sealed partial class HexLinkTree
     /// <summary>A manifest as the wire says it.</summary>
     public static JsonObject Json(HexLinkManifest manifest, int start = 0, int? end = null)
     {
+        using var timing = HexLinkSyncTiming.Measure("manifest.serialize", (end ?? manifest.Files.Count) - start);
         var entries = new JsonArray();
         for (int at = start; at < (end ?? manifest.Files.Count); at++)
         {
@@ -712,7 +723,8 @@ internal sealed class HexLinkTreeWatch : IDisposable
     private void Moved(string full)
     {
         string relative = Path.GetRelativePath(tree.Root, full).Replace(Path.DirectorySeparatorChar, '/');
-        if (relative.StartsWith("..", StringComparison.Ordinal) || relative.Split('/').Any(part => part.Equals(".git", StringComparison.OrdinalIgnoreCase)))
+        if (relative.StartsWith("..", StringComparison.Ordinal) || HexLinkTree.SyncArtifact(relative) ||
+            relative.Split('/').Any(part => part.Equals(".git", StringComparison.OrdinalIgnoreCase)))
             return;
         lock (pending)
         {
@@ -751,6 +763,7 @@ internal sealed class HexLinkTreeWatch : IDisposable
     private async Task Look(bool throwOnFailure = false)
     {
         await looking.WaitAsync();
+        using var timing = HexLinkSyncTiming.Measure("watch.look-and-hash");
         try
         {
             string[] paths;
