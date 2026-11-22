@@ -27,7 +27,8 @@ internal sealed partial class DawnScene
     /// </summary>
     internal static void InheritPermissions(IDictionary<string, string> child, IEnumerable<string> optionKeys, Func<string, string?> parentValue)
     {
-        foreach (string key in optionKeys.Where(key => PERMISSION_KEYS.Contains(key)))
+        // Its model too: a helper that runs a bigger model than the one that started it spends what that one wasn't given
+        foreach (string key in optionKeys.Concat([ALLOW, DENY]).Distinct().Where(key => PERMISSION_KEYS.Contains(key) || key is "model" or ALLOW or DENY))
         {
             if (!child.ContainsKey(key) && parentValue(key) is { Length: > 0 } level)
                 child[key] = level;

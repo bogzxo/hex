@@ -80,7 +80,8 @@ public sealed class HexLinkAgentApprovalsTests
         var inherited = new Dictionary<string, string>();
         Hex.Dawn.DawnScene.InheritPermissions(inherited, ["model", "permission_mode"], key => key == "permission_mode" ? "bypassPermissions" : "opus");
         Assert.Equal("bypassPermissions", inherited["permission_mode"]);
-        Assert.False(inherited.ContainsKey("model"));
+        Assert.Equal("opus", inherited["model"]);
+        Assert.False(inherited.ContainsKey("effort"));
 
         var chosen = new Dictionary<string, string> { ["permission_mode"] = "plan" };
         Hex.Dawn.DawnScene.InheritPermissions(chosen, ["permission_mode"], _ => "bypassPermissions");

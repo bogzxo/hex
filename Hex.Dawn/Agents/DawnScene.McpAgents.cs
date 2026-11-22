@@ -308,8 +308,12 @@ internal sealed partial class DawnScene
 
         // Started by a chat of the same agent system, it may do what that one may without asking, not what the panel's setting says
         if (parent is not null && parent.Agent == agent)
-            InheritPermissions(chat.Options, OptionsOf(agent).Select(option => option.Key),
-                key => parent.Options.GetValueOrDefault(key) ?? Values.Text(extensions.SettingOf(run.Extension, key)));
+            InheritPermissions(chat.Options, OptionsOf(agent).Select(option => option.Key), key => key switch
+            {
+                ALLOW or DENY => parent.Options.GetValueOrDefault(key),
+                "model" => parent.Options.GetValueOrDefault(key) is { Length: > 0 } chosen ? chosen : parent.Model,
+                _ => parent.Options.GetValueOrDefault(key) ?? Values.Text(extensions.SettingOf(run.Extension, key))
+            });
 
         // What it may do, said by the one starting it, and whose word what it asks waits on
         if (!TakePermissions(args, chat, out string? wrong))
