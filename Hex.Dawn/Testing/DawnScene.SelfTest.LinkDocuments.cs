@@ -54,6 +54,8 @@ internal sealed partial class DawnScene
         {
             if (document.Editor.ReadOnly && document.Editor.Text == "YX")
                 Signal("read");
+            if (document.Editor.ReadOnly && document.Editor.Text == "Y" && !Flag("agent-edit-approved"))
+                Signal("agent-edit-approved");
             if (document.Editor.Text == "named" && document.Editor.RemoteCarets.Any(caret => caret.Label == "Agent Fixture"))
                 Signal("agent");
             return;
@@ -112,6 +114,7 @@ internal sealed partial class DawnScene
         if (linkDocTestStage == 5 && document.Editor.Text == "Y")
         {
             Signal("undo");
+            Signal("agent-edit-approved");
             linkDocTestStage++;
         }
         if (linkDocTestStage == 6 && Flag("save") && document.Editor.Text == "named")
@@ -289,18 +292,33 @@ internal sealed partial class DawnScene
 
         test.Run(() => document.Editor.Document.Undo());
         Await("A's undo kept the overlapping text from B", () => Flag(peerWork, "undo") && document.Editor.Text == "Y");
+        bool ReplicasApprovedAgentEdit() => Flag(peerWork, "agent-edit-approved") && Flag(readerWork, "agent-edit-approved");
+        test.WaitFor(ReplicasApprovedAgentEdit, 30);
         test.Run(() =>
         {
+            if (!ReplicasApprovedAgentEdit())
+            {
+                Console.WriteLine("[Hex self-test] link-documents: the simulated participants did not approve the agent edit");
+                return;
+            }
             named = new HexAgentChat(++agentChatsMade, "codex") { Name = "Fixture" };
             agentChats.Add(named);
             agentEdit = McpTools.CallAs("hex_edit", new JsonObject
             {
-                ["path"] = path, ["old_string"] = "Y", ["new_string"] = "named", ["check"] = false
+                // The scripted owner and both replicas consent to the named agent editing their shared file.
+                ["path"] = path, ["old_string"] = "Y", ["new_string"] = "named", ["check"] = false, ["override_claim"] = true
             }, default, caller: named.Id);
         });
         Await("all editors saw the named agent's live edit and caret", () =>
             agentEdit is { IsCompletedSuccessfully: true, Result.IsError: false } && document.Editor.Text == "named" && Flag(readerWork, "agent"));
-        test.Run(() => Signal(peerWork, "save"));
+        test.Run(() =>
+        {
+            if (agentEdit is { IsCompletedSuccessfully: true, Result.IsError: true })
+                Console.WriteLine($"[Hex self-test] link-documents: agent edit failed: {agentEdit.Result.AllText()}");
+            else if (agentEdit?.Exception is { } failure)
+                Console.WriteLine($"[Hex self-test] link-documents: agent edit threw: {failure.GetBaseException().Message}");
+            Signal(peerWork, "save");
+        });
         Await("a save by B wrote the authority buffer and synced the same bytes", () =>
             files.All(file => ReadLinkTestFile(file) == "named"));
         test.Run(() =>
