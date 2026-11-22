@@ -129,7 +129,7 @@ internal static class HexLinkWorktreeGateInputs
     private static bool TryDotnetProject(string command, out string? target)
     {
         target = null;
-        if (command.IndexOfAny(['&', '|', ';', '<', '>', '\n', '\r', ', (char)96]) >= 0)
+        if (command.IndexOfAny(['&', '|', ';', '<', '>', '\n', '\r', (char)36, (char)96]) >= 0)
             return false;
         string[] words = command.Split(' ', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         if (words.Length < 2 || !words[0].Equals("dotnet", StringComparison.OrdinalIgnoreCase) ||
