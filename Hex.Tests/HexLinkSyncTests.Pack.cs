@@ -10,11 +10,13 @@ namespace Hex.Tests;
 public sealed partial class HexLinkSyncTests
 {
 
-    [Fact]
-    public async Task Binary_sync_copies_files_over_the_legacy_cap_in_each_direction()
+    [Theory]
+    [InlineData(HexLinkFilePack.MaximumFile + 1024)]
+    [InlineData(HexLinkFiles.MOST_READ + 1024)]
+    public async Task Binary_sync_copies_medium_and_streamed_files_in_each_direction(int length)
     {
         using var pair = new LinkedPair(EDIT, EDIT);
-        byte[] fromA = new byte[HexLinkFiles.MOST_READ + 1024], fromB = new byte[fromA.Length];
+        byte[] fromA = new byte[length], fromB = new byte[length];
         new Random(21).NextBytes(fromA);
         new Random(22).NextBytes(fromB);
         File.WriteAllBytes(Path.Combine(pair.A.Work, "large-a.bin"), fromA);
@@ -27,6 +29,8 @@ public sealed partial class HexLinkSyncTests
 
         Assert.Equal(HexLinkFiles.Hash(fromA), HashLarge(Path.Combine(pair.B.Work, "large-a.bin")));
         Assert.Equal(HexLinkFiles.Hash(fromB), HashLarge(Path.Combine(pair.A.Work, "large-b.bin")));
+        if (length <= HexLinkFiles.MOST_READ)
+            Assert.Contains(pair.B.Audited, entry => entry.Detail.StartsWith("sync/pack/write", StringComparison.Ordinal));
         Assert.Empty(sync.Skipped);
         Assert.Empty(sync.Conflicts);
     }

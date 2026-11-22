@@ -69,6 +69,7 @@ internal sealed partial class HexLinkHost
 
         var files = new List<HexLinkFilePack.Entry>(paths.Count);
         var errors = new JsonArray();
+        int maximum = paths.Count == 1 ? HexLinkFilePack.MaximumSingle : HexLinkFilePack.MaximumFile;
         foreach (string path in paths)
         {
             cancel.ThrowIfCancellationRequested();
@@ -76,10 +77,10 @@ internal sealed partial class HexLinkHost
             {
                 string full = ResolveFile(path);
                 var info = new FileInfo(full);
-                if (info.Length > HexLinkFilePack.MaximumFile)
+                if (info.Length > maximum)
                     throw new HexLinkException(HexLinkErrors.TOO_BIG, $"The file {path} has outgrown a Link file pack.");
                 byte[] bytes = await HexLinkFiles.ReadSharedAsync(full, cancel);
-                if (bytes.Length > HexLinkFilePack.MaximumFile)
+                if (bytes.Length > maximum)
                     throw new HexLinkException(HexLinkErrors.TOO_BIG, $"The file {path} has outgrown a Link file pack.");
                 int slash = path.IndexOf('/');
                 HexLinkTree tree = TreeOf(new JsonObject { ["folder"] = path[..slash] });

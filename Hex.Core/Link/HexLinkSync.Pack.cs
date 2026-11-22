@@ -9,6 +9,7 @@ internal static class HexLinkFilePack
 {
     public const int MaximumFiles = 32;
     public const int MaximumFile = 512 * 1024;
+    public const int MaximumSingle = HexLinkFiles.MOST_READ;
     public const int MaximumLength = 18 * 1024 * 1024;
     private const int MaximumHeader = 48 * 1024;
 
@@ -42,13 +43,14 @@ internal static class HexLinkFilePack
             throw new ArgumentException("A Link file pack contains too many files.", nameof(entries));
 
         var headers = new byte[entries.Count][];
+        int maximum = entries.Count == 1 ? MaximumSingle : MaximumFile;
         int length = 0;
         for (int i = 0; i < entries.Count; i++)
         {
             Entry entry = entries[i];
             var json = new JsonObject { ["path"] = entry.Path, ["length"] = entry.Bytes.Length, ["base"] = entry.Base, ["executable"] = entry.Executable };
             byte[] header = Encoding.UTF8.GetBytes(json.ToJsonString());
-            if (header.Length > MaximumHeader || entry.Bytes.Length > MaximumFile)
+            if (header.Length > MaximumHeader || entry.Bytes.Length > maximum)
                 throw new HexLinkException(HexLinkErrors.TOO_BIG, "An entry is too large for a Link file pack.");
             headers[i] = header;
             length += sizeof(int) + header.Length + entry.Bytes.Length;
@@ -113,8 +115,8 @@ internal static class HexLinkFilePack
                 throw HexLinkException.Invalid("Invalid Link pack header length.");
             if (JsonNode.Parse(body[..length]) is not JsonObject header ||
                 HexLinkData.String(header, "path", HexLinkFiles.MOST_PATH + 1) is not { Length: > 0 and <= HexLinkFiles.MOST_PATH } path ||
-                !paths.Add(path) || HexLinkData.Int(header, "length") is not int bytes || bytes < 0 || bytes > MaximumFile ||
-                bytes > body.Length - length)
+                !paths.Add(path) || HexLinkData.Int(header, "length") is not int bytes || bytes < 0 || bytes > MaximumSingle ||
+                bytes > body.Length - length || (bytes > MaximumFile && (entries.Count != 0 || bytes != body.Length - length)))
                 throw HexLinkException.Invalid("Invalid or duplicate Link file pack entry.");
             body = body[length..];
 
@@ -166,18 +168,32 @@ internal sealed partial class HexLinkSync
         long size;
         lock (gate)
             size = remote.GetValueOrDefault(path)?.Size ?? 0;
-        if (packedReads is not null && !noPackReads && size <= HexLinkFilePack.MaximumFile)
+        if (packedReads is not null && !noPackReads)
         {
-            var answer = new TaskCompletionSource<HexLinkFile>(TaskCreationOptions.RunContinuationsAsynchronously);
-            packedReads.Add(new PendingRead(path, cancel, answer));
             try
             {
-                return await answer.Task.WaitAsync(cancel);
+                if (size <= HexLinkFilePack.MaximumFile)
+                {
+                    var answer = new TaskCompletionSource<HexLinkFile>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    packedReads.Add(new PendingRead(path, cancel, answer));
+                    try
+                    {
+                        return await answer.Task.WaitAsync(cancel);
+                    }
+                    catch (HexLinkException e) when (e.Code == HexLinkErrors.TOO_BIG)
+                    {
+                        // The file grew since the manifest. Retry it outside the small-file pack.
+                    }
+                }
+
+                var (files, errors) = await peer.ReadFilePack([path], cancel);
+                if (files.TryGetValue(path, out HexLinkFile? read))
+                    return read;
+                throw errors[path];
             }
-            catch (HexLinkException e) when (e.Code is HexLinkErrors.METHOD_NOT_FOUND or HexLinkErrors.TOO_BIG)
+            catch (HexLinkException e) when (e.Code == HexLinkErrors.METHOD_NOT_FOUND)
             {
-                if (e.Code == HexLinkErrors.METHOD_NOT_FOUND)
-                    noPackReads = true;
+                noPackReads = true;
             }
         }
         return await Asked(() => peer.Read(path, cancel), cancel);
@@ -185,13 +201,23 @@ internal sealed partial class HexLinkSync
 
     private async Task<string> PushPacked(string path, string? baseHash, byte[] bytes, bool? executable, CancellationToken cancel)
     {
-        if (packedWrites is not null && !noPackWrites && bytes.Length <= HexLinkFilePack.MaximumFile)
+        if (packedWrites is not null && !noPackWrites)
         {
-            var answer = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-            packedWrites.Add(new PendingWrite(new HexLinkFilePack.Entry(path, bytes, baseHash, executable), cancel, answer));
+            var entry = new HexLinkFilePack.Entry(path, bytes, baseHash, executable);
             try
             {
-                return await answer.Task.WaitAsync(cancel);
+                if (bytes.Length <= HexLinkFilePack.MaximumFile)
+                {
+                    var answer = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    packedWrites.Add(new PendingWrite(entry, cancel, answer));
+                    return await answer.Task.WaitAsync(cancel);
+                }
+
+                var outcomes = await peer.WriteFilePack(folder.Name, [entry], cancel);
+                HexLinkFilePack.Outcome outcome = outcomes[path];
+                if (outcome.Error is { } error)
+                    throw error;
+                return outcome.Hash ?? HexLinkFiles.Hash(bytes);
             }
             catch (HexLinkException e) when (e.Code is HexLinkErrors.METHOD_NOT_FOUND or HexLinkErrors.NOT_FOUND)
             {

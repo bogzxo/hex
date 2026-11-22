@@ -176,6 +176,8 @@ internal sealed class LinkServices : IHexLinkServices, IDisposable
 
     public string Root { get; }
 
+    public string? TreeCacheDirectory { get; set; }
+
     public string Work => Workspace.Folders[0].Path;
 
     public HexLinkDevice Device { get; }

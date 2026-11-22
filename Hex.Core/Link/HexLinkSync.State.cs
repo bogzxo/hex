@@ -216,11 +216,23 @@ internal sealed partial class HexLinkSync
         }
     }
 
-    // Saved now and then while a lot is moving, so a link dropping halfway through a burst loses little
+    private int periodicSave;
+
+    // Only one completing worker schedules the periodic snapshot. An idle or conflict save can still publish its own.
     private void MaybeSave()
     {
-        if (Environment.TickCount64 - Volatile.Read(ref savedAt) > SAVE_EVERY_MS)
-            Save();
+        if (Environment.TickCount64 - Volatile.Read(ref savedAt) <= SAVE_EVERY_MS ||
+            Interlocked.CompareExchange(ref periodicSave, 1, 0) != 0)
+            return;
+        try
+        {
+            if (Environment.TickCount64 - Volatile.Read(ref savedAt) > SAVE_EVERY_MS)
+                Save();
+        }
+        finally
+        {
+            Volatile.Write(ref periodicSave, 0);
+        }
     }
 
     // When each of the last requests went, to keep under MOST_ASKS_A_SECOND over any second
