@@ -8,11 +8,19 @@
 - Run an agent on another machine and answer its approval requests from your own. File claims show who is working on a path. Use a private worktree to build and test a change before publishing it back to the shared workspace.
 - Hold changes to a shared file while you work. Compare incoming edits, resolve conflicts in the merge editor and submit the result when ready.
 - To connect over the internet, enable public connections in Devices. Hex asks before requesting a temporary port forward from your router. Public invites can use an IP address or a hostname.
+- On the same network there is nothing to copy: open Invite a device on one machine, pick it under Nearby on the other, and check both screens show the same six digits. The Invite and Join windows lead through it in two steps.
+- Chats running on your other devices are grouped by device in the chat list, running and finished, and each device folds away. Rename, stop, restart or delete the ones you started there.
 
 ## Editor settings
 
 - AI autocomplete starts off. When enabled, choose a typing pause (100 ms by default) or a shortcut (`Ctrl+Alt+.` by default). When connected to Ollama, pick from its installed models.
 - Git support can be switched off. Settings that require Git explain the dependency and become available again when you turn Git back on.
+- Settings are regrouped, with AI and Hex Link in sections of their own. Searching for an old section's name still finds its settings.
+
+## Also
+
+- On macOS, Hex comes as an app in a disk image.
+- A new C# project or Horizon game always has its project in its solution, so completions work the moment it opens. A solution with no projects in it no longer hides the project beside it.
 
 # Hex 3.3.0 Amphetamine
 

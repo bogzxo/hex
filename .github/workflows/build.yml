@@ -317,7 +317,9 @@ jobs:
   # Hex-<version>-macos-x64 and -macos-universal. Add them here when one has been run.
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    # The macOS app is new and its job hasn't a release behind it yet: when it fails the release still goes out with
+    # the Windows and Linux builds, and says so, rather than nobody getting anything
+    if: ${{ always() && startsWith(github.ref, 'refs/tags/v') && needs.build.result == 'success' }}
     needs: [build, macos-app]
     runs-on: ubuntu-latest
     permissions:
@@ -349,7 +351,10 @@ jobs:
           prerelease=""
           case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
           if head -n 1 RELEASE_NOTES.md | grep -qi 'preview\|prerelease'; then prerelease="--prerelease"; fi
-          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/*.exe dist/*.dmg --repo "$GITHUB_REPOSITORY" --title "$title" --notes-file RELEASE_NOTES.md $prerelease
+          shopt -s nullglob
+          files=(dist/*.zip dist/*.exe dist/*.dmg)
+          if ! compgen -G "dist/*.dmg" > /dev/null; then echo "::warning::No macOS app in this release, its job didn't make one."; fi
+          gh release create "$GITHUB_REF_NAME" "${files[@]}" --repo "$GITHUB_REPOSITORY" --title "$title" --notes-file RELEASE_NOTES.md $prerelease
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
 
       # The page says the latest release's version, codename and notes. A release made with the workflow's own token
