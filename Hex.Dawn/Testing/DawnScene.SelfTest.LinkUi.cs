@@ -197,6 +197,15 @@ internal sealed partial class DawnScene
 
         // The pairing dialog, the code large and grouped, nothing ticked, Pair waiting for View
         test.WaitFor(() => linkPairingDialog is { IsOpen: true } || linkTestPeer is { HasExited: true }, 90.0f);
+        test.Run(() =>
+        {
+            if (linkPairingDialog is { IsOpen: true })
+                return;
+            string state = linkTestPeer is { HasExited: true } process ? $"exited with {process.ExitCode}" : "did not reach pairing";
+            Console.WriteLine($"[Hex self-test] link-ui: fixture B {state}");
+            foreach (string line in linkTestPeerSaid.TakeLast(12))
+                Console.WriteLine($"[Hex self-test] link-ui: fixture B output: {line}");
+        });
         test.Settle(0.4f);
         test.Check("link-ui: the pairing dialog shows B, its code grouped three and three, nothing ticked and Pair greyed", () =>
             linkPairingDialog is { IsOpen: true } dialog && LinkPairingPending is { } asked && asked.Other.Name == LINK_PEER_NAME
@@ -391,17 +400,20 @@ internal sealed partial class DawnScene
         });
 
         // Typed in the box and sent, it reaches B
+        bool InFixtureMirror() => peerId is not null && agentChat is { } shown && shown == linkRemoteMirror && LinkRemoteOf(shown)?.DeviceId == peerId;
         test.Run(() =>
         {
+            if (!InFixtureMirror())
+                return;
             agentsInput.Focus();
             agentsInput.Text = LINK_UI_SENT;
         });
         test.Settle(0.3f);
-        test.Check("link-ui: the box can send to B's chat while B lets this one steer", () => agentsSend.Enabled && !agentsInput.ReadOnly);
+        test.Check("link-ui: the box can send to B's chat while B lets this one steer", () => InFixtureMirror() && agentsSend.Enabled && !agentsInput.ReadOnly);
         // A notification left by an earlier suite can cover Send until dismissed.
         test.Run(ClearToasts);
         test.WaitFor(() => toasts.Cards.Count == 0, 2.0f);
-        test.Click(() => Centre(agentsSend));
+        test.Click(() => InFixtureMirror() ? Centre(agentsSend) : Vector2.Zero);
         test.WaitFor(() => LinkTestPeerSaid("steered tool hex_agent_send"), 20.0f);
         test.Check("link-ui: what was sent reached B as hex_agent_send to its chat", () =>
             LinkTestPeerSaid("steered tool hex_agent_send") && LinkTestPeerLine("steered tool hex_agent_send").Contains(LINK_UI_SENT, StringComparison.Ordinal));
@@ -746,7 +758,7 @@ internal sealed partial class DawnScene
             if (sessions.TryPeek(out HexLinkSession? session))
                 sentOffer = session.Ask("git/bundle", new JsonObject { ["operation"] = "offer", ["workspace"] = "Fixture workspace" });
         });
-        test.WaitFor(() => OpenDialog() is { } dialog && IsWorkspaceOffer(dialog), 6);
+        test.WaitFor(() => sentOffer is { IsCompletedSuccessfully: true } && OpenDialog() is { } dialog && IsWorkspaceOffer(dialog), 8);
         test.Check("link-ui: a received workspace offer opens a choice with no workspace or Devices window open", () =>
             sentOffer is { IsCompletedSuccessfully: true } && explorer.workspace.Folders.Count == 0 &&
             linkWindow is null && OpenDialog() is { } dialog && IsWorkspaceOffer(dialog));
