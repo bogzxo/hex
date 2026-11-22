@@ -247,4 +247,21 @@ for (const track of document.querySelectorAll('.swipe')) {
   };
   new ResizeObserver(fit).observe(track);
 }
+// The demos drawn in the page stand still until somebody presses Play, then run once. The button is only there for
+// somebody who hasn't asked for less motion: without it the demo is the picture it already was
+const motion = matchMedia('(prefers-reduced-motion: no-preference)');
+for (const play of document.querySelectorAll('.demo-play')) {
+  const demo = document.getElementById(play.dataset.demo);
+  if (!demo) continue;
+  const offer = () => { play.hidden = !motion.matches; };
+  offer();
+  motion.addEventListener('change', offer);
+  play.addEventListener('click', () => {
+    // Taken off and put back so a second press starts it from the top
+    demo.classList.remove('playing');
+    void demo.offsetWidth;
+    demo.classList.add('playing');
+    play.textContent = 'Play it again';
+  });
+}
 })();
