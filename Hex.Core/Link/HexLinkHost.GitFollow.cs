@@ -22,8 +22,11 @@ internal sealed partial class HexLinkHost
         string folder = HexLinkData.Need(parameters, "folder", 200);
         _ = ResolveUsableTreeFile(folder);
         List<string> paths = HexLinkData.Strings(parameters, "paths", HexLinkTree.MOST_REPOS + 1, HexLinkFiles.MOST_PATH);
+        var issues = new JsonObject();
         JsonObject tips = await Task.Run(async () =>
         {
+            if (HexLinkGit.Why() is { } unavailable)
+                throw HexLinkException.NotFound(unavailable);
             var result = new JsonObject();
             foreach (string path in paths.Distinct(StringComparer.Ordinal))
             {
@@ -34,16 +37,18 @@ internal sealed partial class HexLinkHost
                     var scope = HexLinkGitFollowScan.For(ResolveGitFollowRepository(wire));
                     if (await scope.ReadStable(cancel) is { } tip)
                         result[path] = tip.ToJson();
+                    else
+                        issues[path] = "Git's index or checkout is busy. Link will retry.";
                 }
                 catch (Exception error) when (error is HexLinkException or IOException or UnauthorizedAccessException or InvalidOperationException)
                 {
-                    // A raced, hidden or unavailable repository cannot authorize a Git move.
+                    issues[path] = error.Message[..Math.Min(error.Message.Length, 512)];
                 }
             }
             return result;
         }, cancel);
         Need(HexLinkRights.View, "git/follow-tips");
-        return new JsonObject { ["tips"] = tips };
+        return new JsonObject { ["tips"] = tips, ["issues"] = issues };
     }
 
     private async Task<JsonObject> GitFollowRequest(string operation, JsonObject parameters, CancellationToken cancel)
@@ -89,8 +94,9 @@ internal sealed partial class HexLinkHost
         HexLinkHeadTip target = HexLinkHeadTip.Of(HexLinkData.Object(parameters, "target"))
             ?? throw HexLinkException.Invalid("HEAD follow needs an exact target commit and branch.");
         var observed = await source.GitFollowTips(name, [path], cancel);
-        if (observed.GetValueOrDefault(path) != target)
-            throw new HexLinkException(HexLinkErrors.CONFLICT, "The other device's Git tip changed. Link will compare it again.");
+        if (observed.Tips.GetValueOrDefault(path) != target)
+            throw new HexLinkException(HexLinkErrors.CONFLICT, observed.Issues.GetValueOrDefault(path)
+                ?? "The other device's Git tip changed. Link will compare it again.");
         await HexLinkGitFollow.Fetch(source, wire, root, expected, target, cancel);
         HexLinkHeadMove move = await HexLinkGitFollow.Move(root, expected, target, state?.Agreed(path), cancel, () =>
         {

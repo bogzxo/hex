@@ -183,10 +183,10 @@ internal sealed partial class HexLinkPeer
     /// Null when there's nothing this machine hasn't got. <paramref name="progress"/> hears bytes so far and in all.
     /// </summary>
     public async Task<string?> Bundle(string repository, IReadOnlyList<string> have, Action<long, long>? progress = null, string? repo = null, CancellationToken cancel = default,
-        string? followWire = null, string? followHead = null)
+        string? followWire = null, string? followHead = null, string? temporaryDirectory = null)
     {
         string id = Guid.NewGuid().ToString("N");
-        string file = Path.Combine(Path.GetTempPath(), $"hexlink-{id}.bundle");
+        string file = Path.Combine(temporaryDirectory ?? Path.GetTempPath(), $"hexlink-{id}.bundle");
         var receiving = new Receiving();
         bundles[id] = receiving;
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancel, session.Closing);

@@ -103,8 +103,9 @@ internal sealed partial class HexLinkSync
             }
 
             string[] paths = [.. followRepositories.Select(repo => repo.Path)];
-            IReadOnlyDictionary<string, HexLinkHeadTip> there;
-            try { there = await peer.GitFollowTips(folder.Name, paths, cancel); }
+            Dictionary<string, HexLinkHeadTip> there;
+            Dictionary<string, string> remoteIssues;
+            try { (there, remoteIssues) = await peer.GitFollowTips(folder.Name, paths, cancel); }
             catch (HexLinkException error) when (followReady.Count == 0 && error.Code is HexLinkErrors.METHOD_NOT_FOUND or HexLinkErrors.INVALID_PARAMS)
             {
                 followUnsupported = true;
@@ -118,10 +119,13 @@ internal sealed partial class HexLinkSync
             foreach (FollowRepository repo in followRepositories)
             {
                 cancel.ThrowIfCancellationRequested();
-                if (!there.TryGetValue(repo.Path, out HexLinkHeadTip? remote))
-                    continue;
-
                 string path = repo.Path.Length == 0 ? folder.Name : repo.Path;
+                if (!there.TryGetValue(repo.Path, out HexLinkHeadTip? remote))
+                {
+                    if (remoteIssues.TryGetValue(repo.Path, out string? why))
+                        issues.Add($"{path} on {Device.Name}. {why}");
+                    continue;
+                }
                 try
                 {
                     HexLinkHeadTip? local = await Task.Run(() => repo.Scan.ReadStable(cancel), cancel);

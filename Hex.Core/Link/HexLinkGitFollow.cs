@@ -30,16 +30,16 @@ internal static class HexLinkGitFollow
 
     internal static HexLinkHeadTip ReadCheckout(string repository, CancellationToken cancel)
     {
-        if (!PlatformPaths.Same(Git(repository, ["rev-parse", "--show-toplevel"], cancel).Trim(), repository))
-            throw HexLinkException.NotFound("The selected folder has no Git checkout of its own.");
+        _ = LocateCheckout(repository, cancel);
         return Read(repository, cancel);
     }
 
     internal static (string GitDirectory, string CommonDirectory) LocateCheckout(string repository, CancellationToken cancel)
     {
-        string[] lines = Git(repository, ["rev-parse", "--path-format=absolute", "--show-toplevel",
-            "--absolute-git-dir", "--git-common-dir"], cancel).Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-        if (lines.Length != 3 || !PlatformPaths.Same(lines[0], repository))
+        // Git prints an empty prefix at the checkout root, even when it resolves an alias such as /var on macOS.
+        string[] lines = Git(repository, ["rev-parse", "--path-format=absolute", "--show-prefix",
+            "--absolute-git-dir", "--git-common-dir"], cancel).TrimEnd('\r', '\n').Split('\n', StringSplitOptions.TrimEntries);
+        if (lines.Length != 3 || lines[0].Length != 0 || lines[1].Length == 0 || lines[2].Length == 0)
             throw HexLinkException.NotFound("The selected folder has no Git checkout of its own.");
         return (lines[1], lines[2]);
     }

@@ -18,6 +18,12 @@ internal sealed partial class DawnScene
             return;
         }
 
+        if (HexLinkGit.Why() is { } why)
+        {
+            test.Run(() => Console.WriteLine($"[Hex self-test] link-git-follow skipped: {why}"));
+            return;
+        }
+
         string home = LinkTestFolder("hex-link-follow-a-", test);
         string peerHome = LinkTestFolder("hex-link-follow-b-", test);
         string root = Path.Combine(home, FOLLOW_TEST_FOLDER);
@@ -55,10 +61,12 @@ internal sealed partial class DawnScene
         });
         test.WaitFor(() => ReadProvisionTestFile(Path.Combine(joined, "committed.txt")) == FOLLOW_TEST_CONTENT
             || File.Exists(Path.Combine(peerHome, "git-follow-returned.txt")), 75.0f);
-        test.WaitFor(() => ReadProvisionTestFile(Path.Combine(root, "committed.txt")) == FOLLOW_TEST_REVERSE, 85.0f);
-        test.Check("link-git-follow: the joiner's commit and working file came back", () =>
-            ReadProvisionTestFile(Path.Combine(root, "committed.txt")) == FOLLOW_TEST_REVERSE
-            && ReadProvisionTestFile(Path.Combine(peerHome, "git-follow-returned.txt")) == ProvisionTestGit(root, "rev-parse", "HEAD"));
+        bool ReverseArrived() => ReadProvisionTestFile(Path.Combine(root, "committed.txt")) == FOLLOW_TEST_REVERSE
+            && ReadProvisionTestFile(Path.Combine(peerHome, "git-follow-returned.txt")) is { } returned
+            && HexLinkGitFollowScan.For(root).Read(CancellationToken.None)?.Head == returned;
+
+        test.WaitFor(ReverseArrived, 85.0f);
+        test.Check("link-git-follow: the joiner's commit and working file came back", ReverseArrived);
         test.Check("link-git-follow: history, index and checkout agree on the branch", () =>
         {
             string history = ProvisionTestGit(root, "log", "-2", "--format=%s").ReplaceLineEndings("\n");

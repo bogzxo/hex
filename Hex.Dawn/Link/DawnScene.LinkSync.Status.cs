@@ -31,7 +31,7 @@ internal sealed partial class DawnScene
                     var skipped = sync.Skipped;
                     return new HexLinkSyncReport(entry.Folder, sync.State, sync.Why, sync.Sent, sync.Received,
                         conflicts.Count, skipped.Count, sync.PullOnly, sync.FilesDone, sync.FilesTotal, sync.BytesDone, sync.BytesTotal,
-                        sync.Queued, sync.Detail,
+                        sync.Queued, sync.GitFollowIssue ?? sync.Detail,
                         [.. conflicts.Take(HexLinkSyncReport.MAX_SAMPLES).Select(row => new HexLinkSyncSkipped(row.Path, row.Kind))],
                         [.. skipped.Take(HexLinkSyncReport.MAX_SAMPLES)]);
                 })];

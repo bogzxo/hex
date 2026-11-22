@@ -23,7 +23,8 @@ internal static class HexLinkGit
     private static readonly TimeSpan PATIENCE = TimeSpan.FromMinutes(10);
 
     /// <summary>Why git can't be run here, null when it can.</summary>
-    public static string? Why() => HexHost.NoProcesses("git") ?? (GitProcess.Installed ? null : "git isn't installed");
+    public static string? Why() => HexHost.NoProcesses("git") ??
+        (GitProcess.Installed ? null : "Hex could not run Git on this device. Install Git or make it available on Hex's PATH.");
 
     /// <summary>A bundle written, where, how big and the refs in it (name and commit).</summary>
     public sealed record Made(string File, long Size, IReadOnlyList<(string Name, string Head)> Refs);
@@ -155,12 +156,19 @@ internal static class HexLinkGit
     {
         GitResult head = GitProcess.Run(repo, ["rev-parse", "--verify", "--quiet", "HEAD"], cancel: cancel);
         GitResult refs = GitProcess.Run(repo, ["for-each-ref", "--format=%(objectname)", "refs/heads", "refs/remotes", "refs/tags"], cancel: cancel);
+        if (!refs.Ok)
+            throw new InvalidOperationException(ErrorOf(refs));
         return [.. (head.Output + "\n" + refs.Output).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(IsCommitId).Distinct(StringComparer.OrdinalIgnoreCase).Take(MOST_HAVE)];
     }
 
-    internal static string ErrorOf(GitResult git) =>
-        git.Error.Length > 0 ? git.Error.Trim() : git.Output.Length > 0 ? git.Output.Trim() : $"Git exited with code {git.Exit}.";
+    internal static string ErrorOf(GitResult git)
+    {
+        if (git.Error.Contains("dubious ownership", StringComparison.OrdinalIgnoreCase))
+            return "Git refused this repository because it has a different owner. Verify the owner and configure safe.directory for this exact checkout in the account that runs Hex.";
+        return git.Error.Length > 0 ? git.Error.Trim() :
+            git.Output.Length > 0 ? git.Output.Trim() : $"Git exited with code {git.Exit}.";
+    }
 
 
     /// <summary>A device's name as a ref's folder, lower case letters, digits and dashes, "device" for one with none of those.</summary>

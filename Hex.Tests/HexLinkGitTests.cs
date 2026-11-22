@@ -8,6 +8,14 @@ using static Hex.Tests.HexLinkTestKit;
 
 namespace Hex.Tests;
 
+internal sealed class LinkGitFactAttribute : FactAttribute
+{
+    public LinkGitFactAttribute(bool directoryAlias = false) =>
+        Skip = directoryAlias && OperatingSystem.IsWindows()
+            ? "Creating a directory symlink may require Developer Mode on Windows."
+            : HexLinkGit.Why();
+}
+
 /// <summary>
 /// A repository handed over a link by git: bundled, sent in chunks, cloned on the other side, then a second fetch
 /// bringing only what's new; a patch of the working tree offered and applied. And the working-tree sync's manifest and
@@ -41,11 +49,9 @@ public sealed class HexLinkGitTests
         return repo;
     }
 
-    [Fact]
+    [LinkGitFact]
     public async Task A_bundle_clones_on_the_other_side_and_a_second_fetch_brings_only_whats_new()
     {
-        if (NoGit)
-            return;
         using var pair = await LinkedPair.Up(HexLinkRights.View);
         string repo = MadeRepository(pair.A);
 
@@ -74,8 +80,41 @@ public sealed class HexLinkGitTests
         Assert.Equal(Head(repo), Head(clone, "refs/remotes/desk-pc/main"));
         Assert.Equal(GitProcess.Run(repo, ["rev-parse", "HEAD~1"]).Output.Trim(), Head(clone));
 
-        Assert.Equal(HexLinkErrors.NOT_FOUND, await CodeOf(pair.PeerA.Bundle("nothing", [])));
-        Assert.Empty(Directory.GetFiles(Path.GetTempPath(), "hexlink-*.bundle").Where(file => File.GetLastWriteTimeUtc(file) > DateTime.UtcNow.AddSeconds(-5) && new FileInfo(file).Length == 0));
+        string receiveDirectory = Directory.CreateDirectory(Path.Combine(pair.B.Root, "missing-bundle")).FullName;
+        Assert.Equal(HexLinkErrors.NOT_FOUND, await CodeOf(pair.PeerA.Bundle("nothing", [], temporaryDirectory: receiveDirectory)));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(receiveDirectory));
+    }
+
+    [LinkGitFact]
+    public async Task A_failed_git_tip_read_reports_the_repository_reason()
+    {
+        using var pair = await LinkedPair.Up(HexLinkRights.View);
+        var (tips, issues) = await pair.PeerA.GitFollowTips("work", [""], CancellationToken.None);
+
+        Assert.Empty(tips);
+        Assert.Equal("The selected folder has no Git checkout of its own.", issues[""]);
+    }
+
+    [Fact]
+    public void Git_ownership_refusals_tell_the_user_which_account_to_check()
+    {
+        var error = new GitResult(128, "", "fatal: detected dubious ownership in repository at '/some/work'");
+        Assert.Contains("different owner", HexLinkGit.ErrorOf(error));
+        Assert.Contains("safe.directory", HexLinkGit.ErrorOf(error));
+        Assert.Contains("account that runs Hex", HexLinkGit.ErrorOf(error));
+    }
+
+    [LinkGitFact(directoryAlias: true)]
+    public async Task Git_follow_accepts_an_aliased_checkout_root_but_not_a_subdirectory()
+    {
+        using var pair = await LinkedPair.Up(HexLinkRights.View);
+        string repo = MadeRepository(pair.A);
+        string alias = Path.Combine(pair.B.Root, "alias");
+        Directory.CreateSymbolicLink(alias, repo);
+
+        Assert.Equal(Head(repo), HexLinkGitFollow.ReadCheckout(alias, CancellationToken.None).Head);
+        string subdirectory = Directory.CreateDirectory(Path.Combine(repo, "sub")).FullName;
+        Assert.Throws<HexLinkException>(() => HexLinkGitFollow.ReadCheckout(subdirectory, CancellationToken.None));
     }
 
     [Fact]

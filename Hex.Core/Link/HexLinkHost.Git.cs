@@ -49,6 +49,8 @@ internal sealed partial class HexLinkHost
             if (operation == "deleted")
                 return await ProvisionDeleted(parameters, transfer.Token);
             string name = HexLinkData.Need(parameters, "repository", 200);
+            if (await Task.Run(HexLinkGit.Why, transfer.Token) is { } unavailable)
+                throw HexLinkException.NotFound(unavailable);
             string repository;
             HexLinkProvisionRepository? planned = null;
             string? followWire = HexLinkData.String(parameters, "follow_wire", HexLinkFiles.MOST_PATH);

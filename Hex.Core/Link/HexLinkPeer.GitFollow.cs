@@ -5,7 +5,7 @@ namespace Hex.Core;
 internal sealed partial class HexLinkPeer
 {
     internal event Action? GitFollowHint;
-    internal async Task<IReadOnlyDictionary<string, HexLinkHeadTip>> GitFollowTips(
+    internal async Task<(Dictionary<string, HexLinkHeadTip> Tips, Dictionary<string, string> Issues)> GitFollowTips(
         string folder, IReadOnlyList<string> paths, CancellationToken cancel)
     {
         JsonObject response = await AskObject("git/bundle", new JsonObject
@@ -16,10 +16,16 @@ internal sealed partial class HexLinkPeer
         if (HexLinkData.Object(response, "tips") is not { } tips)
             throw HexLinkException.Invalid("The other device returned no Git tips.");
         var result = new Dictionary<string, HexLinkHeadTip>(StringComparer.Ordinal);
+        var issues = new Dictionary<string, string>(StringComparer.Ordinal);
+        JsonObject? problems = HexLinkData.Object(response, "issues");
         foreach (string path in paths)
+        {
             if (HexLinkHeadTip.Of(HexLinkData.Object(tips, path)) is { } tip)
                 result[path] = tip;
-        return result;
+            else if (problems is not null && HexLinkData.String(problems, path, 512) is { Length: > 0 } why)
+                issues[path] = why;
+        }
+        return (result, issues);
     }
 
     internal Task<JsonObject> StopGitFollow(string folder, CancellationToken cancel) =>

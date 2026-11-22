@@ -23,6 +23,12 @@ internal sealed partial class DawnScene
             return;
         }
 
+        if (HexLinkGit.Why() is { } noGit)
+        {
+            test.Run(() => Console.WriteLine($"[Hex self-test] link-claims skipped: {noGit}"));
+            return;
+        }
+
         string home = LinkTestFolder("hex-claims-a-", test), peerHome = LinkTestFolder("hex-claims-b-", test);
         string local = Path.Combine(home, CLAIM_TEST_WORK), remote = Path.Combine(peerHome, CLAIM_TEST_WORK);
         string localFile = Path.Combine(local, CLAIM_TEST_FILE);
@@ -120,7 +126,7 @@ internal sealed partial class DawnScene
             File.WriteAllText(Path.Combine(remote, "clean.txt"), CLAIM_TEST_BASE[..^2] + "I\n");
             File.WriteAllText(Path.Combine(local, "overlap.txt"), ours);
             File.WriteAllText(Path.Combine(remote, "overlap.txt"), theirs);
-            merged = FlushClaimsTestSync(reconnect.Device.Id);
+            merged = FlushClaimsTestSync(reconnect.Device.Id, resume: true);
         });
         test.WaitFor(() => merged is { IsCompleted: true }, 35.0f);
         test.Check("link-claims: disjoint edits converged on both disks", () =>
@@ -270,9 +276,9 @@ internal sealed partial class DawnScene
         HexLinkClaim? HostClaim(HexLinkClaimKind kind) => LinkClaimsAt(file).FirstOrDefault(item => item.DeviceId == owner && item.Kind == kind);
     }
 
-    private async Task<string?> FlushClaimsTestSync(string deviceId)
+    private async Task<string?> FlushClaimsTestSync(string deviceId, bool resume = false)
     {
-        string? why = await LinkSyncStart(deviceId, CLAIM_TEST_WORK);
+        string? why = await LinkSyncStart(deviceId, CLAIM_TEST_WORK, resume: resume);
         if (why is not null || LinkSyncOf(deviceId, CLAIM_TEST_WORK) is not { } sync)
             return why ?? "No working-tree sync.";
         await sync.Flush();
