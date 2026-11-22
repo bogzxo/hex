@@ -42,6 +42,7 @@ internal static class HexLinkFilePack
         if (entries.Count > MaximumFiles)
             throw new ArgumentException("A Link file pack contains too many files.", nameof(entries));
 
+        var prepare = HexLinkSyncTiming.Measure("pack.build-headers", entries.Count);
         var headers = new byte[entries.Count][];
         int maximum = entries.Count == 1 ? MaximumSingle : MaximumFile;
         int length = 0;
@@ -59,7 +60,11 @@ internal static class HexLinkFilePack
         if (length > MaximumLength)
             throw new HexLinkException(HexLinkErrors.TOO_BIG, "The Link file pack is too large.");
 
+        prepare.Dispose();
+        var opening = HexLinkSyncTiming.Measure("pack.open");
         await using HexLinkSession.BulkUpload upload = await session.OpenBulkAsync(purpose, length, metadata, cancel);
+        opening.Dispose();
+        var frames = HexLinkSyncTiming.Measure("pack.copy-and-send", length);
         // A full frame carries many small files. Never allocate a contiguous buffer the size of the pack.
         byte[] buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(HexLinkFrameHeader.MaximumPayload);
         try
@@ -97,6 +102,8 @@ internal static class HexLinkFilePack
             System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
         }
 
+        frames.Dispose();
+        using var completing = HexLinkSyncTiming.Measure("pack.commit-round-trip", entries.Count);
         return await upload.CompleteAsync(cancel);
     }
 
@@ -146,10 +153,19 @@ internal static class HexLinkFilePack
 
         public JsonNode? Result { get; private set; }
 
-        public ValueTask WriteAsync(ReadOnlyMemory<byte> data, CancellationToken cancel) => staging.WriteAsync(data, cancel);
+        public async ValueTask WriteAsync(ReadOnlyMemory<byte> data, CancellationToken cancel)
+        {
+            using var timing = HexLinkSyncTiming.Measure("pack.receiver-stage", data.Length);
+            await staging.WriteAsync(data, cancel);
+        }
 
-        public async ValueTask CommitAsync(CancellationToken cancel) =>
-            Result = await commit(Parse(staging.GetBuffer().AsSpan(0, (int)staging.Length)), cancel);
+        public async ValueTask CommitAsync(CancellationToken cancel)
+        {
+            List<Entry> entries;
+            using (HexLinkSyncTiming.Measure("pack.receiver-parse", (int)staging.Length))
+                entries = Parse(staging.GetBuffer().AsSpan(0, (int)staging.Length));
+            Result = await commit(entries, cancel);
+        }
 
         public ValueTask DisposeAsync() => staging.DisposeAsync();
     }

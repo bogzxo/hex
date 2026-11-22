@@ -86,6 +86,7 @@ internal sealed partial class HexLinkTree
 
     private void SaveCache(IReadOnlyList<HexLinkTreeFile> files)
     {
+        using var timing = HexLinkSyncTiming.Measure("tree.save-cache");
         long changes = ComputedHashes, modes = Interlocked.Read(ref modeChanges);
         if (cacheFile is null || (cachedHashes == changes && cachedModes == modes))
             return;

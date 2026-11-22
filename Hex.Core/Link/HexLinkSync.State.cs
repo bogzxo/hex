@@ -163,6 +163,7 @@ internal sealed partial class HexLinkSync
     // The bases and the conflicts written, whole or not at all
     internal void Save()
     {
+        using var timing = HexLinkSyncTiming.Measure("state.save");
         JsonObject state;
         long version;
         lock (gate)
@@ -205,7 +206,8 @@ internal sealed partial class HexLinkSync
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(StateFile)!);
-                HexLinkFiles.WriteAtomic(StateFile, Encoding.UTF8.GetBytes(state.ToJsonString()));
+                using (HexLinkSyncTiming.Measure("state.serialize-write"))
+                    HexLinkFiles.WriteAtomic(StateFile, Encoding.UTF8.GetBytes(state.ToJsonString()));
                 writtenVersion = version;
                 Volatile.Write(ref savedAt, Environment.TickCount64);
             }

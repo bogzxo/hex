@@ -306,8 +306,11 @@ internal sealed partial class HexLinkSync : IDisposable
 
             tree = HexLinkTree.Shared(folder, () => Excludes(), Path.GetDirectoryName(StateFile), peer.Session.SupportsBulk);
             watch = new HexLinkTreeSubscription(tree, Saw, Quiet, Rescan);
-            HexLinkManifest mine = await Task.Run(tree.Manifest, cancel);
-            HexLinkManifest theirs = await peer.WatchTree(folder.Name, Heard, cancel, mine);
+            HexLinkManifest mine, theirs;
+            using (HexLinkSyncTiming.Measure("start.local-manifest"))
+                mine = await Task.Run(tree.Manifest, cancel);
+            using (HexLinkSyncTiming.Measure("start.manifest-round-trip"))
+                theirs = await peer.WatchTree(folder.Name, Heard, cancel, mine);
             remoteWatched = true;
             LocalHead = mine.Head;
             RemoteHead = theirs.Head;
@@ -594,6 +597,7 @@ internal sealed partial class HexLinkSync : IDisposable
 
     private void Notify()
     {
+        using var timing = HexLinkSyncTiming.Measure("sync.notify");
         try
         {
             Changed?.Invoke();

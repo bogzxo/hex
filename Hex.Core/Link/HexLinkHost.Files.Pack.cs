@@ -17,13 +17,16 @@ internal sealed partial class HexLinkHost
 
     private async Task<JsonNode?> ApplyFilePack(JsonObject metadata, IReadOnlyList<HexLinkFilePack.Entry> entries, CancellationToken cancel)
     {
+        using var total = HexLinkSyncTiming.Measure("pack.receiver-apply", entries.Count);
         Need(HexLinkRights.Edit, "sync/pack/write");
         HexLinkTree tree = TreeOf(metadata);
         string prefix = tree.Folder.Name + "/";
         if (entries.Any(entry => !entry.Path.StartsWith(prefix, StringComparison.Ordinal) || entry.Path.Length == prefix.Length))
             throw HexLinkException.Invalid("A packed file path is outside its workspace folder.");
 
-        HashSet<string> ignored = tree.Ignored([.. entries.Select(entry => entry.Path[prefix.Length..])]);
+        HashSet<string> ignored;
+        using (HexLinkSyncTiming.Measure("pack.receiver-ignore", entries.Count))
+            ignored = tree.Ignored([.. entries.Select(entry => entry.Path[prefix.Length..])]);
         services.Audit("edit", Device, $"sync/pack/write {tree.Folder.Name}, {entries.Count} files");
         var results = new JsonArray();
         foreach (HexLinkFilePack.Entry entry in entries)
@@ -33,7 +36,9 @@ internal sealed partial class HexLinkHost
             try
             {
                 Need(HexLinkRights.Edit, "sync/pack/write");
-                string full = ResolveFile(entry.Path);
+                string full;
+                using (HexLinkSyncTiming.Measure("pack.receiver-resolve"))
+                    full = ResolveFile(entry.Path);
                 if (ignored.Contains(entry.Path[prefix.Length..]))
                     throw new HexLinkException(HexLinkErrors.NOT_ALLOWED, "Link cannot write an ignored file.");
                 string? hash = await services.CompareAndReplace(full, entry.Path, entry.Base, entry.Bytes, cancel, entry.Executable);

@@ -193,6 +193,7 @@ internal sealed partial class HexLinkHost
 
     private void TreeMoved(string folder, IReadOnlyList<HexLinkTreeChange> changes)
     {
+        using var timing = HexLinkSyncTiming.Measure("watch.send-to-peer", changes.Count);
         if (!HexLinkAllowed.Has(Rights, HexLinkRights.View))
             return;
         var said = new JsonArray();

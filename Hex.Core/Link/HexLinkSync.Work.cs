@@ -170,6 +170,7 @@ internal sealed partial class HexLinkSync
     // This side's tree changed (its watcher's thread): what isn't settled already is queued
     private void Saw(IReadOnlyList<HexLinkTreeChange> changes)
     {
+        using var timing = HexLinkSyncTiming.Measure("watch.local-echo", changes.Count);
         var dirty = new List<string>();
         lock (gate)
         {
@@ -207,6 +208,7 @@ internal sealed partial class HexLinkSync
     // at the base queued. What this side sent comes back here with the hash it was agreed at and is dropped.
     private void Heard(IReadOnlyList<HexLinkTreeChange> changes)
     {
+        using var timing = HexLinkSyncTiming.Measure("watch.remote-echo", changes.Count);
         var dirty = new List<string>();
         lock (gate)
         {
@@ -613,16 +615,19 @@ internal sealed partial class HexLinkSync
         }
         catch (HexLinkException e) when (e.Code is HexLinkErrors.CONFLICT or HexLinkErrors.TIMED_OUT or HexLinkErrors.INTERNAL_ERROR or HexLinkErrors.NOT_FOUND)
         {
+            using var timing = HexLinkSyncTiming.Measure($"retry.rpc-{e.Code}");
             Again(wire, e.Message);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
+            using var timing = HexLinkSyncTiming.Measure("retry.io-unavailable");
             // Open here a moment (an editor saving it, a virus scanner, an indexer, on Windows any reader stops a file
             // being moved over), tried again in a moment rather than left until it next changes
             Again(wire, $"The file is unavailable. Link will retry. {e.Message}");
         }
         catch (Exception e)
         {
+            using var timing = HexLinkSyncTiming.Measure(e is HexLinkException error ? $"skip.rpc-{error.Code}" : "skip.other");
             Skip(wire, e.Message);
         }
         finally
@@ -684,7 +689,8 @@ internal sealed partial class HexLinkSync
                 mine = await ReadStreamedMetadata(wire, full, info, stop);
             else
             {
-                localBytes = await HexLinkFiles.ReadSharedAsync(full, stop);
+                using (HexLinkSyncTiming.Measure("reconcile.read-source"))
+                    localBytes = await HexLinkFiles.ReadSharedAsync(full, stop);
                 TextInfo text = TextOf(localBytes);
                 mine = new HexLinkTreeFile(wire, HexLinkFiles.Hash(localBytes), localBytes.LongLength, text.Norm, EolWord(text.Eol), tree.Mode(full));
             }
