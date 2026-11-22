@@ -601,8 +601,11 @@ internal sealed partial class HexLinkSync
         return new HashSet<string>(tree.Ignored(relative).Select(each => start + each), StringComparer.Ordinal);
     }
 
-    private async Task<byte[]?> ReadLocal(string full, CancellationToken stop) =>
-        HexLinkTree.RegularFile(full, tree.Root) is null ? null : await HexLinkFiles.ReadSharedAsync(full, stop);
+    private async Task<byte[]?> ReadLocal(string full, CancellationToken stop)
+    {
+        await using var lease = await HexLinkPublicationFence.ForRoot(full).EnterLive(stop);
+        return HexLinkTree.RegularFile(full, tree.Root) is null ? null : await HexLinkFiles.ReadSharedAsync(full, stop);
+    }
 
     // One path worked on, whatever happens the queue going on after it
     private async Task Run(string wire, bool ignored, CancellationToken stop)

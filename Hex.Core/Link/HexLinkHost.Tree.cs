@@ -144,7 +144,10 @@ internal sealed partial class HexLinkHost
                 throw HexLinkException.Invalid("Both names must be case variants of one file in the folder.");
             if (tree.Ignored([from[prefix.Length..], to[prefix.Length..]]).Count != 0)
                 throw new HexLinkException(HexLinkErrors.NOT_ALLOWED, "Link cannot rename an ignored file.");
-            await services.RenameCase(ResolveFile(from), ResolveFile(to), expected, cancel);
+            string full = ResolveFile(from);
+            await using var lease = await HexLinkPublicationFence.ForRoot(Path.GetDirectoryName(full)!).EnterLive(cancel);
+            Need(HexLinkRights.Edit, "sync/rename");
+            await services.RenameCase(full, ResolveFile(to), expected, cancel);
             tree.NoteCase(to[prefix.Length..]);
             return new JsonObject { ["renamed"] = true };
         }
