@@ -199,6 +199,7 @@ internal sealed class HexAgentHub
         {
             Approvals = chat.HasPending ? [.. Approvals(chat).Take(16).Select(entry => ApprovalStatus(chat, entry))] : [],
             LinkStarter = chat.LinkStarter,
+            LinkDevice = chat.LinkDevice ?? chat.LinkStarter?.Device,
             RouteLinkApprovals = chat.Options.GetValueOrDefault("approvals") != "person"
         };
 

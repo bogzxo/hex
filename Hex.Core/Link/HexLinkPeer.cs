@@ -14,6 +14,9 @@ internal sealed record HexLinkRow(int Id, string Name, string Agent, string? Mod
 {
     public IReadOnlyList<HexAgentApprovalStatus> Approvals { get; init; } = [];
     public string? StarterReceipt { get; init; }
+
+    /// <summary>Whether this machine's call started the chat there. It manages those on Steer, the others take Manage.</summary>
+    public bool StartedByYou { get; init; }
 }
 
 /// <summary>
@@ -349,6 +352,7 @@ internal sealed partial class HexLinkPeer : IDisposable
                 HexLinkData.Bool(row, "waiting") == true, HexLinkData.String(row, "plan_step", 1000))
             {
                 StarterReceipt = HexLinkData.String(row, "starter_receipt", 32),
+                StartedByYou = HexLinkData.Bool(row, "started_by_you") == true,
                 Approvals = [.. HexLinkData.Objects(row, "approvals", 16)
                     .Where(each => HexLinkData.Int(each, "request") is > 0 && HexLinkData.String(each, "title", 300) is { Length: > 0 })
                     .Select(each => new HexAgentApprovalStatus(HexLinkData.Int(each, "request")!.Value,
@@ -430,6 +434,47 @@ internal sealed partial class HexLinkPeer : IDisposable
         if (text is not null)
             arguments["text"] = text;
         return Call("hex_agent_restart", arguments, cancel);
+    }
+
+    /// <summary>An agent there renamed (hex_agent_rename), an empty name giving it back the name of what it was asked.</summary>
+    public Task<McpToolResult> Rename(int chat, string name, CancellationToken cancel = default) =>
+        Call("hex_agent_rename", new JsonObject { ["id"] = chat, ["name"] = name }, cancel);
+
+    /// <summary>An agent's chat there deleted with the chats it started (hex_agent_close), or emptied with <paramref name="clear"/>. Deleting is confirmed here, the caller has asked the person.</summary>
+    public Task<McpToolResult> Close(int chat, bool clear = false, CancellationToken cancel = default)
+    {
+        var arguments = new JsonObject { ["id"] = chat };
+        if (clear)
+            arguments["clear"] = true;
+        else
+            arguments["confirm"] = true;
+        return Call("hex_agent_close", arguments, cancel);
+    }
+
+    /// <summary>
+    /// A chat there managed: stop, restart, rename (<paramref name="text"/> is the name), close (empties it, keeping the chat) or
+    /// delete. The device there decides: the chats this machine started take Steer, the rest take Manage agents. Never throws for
+    /// a refusal, Message says it and names the permission missing. Deleting is for a caller that has confirmed with the person.
+    /// </summary>
+    public async Task<(bool Ok, string Message)> AgentAction(int chat, string action, string? text = null, CancellationToken cancel = default)
+    {
+        try
+        {
+            McpToolResult result = action switch
+            {
+                "stop" => await Stop(chat, cancel),
+                "restart" => await Restart(chat, text, cancel),
+                "rename" => await Rename(chat, text ?? string.Empty, cancel),
+                "close" => await Close(chat, clear: true, cancel),
+                "delete" => await Close(chat, clear: false, cancel),
+                _ => throw new ArgumentException($"There's no agent action called {action}.", nameof(action))
+            };
+            return (!result.IsError, result.AllText());
+        }
+        catch (HexLinkException refused)
+        {
+            return (false, refused.Message);
+        }
     }
 
     /// <summary>An approval an agent there asked answered (hex_agent_approve), the oldest waiting unless <paramref name="request"/> says which.</summary>

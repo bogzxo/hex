@@ -140,6 +140,9 @@ internal interface IHexLinkServices
     /// <summary>A line for the audit log: what was done or refused, by which device, and on what.</summary>
     void Audit(string what, HexLinkDevice who, string detail);
 
+    /// <summary>A notice for the person here, something a linked device did to this machine's agents. Nothing, unless the editor shows it.</summary>
+    void Notice(string text) { }
+
     /// <summary>
     /// Whether this machine would make predictions for a device that may ask (its share setting on and a model it can
     /// reach). Read off the editor's thread on every predict/start and hello, so it's cheap. Not, unless the editor says.

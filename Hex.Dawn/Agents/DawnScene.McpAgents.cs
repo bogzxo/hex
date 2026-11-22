@@ -68,18 +68,24 @@ internal sealed partial class DawnScene
             "Steer a chat's agent, an instruction. A finished one starts another turn with it, going on from where it was. A running one that can be told more takes it in as it works, one that can't finds it in its inbox and starts its next turn with it if it hasn't read it by then. hex_agent_message sends a finding or an answer without it being an instruction.",
             McpSchema.Object([("id", McpSchema.Integer("The chat.")), ("text", McpSchema.String("What to say."))], "id", "text")), AgentSend),
         new(new McpTool("hex_agent_stop", "Stop an agent",
-            "Stop a chat's agent and everything it started. What it said so far stays in its chat.",
+            "Stop a chat's agent and everything it started. What it said so far stays in its chat. Over Hex Link, a chat this device started there takes Steer, any other chat takes Manage agents.",
             McpSchema.Object([("id", McpSchema.Integer("The chat."))], "id")), AgentStopTool),
         new(new McpTool("hex_agent_restart", "Restart a stuck agent",
-            "Kill a chat's agent with everything its process started (its commands, builds, test runs; not the agents it started, which carry on) and start it again on the same session, told to carry on from where it was, with text in front when given and its unread messages after. For an agent that's stuck, hung on a command, or whose turn ended while its process goes on. Only for agents you started, or from a client that isn't an agent of the panel.",
+            "Kill a chat's agent with everything its process started (its commands, builds, test runs; not the agents it started, which carry on) and start it again on the same session, told to carry on from where it was, with text in front when given and its unread messages after. For an agent that's stuck, hung on a command, or whose turn ended while its process goes on. Only for agents you started, or from a client that isn't an agent of the panel. Over Hex Link, a chat this device started there takes Steer, any other chat takes Manage agents.",
             McpSchema.Object([
                 ("id", McpSchema.Integer("The chat.")),
                 ("text", McpSchema.String("What to tell it as it starts again, 'carry on from where you were' by default."))], "id")), AgentRestart),
-        new(new McpTool("hex_agent_close", "Close or clear an agent you started",
-            "Delete the chat of an agent you started, its agent stopped and the chats it started deleted with it, when its work is done and its chat would only be in the way. clear true keeps the chat and empties it instead, its rows, mail and session gone, so the next hex_agent_send starts it afresh on a new task without what it knew. Only for agents you started.",
+        new(new McpTool("hex_agent_rename", "Rename an agent's chat",
+            "Give a chat a name of your own in the Agents panel, an empty name gives it the automatic one back. Only for agents you started. Over Hex Link, for a chat this device started on the device that has it (Steer), or any chat when that device allows Manage agents for you.",
             McpSchema.Object([
                 ("id", McpSchema.Integer("The chat.")),
-                ("clear", McpSchema.Flag("Keep the chat, emptied, rather than deleting it."))], "id")), AgentClose)
+                ("name", McpSchema.String("The new name, at most 40 characters, empty for the automatic name."))], "id", "name")), AgentRename),
+        new(new McpTool("hex_agent_close", "Close or clear an agent you started",
+            "Delete the chat of an agent you started, its agent stopped and the chats it started deleted with it, when its work is done and its chat would only be in the way. clear true keeps the chat and empties it instead, its rows, mail and session gone, so the next hex_agent_send starts it afresh on a new task without what it knew. Only for agents you started. Over Hex Link, a chat this device started there takes Steer, any other chat takes Manage agents, and deleting takes confirm true.",
+            McpSchema.Object([
+                ("id", McpSchema.Integer("The chat.")),
+                ("clear", McpSchema.Flag("Keep the chat, emptied, rather than deleting it.")),
+                ("confirm", McpSchema.Flag("Over Hex Link, yes to delete the chat, which can't be undone."))], "id")), AgentClose)
     ];
 
     /// <summary>The chat a call came from, when it's an agent of the panel's.</summary>
@@ -282,6 +288,8 @@ internal sealed partial class DawnScene
 
         string? name = args.String("name") is { Length: > 0 } named ? (named.Length > 40 ? named[..39] + "…" : named) : null;
         var chat = new HexAgentChat(++agentChatsMade, agent) { Parent = parent?.Id, Depth = depth, Name = name };
+        if (remoteCall is not null)
+            chat.LinkDevice = remoteCall.Device.Id;
         if (remoteCall is { Chat: { } starter, Receipt: { } receipt } remote)
             chat.LinkStarter = new HexLinkAgentStarter(remote.Device.Id, starter, receipt);
         if (args.String("model") is { Length: > 0 } model)
@@ -601,6 +609,31 @@ internal sealed partial class DawnScene
         yield return McpToolResult.Text(killed
             ? $"#{chat.Id} was killed with what it had running and is going again from where it was. hex_agent_wait waits for it."
             : $"#{chat.Id} wasn't running, it's going again from where it was. hex_agent_wait waits for it.");
+    }
+
+    /// <summary>A chat given a name of somebody's own, by the agent that started it, or a client that isn't an agent of the panel.</summary>
+    private IEnumerable<McpToolResult?> AgentRename(JsonObject args)
+    {
+        if (ChatById(args.Integer("id") ?? -1) is not { } chat)
+        {
+            yield return McpToolResult.Error("There's no such chat, hex_agent_list says which there are.");
+            yield break;
+        }
+
+        if (CallerOf(args) is { } asking && chat.Parent != asking && chat.Id != asking)
+        {
+            yield return McpToolResult.Error($"#{chat.Id} wasn't started by you, only the agent that started it renames it.");
+            yield break;
+        }
+
+        string name = (args.String("name") ?? string.Empty).Trim();
+        if (name.Length > 40)
+            name = name[..39] + "…";
+        chat.Rename(name);
+        agentsListDrawn = NOT_DRAWN;
+        noonFleetDrawn = NOT_DRAWN;
+        PublishAgentStatuses();
+        yield return McpToolResult.Text(name.Length == 0 ? $"#{chat.Id} has its automatic name again: \"{chat.Shown}\"." : $"Renamed #{chat.Id} to \"{name}\".");
     }
 
     /// <summary>

@@ -105,6 +105,9 @@ internal sealed class HexAgentEntry(HexAgentEntryKind kind, string text)
 internal sealed partial class HexAgentChat(int id, string agent)
 {
     internal HexLinkAgentStarter? LinkStarter { get; set; }
+
+    /// <summary>The id of the linked device whose call started this chat, null for a chat started here. It says whose chat it is when that device manages it.</summary>
+    internal string? LinkDevice { get; set; }
     internal List<HexLinkAgentChild> LinkChildren { get; } = [];
     // The rows a chat keeps in memory, and how many more it lets come before the oldest go to its file a batch at a time.
     // A batch rather than a row each, the panel draws the chat again from the start when rows leave its top

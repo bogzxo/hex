@@ -56,6 +56,7 @@ internal static class HexLinkAllowed
         ["hex_agent_spawn"] = HexLinkRights.Steer,
         ["hex_agent_approve"] = HexLinkRights.Steer,
         ["hex_agent_close"] = HexLinkRights.Steer,
+        ["hex_agent_rename"] = HexLinkRights.Steer,
         ["hex_link_devices"] = HexLinkRights.Steer,
         ["hex_link_call"] = HexLinkRights.Steer,
         ["hex_link_spawn"] = HexLinkRights.Steer,

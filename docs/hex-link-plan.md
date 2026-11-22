@@ -12,6 +12,19 @@ integration gates.
   worktrees and checked publication, and remote agent approvals. Real-device checks covered workspace Get,
   automatic reconnect and sync resumption, LAN and Tailscale file probes, HEAD follow, agent coordination
   and a three-editor save with the authority's tab closed.
+- **Managing another device's agents.** A linked device stops, restarts, renames, clears and deletes chats of the
+  Agents panel on the device that has them (`hex_agent_stop`, `hex_agent_restart`, `hex_agent_rename`,
+  `hex_agent_close`, or `HexLinkPeer.AgentAction`; rows say `started_by_you`). The device that has the chats decides.
+  A chat the caller's own call started there takes **Steer**, as it always has. A chat it did not start (the
+  device's own, another device's) takes **Manage agents**, a fourth per-device right (`manage`, needs Steer, off
+  until the person ticks it in the Devices window). Stopping or deleting a chat also stops or deletes the chats
+  under it, so a chat of the caller's with somebody else's chat under it takes Manage too. Deleting takes
+  `confirm true` over MCP and a confirmation card in the caller's UI; clearing (`clear true`) keeps the chat. A
+  running chat is stopped first. A refusal says whose chat it was and names Manage agents. Every action, done or
+  refused, is written to the audit log (`manage`, `manage refused`, `manage failed`) and shown as a notice on the
+  device that has the chats. All of it travels as ordinary `tools/call` requests, so it works on LAN, Tailscale
+  and through the one-hop relay (`hex_link_call`). Chats started by a link remember the device that started them
+  (`link_device` in the chat file).
 - **Known limits.** One hop can relay permitted control RPC. Bulk publication requires a direct link to the
   authority. Handle case-only directory renames manually. BOGROG had no Tailscale, and the Mac's Claude CLI
   was signed out. Shared editing can exceed the 50 ms loopback target under CPU saturation.

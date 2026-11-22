@@ -138,6 +138,8 @@ internal static class HexLinkData
             words.Add((JsonNode)"edit");
         if (rights.HasFlag(HexLinkRights.Predict))
             words.Add((JsonNode)"predict");
+        if (rights.HasFlag(HexLinkRights.Manage))
+            words.Add((JsonNode)"manage");
         return words;
     }
 
@@ -153,6 +155,7 @@ internal static class HexLinkData
                 "steer" => HexLinkRights.Steer,
                 "edit" => HexLinkRights.Edit,
                 "predict" => HexLinkRights.Predict,
+                "manage" => HexLinkRights.Manage,
                 _ => HexLinkRights.None
             };
         }
@@ -167,6 +170,7 @@ internal static class HexLinkData
         HexLinkRights.Steer => "steer",
         HexLinkRights.Edit => "edit",
         HexLinkRights.Predict => "predict",
+        HexLinkRights.Manage => "manage",
         _ => right.ToString().ToLowerInvariant()
     };
 

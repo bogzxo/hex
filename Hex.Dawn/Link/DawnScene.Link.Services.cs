@@ -137,6 +137,8 @@ internal sealed partial class DawnScene
         public void WorkspaceOffered(HexLinkDevice device, string workspace) => hex.LinkWorkspaceOffered(device, workspace);
         public HexLinkWorkspace WorkspaceForProvision(string? folder) => hex.LinkProvisionExport(folder);
 
+        public void Notice(string text) => hex.PostLink(() => hex.Say(text));
+
         public void Audit(string what, HexLinkDevice who, string detail)
         {
             hex.linkAudit?.Write(what, who.Id, detail);

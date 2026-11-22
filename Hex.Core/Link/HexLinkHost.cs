@@ -286,6 +286,7 @@ internal sealed partial class HexLinkHost : IDisposable
                 ["approvals"] = row.Approvals.Count > 0 ? new JsonArray([.. row.Approvals.Select(approval => (JsonNode)new JsonObject
                     { ["request"] = approval.Number, ["title"] = approval.Title, ["detail"] = approval.Detail })]) : null,
                 ["plan_step"] = extra?.PlanStep,
+                ["started_by_you"] = HexLinkAgentManage.Owns(row, Device),
                 ["starter_receipt"] = row.RouteLinkApprovals && row.LinkStarter is { } starter && starter.Device == Device.Id ? starter.Receipt : null
             });
         }
@@ -331,6 +332,23 @@ internal sealed partial class HexLinkHost : IDisposable
                 Guid.TryParseExact(receipt, "N", out _) ? receipt : null));
         }
 
+        // Managing a chat (stop, restart, rename, close, delete): the device's own chats on Steer, the rest on Manage
+        string? managed = null;
+        if (HexLinkAgentManage.Manages(name))
+        {
+            HexHubSnapshot fleet = services.Fleet;
+            int? target = HexLinkData.Int(arguments, "id");
+            string action = HexLinkAgentManage.Action(name, arguments);
+            bool own = target is { } number && fleet.Rows.TryGetValue(number, out HexHubRow? row) && HexLinkAgentManage.Owns(row, Device);
+            managed = HexLinkAgentManage.Describe(action, target, fleet, own);
+            if (HexLinkAgentManage.Refusal(name, arguments, Device, Rights, fleet) is { } why)
+            {
+                services.Audit("manage refused", Device, $"{managed}: {why}");
+                services.Notice($"{Device.Name} tried to {managed}. It was refused.");
+                return McpToolResult.Error(why).ToJson();
+            }
+        }
+
         if (right != HexLinkRights.View)
             services.Audit(HexLinkData.Word(right), Device, $"tool {name} {Cut(arguments.ToJsonString(), 300)}");
 
@@ -365,6 +383,13 @@ internal sealed partial class HexLinkHost : IDisposable
             }
 
             McpToolResult result = await services.Tools.Call(name, arguments, cancel);
+            if (managed is not null)
+            {
+                services.Audit(result.IsError ? "manage failed" : "manage", Device, $"{managed}: {Cut(result.AllText(), 200)}");
+                if (!result.IsError)
+                    services.Notice($"{Device.Name} did this to an agent here: {managed}.");
+            }
+
             return result.ToJson();
         }
         catch (OperationCanceledException) when (!session.IsClosed)

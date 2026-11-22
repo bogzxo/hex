@@ -14,6 +14,9 @@ internal sealed record HexHubRow(int Id, string Shown, string Agent, string? Mod
 {
     public IReadOnlyList<HexAgentApprovalStatus> Approvals { get; init; } = [];
     public HexLinkAgentStarter? LinkStarter { get; init; }
+
+    /// <summary>The linked device that started this chat, null when it was started here.</summary>
+    public string? LinkDevice { get; init; }
     public bool RouteLinkApprovals { get; init; }
 
     /// <summary>Its messages not read yet, read off any thread by the number the chat has read up to.</summary>

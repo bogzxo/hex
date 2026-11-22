@@ -54,6 +54,7 @@ internal static class HexAgentChatStore
             ["dropped"] = chat.Dropped,
             ["plan"] = chat.Plan?.ToStored(),
             ["link_starter"] = includeLinkOwnership ? chat.LinkStarter?.ToJson() : null,
+            ["link_device"] = includeLinkOwnership ? chat.LinkDevice : null,
             ["link_children"] = includeLinkOwnership && chat.LinkChildren.Count > 0
                 ? new JsonArray([.. chat.LinkChildren.Select(child => (JsonNode)child.Address.ToJson())]) : null
         };
@@ -130,6 +131,7 @@ internal static class HexAgentChatStore
             Stopped = said["stopped"]?.GetValue<bool>() ?? false
         };
         chat.LinkStarter = HexLinkAgentStarter.Read(said["link_starter"] as JsonObject);
+        chat.LinkDevice = HexLinkData.String(said, "link_device", 64) is { Length: 64 } startedBy ? startedBy : chat.LinkStarter?.Device;
         foreach (JsonObject child in HexLinkData.Objects(said, "link_children", 128))
             if (HexLinkAgentStarter.Read(child) is { } address)
                 chat.LinkChildren.Add(new HexLinkAgentChild(address));

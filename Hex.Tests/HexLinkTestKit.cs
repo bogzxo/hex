@@ -146,7 +146,7 @@ internal sealed class LinkTools : IMcpTools
         .. HexLinkAllowed.Names.Select(name => new McpTool(name, name, $"The stand in for {name}.",
             name == "hex_read" ? McpSchema.Object([("path", McpSchema.String("The file."))], "path")
             : McpSchema.Object([("id", McpSchema.Integer("A chat.")), ("text", McpSchema.String("Text.")), ("allow", McpSchema.Flag("Allow.")), ("request", McpSchema.Integer("Which.")),
-                ("path", McpSchema.String("A path."))]))),
+                ("path", McpSchema.String("A path.")), ("name", McpSchema.String("A name.")), ("clear", McpSchema.Flag("Clear.")), ("confirm", McpSchema.Flag("Confirm."))]))),
         new McpTool("hex_terminal_run", "Terminal", "Runs a command.", McpSchema.Object([("command", McpSchema.String("What."))], "command")),
         new McpTool("hex_screenshot", "Screenshot", "Takes one.", McpSchema.Empty())
     ];
@@ -236,6 +236,10 @@ internal sealed partial class LinkServices : IHexLinkServices, IDisposable
     }
 
     public void Audit(string what, HexLinkDevice who, string detail) => Audited.Enqueue((what, who, detail));
+
+    public ConcurrentQueue<string> Notices { get; } = new();
+
+    public void Notice(string text) => Notices.Enqueue(text);
 
     /// <summary>Changes chats as the editor's thread would, then pumps the hub.</summary>
     public void OnEditor(Action change)
