@@ -36,7 +36,8 @@ public static partial class DawnProgram
     private const string SELF_TEST_HOME = "horizon-hex-selftest-dusk-";
 
     // Where layouts go when nobody says otherwise, next to the editor
-    private const string DEFAULT_WORKSPACE = "layouts";
+    // Next to the program, in the user's Library for a bundle (which is never written)
+    private static readonly string DEFAULT_WORKSPACE = Hex.Core.HexBundle.Inside ? Path.Combine(Hex.Core.HexHost.WritableFolder, "layouts") : "layouts";
 
     /// <summary>
     /// Starts the editor. Without arguments it comes up maximised with an empty layout.
