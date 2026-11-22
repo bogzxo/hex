@@ -65,9 +65,9 @@ internal sealed partial class DawnScene
 
     private void RebuildTabs()
     {
-        MarkLinkEditorNotices();
+        if (linkEditorNotices is not null)
+            MarkLinkEditorNotices();
         tabButtons.Clear();
-        MarkLinkEditorNotices();
 
         // The plain welcome over the empty layout is no file anybody opened, so no tab says "Untitled". Only ever the one
         // document then, so the tabs left still line up with the documents
@@ -91,21 +91,29 @@ internal sealed partial class DawnScene
             string icon = IconOfDocument(shown);
 
             // Another machine's file says whose it is (DawnScene.LinkFiles)
-            tab.Title = LinkRemoteTitle(shown) ?? (shown.IsText && shown.Path is { } path ? Path.GetFileName(path) : shown.Name);
+            tab.Title = shown.IsText && shown.Path is { } path ? Path.GetFileName(path) : shown.Name;
             tab.Icon = icon;
             tab.IconColor = shown.IsText ? null : FolderColor;
-            tab.Tooltip = LinkLiveTooltip(shown) ?? LinkRemoteTooltip(shown) ?? (shown.Path is { } where ? where : Said("tabs.never_saved", ("name", shown.Name)));
-            tab.PresenceColors = LinkLiveTabColors(shown);
+            tab.Tooltip = shown.Path ?? Said("tabs.never_saved", ("name", shown.Name));
             tab.Modified = shown.Modified;
             tab.Pinned = shown.Pinned;
             tab.TitleColor = TabGitColor(shown);
             tab.Tag = shown;
-            LinkClaimTab(shown, tab);
-            LinkHoldTabMark(shown, tab);
+            if (linkItem is not null || linkServices is not null)
+                DecorateLinkedTab(shown, tab);
         }
 
         docTabs.Selected = documents.IndexOf(document);
         RetitleWindow();
+    }
+
+    private void DecorateLinkedTab(HexDocument shown, StripTab tab)
+    {
+        tab.Title = LinkRemoteTitle(shown) ?? tab.Title;
+        tab.Tooltip = LinkLiveTooltip(shown) ?? LinkRemoteTooltip(shown) ?? tab.Tooltip;
+        tab.PresenceColors = LinkLiveTabColors(shown);
+        LinkClaimTab(shown, tab);
+        LinkHoldTabMark(shown, tab);
     }
 
     /// <summary>The title bar and the window's title said for what is open.</summary>

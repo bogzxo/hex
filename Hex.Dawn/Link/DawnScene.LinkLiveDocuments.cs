@@ -876,7 +876,7 @@ internal sealed partial class DawnScene
 
     private bool LinkLiveTrySave(HexDocument tab, string path)
     {
-        if (liveDocumentSessions?.TryGetValue(tab, out var shared) != true || tab.Path is null || !PlatformPaths.Same(tab.Path, path))
+        if (liveDocumentSessions is null || !liveDocumentSessions.TryGetValue(tab, out var shared) || tab.Path is null || !PlatformPaths.Same(tab.Path, path))
             return false;
         if (shared.Draft is not null)
         {
@@ -905,7 +905,7 @@ internal sealed partial class DawnScene
 
     private string? LinkLiveTooltip(HexDocument tab)
     {
-        if (liveDocumentSessions?.TryGetValue(tab, out var shared) != true)
+        if (liveDocumentSessions is null || !liveDocumentSessions.TryGetValue(tab, out var shared))
             return null;
         if (shared.Draft is { } draft)
             return Said("link.doc_draft") + " " + draft.Reason;

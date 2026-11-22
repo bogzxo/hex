@@ -112,7 +112,8 @@ internal sealed partial class DawnScene
             // Whichever face is up, a turn that began without a checkpoint gets one
             CheckpointNewTurns();
             // And the devices linked to this one that watch the fleet, or a chat of it, told
-            LinkHubMoved();
+            if (LinkOn)
+                LinkHubMoved();
         }
     }
 
