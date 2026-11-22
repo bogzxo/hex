@@ -182,6 +182,7 @@ internal sealed class LinkServices : IHexLinkServices, IDisposable
 
     public HexLinkWorkspace Workspace { get; set; }
     public HexLinkAuthorityStore? FolderAuthorities { get; set; }
+    public IHexLinkPublicationService? Publication { get; set; }
 
     public HexLinkDocuments Documents { get; } = new();
 

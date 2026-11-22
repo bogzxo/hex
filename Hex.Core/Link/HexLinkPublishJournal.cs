@@ -8,12 +8,12 @@ internal sealed record HexLinkPublishEdit(string Path, string? Base, byte[]? Byt
 internal sealed record HexLinkPublishReceipt(Guid Id, string Commit, int Files);
 
 internal sealed record HexLinkPublishTarget(
-    Func<CancellationToken, ValueTask<IAsyncDisposable>> Fence,
+    Func<Guid, CancellationToken, ValueTask<IAsyncDisposable>> Fence,
     Func<string, CancellationToken, Task<string?>> Hash,
     Func<HexLinkPublishEdit, CancellationToken, Task> Apply,
     // Persist the complete notice for replay, deduplicating by receipt ID.
     Func<HexLinkPublishReceipt, IReadOnlyList<HexLinkPublishEdit>, CancellationToken, Task> Announce,
-    Action<bool>? BlockLiveForRecovery = null);
+    Action<Guid, bool>? BlockLiveForRecovery = null);
 
 /// <summary>
 /// The owner stages a complete set in Link's object store. One ref transaction records the commit decision
@@ -48,24 +48,25 @@ internal sealed class HexLinkPublishJournal(string directory, HexLinkWorktreeGit
             }
 
             string commit = await Stage(manifest, ordered, cancel);
-            await using IAsyncDisposable fence = await target.Fence(cancel);
-            if (await git.Tip(cancel) != tip)
+            await using IAsyncDisposable fence = await target.Fence(id, cancel);
+            CancellationToken stop = fence is HexLinkPublicationFence.Lease lease ? lease.Stop : cancel;
+            if (await git.Tip(stop) != tip)
                 throw new HexLinkException(HexLinkErrors.CONFLICT, "A publication advanced while this set was being prepared.");
             foreach (HexLinkPublishEdit edit in ordered)
-                await CheckBase(edit, cancel);
+                await CheckBase(edit, stop);
 
-            target.BlockLiveForRecovery?.Invoke(true);
+            target.BlockLiveForRecovery?.Invoke(id, true);
             try
             {
-                await git.CommitPublish(id, commit, tip, cancel);
+                await git.CommitPublish(id, commit, tip, stop);
             }
             catch
             {
                 if (await git.Receipt(id, CancellationToken.None) is null)
-                    target.BlockLiveForRecovery?.Invoke(false);
+                    target.BlockLiveForRecovery?.Invoke(id, false);
                 throw;
             }
-            return await Project(id, commit, ordered, cancel);
+            return await Project(id, commit, ordered, stop);
         }
         finally
         {
@@ -109,6 +110,35 @@ internal sealed class HexLinkPublishJournal(string directory, HexLinkWorktreeGit
         if (Completed(id, commit))
             return new HexLinkPublishReceipt(id, commit, list.Count);
 
+        HexLinkPublishEdit[] edits = await ReadEdits(commit, list, cancel);
+
+        await using IAsyncDisposable fence = await target.Fence(id, cancel);
+        if (Completed(id, commit))
+            return new HexLinkPublishReceipt(id, commit, edits.Length);
+        target.BlockLiveForRecovery?.Invoke(id, true);
+        return await Project(id, commit, edits, fence is HexLinkPublicationFence.Lease lease ? lease.Stop : cancel);
+    }
+
+    public async Task<IReadOnlyList<HexLinkPublishEdit>> CommittedEdits(Guid id, CancellationToken cancel)
+    {
+        string commit = await git.Receipt(id, cancel)
+            ?? throw HexLinkException.NotFound("The publication has no committed payload.");
+        JsonObject said = await ReadManifest(commit, cancel);
+        if (ManifestId(said) != id || said["files"] is not JsonArray list || list.Count > HexLinkTree.MOST_FILES)
+            throw new IOException("The saved publication manifest is invalid.");
+        return await ReadEdits(commit, list, cancel);
+    }
+
+    public async Task<Guid?> PendingProjection(CancellationToken cancel)
+    {
+        if (await git.Tip(cancel) is not { } tip)
+            return null;
+        Guid id = ManifestId(await ReadManifest(tip, cancel));
+        return Completed(id, tip) ? null : id;
+    }
+
+    private async Task<HexLinkPublishEdit[]> ReadEdits(string commit, JsonArray list, CancellationToken cancel)
+    {
         var edits = new HexLinkPublishEdit[list.Count];
         for (int i = 0; i < list.Count; i++)
         {
@@ -121,11 +151,7 @@ internal sealed class HexLinkPublishJournal(string directory, HexLinkWorktreeGit
             edits[i] = new HexLinkPublishEdit(path, basis, bytes);
         }
 
-        await using IAsyncDisposable fence = await target.Fence(cancel);
-        if (Completed(id, commit))
-            return new HexLinkPublishReceipt(id, commit, edits.Length);
-        target.BlockLiveForRecovery?.Invoke(true);
-        return await Project(id, commit, edits, cancel);
+        return edits;
     }
 
     private async Task<HexLinkPublishReceipt> Project(Guid id, string commit, IReadOnlyList<HexLinkPublishEdit> edits, CancellationToken cancel)
@@ -142,9 +168,9 @@ internal sealed class HexLinkPublishJournal(string directory, HexLinkWorktreeGit
         }
 
         var receipt = new HexLinkPublishReceipt(id, commit, edits.Count);
-        await target.Announce(receipt, edits, CancellationToken.None);
+        await target.Announce(receipt, edits, cancel);
         HexLinkFiles.WriteAtomic(CompletePath(id), Encoding.UTF8.GetBytes(commit));
-        target.BlockLiveForRecovery?.Invoke(false);
+        target.BlockLiveForRecovery?.Invoke(id, false);
         return receipt;
     }
 

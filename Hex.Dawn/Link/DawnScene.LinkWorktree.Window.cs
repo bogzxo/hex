@@ -43,7 +43,7 @@ internal sealed partial class DawnScene
             : "Private worktree";
         holder.Add(LinkLine(state));
         bool busy = privateDeviceJobs.Contains(id);
-        bool ready = LinkPrivatePublishRoute?.Invoke(shared) is not null;
+        bool ready = LinkPrivatePublishRoute(shared) is not null;
         buttons.Add(LinkButton("Open private editor", "folder-opened", () => RunPrivateDeviceAction(id, async stop =>
         {
             HexLinkPrivateWorktree draft = await LinkOpenStoredDraft(id, stop);

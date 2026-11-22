@@ -7,9 +7,6 @@ internal sealed partial class DawnScene
 {
     private readonly ConcurrentDictionary<Guid, HexLinkPrivateWorktree> linkPrivateDrafts = new();
 
-    // Supplied by the sync owner transport, which also fences the receiving side and delivers the whole set.
-    internal Func<HexLinkFolder, HexLinkDraftRoute?>? LinkPrivatePublishRoute { get; set; }
-
     private HexMcpTool LinkPublishTool() => new(new McpTool("hex_link_publish", "Publish private worktree changes",
         "Check an agent's private worktree, build and publish its changes, or discard the draft.",
         McpSchema.Object([
@@ -41,7 +38,7 @@ internal sealed partial class DawnScene
                     linkPrivateDrafts.TryRemove(id, out _);
                     return McpToolResult.Text("Private worktree discarded.");
                 case "publish":
-                    if (LinkPrivatePublishRoute?.Invoke(draft.SharedFolder) is not { } route)
+                    if (LinkPrivatePublishRoute(draft.SharedFolder) is not { } route)
                         return McpToolResult.Error("Connect to a folder authority that supports checked publication.");
                     var options = await OnEditorForLink(() => LinkWorktreeGateOf(draft, tests)).WaitAsync(cancel);
                     HexLinkDraftPublication result = await draft.Publish(route, options, bypass, cancel);

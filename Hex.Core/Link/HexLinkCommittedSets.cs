@@ -106,7 +106,7 @@ internal sealed class HexLinkCommittedSets
 
     // Delivery retries after disconnect by calling this with the same authenticated peer ID.
     public async Task Deliver(string peer, Func<HexLinkCommittedSet, CancellationToken, Task<HexLinkCommittedAck>> send,
-        CancellationToken cancel)
+        CancellationToken cancel, Action<HexLinkCommittedSet>? acknowledged = null)
     {
         foreach (HexLinkCommittedSet set in Pending(peer))
         {
@@ -129,6 +129,31 @@ internal sealed class HexLinkCommittedSets
                     break;
                 }
             }
+            acknowledged?.Invoke(set);
+        }
+    }
+
+    public (bool Prepared, HexLinkCommittedAck? Ack) Incoming(HexLinkCommittedSet set)
+    {
+        JsonObject body = Canonical(set);
+        lock (gate)
+        {
+            if (Load(PathFor(set.Id, outgoing: false)) is not { } row)
+                return (false, null);
+            RequireMatch(body, row);
+            return (true, HexLinkData.Bool(row, "complete") == true ? Acknowledge(body) : null);
+        }
+    }
+
+    public HexLinkCommittedAck? Receipt(Guid id, string folder, long epoch)
+    {
+        lock (gate)
+        {
+            if (Load(PathFor(id, outgoing: false)) is not { } row || HexLinkData.Bool(row, "complete") != true)
+                return null;
+            JsonObject body = Body(row);
+            return HexLinkData.String(body, "folder", 201) == folder && HexLinkData.Long(body, "epoch") == epoch
+                ? Acknowledge(body) : null;
         }
     }
 
@@ -176,6 +201,8 @@ internal sealed class HexLinkCommittedSets
             return Acknowledge(body);
         }
     }
+
+    public bool MatchesReceipt(HexLinkCommittedSet set, HexLinkCommittedAck receipt) => Acknowledge(set) == receipt;
 
     private static JsonObject Canonical(HexLinkCommittedSet set) => HexLinkCommittedSet.Read(set.ToJson()).ToJson();
     private static HexLinkCommittedAck Acknowledge(HexLinkCommittedSet set) => Acknowledge(Canonical(set));

@@ -19,6 +19,8 @@ internal sealed partial class DawnScene
 
         public HexLinkDevice Device => hex.linkIdentity?.Device ?? new HexLinkDevice(string.Empty, hex.LinkNameWanted);
 
+        public IHexLinkPublicationService? Publication => hex.CurrentLinkPublication?.Publication;
+
         public HexLinkAuthorityStore FolderAuthorities { get; } = new(Path.Combine(hex.linkData, "folder-authority.json"));
 
         public HexLinkWorkspace Workspace

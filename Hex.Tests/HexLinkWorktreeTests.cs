@@ -204,12 +204,12 @@ public sealed class HexLinkWorktreeTests : IDisposable
         Assert.StartsWith("base one", File.ReadAllText(target));
         var fence = HexLinkPublicationFence.ForRoot(shared);
         int notices = 0;
-        var receiver = new HexLinkPublishTarget(fence.EnterPublish,
+        var receiver = new HexLinkPublishTarget(async (id, stop) => await fence.EnterExclusive(HexLinkFenceKind.Publication, stop, recovery: id),
             (wire, _) => Task.FromResult(HexLinkFiles.HashOf(HexLinkFiles.Resolve([folder], wire))),
             async (edit, stop) => await HexLinkFiles.CompareAndReplace(HexLinkFiles.Resolve([folder], edit.Path),
                 edit.Path, edit.Base, edit.Bytes, stop),
             (_, _, _) => { notices++; return Task.CompletedTask; },
-            fence.BlockLiveForRecovery);
+            (id, pending) => { if (pending) fence.HoldRecovery(id, HexLinkFenceKind.Publication); else fence.ReleaseRecovery(id); });
         var objects = await HexLinkWorktreeGit.Open(Folder("pub-obj"), CancellationToken.None);
         var journal = new HexLinkPublishJournal(Folder("pub-log"), objects, receiver);
         var route = new HexLinkDraftRoute(_ => Task.FromResult(tree.Manifest()), journal.Recover,
@@ -266,7 +266,7 @@ public sealed class HexLinkWorktreeTests : IDisposable
     {
         var store = await HexLinkWorktreeGit.Open(Folder("objects"), CancellationToken.None);
         return new HexLinkPublishJournal(Folder("journal"), store, new HexLinkPublishTarget(
-            disk.Fence, disk.Hash, disk.Apply, disk.Announce, pending => disk.RecoveryPending = pending));
+            (_, stop) => disk.Fence(stop), disk.Hash, disk.Apply, disk.Announce, (_, pending) => disk.RecoveryPending = pending));
     }
 
     private static HexLinkPublishEdit Edit(string path, string before, string after) => new(path, HexLinkFiles.Hash(Bytes(before)), Bytes(after));
