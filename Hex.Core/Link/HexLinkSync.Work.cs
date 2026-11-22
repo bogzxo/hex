@@ -1117,9 +1117,8 @@ internal sealed partial class HexLinkSync
                     SetBase(wire, AgreedOf(bytes, sending) with { Executable = tree.Mode(full) });
             }
 
-            lock (gate)
-                if (heldSubmission && submittedHolds.GetValueOrDefault(wire) == expectedLocal)
-                    submittedHolds.Remove(wire);
+            if (heldSubmission)
+                ForgetHeldSubmission(wire, expectedLocal);
             Interlocked.Increment(ref sent);
             Notify();
         }

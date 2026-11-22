@@ -107,9 +107,24 @@ internal sealed partial class DawnScene
             return true;
         }).ConfigureAwait(false);
 
+        // This copy can also be a source for another peer's file sync. Carry the exact submission forward.
+        int slash = wire.IndexOf('/');
+        HexLinkSync[] forwarding;
+        lock (linkSyncGate)
+            forwarding = [.. linkSyncs.Values.Where(entry => slash > 0 && PlatformPaths.Comparer.Equals(entry.Folder, wire[..slash]))
+                .Select(entry => entry.Sync).OfType<HexLinkSync>()];
+        string? submitted = bytes is null ? null : HexLinkFiles.Hash(bytes);
+        foreach (HexLinkSync sync in forwarding)
+            sync.RememberHeldSubmission(wire, submitted);
         try
         {
             return await LinkCompareAndReplace(full, wire, basis, bytes, cancel, executable, directories).ConfigureAwait(false);
+        }
+        catch
+        {
+            foreach (HexLinkSync sync in forwarding)
+                sync.ForgetHeldSubmission(wire, submitted);
+            throw;
         }
         finally
         {

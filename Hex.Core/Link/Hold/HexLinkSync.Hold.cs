@@ -173,6 +173,19 @@ internal sealed partial class HexLinkSync
         }
     }
 
+    internal void RememberHeldSubmission(string wire, string? hash)
+    {
+        lock (gate)
+            submittedHolds[wire] = hash;
+    }
+
+    internal void ForgetHeldSubmission(string wire, string? hash)
+    {
+        lock (gate)
+            if (submittedHolds.TryGetValue(wire, out string? pending) && pending == hash)
+                submittedHolds.Remove(wire);
+    }
+
     private bool IsSubmittedHold(string wire, string? current)
     {
         lock (gate)

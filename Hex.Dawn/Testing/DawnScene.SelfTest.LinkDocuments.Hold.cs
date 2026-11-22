@@ -96,10 +96,16 @@ internal sealed partial class DawnScene
             receiverWrite?.Exception?.GetBaseException() is HexLinkException { Code: HexLinkErrors.CONFLICT } &&
             LinkLiveOf(document) == receivingRoom && ReadLinkTestFile(file) == "authority edit");
         test.Run(() => receiverWrite = linkServices?.ApplyHeldSubmission(file, LINK_DOC_WIRE, expected, submitted, default, null, null));
-        Check("a checked submission updates the clean authority and rejoins both editors", () =>
-            receiverWrite is { IsCompletedSuccessfully: true } && ReadLinkTestFile(file) == "submitted by a holder" &&
-            ReadLinkTestFile(peerFile) == "submitted by a holder" && document.Editor.Text == "submitted by a holder" &&
-            LinkLiveOf(document) is { Draft: null } joined && !ReferenceEquals(joined, receivingRoom));
+        bool SharedSubmissionArrived() => receiverWrite is { IsCompletedSuccessfully: true } &&
+            ReadLinkTestFile(file) == "submitted by a holder" && ReadLinkTestFile(peerFile) == "submitted by a holder" &&
+            document.Editor.Text == "submitted by a holder" && LinkLiveOf(document) is { Draft: null } joined &&
+            !ReferenceEquals(joined, receivingRoom);
+        Check("a checked submission updates the clean authority and rejoins both editors", SharedSubmissionArrived);
+        test.Run(() =>
+        {
+            if (!SharedSubmissionArrived())
+                Console.WriteLine($"[Hex self-test] held publication: {receiverWrite?.Status}, {receiverWrite?.Exception?.GetBaseException().Message}, local={ReadLinkTestFile(file)}, peer={ReadLinkTestFile(peerFile)}, room={LinkLiveOf(document) is not null}, sync={LinkSyncs.FirstOrDefault()?.Summary}");
+        });
     }
 
     private void LinkDocumentHoldTestPeer(string work)
