@@ -217,10 +217,8 @@ internal static class ProjectTemplates
             _ => null
         };
 
-        // A Horizon game is files of ours, the engine beside it cloned when there's no checkout of it on the machine
-        // to point at. Its solution is one of its files (Solution)
-        if (template.Id == "csharp-horizon" && HorizonEngine() is null)
-            commands.Add(["git", "clone", "--depth", "1", HORIZON_REPOSITORY, "external/horizon"]);
+        // A Horizon game is files of ours, the engine comes from its NuGet packages when it's first built. Its solution
+        // is one of its files (Solution)
 
         // The SDK's template writes the project, round the solution that is there already as one of the files
         if (dotnet is not null)
@@ -242,7 +240,7 @@ internal static class ProjectTemplates
         "go" => Go(name),
         "typescript" => TypeScript(name),
         "d-dub" => D(name),
-        "csharp-horizon" => [.. HorizonGame(name, HorizonEngine()), Solution(name)],
+        "csharp-horizon" => [.. HorizonGame(name), Solution(name)],
 
         // The SDK's templates write the rest, all we add is what git is told to leave alone and the solution
         _ => [(".gitignore", "bin/\nobj/\n.vs/\n*.user\n"), Solution(name)]
@@ -476,13 +474,14 @@ internal static class ProjectTemplates
         return char.IsAsciiDigit(made[0]) ? "_" + made : made;
     }));
 
-    // A Horizon game, the engine's own projects referenced from its checkout and a scene of one line of text. HorizonRoot
-    // is the workspace's when the game is made in it (its Directory.Build.props says), the checkout found when there is
-    // one, and the clone in external/horizon when there isn't
-    private static List<(string, string)> HorizonGame(string name, string? engine)
+    /// <summary>The version of the engine's NuGet packages a new Horizon game is made with.</summary>
+    public const string HORIZON_PACKAGES = "1.5.0";
+
+    // A Horizon game on the engine's NuGet packages (bogzxo.Horizon.*), which bring its shaders, fonts and UI skins next to
+    // the program as it's built, and a scene of one line of text. No checkout of the engine is needed anywhere
+    private static List<(string, string)> HorizonGame(string name)
     {
         string space = Namespace(name);
-        string root = engine ?? @"$(MSBuildThisFileDirectory)external\horizon\";
         return
         [
             ($"{name}.csproj", $$"""
@@ -494,15 +493,12 @@ internal static class ProjectTemplates
                     <ImplicitUsings>enable</ImplicitUsings>
                     <Nullable>enable</Nullable>
                     <RootNamespace>{{space}}</RootNamespace>
-
-                    <!-- Where the Horizon engine is, a workspace's Directory.Build.props can say another -->
-                    <HorizonRoot Condition="'$(HorizonRoot)' == ''">{{root}}</HorizonRoot>
                   </PropertyGroup>
 
                   <ItemGroup>
-                    <ProjectReference Include="$(HorizonRoot)Horizon\Horizon.csproj" />
-                    <ProjectReference Include="$(HorizonRoot)Horizon.Platform.Desktop\Horizon.Platform.Desktop.csproj" />
-                    <ProjectReference Include="$(HorizonRoot)Horizon.UI\Horizon.UI.csproj" />
+                    <PackageReference Include="bogzxo.Horizon.Engine" Version="{{HORIZON_PACKAGES}}" />
+                    <PackageReference Include="bogzxo.Horizon.Platform.Desktop" Version="{{HORIZON_PACKAGES}}" />
+                    <PackageReference Include="bogzxo.Horizon.UI" Version="{{HORIZON_PACKAGES}}" />
                   </ItemGroup>
 
                 </Project>
@@ -551,7 +547,7 @@ internal static class ProjectTemplates
                 }
 
                 """),
-            (".gitignore", "bin/\nobj/\n.vs/\n*.user\nexternal/\n")
+            (".gitignore", "bin/\nobj/\n.vs/\n*.user\n")
         ];
     }
 

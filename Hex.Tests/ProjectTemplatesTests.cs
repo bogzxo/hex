@@ -194,16 +194,18 @@ public sealed class ProjectTemplatesTests
         ProjectTemplate game = ProjectTemplates.Find("csharp-horizon")!;
         var files = ProjectTemplates.Files(game, "Sun-Game").ToDictionary(file => file.Path, file => file.Text);
 
-        Assert.Contains(@"$(HorizonRoot)Horizon.UI\Horizon.UI.csproj", files["Sun-Game.csproj"]);
+        Assert.Contains($"<PackageReference Include=\"bogzxo.Horizon.UI\" Version=\"{ProjectTemplates.HORIZON_PACKAGES}\" />", files["Sun-Game.csproj"]);
+        Assert.Contains("<PackageReference Include=\"bogzxo.Horizon.Engine\"", files["Sun-Game.csproj"]);
+        Assert.DoesNotContain("HorizonRoot", files["Sun-Game.csproj"]);
         Assert.Contains("<RootNamespace>Sun_Game</RootNamespace>", files["Sun-Game.csproj"]);
         Assert.Contains("new Label(\"Goodbye, sunshine!\")", files["MainScene.cs"]);
         Assert.Contains("namespace Sun_Game;", files["MainScene.cs"]);
         Assert.Contains("engine.Run<MainScene>();", files["Program.cs"]);
         Assert.Equal("MainScene.cs", ProjectTemplates.MainFile(game, "Sun-Game"));
 
-        // The engine cloned beside it only when there's no checkout to point at
+        // The engine comes from its packages, nothing is cloned
         var commands = ProjectTemplates.Commands(game, "Sun-Game", optional: false);
-        Assert.Equal(ProjectTemplates.HorizonEngine() is null, commands.Any(command => command is ["git", "clone", ..]));
+        Assert.DoesNotContain(commands, command => command is ["git", "clone", ..]);
         Assert.DoesNotContain(commands, command => command is ["dotnet", ..]);
         Assert.Contains("<Project Path=\"Sun-Game.csproj\" />", files["Sun-Game.slnx"]);
     }

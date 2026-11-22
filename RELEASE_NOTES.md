@@ -1,3 +1,15 @@
+# Hex 3.4.2
+
+## Hex Link
+
+- Chat with the people connected to you. Link Chat opens on the right when another device connects, with each person's name in their device's colour. Close it and reopen it with Link: Chat. A count shows messages that arrived while it was closed.
+- Spy > and a device's name, in the command palette, jumps once to another person's file and caret. Use Follow to keep up with them.
+- Add a `.hex-link-ignore` file at the root of a shared folder to keep build output and other local files from syncing. It uses `.gitignore` rules, and changes to it apply at once. When you turn on Link or share a folder that has no such file, Hex offers to create one for common build output.
+- Files that are the same on both devices no longer show as conflicts when one copy has a UTF-8 BOM, when a file was only reformatted, or when a newer edit arrives while a sync is saving. A conflict over unsaved changes now clears once both saved files match.
+- AI autocomplete over Hex Link works on the device without a model. The device with the model shares it whenever Share with paired devices is on, even with its own predictions switched off. When predictions can't come over Link, Hex says why: no device is connected, the device hasn't allowed this one to use AI completions, or it doesn't share its model.
+- Private worktrees are safer. Editing `.hex-link-ignore` in a private copy never publishes ignored files as deletions. A publication that conflicted no longer raises a false conflict the next time. A file too large to publish is named. A private copy can be discarded while its authority is offline. Discarded copies and old snapshots are cleaned up.
+- File claims ignore paths that `.hex-link-ignore` leaves out.
+
 # Hex 3.4.0 Modafinil
 
 ## Hex Link

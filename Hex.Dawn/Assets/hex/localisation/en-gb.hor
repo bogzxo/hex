@@ -251,7 +251,7 @@ let strings = {
         kind_d_dub: "D (dub)",
         about_csharp_console: "A command-line program on .NET, made by the SDK's own template with a solution around it. Needs the .NET SDK.",
         about_csharp_classlib: "A .NET library to reference from other projects, made by the SDK's template with a solution around it. Needs the .NET SDK.",
-        about_csharp_horizon: "A game on the Horizon engine whose first scene says “Goodbye, sunshine!”. It builds against a Horizon checkout on this machine, or clones the engine into external/horizon.",
+        about_csharp_horizon: "A game on the Horizon engine whose first scene says “Goodbye, sunshine!”. It builds against the engine's NuGet packages, so nothing else needs to be on this machine.",
         about_csharp_xunit: "A .NET test project with xUnit, ready to run from the Testing view. Needs the .NET SDK.",
         about_python: "A package in a src layout with pyproject.toml, a __main__ to run and pyright pointed at the project's .venv.",
         about_java_maven: "A Maven project for Java 21 with an App class in a package named after the project. jdtls reads the pom.xml.",
