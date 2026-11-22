@@ -173,6 +173,43 @@ public sealed class HexLinkProvisionTests
     }
 
     [Fact]
+    public async Task Keeps_checkout_line_endings_when_mixed_host_bytes_are_git_clean()
+    {
+        if (HexLinkGit.Why() is not null)
+            return;
+
+        using var pair = await LinkedPair.Up(HexLinkRights.View);
+        string host = pair.A.Work;
+        MakeRepo(host);
+        Git(host, "config", "core.autocrlf", "true");
+        File.WriteAllText(Path.Combine(host, ".gitattributes"), "*.txt text eol=lf\n");
+        File.WriteAllText(Path.Combine(host, "clean.txt"), "one\ntwo\nthree\n");
+        File.WriteAllText(Path.Combine(host, "edited.txt"), "one\ntwo\nthree\n");
+        Git(host, "add", ".");
+        Git(host, "commit", "-qm", "Add text files");
+        File.WriteAllText(Path.Combine(host, "clean.txt"), "one\r\ntwo\nthree\r\n");
+        const string edited = "one\r\nchanged\nthree\r\n";
+        File.WriteAllText(Path.Combine(host, "edited.txt"), edited);
+        Assert.Equal(Git(host, "rev-parse", "HEAD:clean.txt"), Git(host, "hash-object", "--path=clean.txt", "clean.txt"));
+
+        string target = Path.Combine(pair.B.Root, "eol-destination");
+        string journal = Path.Combine(pair.B.Root, "journal.json");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+        HexLinkProvisionResult got = await HexLinkProvision.Get(pair.PeerA, target, journal, null, timeout.Token);
+        Assert.Empty(got.Skipped);
+        Assert.Equal("one\ntwo\nthree\n", File.ReadAllText(Path.Combine(target, "clean.txt")));
+        Assert.Equal(string.Empty, Git(target, "status", "--porcelain", "--", "clean.txt"));
+        Assert.Equal(edited, File.ReadAllText(Path.Combine(target, "edited.txt")));
+        Assert.Contains("edited.txt", Git(target, "status", "--porcelain", "--", "edited.txt"));
+
+        using var sync = new HexLinkSync(pair.PeerA, Assert.Single(got.Folders), Path.Combine(pair.B.Root, "sync-eol"));
+        await sync.Start(cancel: timeout.Token);
+        await sync.Flush(timeout.Token);
+        Assert.Equal("one\ntwo\nthree\n", File.ReadAllText(Path.Combine(target, "clean.txt")));
+        Assert.Equal(string.Empty, Git(target, "status", "--porcelain", "--", "clean.txt"));
+    }
+
+    [Fact]
     public async Task One_sided_repositories_wait_while_common_files_sync_and_get_only_installs_the_requested_repo()
     {
         if (HexLinkGit.Why() is not null)
