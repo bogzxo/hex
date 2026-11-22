@@ -147,7 +147,7 @@ internal sealed partial class DawnScene
         }
 
         // Its device forgotten (or Link turned off): the chat put away, there's no coming back to it
-        if (link is null || !LinkKnown.Any(known => known.Device.Id.Equals(open.DeviceId, StringComparison.OrdinalIgnoreCase)))
+        if (LinkChatFake(open.DeviceId) is null && (link is null || linkTrust?.Find(open.DeviceId) is null))
         {
             CloseRemoteMirror();
             linkRemoteOf.Remove(agentChat!);

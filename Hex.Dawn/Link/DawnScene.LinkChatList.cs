@@ -5,6 +5,7 @@ using System.Numerics;
 using Horizon.Rendering;
 using Horizon.UI;
 using Horizon.UI.Components;
+using Horizon.UI.Skinning;
 
 namespace Hex.Dawn;
 
@@ -22,7 +23,7 @@ internal sealed partial class DawnScene
     private HexChatListFolds? linkChatFolds;
     private readonly Dictionary<string, bool> linkChatUsualSeen = new(StringComparer.Ordinal);
     private int linkChatFoldsVersion;
-    private (UIComponent List, string Key)? linkChatRefocus;
+    private (UIComponent List, ChatListHeadButton Previous)? linkChatRefocus;
 
     private HexChatListFolds LinkChatFolds => linkChatFolds ??= new HexChatListFolds(settings.AgentsListFolds);
 
@@ -203,7 +204,7 @@ internal sealed partial class DawnScene
     }
 
     private readonly record struct LinkChatGroupState(LinkChatDevice Device, HexLinkChatCounts Counts, bool Open,
-        bool RunningOpen, bool FinishedOpen, int SelectedChat, Horizon.UI.Skinning.UISkin? Skin);
+        bool RunningOpen, bool FinishedOpen, int SelectedChat, UISkin? Skin);
     private sealed record LinkChatGroupView(LinkChatGroupState State, StackPanel Root, float Height, Action<float> Refresh);
     private readonly Dictionary<string, LinkChatGroupView> agentsLinkChatGroups = new(StringComparer.Ordinal);
     private readonly Dictionary<string, LinkChatGroupView> noonLinkChatGroups = new(StringComparer.Ordinal);
@@ -237,6 +238,7 @@ internal sealed partial class DawnScene
             refreshes.Add(group.Refresh);
             tall += group.Height;
         }
+        RefocusChatListHead(rows);
         return tall;
     }
 
@@ -273,7 +275,8 @@ internal sealed partial class DawnScene
                     HexAgentChat standIn = LinkStandIn(device.Id, device.Name, row);
                     var remote = new LinkRemoteCard(device.Id, device.Name, row.Id);
                     AgentCard card = AgentCardOf(standIn, step, closable: false, quiet: !device.Online || !running,
-                        rail: HexLinkChatGroups.NeedsYou(row, item => LinkFailureUnseen(device, item)), remote: remote, approval: row.Approvals.FirstOrDefault());
+                        rail: HexLinkChatGroups.NeedsYou(row, item => LinkFailureUnseen(device, item)), remote: remote,
+                        approval: row.Approvals.FirstOrDefault(), waiting: row.Waiting);
                     block.Add(card.Root);
                     fitRows.Add(card.Refresh);
                     tall += AGENT_CARD + spacing;
@@ -307,7 +310,8 @@ internal sealed partial class DawnScene
         });
         var name = head.Add(new Label
         {
-            Bold = true, Dim = !device.Online, TextScale = 0.13f, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft,
+            Bold = true, Dim = !device.Online, Color = device.Online ? null : LinkChatDimInk(),
+            TextScale = 0.13f, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft,
             Position = new Vector2(inset, -3), Align = Origin.Left, Tooltip = tip
         });
         var status = device.Online ? LinkChatChip(Said("link.device_connected"), UIBadgeTone.Success)
@@ -323,12 +327,19 @@ internal sealed partial class DawnScene
             upper.Add(route);
         }
 
-        string summary = HexLinkChatGroups.CountsSaid(counts, Said("link.chats_running"), Said("link.chats_finished"), string.Empty);
+        string countsSaid = HexLinkChatGroups.CountsSaid(counts, Said("link.chats_running"), Said("link.chats_finished"), string.Empty);
+        string summary = countsSaid, compactSummary = countsSaid;
         if (!device.Online)
-            summary = Said("link.chats_offline_seen", ("time", device.SeenUtc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture))) + " · " + summary;
+        {
+            DateTime seen = device.SeenUtc.ToLocalTime();
+            string lastSeen = Said("link.chats_offline_seen", ("time", seen.ToString("g", CultureInfo.CurrentCulture)));
+            summary = JoinAgentCardDetails(lastSeen, countsSaid);
+            compactSummary = JoinAgentCardDetails(seen.ToString("M/d HH:mm", CultureInfo.CurrentCulture), countsSaid);
+            status.Tooltip = $"{lastSeen}\n{status.Tooltip}";
+        }
         var totals = head.Add(new Label
         {
-            TextScale = 0.11f, Dim = true, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft,
+            TextScale = 0.11f, Dim = true, Color = LinkChatDimInk(), Anchor = Origin.TopLeft, Pivot = Origin.TopLeft,
             Position = new Vector2(inset, -26), Align = Origin.Left, Tooltip = summary
         });
         List<Badge> rights = LinkRightsChips(device.Granted);
@@ -360,13 +371,36 @@ internal sealed partial class DawnScene
             foreach (Badge chip in rights)
                 chip.Visible = minSummary + lowerWidth <= width;
             float bottom = PlaceLinkChatChips(lower, -26);
-            totals.Text = UIRichText.Literal(FitText(summary, totals.TextScale, width - inset - bottom));
+            float totalsWidth = width - inset - bottom;
+            string fit = FitLinkChatText(summary, totals.TextScale, totalsWidth);
+            if (!device.Online && fit != summary)
+                fit = FitLinkChatText(compactSummary, totals.TextScale, totalsWidth) == compactSummary
+                    ? compactSummary : FitLinkChatText(countsSaid, totals.TextScale, totalsWidth);
+            totals.Text = UIRichText.Literal(fit);
         }
         return (head, Refresh);
     }
 
     private Badge LinkChatChip(string text, UIBadgeTone tone = UIBadgeTone.Neutral) =>
         new() { Text = text, Tone = tone, Colour = LinkBadgeColour(tone), TextScale = 0.11f };
+
+    private Vector4? LinkChatDimInk() => Skin is { } skin ? LinkChatReadableInk(skin.DimTextColor) : null;
+
+    private Vector4 LinkChatReadableInk(Vector4 ink, bool chip = false)
+    {
+        if (Skin is not { } skin)
+            return ink;
+        Vector4 panel = skin.Palette.Panel;
+        Vector4 ground = Vector4.Lerp(new Vector4(0, 0, 0, 1), panel with { W = 1 }, panel.W);
+        for (int step = 0; step < 10; step++)
+        {
+            Vector4 colour = Vector4.Lerp(ink, skin.Palette.Text, step * 0.1f);
+            Vector4 behind = chip ? Vector4.Lerp(ground, colour with { W = 1 }, colour.W * 0.16f) : ground;
+            if (UIPalette.Contrast(colour, behind) >= 4.5f)
+                return colour;
+        }
+        return skin.Palette.Text;
+    }
 
     private float LinkChatChipWidth(Badge chip)
     {
@@ -407,6 +441,7 @@ internal sealed partial class DawnScene
         row.Add(new Label
         {
             Text = $"$({(open ? "chevron-down" : "chevron-right")}) {title}", TextScale = 0.125f, Dim = true, Bold = true,
+            Color = key == "local/finished" ? null : LinkChatDimInk(),
             Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(inset, 0), Align = Origin.Left
         });
         string many = count.ToString(CultureInfo.InvariantCulture);
@@ -432,6 +467,18 @@ internal sealed partial class DawnScene
                 return at;
         }
         return null;
+    }
+
+    private void RefocusChatListHead(UIComponent list)
+    {
+        if (linkChatRefocus is not { } focus || focus.List != list)
+            return;
+        linkChatRefocus = null;
+        if (compositor.Focus is { } current && current != focus.Previous)
+            return;
+        ChatListHeadButton? next = Descendants(list).OfType<ChatListHeadButton>()
+            .FirstOrDefault(button => button.Key == focus.Previous.Key && button.IsShownInHierarchy);
+        next?.Focus();
     }
 
     private void MoveChatListFocus(Button from, int step, bool headOnly = false)
@@ -482,7 +529,7 @@ internal sealed partial class DawnScene
             if (open == Open)
                 return;
             if (IsFocused && scene.ChatListOf(this) is { } list)
-                scene.linkChatRefocus = (list, Key);
+                scene.linkChatRefocus = (list, this);
             setOpen(open);
         }
 
@@ -498,15 +545,5 @@ internal sealed partial class DawnScene
             }
         }
 
-        protected override void Update(float dt)
-        {
-            base.Update(dt);
-            if (scene.linkChatRefocus is { } focus && focus.Key == Key && Module is not null
-                && IsShownInHierarchy && scene.ChatListOf(this) == focus.List)
-            {
-                scene.linkChatRefocus = null;
-                Focus();
-            }
-        }
     }
 }

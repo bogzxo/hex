@@ -218,6 +218,8 @@ internal sealed partial class DawnScene
         string id = remote?.DeviceId ?? LinkDevice?.Id ?? string.Empty;
         string name = OneLine(remote?.DeviceName ?? LinkDevice?.Name ?? LinkNameWanted, 18);
         Vector4 tint = LinkDeviceTint(id, Skin);
+        if (remote is not null)
+            tint = LinkChatReadableInk(tint, chip: true);
         badge = root.Add(new Badge
         {
             Text = name, Icon = "vm", Colour = tint, TextScale = 0.1f, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(38, y),

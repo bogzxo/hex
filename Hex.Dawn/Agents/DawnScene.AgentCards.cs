@@ -59,7 +59,7 @@ internal sealed partial class DawnScene
     /// <param name="quiet">Its name dimmed, a finished chat's in a list where the working ones should read first.</param>
     /// <param name="rail">A rail of the warning colour down its left, a chat waiting on the person, the one thing in the list meant to catch the eye.</param>
     /// <param name="remote">The chat of another device the card is, its stand-in drawn and picking it opens that (DawnScene.LinkFleet).</param>
-    private AgentCard AgentCardOf(HexAgentChat chat, int step, bool closable, bool quiet = false, bool rail = false, LinkRemoteCard? remote = null, HexAgentApprovalStatus? approval = null)
+    private AgentCard AgentCardOf(HexAgentChat chat, int step, bool closable, bool quiet = false, bool rail = false, LinkRemoteCard? remote = null, HexAgentApprovalStatus? approval = null, bool waiting = false)
     {
         UISkin? skin = Skin;
         float indent = (remote is null ? step : Math.Min(step, 2)) * CHAT_STEP;
@@ -90,22 +90,25 @@ internal sealed partial class DawnScene
         HexAgentProfile? profile = HexAgentProfiles.All.FirstOrDefault(each => each.Id == chat.Agent);
         string system = profile?.Name ?? chat.Agent;
         Vector4 tint = AgentTint(chat.Agent, skin);
+        Vector4? remoteDim = remote is not null ? LinkChatDimInk() : null;
+        if (remote is not null)
+            tint = LinkChatReadableInk(tint, chip: true);
         // A pill of the system's letters in its own colour, the same badge as the card's state across from it
         var agentBadge = root.Add(new Badge { Text = Initials(system), Colour = tint, TextScale = 0.1f, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_TOP + 1), Tooltip = system });
 
         // The machine it runs on, while there's more than one to say (DawnScene.LinkFleet), and who started it after that
         float fromAt = 38 + LinkCardBadge(root, remote, -CARD_TOP + 1, out Badge? deviceBadge);
-        var from = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(fromAt, -CARD_TOP - 1), TextScale = CARD_SMALL, Dim = true, Align = Origin.Left });
+        var from = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(fromAt, -CARD_TOP - 1), TextScale = CARD_SMALL, Dim = true, Color = remoteDim, Align = Origin.Left });
         // How it's doing as a badge in the colour of it, a beating dot while it works. It was words in a colour, which read
         // as one more line of the card's small print
         var state = root.Add(new Badge { Anchor = Origin.TopRight, Pivot = Origin.TopRight, Position = new Vector2(closable ? -30 : -10, -CARD_TOP + 2), TextScale = CARD_SMALL });
-        var name = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_TITLE), TextScale = CARD_NAME, Bold = chat == agentChat, Dim = quiet, Align = Origin.Left });
+        var name = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_TITLE), TextScale = CARD_NAME, Bold = chat == agentChat, Dim = quiet, Color = quiet ? remoteDim : null, Align = Origin.Left });
         if (rail)
         {
             Vector4 warning = skin?.Palette.Warning ?? new Vector4(1.0f, 0.78f, 0.3f, 1.0f);
             root.Add(new Panel { Anchor = Origin.Left, Pivot = Origin.Left, Size = new Vector2(3, AGENT_CARD - 24), Position = new Vector2(2, 0), Radius = 1.5f, Color = warning with { W = 0.9f } });
         }
-        var under = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_UNDER), TextScale = CARD_SMALL, Dim = true, Align = Origin.Left });
+        var under = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_UNDER), TextScale = CARD_SMALL, Dim = true, Color = remoteDim, Align = Origin.Left });
         // A double click on the name renames it in place, the box over it while it does (DawnScene.AgentsPanel.Rename)
         pick.Title = name;
         if (remote is not null)
@@ -151,7 +154,7 @@ internal sealed partial class DawnScene
             string starterTip = remote is null ? startedBy : startedBy.Length > 0 ? $"{starter}\n{startedBy}" : starter;
             if (from.Tooltip != starterTip)
                 from.Tooltip = starterTip;
-            ShowAgentStatus(state, chat, approval);
+            ShowAgentStatus(state, chat, approval, waiting);
 
             // As much of it as fits beside the state, measured in the font, which a count of letters guessed at short
             float stateWidth = (Skin?.Font.Measure(state.Text, state.TextScale, markup: false).X ?? 100.0f) + 40.0f;
@@ -159,7 +162,9 @@ internal sealed partial class DawnScene
             bool startedBelow = false;
             if (remote is not null && deviceBadge is not null)
             {
-                state.Colour = LinkBadgeColour(state.Tone);
+                state.Colour = skin is not null
+                    ? LinkChatReadableInk(LinkBadgeColour(state.Tone) ?? state.ColourIn(skin), chip: true)
+                    : null;
                 state.Opacity = 1.0f;
                 stateWidth = LinkChatChipWidth(state);
                 float right = room - stateWidth - 16.0f;
@@ -204,7 +209,7 @@ internal sealed partial class DawnScene
                 if (extra is null && chat.Cost > 0)
                     extra = "$" + chat.Cost.ToString("0.000", CultureInfo.InvariantCulture);
                 string details = JoinAgentCardDetails(model, extra);
-                string? time = chat.TurnSeconds > 0 && (approval is not null || chat.RunGoing || chat.Failed || chat.Stopped)
+                string? time = chat.TurnSeconds > 0 && (approval is not null || waiting || chat.RunGoing || chat.Failed || chat.Stopped)
                     ? Took(chat.TurnSeconds) : null;
                 string tail = JoinAgentCardDetails(time, startedBelow ? startedHere : null);
                 float tailWidth = tail.Length == 0 ? 0.0f : Skin?.Font.Measure(" · " + tail, under.TextScale, markup: false).X ?? 110.0f;
@@ -283,11 +288,12 @@ internal sealed partial class DawnScene
 
     // How an agent is doing in a word or two and its time, on its badge in the tone of it: working in blue with a beating
     // dot, failed in red, done and unseen in the accent with a dot, stopped, done and new quiet. In the texts, not English here
-    private static void ShowAgentStatus(Badge badge, HexAgentChat chat, HexAgentApprovalStatus? approval = null)
+    private static void ShowAgentStatus(Badge badge, HexAgentChat chat, HexAgentApprovalStatus? approval, bool waiting)
     {
         string time = Took(chat.TurnSeconds);
         (string text, UIBadgeTone tone, string icon, bool dot) = approval is not null
             ? (Said("agents_panel.waiting_approval_short"), UIBadgeTone.Warning, "shield", false)
+            : waiting ? (Said("link.chats_waiting_for_you"), UIBadgeTone.Warning, "watch", false)
             : chat.Running ? (Said("agents_panel.card_working", ("time", time)), UIBadgeTone.Info, "", true)
             // Its turn over but its program still going, on a build or a wait of its own: not done, and said so
             : chat.RunGoing ? (Said("agents_panel.card_waiting"), UIBadgeTone.Warning, "watch", false)
@@ -299,7 +305,7 @@ internal sealed partial class DawnScene
         badge.Tone = tone;
         badge.Icon = icon;
         badge.Dot = dot;
-        badge.Pulse = chat.Running && approval is null;
+        badge.Pulse = chat.Running && approval is null && !waiting;
         badge.Opacity = tone == UIBadgeTone.Neutral && !chat.Stopped ? 0.7f : 1.0f;
     }
 
