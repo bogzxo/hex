@@ -839,6 +839,8 @@ public sealed class HexLinkProtocolTests
     public async Task The_steering_helpers_call_the_tools_they_stand_for()
     {
         using var pair = await LinkedPair.Up(HexLinkRights.View | HexLinkRights.Steer);
+        // Chat 2 is the caller's own, so stopping and restarting it takes Steer
+        pair.A.OnEditor(() => pair.A.Hub.Add(new HexAgentChat(2, "claude_code") { LinkDevice = DeviceB.Id }));
         await pair.PeerA.Send(2, "carry on");
         await pair.PeerA.Stop(2);
         await pair.PeerA.Restart(2, "again");
