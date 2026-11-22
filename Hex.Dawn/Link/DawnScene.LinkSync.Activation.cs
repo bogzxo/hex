@@ -167,7 +167,19 @@ internal sealed partial class DawnScene
             foreach (var entry in linkSyncs.Values.Where(each => each.DeviceId == peer.Device.Id))
                 entry.Sync?.RefreshReceiveRights();
         if (HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))
-            _ = LinkPrepareSharedWorkspace(peer);
+            _ = LinkRecheckBoundSync(peer);
+    }
+
+    private async Task LinkRecheckBoundSync(HexLinkPeer peer)
+    {
+        if (linkServices?.Workspace.Folders.Any(folder => folder.FolderAuthorityId == peer.Device.Id) != true ||
+            !await TryRefreshLinkWorkspace(peer).ConfigureAwait(false))
+            return;
+        PostLink(() =>
+        {
+            if (!peer.IsClosed && LinkPeerOf(peer.Device.Id) == peer && HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))
+                LinkSyncStartSharedFolders(peer, boundOnly: true);
+        });
     }
 
     private bool LinkStopBoundReplica(string deviceId, string folder)

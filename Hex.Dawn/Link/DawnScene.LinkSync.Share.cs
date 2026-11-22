@@ -40,17 +40,17 @@ internal sealed partial class DawnScene
     }
 
     // A matching workspace folder starts on connect unless the person turned it off. The sync still checks Git identity.
-    private void LinkSyncStartSharedFolders(HexLinkPeer peer)
+    private void LinkSyncStartSharedFolders(HexLinkPeer peer, bool boundOnly = false)
     {
         if (linkServices is not { } services)
             return;
 
-        bool elected = LinkAutoSyncOwner(peer.Session.Connection.Dialled, peer.Session.Connection.Rights, peer.Granted);
+        bool elected = !boundOnly && LinkAutoSyncOwner(peer.Session.Connection.Dialled, peer.Session.Connection.Rights, peer.Granted);
         string[] common = [.. services.Workspace.Folders
             .Where(local => peer.Workspace.Folders.Any(remote => PlatformPaths.Comparer.Equals(local.Name, remote.Name)
                 && (local.Authority is { } pin
                     ? pin == remote.Authority && pin.DeviceId == peer.Device.Id
-                    : remote.Authority is null && elected && !peer.ChosenSyncFolders.Contains(local.Name, PlatformPaths.Comparer))))
+                    : elected && remote.Authority is null && !peer.ChosenSyncFolders.Contains(local.Name, PlatformPaths.Comparer))))
             .Select(local => local.Name)];
         if (common.Length == 0)
             return;
@@ -58,7 +58,8 @@ internal sealed partial class DawnScene
         _ = Task.Run(async () =>
         {
             var choices = LinkSyncChoices();
-            var chosen = new HashSet<string>(LinkSyncChosenIn(choices, peer.Device.Id), PlatformPaths.Comparer);
+            // A role change also rechecks replicas whose sync choice was already saved.
+            HashSet<string> chosen = boundOnly ? [] : new(LinkSyncChosenIn(choices, peer.Device.Id), PlatformPaths.Comparer);
             var disabled = new HashSet<string>(choices
                 .Where(choice => HexLinkData.String(choice, "device", 200) == peer.Device.Id && HexLinkData.Bool(choice, "enabled") == false)
                 .Select(choice => HexLinkData.String(choice, "folder", 200) ?? string.Empty), PlatformPaths.Comparer);
