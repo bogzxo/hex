@@ -67,6 +67,7 @@ internal sealed partial class HexLinkHost
         }
 
         using var publishing = tree.BeginPackPublication();
+        var directories = new HexLinkFiles.PackDirectories();
         var options = new ParallelOptions { CancellationToken = cancel, MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount - 1, 1, 4) };
         await Parallel.ForEachAsync(Enumerable.Range(0, entries.Count), options, async (i, stop) =>
         {
@@ -78,7 +79,7 @@ internal sealed partial class HexLinkHost
             try
             {
                 Need(HexLinkRights.Edit, "sync/pack/write");
-                string? hash = await services.CompareAndReplace(full, entry.Path, entry.Base, entry.Bytes, stop, entry.Executable);
+                string? hash = await services.CompareAndReplacePacked(full, entry.Path, entry.Base, entry.Bytes, stop, entry.Executable, directories);
                 tree.RememberMode(full, entry.Executable);
                 results[i] = new(entry.Path, hash);
             }

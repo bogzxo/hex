@@ -58,6 +58,10 @@ internal interface IHexLinkServices
     Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes, CancellationToken cancel, bool? executable = null) =>
         HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel, executable);
 
+    Task<string?> CompareAndReplacePacked(string full, string wire, string? baseHash, byte[] bytes,
+        CancellationToken cancel, bool? executable, HexLinkFiles.PackDirectories directories) =>
+        CompareAndReplace(full, wire, baseHash, bytes, cancel, executable);
+
     /// <summary>Buffers explicitly shared by the host editor, across all its connections.</summary>
     HexLinkDocuments? Documents => null;
 

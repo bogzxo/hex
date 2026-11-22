@@ -66,6 +66,10 @@ internal sealed partial class DawnScene
         public Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes, CancellationToken cancel, bool? executable = null) =>
             hex.LinkCompareAndReplace(full, wire, baseHash, bytes, cancel, executable);
 
+        public Task<string?> CompareAndReplacePacked(string full, string wire, string? baseHash, byte[] bytes,
+            CancellationToken cancel, bool? executable, HexLinkFiles.PackDirectories directories) =>
+            hex.LinkCompareAndReplace(full, wire, baseHash, bytes, cancel, executable, directories);
+
         public void Presence(HexLinkDevice device, HexLinkPresence? presence) => hex.PostLink(() =>
         {
             hex.linkPresence[device.Id] = new LinkPresenceSeen(device, presence, DateTime.UtcNow);
@@ -90,11 +94,15 @@ internal sealed partial class DawnScene
     }
 
     internal async Task<string?> LinkCompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes,
-        CancellationToken cancel, bool? executable = null)
+        CancellationToken cancel, bool? executable = null) =>
+        LinkCompareAndReplace(full, wire, baseHash, bytes, cancel, executable, directories: null);
+
+    private async Task<string?> LinkCompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes,
+        CancellationToken cancel, bool? executable, HexLinkFiles.PackDirectories? directories)
     {
         LinkTabStamp before = await LinkTabForCheckedWrite(full, wire, cancel);
 
-        string? hash = await HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel, executable).ConfigureAwait(false);
+        string? hash = await HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel, executable, directories).ConfigureAwait(false);
         if (bytes is not null && HexLinkFiles.Decode(bytes) is { } decoded &&
             await OnEditorForLink(() => LinkTakeIntoTab(full, decoded.Text, before)).ConfigureAwait(false))
         {
