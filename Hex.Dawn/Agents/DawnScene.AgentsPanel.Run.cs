@@ -31,6 +31,9 @@ internal sealed partial class DawnScene
         string asked = agentsInput.Text.Trim();
         if (asked.Length == 0 && agentImages.Count == 0)
             return;
+        // A chat of another device, or a new one to run on one, goes over the link (DawnScene.LinkChats)
+        if (LinkSendFromBox(asked))
+            return;
         if (HandleAgentCommand(asked))
             return;
 
@@ -115,7 +118,8 @@ internal sealed partial class DawnScene
     /// </summary>
     private bool AgentRunBusy(HexAgentChat chat) => agentsStarting.Contains(chat) || agentRuns.Any(each => each.Chat == chat);
 
-    private void StartAgent(HexAgentChat chat, HexExtension extension, ObjectValue run, string prompt, string asked, string? contextLocation = null)
+    private void StartAgent(HexAgentChat chat, HexExtension extension, ObjectValue run, string prompt, string asked,
+        string? contextLocation = null, LinkPrivateAgentStart? prepare = null)
     {
         // Its turn said over, the agent can still be going of its own (Claude Code woken by a task of its own in the
         // background), and a second run on the same session had two agents writing over each other. What's asked waits in
@@ -143,6 +147,12 @@ internal sealed partial class DawnScene
         // agent starts once it's taken, started alongside it its first writes could be in what was taken as before
         HexAgentEntry turn = chat.Ask(prompt, asked, contextLocation is null ? null : asked, contextLocation);
         agentsStarting.Add(chat);
+        if (prepare is not null)
+        {
+            LinkPrepareAgent(chat, prepare, () => LaunchAgent(chat, extension, run, prompt));
+            return;
+        }
+        if (chat.LinkDraft is not null) { LaunchAgent(chat, extension, run, prompt); return; }
         TakeCheckpoint(turn, () =>
         {
             // Stopped while the checkpoint was taken, it isn't started at all. Left in agentsStarting through the launch,
@@ -211,6 +221,8 @@ internal sealed partial class DawnScene
         if (mcpHost is null && StartMcp())
             chat.Note(Said("agents_panel.mcp_started"));
 
+        string? folder = LinkAgentFolder(chat);
+        if (folder is null) { agentsStarting.Remove(chat); chat.Error("The private worktree is unavailable."); chat.Done(); return; }
         ObjectValue chatObject = ChatObject(chat, extension);
         List<string> arguments = [];
         if (HexExtensions.FunctionOf(run, "arguments") is { } making)
@@ -218,7 +230,7 @@ internal sealed partial class DawnScene
             if (!extension.Invoke(making, [new StringValue(prompt), chatObject], out IRuntimeValue made))
             {
                 agentsStarting.Remove(chat);
-                chat.Error($"{extension.Name}, {extension.Failed}");
+                chat.Error($"{extension.Name}, {extension.CallError}");
                 chat.Done();
                 return;
             }
@@ -237,15 +249,13 @@ internal sealed partial class DawnScene
             if (MessageLine(extension, run, prompt, chatObject) is not { } first)
             {
                 agentsStarting.Remove(chat);
-                chat.Error($"{extension.Name}, {extension.Failed}");
+                chat.Error($"{extension.Name}, {extension.CallError}");
                 chat.Done();
                 return;
             }
 
             input = first + "\n";
         }
-
-        string folder = explorer.workspace.Folders.FirstOrDefault() ?? Directory.GetCurrentDirectory();
 
         // Starting it makes a process and writes the prompt down its stdin, which waits when the program is slow to take it
         // (a scanner looking it over first, a prompt bigger than the pipe), so it's off the editor's thread. What went wrong
@@ -410,7 +420,7 @@ internal sealed partial class DawnScene
     /// <param name="withStarted">Whether the agents it started (and theirs) stop too, its menu's Stop with its agents, an agent's hex_agent_stop and closing it.</param>
     private void StopAgent(HexAgentChat? chat, bool withStarted = false)
     {
-        if (chat is null)
+        if (chat is null || LinkStopRemote(chat))
             return;
 
         // What was held for it goes with the run, kept it went to the next run's agent as soon as it said anything
@@ -418,7 +428,10 @@ internal sealed partial class DawnScene
 
         // One still waiting for its checkpoint is never started, its turn over as it is
         if (agentsStarting.Remove(chat))
+        {
+            LinkStopAgentPreparation(chat);
             chat.Done();
+        }
 
         foreach (AgentRun run in agentRuns.Where(run => run.Chat == chat).ToList())
         {
@@ -555,7 +568,7 @@ internal sealed partial class DawnScene
 
         if (!run.Extension.Invoke(heard, [run.ChatObject, parsed]))
         {
-            run.Chat.Error($"{run.Extension.Name} couldn't read what its agent said, {run.Extension.Failed}");
+            run.Chat.Error($"{run.Extension.Name} couldn't read what its agent said, {run.Extension.CallError}");
             run.SaidWrong = true;
             extensions.Failed(run.Extension);
             run.Process.Dispose();
@@ -564,7 +577,7 @@ internal sealed partial class DawnScene
 
     /// <summary>What an extension says what its agent did on, a chat's rows, a turn that went wrong marked so on its run.</summary>
     private ObjectValue ChatObject(HexAgentChat chat, HexExtension extension) =>
-        HexAgentChatApi.Of(chat, explorer.workspace.Folders.FirstOrDefault() ?? Directory.GetCurrentDirectory(), () =>
+        HexAgentChatApi.Of(chat, LinkAgentFolder(chat) ?? string.Empty, () =>
         {
             foreach (AgentRun run in agentRuns.Where(run => run.Chat == chat))
                 run.SaidWrong = true;

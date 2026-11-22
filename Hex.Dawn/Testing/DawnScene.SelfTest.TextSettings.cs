@@ -55,7 +55,7 @@ internal sealed partial class DawnScene
         string[] titles = ["Tab size", "Insert spaces", "Detect indentation", "Line numbers", "Indent guides", "Use .editorconfig"];
         test.Check("text settings: the window opens on Editor · Text, its rows first", () =>
             SettingsPage is { } page && page.SectionsShown.Count > 0 && page.SectionsShown[0] == EditorSettingsCatalog.TEXT
-            && page.Settings.Where(setting => setting.Group == EditorSettingsCatalog.TEXT).Select(setting => setting.Key).SequenceEqual(textKeys));
+            && page.Settings.Where(setting => setting.Group == EditorSettingsCatalog.TEXT).Select(setting => setting.Key).ToList() is { } shownKeys && textKeys.All(shownKeys.Contains) && shownKeys[0] == "tab_size");
 
         // A row's name is written in bold, so it's looked for inside what the row says
         test.Check("text settings: they're called Tab size, Insert spaces, Detect indentation, Line numbers, Indent guides and Use .editorconfig", () =>
@@ -215,8 +215,8 @@ internal sealed partial class DawnScene
 
         test.Check("workspace: new keys are folder keys", () =>
             new[] { "rulers", "render_whitespace", "cursor_style", "sticky_scroll", "format_on_save" }.All(HexSettings.IsWorkspaceKey));
-        test.Check("text: format on save is a row of Editor · Files", () =>
-            SettingsPage!.Settings.Any(setting => setting.Key == "format_on_save" && setting.Group == EditorSettingsCatalog.FILES));
+        test.Check("text: format on save is a row of Editor · Save and format", () =>
+            SettingsPage!.Settings.Any(setting => setting.Key == "format_on_save" && setting.Group == EditorSettingsCatalog.SAVE));
 
         // VS Code's own names for them find them, the way somebody coming from it would type them
         test.Run(() => SettingsPage!.Find("editor.tabSize"));

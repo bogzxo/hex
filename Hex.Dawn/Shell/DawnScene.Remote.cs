@@ -79,6 +79,9 @@ internal sealed partial class DawnScene
             return;
 
         Remote.Hear(Take);
+
+        // A Hex in a macOS .app is told what to open by an Apple Event, which comes to the same place a line on the pipe does
+        MacOpenDocuments.Install(Take);
     }
 
     /// <summary>A line another program said, queued for the editor's thread.</summary>

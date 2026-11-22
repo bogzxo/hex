@@ -251,7 +251,7 @@ internal sealed partial class HexProperties
     /// <summary>Every tick, a project that changed under the rows shown evaluated again.</summary>
     internal void Update()
     {
-        if (!projectsChanged || !page.Visible)
+        if (!projectsChanged || !page.Visible || page.Parent?.Shown != true)
             return;
 
         projectsChanged = false;

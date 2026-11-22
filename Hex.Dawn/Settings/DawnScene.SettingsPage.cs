@@ -23,12 +23,13 @@ internal sealed partial class DawnScene
     private const float PANEL_PROSE = 640.0f;
 
     // What the editor's panels and its interface size are in
-    private const string PANELS = "Editor · Panels";
+    private const string PANELS = EditorSettingsCatalog.INTERFACE;
 
     // The row of the interface size, the key it's kept under in the settings file too
     private const string INTERFACE_SIZE = "interface_size";
 
     private SettingsWindow? settingsView;
+    private OllamaModelPicker? ollamaModels;
 
     /// <summary>The page while it is up, for the self test.</summary>
     internal SettingsPage? SettingsPage => settingsView?.Window.Parent is not null ? settingsView.Page : null;
@@ -37,7 +38,7 @@ internal sealed partial class DawnScene
     private WindowPanel? SettingsWindow => settingsView?.Window.Parent is not null ? settingsView.Window : null;
 
     // What the keyboard's section is called, a panel that sends you to the window of the keys
-    private const string KEYS_SECTION = "Editor · Keyboard shortcuts";
+    private const string KEYS_SECTION = EditorSettingsCatalog.KEYS;
 
     /// <summary>
     /// The settings, brought to the front when they're up. Ctrl+, in the settings file goes to the setting on the caret's
@@ -62,18 +63,22 @@ internal sealed partial class DawnScene
             return;
         }
 
-        var sources = new List<ISettingsSource> { new EditorSource(this) };
-        sources.AddRange(settingSources.Select(added => added.Source()));
+        // The text rows come before the editor's own in a section they share, tab size is what most open the settings for
+        var sources = new List<ISettingsSource>(settingSources.Select(added => added.Source())) { new EditorSource(this) };
         sources.Add(new TerminalSettingsSource(terminals, EditorSettingsCatalog.THEME));
         sources.Add(new WindowsSource());
         sources.Add(new DefaultTerminalSource(said => Notify(said, error: true)));
         sources.Add(new ExtensionSettingsSource(this));
+        if (!HexAi.Off)
+            ollamaModels = new();
         settingsView = new SettingsWindow(sources, CloseSettings, EditorSettingsCatalog.Parts, sections: EditorSettingsCatalog.Sections, texts: SettingsPageTexts.Make());
 
         // Dawn's window is the editor's, the other parts fold away the first time it opens and a search puts the
         // editor's rows a little over the rest. Reset all settings asks first
         settingsView.Page.HomePart = EDITOR_PART;
         settingsView.Page.Common = CommonSettings;
+        settingsView.Page.DisabledReasonOf = key => !settings.GitEnabled && EditorSettingsCatalog.RequiresGit(key)
+            ? Said("settings_catalog.git_required") : null;
 
         // The page is drawn at the interface size like everything else. It zoomed itself back up when a size under the one
         // the window's height suggested was picked, so the setting that made every word smaller made these bigger
@@ -102,7 +107,7 @@ internal sealed partial class DawnScene
         // The profiles of how Hex looks over all of it, see DawnScene.Looks
         AddLookPicker(settingsView);
         if (lookPicker is not null)
-            settingsPanels[EditorSettingsCatalog.PROFILES] = lookPicker;
+            settingsPanels[EditorSettingsCatalog.LOOKS] = lookPicker;
         foreach (var added in settingSources)
             added.Opened?.Invoke();
 
@@ -162,6 +167,8 @@ internal sealed partial class DawnScene
             settingsLeft = settingsView.Page.Place;
             parent.Remove(window);
         }
+        ollamaModels?.Update(null);
+        ollamaModels = null;
         settingsView = null;
         lookPicker = null;
         userScopeTab = workspaceScopeTab = null;
@@ -293,6 +300,7 @@ internal sealed partial class DawnScene
             "code_zoom" => new NumberValue(hex.settings.CodeZoom),
             "code_font" => new StringValue(hex.settings.CodeFont),
             "wrap_code" => Values.Bool(hex.settings.WrapCode),
+            EditorSettingsCatalog.GIT_ENABLED => Values.Bool(hex.settings.GitEnabled),
             "git_blame" => Values.Bool(hex.settings.GitBlame),
             "minimap" => Values.Bool(hex.settings.Minimap),
             "spell_check" => Values.Bool(hex.settings.SpellCheck),
@@ -312,6 +320,10 @@ internal sealed partial class DawnScene
             "git_line_length" => new NumberValue(hex.settings.GitLineLength),
             "run_to_terminal" => Values.Bool(hex.settings.RunToTerminal),
             "mcp_server" => Values.Bool(hex.settings.McpServer),
+            "link" => Values.Bool(hex.settings.Link),
+            "link_port" => new NumberValue(hex.settings.LinkPort),
+            "link_name" => new StringValue(hex.settings.LinkName),
+            "link_discoverable" => Values.Bool(hex.settings.LinkDiscoverable),
             "no_ai" => Values.Bool(hex.settings.NoAi),
             "agents_resume_after_limit" => Values.Bool(hex.settings.AgentsResumeAfterLimit),
             "agents_auto_settle_seconds" => new NumberValue(hex.settings.AgentsAutoSettleSeconds),
@@ -363,6 +375,20 @@ internal sealed partial class DawnScene
             "auto_save_delay" => new NumberValue(hex.settings.AutoSaveDelay),
             "canvas_handles" => Values.Bool(hex.settings.CanvasHandles),
             "snap" => new NumberValue(hex.settings.Snap),
+            "edit_predictions" => Values.Bool(hex.settings.EditPredictions),
+            "edit_predictions_provider" => new StringValue(hex.settings.EditPredictionsProvider),
+            "edit_predictions_api_url" => new StringValue(hex.settings.EditPredictionsApiUrl),
+            EditorSettingsCatalog.PREDICTION_KEY => new StringValue(hex.settings.EditPredictionsApiKey),
+            "edit_predictions_model" => new StringValue(hex.settings.EditPredictionsModel),
+            "edit_predictions_prompt_format" => new StringValue(hex.settings.EditPredictionsPromptFormat),
+            "edit_predictions_max_tokens" => new NumberValue(hex.settings.EditPredictionsMaxTokens),
+            "edit_predictions_invocation" => new StringValue(hex.settings.EditPredictionsInvocation),
+            "edit_predictions_debounce" => new NumberValue(hex.settings.EditPredictionsDebounce),
+            "edit_predictions_disabled_languages" => Natives.List(hex.settings.EditPredictionsDisabledLanguages),
+            HexSettings.EDIT_PREDICTIONS_EXCLUDE => Natives.List(hex.settings.EditPredictionsExclude),
+            "edit_predictions_workspace" => Values.Bool(hex.settings.EditPredictionsWorkspace),
+            "edit_predictions_share" => Values.Bool(hex.settings.EditPredictionsShare),
+            EditorSettingsCatalog.LINK_SYSTEM_FILE_FOLDERS => Natives.List(hex.settings.LinkSystemFileFolders),
             "files_associations" => UIFormPairs.Value(hex.settings.FileAssociations.Select(pair => (pair.Key, pair.Value))),
             "disabled_extensions" => Natives.List(hex.ExtensionNames().Where((_, at) => !hex.extensions.All[at].Enabled)),
             _ => null
@@ -417,6 +443,11 @@ internal sealed partial class DawnScene
                     settings.WrapCode = wrap.Value;
                     foreach (HexDocument open in hex.documents)
                         open.Editor.WordWrap = wrap.Value;
+                    break;
+                case (EditorSettingsCatalog.GIT_ENABLED, BooleanValue enabled):
+                    settings.GitEnabled = enabled.Value;
+                    hex.git.ApplyEnabled();
+                    hex.SettingsPage?.Refresh();
                     break;
                 case ("git_blame", BooleanValue blame):
                     settings.GitBlame = blame.Value;
@@ -483,6 +514,22 @@ internal sealed partial class DawnScene
                 case ("mcp_server", BooleanValue agents):
                     settings.McpServer = agents.Value;
                     hex.ApplyMcp();
+                    break;
+                case ("link", BooleanValue link):
+                    settings.Link = link.Value;
+                    hex.ApplyLink();
+                    break;
+                case ("link_port", NumberValue port):
+                    settings.LinkPort = (int)Math.Clamp(MathF.Round(port.Value), 1024.0f, 65535.0f);
+                    hex.ApplyLink(restart: true);
+                    break;
+                case ("link_name", StringValue name):
+                    settings.LinkName = name.Value.Trim();
+                    hex.ApplyLink();
+                    break;
+                case ("link_discoverable", BooleanValue discoverable):
+                    settings.LinkDiscoverable = discoverable.Value;
+                    hex.ApplyLink();
                     break;
                 case ("agents_resume_after_limit", BooleanValue resume):
                 settings.AgentsResumeAfterLimit = resume.Value;
@@ -673,6 +720,56 @@ internal sealed partial class DawnScene
                     break;
                 case ("snap", NumberValue snap):
                     settings.Snap = Math.Clamp(MathF.Round(snap.Value), 0.0f, 16.0f);
+                    break;
+                case ("edit_predictions", BooleanValue predicts):
+                    settings.EditPredictions = predicts.Value;
+                    break;
+                case ("edit_predictions_provider", StringValue { Value: "ollama" or "openai" or "link" } provider):
+                    // Ollama's own address follows the provider to its OpenAI completions and back, any other URL stays
+                    settings.EditPredictionsProvider = provider.Value;
+                    string url = Hex.Core.PredictionSettings.UrlForProvider(provider.Value, settings.EditPredictionsApiUrl);
+                    if (url != settings.EditPredictionsApiUrl)
+                    {
+                        settings.EditPredictionsApiUrl = url;
+                        hex.SettingsPage?.Refresh("edit_predictions_api_url");
+                    }
+                    break;
+                case ("edit_predictions_api_url", StringValue predictionUrl):
+                    settings.EditPredictionsApiUrl = predictionUrl.Value.Trim();
+                    break;
+                case (EditorSettingsCatalog.PREDICTION_KEY, StringValue predictionKey):
+                    settings.EditPredictionsApiKey = predictionKey.Value.Trim();
+                    break;
+                case ("edit_predictions_model", StringValue predictionModel):
+                    settings.EditPredictionsModel = predictionModel.Value.Trim();
+                    break;
+                case ("edit_predictions_prompt_format", StringValue { Value: "infer" or "zeta2" or "qwen" or "code_llama" or "star_coder" or "deepseek_coder" or "code_gemma" or "codestral" } format):
+                    settings.EditPredictionsPromptFormat = format.Value;
+                    break;
+                case ("edit_predictions_max_tokens", NumberValue predictionTokens):
+                    settings.EditPredictionsMaxTokens = (int)Math.Clamp(MathF.Round(predictionTokens.Value), 16.0f, 2048.0f);
+                    break;
+                case ("edit_predictions_invocation", StringValue { Value: "after_typing" or "shortcut" } invocation):
+                    settings.EditPredictionsInvocation = invocation.Value;
+                    break;
+                case ("edit_predictions_debounce", NumberValue predictionPause):
+                    settings.EditPredictionsDebounce = (int)Math.Clamp(MathF.Round(predictionPause.Value), 0.0f, 2000.0f);
+                    break;
+                case ("edit_predictions_disabled_languages", ListValue offLanguages):
+                    settings.EditPredictionsDisabledLanguages = HexSettings.Patterns(offLanguages);
+                    break;
+                case (HexSettings.EDIT_PREDICTIONS_EXCLUDE, ListValue neverSent):
+                    settings.EditPredictionsExclude = HexSettings.Patterns(neverSent);
+                    break;
+                case ("edit_predictions_workspace", BooleanValue predictsHere):
+                    settings.EditPredictionsWorkspace = predictsHere.Value;
+                    break;
+                case (EditorSettingsCatalog.LINK_SYSTEM_FILE_FOLDERS, ListValue systemFolders):
+                    // Only whole local paths name a folder, the way the file is read
+                    settings.LinkSystemFileFolders = [.. HexSettings.Patterns(systemFolders).Where(Path.IsPathFullyQualified)];
+                    break;
+                case ("edit_predictions_share", BooleanValue shares):
+                    settings.EditPredictionsShare = shares.Value;
                     break;
                 case ("files_associations", ObjectValue associations):
                     // the open files pick the new languages up next tick, see UpdateLanguageModes

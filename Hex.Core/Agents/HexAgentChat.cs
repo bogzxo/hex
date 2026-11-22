@@ -13,6 +13,11 @@ internal enum HexAgentToolState { Running, Done, Failed }
 /// </summary>
 internal sealed record HexAgentMail(long Seq, int? From, string FromName, string Kind, string Text, bool Directive)
 {
+    public const string PersonName = "the person watching";
+
+    /// <summary>Mail from the person, distinct from mail from an external agent with no panel chat.</summary>
+    public bool FromPerson => From is null && FromName == PersonName;
+
     /// <summary>The chat it's for, or one of the endpoints of HexMailLog (the person watching, Hex).</summary>
     public int To { get; init; }
 
@@ -99,6 +104,11 @@ internal sealed class HexAgentEntry(HexAgentEntryKind kind, string text)
 /// </summary>
 internal sealed partial class HexAgentChat(int id, string agent)
 {
+    internal HexLinkAgentStarter? LinkStarter { get; set; }
+
+    /// <summary>The id of the linked device whose call started this chat, null for a chat started here. It says whose chat it is when that device manages it.</summary>
+    internal string? LinkDevice { get; set; }
+    internal List<HexLinkAgentChild> LinkChildren { get; } = [];
     // The rows a chat keeps in memory, and how many more it lets come before the oldest go to its file a batch at a time.
     // A batch rather than a row each, the panel draws the chat again from the start when rows leave its top
     public const int MOST_ENTRIES = 200, SPILL_BATCH = 50;
@@ -117,6 +127,9 @@ internal sealed partial class HexAgentChat(int id, string agent)
     public Action<IReadOnlyList<HexAgentEntry>>? Spill { get; set; }
 
     public int Id { get; } = id;
+
+    public Guid? LinkDraft { get; set; }
+    public string? LinkPreparation { get; set; }
 
     /// <summary>The id of the agent profile it's with.</summary>
     public string Agent { get; set; } = agent;
@@ -137,11 +150,27 @@ internal sealed partial class HexAgentChat(int id, string agent)
 
     public bool Running { get; private set; }
 
-    /// <summary>The chat whose agent started this one (hex_agent_spawn), null for one somebody started in the panel.</summary>
-    public int? Parent { get; init; }
+    private int? parent;
+    private int depth;
 
-    /// <summary>How many agents up it was started from, 0 for one somebody started.</summary>
-    public int Depth { get; init; }
+    /// <summary>The chat directly above this one, null for a top-level chat.</summary>
+    public int? Parent { get => parent; init => parent = value; }
+
+    /// <summary>The nesting depth used when this chat starts another agent. Detaching resets it to zero.</summary>
+    public int Depth { get => depth; init => depth = value; }
+
+    internal void SetFamilyPosition(int? newParent, int newDepth)
+    {
+        if (parent == newParent && depth == newDepth)
+            return;
+
+        bool seen = Seen == Version;
+        parent = newParent;
+        depth = newDepth;
+        Version++;
+        if (seen)
+            Seen = Version;
+    }
 
     /// <summary>
     /// What it was called by the agent that started it, or renamed to from its card, shown in place of what it was asked

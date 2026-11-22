@@ -55,6 +55,100 @@ public sealed class DocumentFileTests : IDisposable
         Assert.Single(Directory.GetFiles(folder));
     }
 
+    private const int CannotRemoveReplacedFile = unchecked((int)0x80070497);
+    private const int SharingViolation = unchecked((int)0x80070020);
+
+    [Fact]
+    public void A_transient_windows_replacement_refusal_retries_the_same_staged_bytes()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        string path = Path.Combine(folder, "original.txt");
+        var encoding = new UTF8Encoding(true, true);
+        File.WriteAllText(path, "before", encoding);
+        DateTime creationTime = new(2022, 3, 4, 5, 6, 7, DateTimeKind.Utc);
+        File.SetCreationTimeUtc(path, creationTime);
+        int attempts = 0, checks = 0;
+        string? staged = null;
+        bool saved = DocumentFile.Write(path, "my draft", encoding, () =>
+        {
+            checks++;
+            return File.ReadAllText(path) == "before";
+        }, (source, target, backup) =>
+        {
+            if (++attempts == 1)
+            {
+                staged = source;
+                throw new IOException("Simulated Windows replacement refusal.", CannotRemoveReplacedFile);
+            }
+
+            Assert.Equal(staged, source);
+            File.Replace(source, target, backup);
+        });
+
+        Assert.True(saved);
+        Assert.Equal(2, attempts);
+        Assert.Equal(1, checks);
+        byte[] expected = [.. encoding.GetPreamble(), .. encoding.GetBytes("my draft")];
+        Assert.Equal(expected, File.ReadAllBytes(path));
+        Assert.Equal(creationTime, File.GetCreationTimeUtc(path));
+        Assert.Single(Directory.GetFiles(folder));
+    }
+
+    [Theory]
+    [InlineData(CannotRemoveReplacedFile, 2, 1)]
+    [InlineData(SharingViolation, 1, 0)]
+    public void A_persistent_windows_replacement_error_reaches_the_caller_and_leaves_the_original(int error, int tries, int rechecks)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        string path = Path.Combine(folder, "original.txt");
+        File.WriteAllText(path, "before");
+        int attempts = 0, checks = 0;
+        const string draft = "my unsaved draft";
+
+        IOException failure = Assert.Throws<IOException>(() =>
+            DocumentFile.Write(path, draft, new UTF8Encoding(false), () =>
+            {
+                checks++;
+                return File.ReadAllText(path) == "before";
+            }, (source, _, _) =>
+            {
+                attempts++;
+                Assert.Equal(draft, File.ReadAllText(source));
+                throw new IOException("Simulated Windows replacement refusal.", error);
+            }));
+
+        Assert.Equal(error, failure.HResult);
+        Assert.Equal(tries, attempts);
+        Assert.Equal(rechecks, checks);
+        Assert.Equal("before", File.ReadAllText(path));
+        Assert.Single(Directory.GetFiles(folder));
+    }
+
+    [Fact]
+    public void A_changed_destination_vetoes_the_retry()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        string path = Path.Combine(folder, "original.txt");
+        File.WriteAllText(path, "before");
+        int attempts = 0, checks = 0;
+        bool saved = DocumentFile.Write(path, "my draft", new UTF8Encoding(false), () =>
+        {
+            checks++;
+            return File.ReadAllText(path) == "before";
+        }, (_, target, _) =>
+        {
+            Assert.Equal(1, ++attempts);
+            File.WriteAllText(target, "externally changed");
+            throw new IOException("Simulated Windows replacement refusal.", CannotRemoveReplacedFile);
+        });
+
+        Assert.False(saved);
+        Assert.Equal(1, attempts);
+        Assert.Equal(1, checks);
+        Assert.Equal("externally changed", File.ReadAllText(path));
+        Assert.Single(Directory.GetFiles(folder));
+    }
+
     [Fact]
     public void Failed_replace_leaves_existing_bytes_and_removes_temporary_file()
     {

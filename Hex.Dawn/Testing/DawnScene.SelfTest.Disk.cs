@@ -64,6 +64,37 @@ internal sealed partial class DawnScene
             }
         });
         test.Wait();
+
+        if (OperatingSystem.IsWindows())
+            TestBlockedDocumentSave(test);
+    }
+
+    private void TestBlockedDocumentSave(HexPointerScript test)
+    {
+        string file = Path.Combine(testFolder, "locked_save.txt");
+        const string original = "the saved file";
+        const string draft = "an unsaved private draft";
+        test.Run(() =>
+        {
+            File.WriteAllText(file, original);
+            Open(file);
+            Rewrite(document, draft);
+            using var reader = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read);
+            SaveTo(file);
+        });
+        test.Check("disk: a refused atomic save shows an error and keeps both the file and the draft", () =>
+            document.Path == file && document.Editor.Text == draft && HasChanges(document) &&
+            document.DiskText == original && File.ReadAllText(file) == original &&
+            toasts.Cards.Any(card => !card.Closed && card.Text.Contains("locked_save.txt", StringComparison.Ordinal) &&
+                card.Actions.Any(action => action.Label == Said("documents.save_as_button"))));
+        test.Run(() =>
+        {
+            foreach (UINotification card in toasts.Cards)
+                card.Close();
+            if (document.Path == file)
+                CloseNow();
+        });
+        test.Wait();
     }
 
     private void TestBackups(HexPointerScript test)

@@ -24,6 +24,7 @@ internal sealed partial class HexSettings
         "files_exclude", "search_exclude", "search_use_ignore_files", "explorer_auto_reveal",
         "git_blame", "git_autofetch", "git_autofetch_interval", "git_pull_mode", "git_account", "git_confirm_sync", "git_smart_commit",
         "git_subject_length", "git_line_length",
+        "edit_predictions_workspace", EDIT_PREDICTIONS_EXCLUDE,
         "run_to_terminal", "debugger_path", "snap", "canvas_handles", LANGUAGE_OVERRIDES
     };
 

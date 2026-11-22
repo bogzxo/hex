@@ -90,8 +90,9 @@ internal sealed partial class DawnScene
                     ("query", McpSchema.String("A name or part of one, or Container.Name.")),
                     ("kind", McpSchema.String("Only this kind, type, member, class, interface, struct, enum, method, property, field.")),
                     ("path", McpSchema.String("Only files whose path inside the workspace starts with this.")),
-                    ("most", McpSchema.Integer("At most this many, 25 by default.")), Max()], "query"), ReadOnly: true),
-                (index, args, budget) => index.Symbols(args.String("query") ?? string.Empty, args.String("kind"), args.String("path"), Math.Clamp(args.Integer("most") ?? 25, 1, 500), budget)),
+                    ("most", McpSchema.Integer("At most this many, 25 by default.")),
+                    ("link_locations", McpSchema.Flag("Return JSON locations within the advertised Link workspace, with zero-based lines.")), Max()], "query"), ReadOnly: true),
+                (index, args, budget) => args.Flag("link_locations") ? LinkSymbolLocations(index, args) : index.Symbols(args.String("query") ?? string.Empty, args.String("kind"), args.String("path"), Math.Clamp(args.Integer("most") ?? 25, 1, 500), budget)),
 
             Harnessed(new McpTool("hex_search", "Search code",
                 "Search the workspace's text, ranked rather than in file order. Declarations of what was asked first (marked *), then files by name and how many places they have, places grouped under their file, lines cut short around the match. Use it in place of grep, rg, findstr, Select-String or Grep.",

@@ -189,36 +189,19 @@ internal sealed partial class DawnScene
         if (alone)
             holder.Add(new Label { Text = Said("agents_panel.finished_none_working"), TextScale = 0.125f, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal, Size = new Vector2(0, FINISHED_ALONE), Position = new Vector2(inset, 0) });
 
-        var row = holder.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, FINISHED_HEAD), Color = Vector4.Zero });
-        var head = row.Add(new Button
-        {
-            Style = "button_flat", Fill = UIFill.Both, Label = string.Empty, Animated = false,
-            Tooltip = Said(open ? "agents_panel.finished_fold" : "agents_panel.finished_open"), OnPressed = ToggleFinished
-        });
-        head.OnContextMenu = at =>
+        Menu FinishedMenu()
         {
             var menu = new Menu("finished chats");
             menu.Add(Said(open ? "agents_panel.finished_fold" : "agents_panel.finished_open"), ToggleFinished, icon: open ? "chevron-down" : "chevron-right");
             menu.Add(Said("agents_panel.finished_settle_all"), SettleAllFinished, icon: "check-all").IsEnabled = () => agentChats.Any(CanSettle);
-            ContextMenu.Show(chrome, at, menu);
-        };
-        row.Add(new Label
-        {
-            Text = $"$({(open ? "chevron-down" : "chevron-right")}) {Said("agents_panel.finished_head")}", TextScale = 0.125f, Dim = true, Bold = true,
-            Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(inset, 0), Align = Origin.Left
-        });
-        string many = count.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        row.Add(new Badge { Text = many, Tone = UIBadgeTone.Neutral, TextScale = 0.11f, Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-8, 0) });
-        if (unread > 0)
-        {
-            // Left of the count, measured off its words, a pill's ends and its dot
-            float countWidth = (Skin?.Font.Measure(many, 0.11f, markup: false).X ?? 8.0f) + 14.0f;
-            row.Add(new Badge
-            {
-                Text = Said("agents_panel.finished_unread", ("count", unread.ToString(System.Globalization.CultureInfo.InvariantCulture))), Tone = UIBadgeTone.Accent, Dot = true,
-                TextScale = 0.11f, Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-8 - countWidth - 6, 0)
-            });
+            return menu;
         }
+
+        string flag = unread > 0
+            ? Said("agents_panel.finished_unread", ("count", unread.ToString(System.Globalization.CultureInfo.InvariantCulture)))
+            : string.Empty;
+        holder.Add(ListSectionHead("local/finished", Said("agents_panel.finished_head"), count, flag, UIBadgeTone.Accent, open,
+            _ => ToggleFinished(), FinishedMenu, inset));
         return holder;
     }
 
@@ -283,7 +266,7 @@ internal sealed partial class DawnScene
             started |= chat.Parent is not null;
             working += chat.Running ? 1 : 0;
         }
-        bool wanted = Face != HexFace.Noon && (agentChats.Count > 1 || started);
+        bool wanted = Face != HexFace.Noon && (agentChats.Count > 1 || started || LinkFleetShown);
         float width = agentsView.Size.X;
 
         // The systems under the chats in Dawn, Noon has them under its fleet. Their words put right every time, the list
@@ -306,6 +289,7 @@ internal sealed partial class DawnScene
         ChatsInOrder();
         long said = ((((AgentCardsKey(ChatsShown()) * 31 + (wanted ? 1 : 0)) * 31 + (agentsListOpen ? 1 : 0)) * 31 + (long)most) * 31 + working) * 31 + (systems ? 1 : 0);
         said = (said * 31 + chatsOrderedFor) * 31 + (FinishedShown ? 1 : 0);
+        said = said * 31 + LinkFleetKey();
         if (said == agentsListDrawn)
         {
             foreach (Action<float> refresh in chatRowFits)
@@ -356,6 +340,8 @@ internal sealed partial class DawnScene
                     cardsPlaced.Add((chat.Id, card.Root, depth));
                     depth += AGENT_CARD + agentsListRows.Spacing;
                 }
+                // Then a section for each linked device's agents (DawnScene.LinkFleet)
+                depth += LinkFleetSections(agentsListRows, chatRowFits);
                 // As many cards as the list shows before it scrolls, the finished group's head as tall as it is
                 tall = MathF.Min(depth, most * (AGENT_CARD + 1.0f));
                 SlideCards(agentsListPlaces, cardsPlaced);
@@ -407,9 +393,11 @@ internal sealed partial class DawnScene
     {
         agentsList.Position = new Vector2(0, -(agentsHeadHeight - 2.0f));
         // The card sits on the bottom, the harness's line that was under it being in the head now
-        agentsBody.Padding = new UIEdges(4, agentsHeadHeight + agentsListHeight, 4, agentsComposeTall + 12.0f + AgentsWaitStripTall);
+        agentsBody.Padding = new UIEdges(4, agentsHeadHeight + agentsListHeight, 4, agentsComposeTall + 12.0f + AgentsWaitStripTall + LinkBannerTall);
         if (agentsWaitStrip is not null)
-            agentsWaitStrip.Position = new Vector2(0, agentsComposeTall + 6.0f);
+            agentsWaitStrip.Position = new Vector2(0, agentsComposeTall + 6.0f + LinkBannerTall);
+        if (linkBanner is not null)
+            linkBanner.Position = new Vector2(0, agentsComposeTall + 6.0f);
     }
 
     private string ChatName(int id) => ChatById(id) is { } chat ? $"#{id} {chat.Shown}" : $"#{id}";
@@ -424,8 +412,12 @@ internal sealed partial class DawnScene
             menu.Add(Said("agents_panel.chat_open_side"), () => { ShowFace(HexFace.Dawn); ShowAgentsPanel(); OpenAgentChat(chat); }, icon: "layout-sidebar-left");
         else
             menu.Add(Said("agents_panel.chat_open_noon"), () => { ShowFace(HexFace.Noon); OpenAgentChat(chat); }, icon: "robot");
-        if (chat.Parent is { } parent && ChatById(parent) is { } starter)
-            menu.Add(Said("agents_panel.chat_open_parent"), () => OpenAgentChat(starter), icon: "arrow-up");
+        if (chat.Parent is { } parent)
+        {
+            if (ChatById(parent) is { } starter)
+                menu.Add(Said("agents_panel.chat_open_parent"), () => OpenAgentChat(starter), icon: "arrow-up");
+            menu.Add(Said("agents_panel.chat_detach"), () => DetachAgentChat(chat), icon: "debug-disconnect");
+        }
         menu.AddSeparator();
         menu.Add(Said("agents_panel.chat_rename"), () => RenameAgentChat(chat), icon: "edit");
         menu.Add(Said("agents_panel.chat_copy"), () =>
@@ -548,6 +540,14 @@ internal sealed partial class DawnScene
     /// </summary>
     private void AskCloseAgentChat(HexAgentChat chat)
     {
+        // Another device's chat is only put away here, it's that device's to close (DawnScene.LinkChats)
+        if (LinkRemoteOf(chat) is not null)
+        {
+            if (agentChat == chat)
+                ShowDraftOf(agentChats.LastOrDefault());
+            return;
+        }
+
         List<HexAgentChat> family = FamilyOf(chat);
         int working = family.Count(each => each.Running || each.HasPending);
         if (working == 0)
@@ -563,6 +563,19 @@ internal sealed partial class DawnScene
             if (answer == yes && agentChats.Contains(chat))
                 CloseAgentChat(chat);
         }, risky: yes);
+    }
+
+    private void DetachAgentChat(HexAgentChat chat)
+    {
+        if (!hub.Detach(chat))
+            return;
+
+        agentsListDrawn = noonFleetDrawn = NOT_DRAWN;
+        noonContextDrawn = CONTEXT_NOT_DRAWN;
+        familyFiltersStale = true;
+        agentsWait = noonWait = 0.0f;
+        PublishAgentStatuses();
+        Engine.WindowManager.RequestFrames();
     }
 
     /// <summary>A chat closed, its agent stopped, and the agents it started closed with it.</summary>

@@ -91,12 +91,12 @@ internal sealed partial class DawnScene
     /// </summary>
     internal List<HexMcpTool> McpToolList() => HexAi.Off
         ? [.. new[] { ScreenTools(), EditorTools(), WorkbenchTools(), NotebookTools(), Behind(WorkspaceTools()), DevTools(), Behind(HarnessTools()),
-            Alongside(Behind(FileTools())), Alongside(Behind(CodeTools())), GitDiffTools(), TerminalTools(), DebugTools() }.SelectMany(tools => tools).Where(tool => !AgentsOnly(tool.Meta.Name))]
+            Alongside(Behind(FileTools())), Alongside(Behind(CodeTools())), GitDiffTools(), TerminalTools(), DebugTools() }.SelectMany(tools => tools).Where(tool => !AgentsOnly(tool.Meta.Name)), .. (LinkOn ? new[] { LinkHoldTool() } : [])]
         : [.. ScreenTools(), .. EditorTools(), .. WorkbenchTools(), .. NotebookTools(), .. AgentTools(),
         // The agents', their mail's and their plans' alongside the call going on: they touch chats, not the screen, and
         // queued behind another agent's long call (a build in the terminal, a wait on a language server) an orchestrator's
         // send or restart timed out before it started
-        .. Alongside(Behind(AgentsTools())), .. AskTools(), .. Alongside(Behind(PlanTools())), .. Behind(PictureTools()), .. Behind(WorkspaceTools()), .. Alongside(Behind(AgentMailTools())), .. DevTools(), .. Behind(HarnessTools()), .. Alongside(Behind(FileTools())), .. Alongside(Behind(CodeTools())), .. GitDiffTools(), .. TerminalTools(), .. DebugTools()];
+        .. Alongside(Behind(AgentsTools())), .. AskTools(), .. Alongside(Behind(PlanTools())), .. Behind(PictureTools()), .. Behind(WorkspaceTools()), .. Alongside(Behind(AgentMailTools())), .. (LinkOn ? LinkTools().Concat(LinkClaimTools()) : [LinkDeviceDiscoveryTool()]), .. DevTools(), .. Behind(HarnessTools()), .. Alongside(Behind(FileTools())), .. Alongside(Behind(CodeTools())), .. GitDiffTools(), .. TerminalTools(), .. DebugTools()];
 
     /// <summary>Whether a tool is one only Hex's agents have a use for, the ones No AI leaves out wherever they're listed.</summary>
     internal static bool AgentsOnly(string tool) =>
@@ -278,7 +278,7 @@ internal sealed partial class DawnScene
                         continue;
 
                     string choices = setting.Choices is { Length: > 0 } listed ? $"\nOne of {string.Join(", ", listed)}." : string.Empty;
-                    yield return McpToolResult.Text($"{setting.Key} = {McpValue(source.Get(setting.Key))} ({setting.Kind}, {source.Section} section, comes as {McpValue(source.Default(setting.Key))}"
+                    yield return McpToolResult.Text($"{setting.Key} = {McpValue(EditorSettingsCatalog.Masked(setting.Key, source.Get(setting.Key)))} ({setting.Kind}, {source.Section} section, comes as {McpValue(source.Default(setting.Key))}"
                         + $"{(source.IsModified(setting.Key) ? ", changed" : string.Empty)}).\n{setting.Title}. {Plain(setting.Help)}{choices}");
                     yield break;
                 }
@@ -286,7 +286,7 @@ internal sealed partial class DawnScene
                 if (find is not null && !setting.Key.Contains(find, StringComparison.OrdinalIgnoreCase) && !setting.Title.Contains(find, StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                said.Append($"{setting.Key} = {McpValue(source.Get(setting.Key))}  ({setting.Title}{(source.IsModified(setting.Key) ? ", changed" : string.Empty)})\n");
+                said.Append($"{setting.Key} = {McpValue(EditorSettingsCatalog.Masked(setting.Key, source.Get(setting.Key)))}  ({setting.Title}{(source.IsModified(setting.Key) ? ", changed" : string.Empty)})\n");
             }
         }
 
@@ -301,6 +301,27 @@ internal sealed partial class DawnScene
         if (key == "mcp_server")
         {
             yield return McpToolResult.Error("mcp_server is the door you came in by, it's only changed by hand.");
+            yield break;
+        }
+
+        // Link is a door for other machines, opening it or moving it is the person's to do
+        if (key is "link" or "link_port" or "link_discoverable")
+        {
+            yield return McpToolResult.Error($"{key} opens Hex to other machines, it's only changed by hand.");
+            yield break;
+        }
+
+        // Whether code is sent to a model, where to, and whether it's shared with other devices is the person's to say
+        if (key is "edit_predictions" or "edit_predictions_share" or "edit_predictions_api_url" or "edit_predictions_provider")
+        {
+            yield return McpToolResult.Error($"{key} decides where code is sent, it's only changed by hand in the settings window.");
+            yield break;
+        }
+
+        // A secret is typed into the settings window by the person whose it is, never handed over or back through here
+        if (EditorSettingsCatalog.IsSecret(key))
+        {
+            yield return McpToolResult.Error($"{key} is a secret, it's only changed by hand in the settings window.");
             yield break;
         }
 

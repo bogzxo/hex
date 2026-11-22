@@ -108,6 +108,59 @@ public sealed partial class HexAgentsPanelTests : IDisposable
     }
 
     [Fact]
+    public void Discovery_rechecks_a_fresh_path_after_the_process_path_misses()
+    {
+        string inherited = Path.Combine(folder, "inherited");
+        string registered = Path.Combine(folder, "registered");
+        Directory.CreateDirectory(inherited);
+        Directory.CreateDirectory(registered);
+        string? livePath = null;
+        var paths = new HexAgentProgramPaths(true, false, folder, null, null, null, () => livePath);
+        Assert.Null(HexAgentProcess.Find("claude", inherited, ".EXE", paths));
+
+        string installed = Path.Combine(registered, "claude.exe");
+        File.WriteAllText(installed, "");
+        livePath = $"\"{registered}\"";
+        Assert.Equal(installed, HexAgentProcess.Find("claude", inherited, ".EXE", paths));
+
+        string processChoice = Path.Combine(inherited, "claude.exe");
+        File.WriteAllText(processChoice, "");
+        Assert.Equal(processChoice, HexAgentProcess.Find("claude", inherited, ".EXE", paths));
+        if (OperatingSystem.IsWindows())
+            Assert.Equal(installed, HexAgentProcess.StartInfo(installed, ["--version"], folder).FileName);
+    }
+
+    [Theory]
+    [InlineData("Microsoft/WinGet/Links/claude.exe", "claude")]
+    [InlineData("Microsoft/WinGet/Packages/Anthropic.ClaudeCode_example/claude.exe", "claude")]
+    [InlineData("Microsoft/WinGet/Packages/Anthropic.ClaudeCode_example/bin/claude.exe", "claude")]
+    [InlineData("npm/claude.cmd", "claude")]
+    public void Discovery_finds_windows_install_locations_without_a_path_entry(string relative, string name)
+    {
+        string installed = Path.Combine(folder, relative.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(installed)!);
+        File.WriteAllText(installed, "");
+        var paths = new HexAgentProgramPaths(true, false, folder, folder, folder, null, () => null);
+        Assert.Equal(installed, HexAgentProcess.Find(name, "", ".EXE;.CMD", paths));
+    }
+
+    [Fact]
+    public void Discovery_finds_the_user_bin_and_the_login_shell_path_on_mac()
+    {
+        string localBin = Path.Combine(folder, ".local", "bin");
+        string shellBin = Path.Combine(folder, "from-the-shell");
+        Directory.CreateDirectory(localBin);
+        Directory.CreateDirectory(shellBin);
+        string claude = Path.Combine(localBin, "test-claude");
+        string fromProfile = Path.Combine(shellBin, "test-agent-from-profile");
+        File.WriteAllText(claude, "");
+        File.WriteAllText(fromProfile, "");
+        var paths = new HexAgentProgramPaths(false, true, folder, null, null, null, () => shellBin);
+        Assert.Equal(claude, HexAgentProcess.Find("test-claude", "", fallback: paths));
+        Assert.Equal(fromProfile, HexAgentProcess.Find("test-agent-from-profile", "", fallback: paths));
+    }
+
+    [Fact]
     public void A_program_run_has_its_lines_read_back_and_its_exit_said()
     {
         // A .cmd on Windows, which goes through cmd, a sh elsewhere, started in a group of its own
@@ -122,8 +175,9 @@ public sealed partial class HexAgentsPanelTests : IDisposable
         Assert.Contains(lines, line => line.Error && line.Line.Trim() == "oops");
         Assert.Equal(3, run.ExitCode);
         // Started in the folder it was given, with what Hex adds to its environment
+        // (on a Mac the temp folder is under /var, a link to /private/var, and the shell says the real one)
         if (!OperatingSystem.IsWindows() && System.Environment.GetEnvironmentVariable("MSBUILDDISABLENODEREUSE") is null)
-            Assert.Contains(lines, line => line.Line == $"in {folder} with 1");
+            Assert.Contains(lines, line => line.Line == $"in {folder} with 1" || line.Line == $"in /private{folder} with 1");
     }
 
     [Fact]
@@ -194,7 +248,8 @@ public sealed partial class HexAgentsPanelTests : IDisposable
     }
 
     /// <summary>A plugin of the catalog loaded against a hex with what an agent system uses, and the run it said.</summary>
-    private (HIDLRuntime Runtime, ObjectValue Hex, ObjectValue Run) Load(string id, Dictionary<string, IRuntimeValue>? settings = null)
+    private (HIDLRuntime Runtime, ObjectValue Hex, ObjectValue Run) Load(string id, Dictionary<string, IRuntimeValue>? settings = null,
+        Action<ObjectValue>? registered = null, Action<string>? printed = null)
     {
         ObjectValue? run = null;
         ObjectValue hex = Natives.Object(
@@ -202,6 +257,7 @@ public sealed partial class HexAgentsPanelTests : IDisposable
             {
                 ObjectValue said = args.Object(0);
                 run = said.Properties.TryGetValue("run", out IRuntimeValue? running) ? (ObjectValue)running : null;
+                registered?.Invoke(said);
             })),
             ("setting", Natives.Function("setting", args => settings?.GetValueOrDefault(args.Text(0)) ?? args.Text(0) switch
             {
@@ -218,7 +274,8 @@ public sealed partial class HexAgentsPanelTests : IDisposable
                 HexHarnessGuard.ForCommand(args.Text(0, string.Empty), [folder]) is { } instead ? new StringValue(instead) : Values.Null)),
             ("home", new StringValue(folder)),
             ("exists", Natives.Function("exists", args => Values.Bool(File.Exists(args.Text(0)) || Directory.Exists(args.Text(0))))),
-            ("read", Natives.Function("read", args => new StringValue(File.ReadAllText(args.Text(0))))),
+            ("read", Natives.Function("read", args => new StringValue(HexExtensions.ReadExtensionFile(args.Text(0))))),
+            ("try_read", Natives.Function("try_read", args => HexExtensions.TryReadForExtension(() => HexExtensions.ReadExtensionFile(args.Text(0))))),
             ("json_parse", Natives.Function("json_parse", args => HexJson.Parse(args.Text(0)) ?? Values.Null)),
             ("mcp_server", Natives.Function("mcp_server", args => Natives.Object(("command", new StringValue(@"C:\Hex\Hex.exe")), ("args", Natives.List(["--mcp-connect", "--folder", @"C:\work",
                 .. args.Has(0) && args[0] is ObjectValue chat ? new[] { "--agent-chat", Values.Text(chat.Properties["id"]) } : []]))))),
@@ -228,7 +285,7 @@ public sealed partial class HexAgentsPanelTests : IDisposable
             ("say", Natives.Action("say", _ => { })));
 
         string extension = Path.Combine(Catalog.Folder, id);
-        var runtime = new HIDLRuntime { BaseDirectory = extension, Output = null };
+        var runtime = new HIDLRuntime { BaseDirectory = extension, Output = printed };
         runtime.UserScope.DeclareSystem("hex", hex);
         runtime.RunFile(Path.Combine(extension, "extension.hor"));
         runtime.Invoke(runtime.UserScope.Variables["on_start"], hex);
@@ -703,6 +760,97 @@ public sealed partial class HexAgentsPanelTests : IDisposable
         Assert.False(chat.Running);
     }
 
+    [Theory]
+    [InlineData("locked")]
+    [InlineData("locks-after-start")]
+    [InlineData("empty")]
+    [InlineData("partial")]
+    [InlineData("shared-writer")]
+    public void Codex_starts_and_takes_the_live_model_list_while_its_cache_is_being_written(string state)
+    {
+        bool locksAfterStart = state == "locks-after-start";
+        if ((state == "locked" || locksAfterStart) && !OperatingSystem.IsWindows())
+            return;
+
+        string cache = Path.Combine(folder, ".codex", "models_cache.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(cache)!);
+        File.WriteAllText(cache, state switch
+        {
+            "empty" => string.Empty,
+            "partial" => """{"models":[""",
+            _ => """{"models":[{"slug":"fixture-model","visibility":"list","display_name":"Cached Model"}]}"""
+        });
+        using var writer = locksAfterStart ? null : new FileStream(cache, FileMode.Open, FileAccess.Write,
+            state == "locked" ? FileShare.None : FileShare.ReadWrite | FileShare.Delete);
+        ObjectValue registered = default;
+        var logs = new List<string>();
+        var (runtime, _, run) = Load("codex", registered: profile => registered = profile, printed: logs.Add);
+        Assert.Contains(state == "shared-writer" || locksAfterStart ? "fixture-model" : "gpt-6.1-sol", Models());
+
+        var chat = new HexAgentChat(1, "codex");
+        chat.Ask("hello");
+        var written = new List<string>();
+        var api = HexAgentChatApi.Of(chat, folder, write: line => { written.Add(line); return true; });
+        Assert.Contains("app-server", Arguments(runtime, run, api));
+        Assert.Contains("thread/start", Said(runtime, run, api, "hello"));
+        using var concurrent = locksAfterStart ? new FileStream(cache, FileMode.Open, FileAccess.Write, FileShare.None) : null;
+        Feed(runtime, run, api,
+            """{"id":4,"result":{"data":[{"model":"from-codex","displayName":"Live model"}]}}""",
+            """{"id":5,"result":{"data":[]}}""",
+            """{"id":2,"result":{"thread":{"id":"fixture-thread"}}}""");
+        Assert.Contains("from-codex", Models());
+        Assert.Contains(written, line => line.Contains("turn/start", StringComparison.Ordinal));
+        Assert.Equal(state == "shared-writer" ? 0 : 1, logs.Count(line => line.Contains("models_cache.json", StringComparison.Ordinal)));
+
+        IEnumerable<string?> Models()
+        {
+            var currentRun = (ObjectValue)registered.Properties["run"];
+            var choices = (ListValue)((ObjectValue)((ListValue)currentRun.Properties["options"]).Items[0]).Properties["choices"];
+            return choices.Items.Select(choice => HexExtensions.Text((ObjectValue)choice, "value"));
+        }
+    }
+
+    [Fact]
+    public void Claude_starts_and_handles_init_with_incomplete_optional_caches()
+    {
+        File.WriteAllText(Path.Combine(folder, "claude-models.json"), """{"models":[""");
+        File.WriteAllText(Path.Combine(folder, "claude-windows.json"), string.Empty);
+        var logs = new List<string>();
+        var (runtime, _, run) = Load("claude_code", printed: logs.Add);
+        var chat = new HexAgentChat(1, "claude_code");
+        chat.Ask("hello");
+        var api = HexAgentChatApi.Of(chat, folder);
+        Assert.Contains("--input-format", Arguments(runtime, run, api));
+        Feed(runtime, run, api,
+            """{"type":"system","subtype":"init","session_id":"fixture-session","model":"sonnet"}""");
+        Assert.Equal("fixture-session", chat.Session);
+        Assert.Single(logs, line => line.Contains("claude-models.json", StringComparison.Ordinal));
+        Assert.Single(logs, line => line.Contains("claude-windows.json", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void The_next_extension_call_retries_after_io_and_reports_its_own_error()
+    {
+        File.WriteAllText(Path.Combine(folder, HexExtension.FILE), "func event(hex) { return hex.read(); }");
+        var errors = new Queue<string>(["first read error", "second read error"]);
+        var hex = Natives.Object(("read", Natives.Function("read", _ => errors.TryDequeue(out string? error)
+            ? throw new IOException(error)
+            : new StringValue("read succeeded"))));
+        var extension = new HexExtension(folder, builtIn: false);
+        Assert.True(extension.Load(hex, _ => { }));
+        IRuntimeValue callback = extension.Runtime!.UserScope.Variables["event"];
+
+        Assert.False(extension.Invoke(callback, hex));
+        Assert.Null(extension.Failed);
+        Assert.Equal("first read error", extension.CallError);
+        Assert.False(extension.Invoke(callback, hex));
+        Assert.Null(extension.Failed);
+        Assert.Equal("second read error", extension.CallError);
+        Assert.True(extension.Invoke(callback, [hex], out IRuntimeValue result));
+        Assert.Null(extension.CallError);
+        Assert.Equal("read succeeded", Values.Text(result));
+    }
+
     [Fact]
     public void Codex_speaks_its_app_server_its_items_rows_its_thread_the_session_and_its_limits_and_tokens_said()
     {
@@ -782,6 +930,7 @@ public sealed partial class HexAgentsPanelTests : IDisposable
             "-c", "mcp_servers.hex.command=\"C:/Hex/Hex.exe\"",
             "-c", "mcp_servers.hex.args=[\"--mcp-connect\",\"--folder\",\"C:/work\",\"--agent-chat\",\"1\"]",
             "-c", "mcp_servers.hex.tool_timeout_sec=660", "-c", "mcp_servers.hex.enabled=true",
+            "-c", "mcp_servers.hex.env_vars=[\"HEX_HOME\"]",
             "-c", "mcp_servers.hex.default_tools_approval_mode=\"approve\""], Arguments(runtime, run, api));
         Assert.Contains(HexAgentProfiles.HARNESS_RULES.Replace("\n", "\\n").Replace("\"", "\\\"")[..40], Said(runtime, run, api, "hi"));
 

@@ -15,6 +15,7 @@ internal sealed partial class DawnScene
         ("state", McpSchema.OneOf("Progress of this item. New items are pending by default.", "pending", "doing", "done", "blocked", "dropped")),
         ("note", McpSchema.String("Optional detail, the reason for a blocked step. An empty string clears it.")),
         ("agent", McpSchema.IntegerOrNull("Optional ID of the chat responsible for the item, a label. Use null to clear it.")),
+        ("eta_seconds", McpSchema.Integer("Optional seconds until the step is expected to finish. Zero clears the estimate.")),
         ("files", new JsonObject
         {
             ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" },
@@ -92,7 +93,8 @@ internal sealed partial class DawnScene
             string? note = update.ContainsKey("note") ? update.String("note")?.Trim() : current?.Note;
             int? agent = update.ContainsKey("agent") ? update.Integer("agent") : current?.Agent;
             IReadOnlyList<string>? files = update.ContainsKey("files") ? HexAgentPlan.FilesOf(update["files"]) : current?.Files;
-            var item = new HexPlanItem(text, state, id ?? current?.Id ?? HexAgentPlan.NewId(items), string.IsNullOrEmpty(note) ? null : note, agent, files);
+            long eta = update.Integer("eta_seconds") is { } estimate ? estimate is > 0 and <= 43200 ? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + estimate * 1000L : 0 : current?.EtaAt ?? 0;
+            var item = new HexPlanItem(text, state, id ?? current?.Id ?? HexAgentPlan.NewId(items), string.IsNullOrEmpty(note) ? null : note, agent, files) { EtaAt = eta };
             if (match >= 0)
                 items[match] = item;
             else
@@ -131,7 +133,7 @@ internal sealed partial class DawnScene
         if (changed.Count > 0)
             said.Append("\nChanged: ").Append(string.Join(", ", changed.Select(index => $"{items[index].Id} {items[index].State.ToString().ToLowerInvariant()}")));
 
-        foreach (string overlap in Overlaps(chat, plan))
+        foreach (string overlap in Overlaps(chat, plan).Concat(LinkPlanOverlaps(chat, plan)))
             said.Append('\n').Append(overlap);
         foreach (string told in HandOff(chat, before, plan))
             said.Append('\n').Append(told);

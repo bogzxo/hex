@@ -26,6 +26,8 @@ public static partial class DawnProgram
     private const string ARGUMENT_WINDOW = "--window";
     private const string ARGUMENT_FRESH = "--fresh";
     private const string ARGUMENT_MCP = "--mcp";
+    private const string ARGUMENT_LINK = "--link";
+    private const string ARGUMENT_LINK_PORT = "--link-port";
     private const string ARGUMENT_FACE = "--face";
     private const string ARGUMENT_NO_AI = Hex.Core.HexAi.ARGUMENT;
 
@@ -34,7 +36,8 @@ public static partial class DawnProgram
     private const string SELF_TEST_HOME = "horizon-hex-selftest-dusk-";
 
     // Where layouts go when nobody says otherwise, next to the editor
-    private const string DEFAULT_WORKSPACE = "layouts";
+    // Next to the program, in the user's Library for a bundle (which is never written)
+    private static readonly string DEFAULT_WORKSPACE = Hex.Core.HexBundle.Inside ? Path.Combine(Hex.Core.HexHost.WritableFolder, "layouts") : "layouts";
 
     /// <summary>
     /// Starts the editor. Without arguments it comes up maximised with an empty layout.
@@ -151,15 +154,12 @@ public static partial class DawnProgram
         // started with, run on the pool while the engine is made. The editor waits for them only if they aren't done
         _ = Task.Run(() => System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(DawnScene).TypeHandle));
         Horizon.UI.UILayout.Prewarm(EditorLayouts());
-        // And the grammars: the first is the TextMate registry made as well, a fifth of a second the editor's making
-        // waited on for the agents' box (Markdown) and again for the first file of code
-        _ = Task.Run(() =>
+        // Warm the grammar of the file the person opened. Other grammars load on first use.
+        if (files.Count > 0)
         {
-            // Each read once as well, a grammar gets going (its rules, the languages it holds) the first time it reads, which
-            // the agents' first message and the first file of code waited on otherwise. The editor reads on the pool too
-            foreach (string kind in (string[])["message.md", "file.cs"])
-                Horizon.UI.Scripting.CodeLanguages.ForFile(kind)?.Read("x\n", 1);
-        });
+            string opening = files[^1].Path;
+            _ = Task.Run(() => Horizon.UI.Scripting.CodeLanguages.ForFile(opening)?.Read("x\n", 1));
+        }
 
         var options = new HexOptions(
             Open: files.Count > 0 ? files[^1].Path : null,
@@ -178,6 +178,8 @@ public static partial class DawnProgram
             Folder: folder,
             Fresh: args.Contains(ARGUMENT_FRESH),
             Mcp: args.Contains(ARGUMENT_MCP),
+            Link: args.Contains(ARGUMENT_LINK),
+            LinkPort: int.TryParse(ValueOf(args, ARGUMENT_LINK_PORT), NumberStyles.None, CultureInfo.InvariantCulture, out int linkPort) && linkPort is > 0 and <= 65535 ? linkPort : null,
             Face: ValueOf(args, ARGUMENT_FACE),
             // The self test of No AI is a run without the agents, there's no taking them out of one that has them
             NoAi: args.Contains(ARGUMENT_NO_AI) || (selfTest && ValuesOf(args, ARGUMENT_SELF_TEST).Contains(NO_AI_SUITE, StringComparer.OrdinalIgnoreCase)),
@@ -199,7 +201,7 @@ public static partial class DawnProgram
             // A text editor, nobody plays it with a controller
             Gamepads = false,
             // Its settings and caches next to Hex.exe, Program.Main says so already and this says it to the engine
-            FilesBesideProgram = true,
+            FilesBesideProgram = !Hex.Core.HexBundle.Inside,
             WindowConfiguration = WindowManagerConfiguration.Default1600x900 with
             {
                 WindowTitle = "Hex",

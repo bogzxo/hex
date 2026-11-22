@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Hex is Native AOT, it needs no JIT entitlement. The libraries it loads by name from next to itself (SDL, MoltenVK,
+         Skia, slang) come from NuGet packages, signed by their makers or not at all, and are re-signed with Hex's
+         identity, but one a person puts there, or a plugin, would not be: library validation would refuse them. -->
+    <key>com.apple.security.cs.disable-library-validation</key><true/>
+</dict>
+</plist>

@@ -37,8 +37,7 @@ internal sealed partial class HexLanguages
     private int serverGeneration;
     private bool presentingServerAnswer;
 
-    internal bool TriggersCompletion(HexDocument of, char character) => linters.TryGetValue(of, out var server)
-        && server.Failure is null && server.TriggersCompletion(character);
+    internal bool TriggersCompletion(HexDocument of, char character) => RequestServerOf(of) is { Failure: null } server && server.TriggersCompletion(character);
 
     /// <summary>
     /// What the server of a file of another language offers at the caret, what it said last time while it is still
@@ -47,7 +46,9 @@ internal sealed partial class HexLanguages
     private UICompletionRequest? ServerCompletions(HexDocument of, CodeEditor editor, out bool handled)
     {
         handled = false;
-        if (of.Path is not { } path || !linters.TryGetValue(of, out LanguageServer? server) || server.Failure is not null)
+        bool merge = mergeResults.ContainsKey(of);
+        if (LanguagePathOf(of) is not { } path || RequestServerOf(of) is not { Failure: null } server
+            || (merge && (editor.ReadOnly || !server.Offers("completionProvider"))))
             return null;
 
         handled = true;
@@ -59,7 +60,10 @@ internal sealed partial class HexLanguages
         string prefix = line[start..caret.Column];
 
         // The same word, which the editor narrows down by itself, unless the server wants asking as it goes
-        if (serverAsked.TryGetValue(of, out ServerAsking? asked) && asked.Word == word && ReferenceEquals(asked.Server, server))
+        serverAsked.TryGetValue(of, out ServerAsking? asked);
+        if (merge && asked?.Version != doc.Version)
+            asked = null;
+        if (asked is not null && asked.Word == word && ReferenceEquals(asked.Server, server))
         {
             asked.Typed = editor.CompletionTyped;
             if (!asked.Answered)
@@ -80,8 +84,7 @@ internal sealed partial class HexLanguages
             return null;
 
         // The server has to have the text as it is now, which it would otherwise get a moment after the typing stops
-        if (lintIn.Remove(of))
-            server.Change(path, editor.Text);
+        SynchronizeRequest(of, server, path);
 
         bool again = asked is { Answered: true, Incomplete: true } && asked.Word == word;
 
@@ -125,14 +128,23 @@ internal sealed partial class HexLanguages
             if (!serverAsked.TryGetValue(answer.Of, out ServerAsking? asked) || asked.Generation != answer.Generation)
                 continue;
 
+            CodeEditor editor = answer.Of.Editor;
+            bool merge = mergeResults.ContainsKey(answer.Of);
+            if (merge && (editor.Document.Version != asked.Version || RequestServerOf(answer.Of) != asked.Server
+                || asked.Server?.Failure is not null || editor.ReadOnly))
+            {
+                ForgetServerCompletions(answer.Of);
+                editor.CloseCompletion();
+                continue;
+            }
+
             asked.Answered = true;
             asked.Incomplete = answer.Found?.Incomplete ?? false;
             asked.Offered = answer.Found is { } found ? new UICompletionRequest(asked.Word.Start,
-                found.Items.Select(item => item.AdditionalEdits is { Count: > 0 } || item.ReplacementStart is not null || item.ReplacementEnd is not null
+                found.Items.Select(item => merge || item.AdditionalEdits is { Count: > 0 } || item.ReplacementStart is not null || item.ReplacementEnd is not null
                     ? item with { ExpectedVersion = asked.Version } : item).ToArray()) : null;
 
             // Only for the word it was asked about, the caret having gone somewhere else is the end of it
-            CodeEditor editor = answer.Of.Editor;
             if (!editor.IsFocused || !context.Documents.All.Contains(answer.Of))
                 continue;
 

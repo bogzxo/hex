@@ -28,6 +28,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- What a model was sent and answered, from its card, that the prompts written here are held to byte for byte -->
+    <EmbeddedResource Include="Goldens\Prediction\*" LogicalName="Prediction.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Hex.Dusk\Hex.Dusk.csproj" />
     <ProjectReference Include="..\Hex.Core\Hex.Core.csproj" />
     <ProjectReference Include="..\Hex.Dawn\Hex.Dawn.csproj" />

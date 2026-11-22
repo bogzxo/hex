@@ -45,6 +45,10 @@ internal static class HexWhatsNew
 
     private static readonly Dictionary<string, HexNewsItem[]> releases = new(StringComparer.Ordinal)
     {
+        ["3.4.0"] =
+        [
+            new("linked_workspaces", "go_link", "link", HexNewsPlace.Setting, "link")
+        ],
         ["3.3.0"] =
         [
             new("actions_menu", "go_actions", "lightbulb", HexNewsPlace.Problems),
@@ -64,7 +68,7 @@ internal static class HexWhatsNew
         ],
         ["3.0.0"] =
         [
-            new("solstice", "go_profiles", "color-mode", HexNewsPlace.Settings, EditorSettingsCatalog.PROFILES),
+            new("solstice", "go_profiles", "color-mode", HexNewsPlace.Settings, EditorSettingsCatalog.LOOKS),
             new("horizon_line", "go_tasks", "warning", HexNewsPlace.Problems),
             new("new_project", "go_new_project", "new-folder", HexNewsPlace.NewProject)
         ],

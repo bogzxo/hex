@@ -96,10 +96,10 @@ internal sealed partial class DawnScene
                 test.Run(() => SettingsPage?.Reset("tab_size"));
 
                 // How Hex looks, the looks to pick from
-                test.Run(() => SettingsPage?.GoTo(EditorSettingsCatalog.PROFILES));
+                test.Run(() => SettingsPage?.GoTo(EditorSettingsCatalog.LOOKS));
                 ShotNow(tag + "-looks");
                 test.Check($"settings look: {tag} going to a section in a folded part opens it down the left", () =>
-                    !SettingsPage.IsPartCollapsed(SettingsPage.PartOf(EditorSettingsCatalog.PROFILES)) && SettingsPage?.CurrentGroup == EditorSettingsCatalog.PROFILES);
+                    !SettingsPage.IsPartCollapsed(SettingsPage.PartOf(EditorSettingsCatalog.LOOKS)) && SettingsPage?.CurrentGroup == EditorSettingsCatalog.LOOKS);
 
                 // A search, then the rest of a row's help when a word is only there
                 test.Run(() => SettingsPage?.Find("editorconfig indentation"));

@@ -11,7 +11,7 @@ namespace Hex.Dawn;
 // nobody added.
 internal sealed partial class DawnScene
 {
-    // The rows of Editor · Git in the order the settings window shows them
+    // The dependent rows of Editor · Git in the order the settings window shows them
     private static readonly string[] GitSettingKeys =
         ["git_blame", "git_autofetch", "git_autofetch_interval", "git_pull_mode", "git_account", "git_confirm_sync", "git_smart_commit", "git_subject_length", "git_line_length"];
 
@@ -20,13 +20,14 @@ internal sealed partial class DawnScene
 
     private void TestGitSettings(HexPointerScript test, string repo)
     {
-        // Git Settings... opens the window at Editor · Git, which has its nine rows
+        // Git Settings opens the window at Editor · Git.
         test.Run(() => GitCommand(Said("git.settings_command"))?.OnPicked?.Invoke());
         test.WaitFor(() => SettingsPage?.CurrentGroup == EditorSettingsCatalog.GIT, 3.0f * GIT_PATIENCE);
         test.Check("settings: Git Settings... in the palette opens the settings at Editor · Git", () =>
             SettingsPage is { } page && page.CurrentGroup == EditorSettingsCatalog.GIT);
-        test.Check("settings: Editor · Git has its nine rows", () =>
-            SettingsPage!.Settings.Where(setting => setting.Group == EditorSettingsCatalog.GIT).Select(setting => setting.Key).SequenceEqual(GitSettingKeys));
+        test.Check("settings: Editor · Git has the master switch and its dependent rows", () =>
+            SettingsPage!.Settings.Where(setting => setting.Group == EditorSettingsCatalog.GIT).Select(setting => setting.Key)
+                .SequenceEqual([EditorSettingsCatalog.GIT_ENABLED, .. GitSettingKeys]));
 
         // Every row changed is put in force and lit as changed, and its reset puts it back
         IRuntimeValue Other(string key) => EditorSettingsCatalog.Usual[key] switch
@@ -42,7 +43,7 @@ internal sealed partial class DawnScene
             allChanged = GitSettingKeys.All(key => SettingsPage!.Enter(key, Other(key)) && SettingsPage.IsModified!(key));
             allReset = GitSettingKeys.All(key => SettingsPage!.Reset(key) && !SettingsPage.IsModified!(key));
         });
-        test.Check("settings: every git row changed is lit as changed, and its reset puts it back", () =>
+        test.Check("settings: every dependent Git row tracks and resets changes", () =>
             allChanged && allReset && settings.GitPullMode == "default" && settings.GitSmartCommit == "ask" && settings.GitAutoFetchInterval == 3.0f
             && settings.GitSubjectLength == 50 && settings.GitLineLength == 72 && settings.GitConfirmSync && settings.GitBlame && settings.GitAccount.Length == 0);
         test.Run(CloseSettings);

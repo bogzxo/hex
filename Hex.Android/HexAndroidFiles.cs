@@ -88,6 +88,7 @@ public sealed class HexAndroidFiles
         HexHost.Processes = true;
         HexHost.RunsDownloads = false;
         HexHost.Pipes = false;
+        HexHost.Listens = false;
         HexHost.NativeDialogs = false;
 
         // A terminal's shell is the system's, there's no /bin/sh on Android

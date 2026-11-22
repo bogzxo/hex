@@ -88,12 +88,27 @@ internal sealed partial class HexSettings
         Flag("visual_studio_keys_chosen", settings => settings.VisualStudioKeysChosen, (settings, value) => settings.VisualStudioKeysChosen = value),
         Text("welcome_done", settings => settings.WelcomeDone, (settings, value) => settings.WelcomeDone = value),
         Flag("welcome_checklist_hidden", settings => settings.WelcomeChecklistHidden, (settings, value) => settings.WelcomeChecklistHidden = value),
+        Text("agents_list_folds", settings => settings.AgentsListFolds, (settings, value) => settings.AgentsListFolds = value),
         Choice("csharp_colors", settings => settings.CSharpColors, (settings, value) => settings.CSharpColors = value, "resharper", "visual_studio", "skin"),
         Flag("mcp_server", settings => settings.McpServer, (settings, value) => settings.McpServer = value),
         Flag("no_ai", settings => settings.NoAi, (settings, value) => settings.NoAi = value),
         Flag("agents_resume_after_limit", settings => settings.AgentsResumeAfterLimit, (settings, value) => settings.AgentsResumeAfterLimit = value),
         Whole("agents_auto_settle_seconds", settings => settings.AgentsAutoSettleSeconds, (settings, value) => settings.AgentsAutoSettleSeconds = value, 0.0f, 3600.0f),
         Flag("mcp_hint_quiet", settings => settings.McpHintQuiet, (settings, value) => settings.McpHintQuiet = value),
+        Flag("link", settings => settings.Link, (settings, value) => settings.Link = value),
+        Whole("link_port", settings => settings.LinkPort, (settings, value) => settings.LinkPort = value, 1024.0f, 65535.0f),
+        Text("link_name", settings => settings.LinkName, (settings, value) => settings.LinkName = value.Trim()),
+        Flag("link_discoverable", settings => settings.LinkDiscoverable, (settings, value) => settings.LinkDiscoverable = value),
+        Flag("link_allow_public", settings => settings.LinkAllowPublic, (settings, value) => settings.LinkAllowPublic = value),
+        Flag("link_map_public_port", settings => settings.LinkMapPublicPort, (settings, value) => settings.LinkMapPublicPort = value),
+        Special("link_system_file_folders",
+            (settings, values) =>
+            {
+                if (values.GetValueOrDefault("link_system_file_folders") is ListValue roots)
+                    settings.LinkSystemFileFolders = [.. Patterns(roots).Where(Path.IsPathFullyQualified)];
+            },
+            (settings, written) => written.Add("link_system_file_folders", Horizon.HIDL.Library.Natives.List(settings.LinkSystemFileFolders))),
+        Flag("git_enabled", settings => settings.GitEnabled, (settings, value) => settings.GitEnabled = value),
         Flag("git_autofetch", settings => settings.GitAutoFetch, (settings, value) => settings.GitAutoFetch = value),
         Number("git_autofetch_interval", settings => settings.GitAutoFetchInterval, (settings, value) => settings.GitAutoFetchInterval = value, 1.0f, 60.0f),
         Choice("git_pull_mode", settings => settings.GitPullMode, (settings, value) => settings.GitPullMode = value, "default", "merge", "rebase", "ff_only"),
@@ -206,6 +221,7 @@ internal sealed partial class HexSettings
             },
             (settings, written) => written.Add("language_server_settings", settings.ServerSettingsObject())),
         Flag("csharp_analyzers_moved", settings => settings.CSharpAnalyzersMoved, (settings, value) => settings.CSharpAnalyzersMoved = value),
+        .. PredictionRows,
         Special("files_associations",
             (settings, values) =>
             {

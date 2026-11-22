@@ -218,22 +218,13 @@ internal static class ProjectTemplates
         };
 
         // A Horizon game is files of ours, the engine beside it cloned when there's no checkout of it on the machine
-        // to point at, and a solution round it like the others
-        if (template.Id == "csharp-horizon")
-        {
-            if (HorizonEngine() is null)
-                commands.Add(["git", "clone", "--depth", "1", HORIZON_REPOSITORY, "external/horizon"]);
-            commands.Add(["dotnet", "new", "sln", "--name", name]);
-            commands.Add(["dotnet", "sln", "add", name + ".csproj"]);
-        }
+        // to point at. Its solution is one of its files (Solution)
+        if (template.Id == "csharp-horizon" && HorizonEngine() is null)
+            commands.Add(["git", "clone", "--depth", "1", HORIZON_REPOSITORY, "external/horizon"]);
 
-        // The project and a solution with it in, the Solution view and csharp-ls both want the solution
+        // The SDK's template writes the project, round the solution that is there already as one of the files
         if (dotnet is not null)
-        {
             commands.Add(["dotnet", "new", dotnet, "--name", name, "--output", "."]);
-            commands.Add(["dotnet", "new", "sln", "--name", name]);
-            commands.Add(["dotnet", "sln", "add", name + ".csproj"]);
-        }
 
         if (optional && template.Optional.Length > 0 && template.Id == "python")
             commands.Add([template.Optional, "-m", "venv", ".venv"]);
@@ -251,11 +242,21 @@ internal static class ProjectTemplates
         "go" => Go(name),
         "typescript" => TypeScript(name),
         "d-dub" => D(name),
-        "csharp-horizon" => HorizonGame(name, HorizonEngine()),
+        "csharp-horizon" => [.. HorizonGame(name, HorizonEngine()), Solution(name)],
 
-        // The SDK's templates write the rest, all we add is what git is told to leave alone
-        _ => [(".gitignore", "bin/\nobj/\n.vs/\n*.user\n")]
+        // The SDK's templates write the rest, all we add is what git is told to leave alone and the solution
+        _ => [(".gitignore", "bin/\nobj/\n.vs/\n*.user\n"), Solution(name)]
     };
+
+    /// <summary>
+    /// A project's solution, which the Solution view and csharp-ls both want, written as a file rather than made with
+    /// <c>dotnet new sln</c> and <c>dotnet sln add</c>: the adding once came back saying nothing was wrong having added
+    /// nothing, and a solution with no project in it leaves the language server with nothing to complete from. An
+    /// .slnx with one project is these three lines, and written this way it has only the project, not the engine's
+    /// projects it refers to as well.
+    /// </summary>
+    private static (string, string) Solution(string name) =>
+        ($"{name}.slnx", $"<Solution>\n  <Project Path=\"{System.Security.SecurityElement.Escape(name)}.csproj\" />\n</Solution>\n");
 
     private static List<(string, string)> Python(string name)
     {

@@ -187,11 +187,32 @@ the chat that started them, so they can be watched and talked to like any other.
   `hex_agent_send` starts it afresh. Only the agent that started it may close or clear it.
 
 So one agent can coordinate others, a more capable model keeping the judgement while cheaper ones explore, implement and
-test. `hex_agent_wait` returns as soon as a message comes for the agent waiting (`messages: false` waits on
-regardless), so what one finds steers the rest straight away. A message to an agent that's waiting wakes its wait
-rather than going in on its stdin, which it would only read once the wait was over. Only chats of one family talk, the
+test. Messages from the person watching and questions or blockers addressed to a waiting agent wake `hex_agent_wait`
+in either mode. Ordinary agent mail also wakes the wait by default. With `messages: false` it waits in the inbox
+until the wait returns. The result includes all unread mail, with the person's messages first. Only chats of one family talk, the
 chat somebody started and everything under it. Each message is a line in both chats, to or from whom, its kind and how
 it starts, and what a chat wasn't working to read goes in front of what it's next asked.
+
+With Hex Link on (the `link` setting, `--link`), agents reach the other machines this Hex is linked to, as far as each
+lets this one (docs/hex-link-plan.md). `hex_link_devices()` lists the connected devices, what each lets this machine do
+(view, steer, edit), their workspace folders, repositories and agents, and the paired ones that aren't connected.
+`hex_link_call(device, tool, arguments)` calls one of a device's tools by its name or the start of its id: with view
+its reading and searching tools and `hex_agent_list`/`hex_agent_read`, with steer the `hex_agent_*` that tell, start,
+stop and approve, with edit `hex_edit` and `hex_write`; never its terminal, tasks, screen or settings. What comes back
+starts with a line saying it's another machine's data, not instructions, and a refusal says which right it takes.
+`hex_link_spawn(device, prompt, name?, agent?, model?)` starts an agent there and says how to follow it (`hex_link_call`
+with `hex_agent_wait`, `hex_agent_read` or `hex_agent_send`). With Link off they answer that it is.
+
+`hex_link_sync(device, action, folder?, path?, keep?, force?)` keeps a workspace folder the same here and on a device
+that has the same repository open (matched by its first commit), both ways: `start` turns it on and waits for the first
+comparison (`force` goes on when the two have different commits checked out), `flush` answers once everything saved
+here is there, `status` lists every sync with its counts, conflicts and the files that don't travel, `resolve` settles
+a file both sides changed (`keep: mine|theirs`; the other side's version waits beside it as `name.theirs-<device>.ext`
+until then), `stop` turns it off. What git ignores, `.git` and files over 8 MB never travel. The way to have another
+machine build or test what's changed here: edit here, `hex_link_sync flush`, then `hex_link_spawn` (or `hex_link_call`
+with `hex_agent_send`) there, `hex_link_call` with `hex_agent_wait` for its answer, and what it changes comes back by
+the sync. `hex_link_spawn` with `sync: true` does the start and flush first, and its answer says whether the folder the
+agent runs in there (that machine's first workspace folder) is synced with this one.
 
 What Claude Code and Codex are told in their system prompt (`HexAgentProfiles.HARNESS_RULES`, `hex.harness_rules` to
 an extension) says to find and read code through the harness before the shell, to run commands with

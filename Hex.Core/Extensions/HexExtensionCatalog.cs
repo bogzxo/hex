@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text.RegularExpressions;
+using Hex.Core.Git;
 
 namespace Hex.Core;
 
@@ -208,7 +209,8 @@ internal static partial class HexExtensionCatalog
                 start.ArgumentList.Add(argument);
             start.Environment["GIT_TERMINAL_PROMPT"] = "0";
 
-            using var git = System.Diagnostics.Process.Start(start) ?? throw new IOException("git couldn't be started, is it installed and on the PATH?");
+            using var git = GitProcess.StartEnabled(start) ?? throw new IOException(GitProcess.Enabled
+                ? "git couldn't be started, is it installed and on the PATH?" : GitProcess.DisabledReason);
             Task<string> said = git.StandardError.ReadToEndAsync(cancel);
             await git.StandardOutput.ReadToEndAsync(cancel).ConfigureAwait(false);
             await git.WaitForExitAsync(cancel).ConfigureAwait(false);

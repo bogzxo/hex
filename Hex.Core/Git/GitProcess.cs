@@ -23,11 +23,31 @@ internal static class GitProcess
     // doesn't hold a background thread for ever
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(30);
 
-    // Asked once, in the background, the first time anybody wants to know
-    private static readonly Lazy<Task<bool>> installed = new(() => Task.Run(() => Run(Environment.CurrentDirectory, ["--version"]).Ok));
+    private static readonly Lock integrationGate = new();
+    private static volatile bool enabled = true;
+    private static Task<bool>? installed;
 
-    /// <summary>Whether there's a git to run at all, asked once. Waits for the answer, so not for the editor's thread, see <see cref="InstalledNow"/>.</summary>
-    public static bool Installed => installed.Value.GetAwaiter().GetResult();
+    internal static bool Enabled => enabled;
+
+    internal static void SetEnabled(bool value)
+    {
+        lock (integrationGate)
+        {
+            if (enabled == value)
+                return;
+            enabled = value;
+            installed = null;
+        }
+    }
+
+    private static Task<bool>? Probe()
+    {
+        lock (integrationGate)
+            return enabled ? installed ??= Task.Run(() => Run(Environment.CurrentDirectory, ["--version"]).Ok) : null;
+    }
+
+    /// <summary>Whether Git is enabled and installed. Waits for the probe, so use InstalledNow on the UI thread.</summary>
+    public static bool Installed => Probe()?.GetAwaiter().GetResult() == true && enabled;
 
     /// <summary>The GitHub account every git is run as (the git_account setting), empty for whatever git works out itself.</summary>
     public static string Account
@@ -39,15 +59,26 @@ internal static class GitProcess
     private static volatile string account = string.Empty;
 
     /// <summary>Whether there's a git, null while that's still being asked (which this starts). Never waits.</summary>
-    public static bool? InstalledNow => installed.Value.IsCompletedSuccessfully ? installed.Value.Result : null;
+    public static bool? InstalledNow => Probe() is { } probe ? probe.IsCompletedSuccessfully ? probe.Result : null : false;
+
+    internal static bool ProbeStarted
+    {
+        get { lock (integrationGate) return installed is not null; }
+    }
+
+    internal const string DisabledReason = "Git support is turned off in Hex.";
+    private static GitResult Disabled => new(-1, string.Empty, DisabledReason);
 
     /// <summary>
     /// Runs git with some arguments in a folder, what's handed in going to its input, and waits for it. Never throws, a
     /// git that isn't there or never finishes comes back as an exit of -1 with the reason.
     /// </summary>
     public static GitResult Run(string folder, IReadOnlyList<string> arguments, string? input = null, TimeSpan? patience = null, bool unattended = false,
-        IReadOnlyDictionary<string, string>? environment = null)
+        IReadOnlyDictionary<string, string>? environment = null, CancellationToken cancel = default, Stream? standardOutput = null)
     {
+        cancel.ThrowIfCancellationRequested();
+        if (!enabled)
+            return Disabled;
         var start = new ProcessStartInfo("git")
         {
             WorkingDirectory = folder,
@@ -99,37 +130,63 @@ internal static class GitProcess
 
         try
         {
-            using var git = Process.Start(start);
+            using var git = StartEnabled(start);
             if (git is null)
-                return new GitResult(-1, string.Empty, "git didn't start");
+                return enabled ? new GitResult(-1, string.Empty, "git didn't start") : Disabled;
 
-            if (input is not null)
-            {
-                // Without a BOM, git reads the first line of a blame's contents as having three bytes of nonsense in front
-                using (var writer = new StreamWriter(git.StandardInput.BaseStream, new UTF8Encoding(false)))
-                    writer.Write(input);
-            }
-
+            using var cancellation = cancel.UnsafeRegister(static state => Kill((Process)state!), git);
             // Closed here rather than left to the process's own Dispose, which leaves its pipes to the finalizer. An idle
             // Hex makes so little garbage that the collector hardly comes round, and a status every few seconds had
             // hundreds of pipe handles open within minutes
             using StreamReader outputReader = git.StandardOutput, errorReader = git.StandardError;
-            Task<string> output = outputReader.ReadToEndAsync();
+            Task<string> output = standardOutput is null ? outputReader.ReadToEndAsync() : CopyOutput(outputReader.BaseStream, standardOutput);
             Task<string> error = errorReader.ReadToEndAsync();
+            // Git can emit a result while it is still consuming stdin, as check-ignore --stdin does.
+            Task writing = input is not null ? WriteInput(git.StandardInput.BaseStream, input) : Task.CompletedTask;
             if (!git.WaitForExit(patience ?? Patience))
             {
-                try { git.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+                Kill(git);
+                cancel.ThrowIfCancellationRequested();
 
                 // The reads end once git has gone, before their pipes are closed under them
-                try { Task.WaitAll([output, error], TimeSpan.FromSeconds(1)); } catch (AggregateException) { }
+                try { Task.WaitAll([output, error, writing], TimeSpan.FromSeconds(1)); } catch (AggregateException) { }
                 return new GitResult(-1, string.Empty, $"git {string.Join(' ', arguments)} took longer than {(patience ?? Patience).TotalSeconds:0} seconds");
             }
 
-            return new GitResult(git.ExitCode, output.Result, error.Result);
+            cancel.ThrowIfCancellationRequested();
+            writing.GetAwaiter().GetResult();
+            return new GitResult(git.ExitCode, output.GetAwaiter().GetResult(), error.GetAwaiter().GetResult());
         }
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
         {
+            cancel.ThrowIfCancellationRequested();
             return new GitResult(-1, string.Empty, e.Message);
         }
+    }
+
+    internal static Process? StartEnabled(ProcessStartInfo start)
+    {
+        lock (integrationGate)
+            return enabled ? Process.Start(start) : null;
+    }
+
+    private static async Task<string> CopyOutput(Stream from, Stream to)
+    {
+        await from.CopyToAsync(to).ConfigureAwait(false);
+        return string.Empty;
+    }
+
+    private static async Task WriteInput(Stream input, string content)
+    {
+        // Signal EOF without a byte-order mark or a continuation queued on the waiting editor thread.
+        var writer = new StreamWriter(input, new UTF8Encoding(false));
+        await using (writer.ConfigureAwait(false))
+            await writer.WriteAsync(content).ConfigureAwait(false);
+    }
+
+    private static void Kill(Process git)
+    {
+        try { git.Kill(entireProcessTree: true); }
+        catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { }
     }
 }

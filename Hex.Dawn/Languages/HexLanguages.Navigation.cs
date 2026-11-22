@@ -75,11 +75,10 @@ internal sealed partial class HexLanguages
     {
         server = null!;
         path = string.Empty;
-        if (!CanRequest(of, provider) || of.Path is not { } at || !linters.TryGetValue(of, out LanguageServer? found) || found.Failure is not null || !found.Offers(provider))
+        if (!CanServe(of, provider) || LanguagePathOf(of) is not { } at || RequestServerOf(of) is not { } found)
             return false;
 
-        if (lintIn.Remove(of))
-            found.Change(at, of.Editor.Text);
+        SynchronizeRequest(of, found, at);
         (server, path) = (found, at);
         return true;
     }
@@ -90,7 +89,8 @@ internal sealed partial class HexLanguages
 
     /// <summary>Whether a document's server does something, for a command that's only there when it does.</summary>
     internal bool CanServe(HexDocument of, string provider) =>
-        CanRequest(of, provider) && of.Path is not null && linters.TryGetValue(of, out LanguageServer? server) && server.Failure is null && server.Offers(provider);
+        CanRequest(of, provider) && LanguagePathOf(of) is not null
+        && RequestServerOf(of) is { Failure: null } server && server.Offers(provider);
 
     /* What the pointer rests on, and what a call takes */
 
@@ -103,7 +103,7 @@ internal sealed partial class HexLanguages
     private string? ServerHover(HexDocument of, CodeEditor editor, UITextPosition at)
     {
         if (!Serves(of, "hoverProvider", out LanguageServer server, out string path))
-            return linters.ContainsKey(of) ? string.Empty : null;
+            return RequestServerOf(of) is { Failure: null } ? string.Empty : null;
 
         var request = new HoverRequest(of, server, of.Path, editor.Document.Version, at, editWorkspaceGeneration);
         return RequestHover(request, () => server.Hover(path, at.Line, at.Column));
@@ -123,7 +123,7 @@ internal sealed partial class HexLanguages
                 hovering = null;
                 if (request.Workspace != editWorkspaceGeneration || request.Of.Path != request.Path
                     || request.Of.Editor.Document.Version != request.Version || context.Documents.Current != request.Of
-                    || linters.GetValueOrDefault(request.Of) != request.Server || request.Server.Failure is not null) return;
+                    || RequestServerOf(request.Of) != request.Server || request.Server.Failure is not null) return;
                 hovered = (request, said is null ? null : Printable(said));
                 request.Of.Editor.AskAgain();
             });
@@ -231,7 +231,7 @@ internal sealed partial class HexLanguages
                 if (number != signatureRequestNumber) return;
                 signing = null;
                 if (request.Of.Editor.Document.Version != request.Version || request.Of.Editor.Document.Caret != request.Caret
-                    || context.Documents.Current != request.Of || linters.GetValueOrDefault(request.Of) != request.Server) return;
+                    || context.Documents.Current != request.Of || RequestServerOf(request.Of) != request.Server) return;
                 signed = (request, said);
                 request.Of.Editor.AskAgain();
             });
@@ -260,7 +260,8 @@ internal sealed partial class HexLanguages
 
             if (places.Count > 1)
             {
-                ShowDefinitionPlaces(context.Strings.Said("code_server.definitions_title", ("word", word), ("count", places.Count.ToString())), server, places, word, request.Workspace);
+                ShowDefinitionPlaces(context.Strings.Said("code_server.definitions_title", ("word", word), ("count", places.Count.ToString())),
+                    server, places, word, request.Workspace, mergeRequest: mergeResults.ContainsKey(of) ? request : null);
                 return;
             }
 
@@ -271,6 +272,9 @@ internal sealed partial class HexLanguages
                 OpenSource(server, place, word, request);
                 return;
             }
+
+            if (GoToMergeLocation(of, place))
+                return;
 
             context.Documents.OpenAt(place.Path, place.Line, NameColumn(place, word));
             context.Notices.Say(context.Strings.Said("code_server.declared_at", ("word", word), ("file", Path.GetFileName(place.Path)), ("line", (place.Line + 1).ToString())));
@@ -316,7 +320,7 @@ internal sealed partial class HexLanguages
 
             var onDisk = place with { Path = file };
             context.Documents.OpenAt(file, place.Line, alignName ? NameColumn(onDisk, word) : place.Character);
-            if (context.Documents.Find(file) is { } opened)
+            if (!mergeResults.ContainsKey(request.Document) && context.Documents.Find(file) is { } opened)
                 AttachSource(opened, server, place.Path);
             context.Notices.Say(context.Strings.Said("code_server.decompiled", ("word", word), ("file", Path.GetFileName(file))));
         });
@@ -339,6 +343,16 @@ internal sealed partial class HexLanguages
         var request = CaptureNavigation(of, server);
         WhenNavigating(request, server.References(path, caret.Line, caret.Column), all =>
         {
+            if (mergeResults.ContainsKey(of))
+            {
+                if (all.Count == 0)
+                    context.Notices.Say(context.Strings.Said("code_server.no_references", ("word", word)));
+                else
+                    ShowDefinitionPlaces(context.Strings.Said("code_server.references_title", ("word", word), ("count", all.Count.ToString())),
+                        server, all, word, request.Workspace, alignName: false, mergeRequest: request);
+                return;
+            }
+
             List<LanguageServerPlace> places = ProjectPlaces(server, all, word);
             if (places.Count == 0)
             {

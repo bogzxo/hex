@@ -69,19 +69,7 @@ internal sealed partial class DawnScene
 
     // A request's number in its chat, counted over the approvals among the rows it keeps, so an answer names the one it
     // means. One waiting is always recent, never among the rows let go of
-    private static int RequestNumber(HexAgentChat chat, HexAgentEntry asked)
-    {
-        int number = 0;
-        foreach (HexAgentEntry entry in chat.Entries)
-        {
-            if (entry.Kind == HexAgentEntryKind.Approval)
-                number++;
-            if (ReferenceEquals(entry, asked))
-                return number;
-        }
-
-        return number;
-    }
+    private static int RequestNumber(HexAgentChat chat, HexAgentEntry asked) => HexAgentHub.RequestNumber(chat, asked);
 
     private IEnumerable<McpToolResult?> AgentApprove(JsonObject args)
     {
@@ -95,6 +83,13 @@ internal sealed partial class DawnScene
         if (CallerOf(args) is { } caller && chat.Parent != caller)
         {
             yield return McpToolResult.Error($"#{id} wasn't started by you, only the agent that started it decides what it may do.");
+            yield break;
+        }
+
+        HexLinkAgentCall? remote = HexLinkAllowed.AgentCall(args);
+        if (remote is { Chat: not null } && chat.LinkStarter?.Matches(remote) != true)
+        {
+            yield return McpToolResult.Error($"#{id} wasn't started by this linked chat. The person can answer its approval card.");
             yield break;
         }
 
@@ -112,7 +107,9 @@ internal sealed partial class DawnScene
 
         bool allow = args["allow"]?.GetValue<bool>() == true;
         chat.Decide(request, allow);
-        chat.Note($"$(shield) {(allow ? "allowed" : "denied")} by #{CallerOf(args)?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "a tool"}: {OneLine(request.Text, 120)}");
+        string who = remote is null ? CallerOf(args) is { } deciding ? $"#{deciding}" : "a tool"
+            : remote.Chat is { } starter ? $"{remote.Device.Name} #{starter}" : remote.Device.Name;
+        chat.Note($"$(shield) {(allow ? "allowed" : "denied")} by {who}: {OneLine(request.Text, 120)}");
         yield return McpToolResult.Text($"#{id}'s request {RequestNumber(chat, request)} {(allow ? "allowed" : "denied")}: {OneLine(request.Text, 160)}");
     }
 }

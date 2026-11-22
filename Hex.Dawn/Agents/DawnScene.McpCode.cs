@@ -71,7 +71,7 @@ internal sealed partial class DawnScene
                 "Rename a symbol everywhere it's used, across files, as one change by its language server (not text replace, so other things of the same name are left alone). Written to the disk, or to a file open with unsaved changes in the editor. dry_run lists the places only.",
                 McpSchema.Object([Symbol(), PathOf(), Line(), Column(),
                     ("new_name", McpSchema.String("What it's to be called.")),
-                    ("dry_run", McpSchema.Flag("Only say what would change.")), Max()], "new_name")),
+                    ("dry_run", McpSchema.Flag("Only say what would change.")), ClaimOverride(), Max()], "new_name")),
                 McpRename, Timeout: 120.0f),
 
             new(new McpTool("hex_fix", "Fixes for a line",
@@ -95,7 +95,7 @@ internal sealed partial class DawnScene
                 "Replace a whole declaration (a method, a class, a function, a property) found by its name with new text, no old_string and no reading it first. Its comments and attributes above stay unless with_comments. Empty new_text deletes it. The errors its server says after come back with it.",
                 McpSchema.Object([Symbol(), PathOf(),
                     ("new_text", McpSchema.String("The declaration as it's to be, its signature and body, indented as the file is.")),
-                    ("with_comments", McpSchema.Flag("Replace the comments and attributes above it too.")),
+                    ("with_comments", McpSchema.Flag("Replace the comments and attributes above it too.")), ClaimOverride(),
                     ("check", McpSchema.Flag("Wait a moment for what its language server says is wrong after, true by default."))], "symbol", "new_text")),
                 McpEditSymbol, Timeout: 30.0f),
 
@@ -721,6 +721,12 @@ internal sealed partial class DawnScene
         int budget = HexAgentProfiles.BudgetFor(McpServer.CallingClient.Value, args.Integer("max_chars"));
 
         // The first declaration the server will rename, one in a copy it hasn't loaded gives no edits
+        Func<string, bool>? allowed = HexLinkAllowed.EditorFileRule(args);
+        if (allowed is not null && all.Any(at => !allowed(at.Path)))
+        {
+            yield return McpToolResult.Error("The rename reaches files outside the shared workspace.");
+            yield break;
+        }
         LanguageServer? server = null;
         McpToolResult? failure = null;
         List<McpCodeAt> tried = [];
@@ -744,8 +750,14 @@ internal sealed partial class DawnScene
             if (box.Value is not IReadOnlyDictionary<string, IReadOnlyList<LanguageServerEdit>> { Count: > 0 } edits || edits.Values.All(list => list.Count == 0))
                 continue;
 
+            if (allowed is not null && edits.Any(change => change.Value.Count > 0 && !allowed(change.Key)))
+            {
+                yield return McpToolResult.Error("The rename reaches files outside the shared workspace.");
+                yield break;
+            }
             Func<string, string> relative = McpRelative();
             string moved = at != all[0] ? $" ({all[0].Place(relative)} gave nothing to rename, {at.Place(relative)} did)" : string.Empty;
+            if (!args.Flag("dry_run") && LinkClaimGuard(args, edits.Where(edit => edit.Value.Count > 0).Select(edit => edit.Key)) is { } blocked) { yield return blocked; yield break; }
             string said = McpApplyEdits(edits, args.Flag("dry_run"), $"{(args.Flag("dry_run") ? "Would rename" : "Renamed")} {at.Name} to {renamed}{moved}", budget);
             yield return said.StartsWith('!') ? McpToolResult.Error(said[1..]) : McpToolResult.Text(said);
             yield break;
@@ -1131,7 +1143,15 @@ internal sealed partial class DawnScene
         }
 
         string path = found.File.Path;
-        HexDocument? open = Context.Documents.Find(path) is { Modified: true } modified ? modified : null;
+        if (HexLinkAllowed.EditorFileRule(args) is { } allowed && !allowed(path))
+        {
+            yield return McpToolResult.Error("The declaration is outside the shared workspace.");
+            yield break;
+        }
+        if (LinkClaimGuard(args, [path]) is { } blocked) { yield return blocked; yield break; }
+        HexDocument? candidate = Context.Documents.Find(path);
+        var live = LinkLiveOf(candidate);
+        HexDocument? open = candidate is { Modified: true } || live is not null ? candidate : null;
         string raw;
         bool bom = false;
         if (open is not null)
@@ -1169,6 +1189,12 @@ internal sealed partial class DawnScene
         string[] changed = put.Length == 0 ? WithoutLines(lines, first, last) : [.. lines.Take(first), .. put, .. lines.Skip(last + 1)];
         string text = string.Join('\n', changed);
         string done = $"{(put.Length == 0 ? "Deleted" : "Replaced")} {here.Symbol.Kind} {here.Symbol.Full}, {found.File.Relative}:{first + 1}-{last + 1} ({last - first + 1} lines, now {put.Length}).{(here.AlsoSaid.Length > 0 ? $" {here.AlsoSaid}" : string.Empty)}";
+        if (live is not null)
+        {
+            foreach (var step in LinkLiveAgentWrite(args, live, raw, text, done))
+                yield return step;
+            yield break;
+        }
         if (open is not null)
         {
             Context.Documents.Rewrite(open, text);

@@ -8,6 +8,60 @@ namespace Hex.Tests;
 /// </summary>
 public sealed class HexAgentHubTests
 {
+    [Theory]
+    [InlineData("progress", false)]
+    [InlineData("finding", false)]
+    [InlineData("instruction", false)]
+    [InlineData("question", true)]
+    [InlineData("blocked", true)]
+    public void OnlyQuestionsAndBlockersFromAgentsWakeAQuietWait(string kind, bool wakes)
+    {
+        var hub = new HexAgentHub();
+        var waiting = new HexAgentChat(1, "codex");
+        hub.Add(waiting);
+        // An agent outside the panel has no chat id either.
+        waiting.Post(new HexAgentMail(hub.NextMailSeq(), null, "an agent outside Hex's panel", kind, "mail", kind == "instruction") { To = waiting.Id });
+        hub.Pump(100);
+
+        HexHubRow row = hub.Snapshot.Rows[waiting.Id];
+        Assert.Equal(wakes, row.UnreadForWait(wakesOnMail: false, finished: false).Length > 0);
+        Assert.Single(row.UnreadForWait(wakesOnMail: true, finished: false));
+        Assert.Single(row.UnreadForWait(wakesOnMail: false, finished: true));
+    }
+
+    [Fact]
+    public async Task AWaitSeesEveryMessageInThePublishedBatchWithPersonMailFirst()
+    {
+        var hub = new HexAgentHub();
+        var waiting = new HexAgentChat(1, "codex");
+        hub.Add(waiting);
+        hub.Pump(100);
+        HexHubSnapshot before = hub.Snapshot;
+        Task change = hub.ChangedAfter(before);
+
+        waiting.Post(new HexAgentMail(hub.NextMailSeq(), 2, "#2", "progress", "first", false) { To = waiting.Id });
+        waiting.Post(new HexAgentMail(hub.NextMailSeq(), null, HexAgentMail.PersonName, "progress", "a plan change", false) { To = waiting.Id });
+        waiting.Post(new HexAgentMail(hub.NextMailSeq(), 2, "#2", "finding", "last agent message", false) { To = waiting.Id });
+        waiting.Post(new HexAgentMail(hub.NextMailSeq(), null, HexAgentMail.PersonName, "instruction", "what to do next", true) { To = waiting.Id });
+        waiting.Post(new HexAgentMail(hub.NextMailSeq(), 2, "#2", "progress", "last of all", false) { To = waiting.Id });
+        Assert.False(change.IsCompleted);
+        Assert.Empty(before.Rows[waiting.Id].Unread);
+
+        hub.Pump(100);
+        await change.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(hub.ChangedAfter(before).IsCompletedSuccessfully);
+        HexHubRow row = hub.Snapshot.Rows[waiting.Id];
+        HexAgentMail[] mail = row.UnreadForWait(wakesOnMail: false, finished: false);
+        Assert.Equal(new long[] { 2, 4, 1, 3, 5 }, mail.Select(message => message.Seq));
+        Assert.All(mail.Take(2), message => Assert.True(message.FromPerson));
+
+        waiting.Post(new HexAgentMail(hub.NextMailSeq(), 2, "#2", "progress", "next tick", false) { To = waiting.Id });
+        waiting.MailRead(mail.Max(message => message.Seq));
+        Assert.Empty(row.Unread);
+        hub.Pump(100);
+        Assert.Equal("next tick", Assert.Single(hub.Snapshot.Rows[waiting.Id].Unread).Text);
+    }
+
     [Fact]
     public void ATerminalsColourCodesAreTakenOutOfNotesAndErrors()
     {

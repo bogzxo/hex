@@ -11,13 +11,24 @@ internal static class HexAgentChatStore
 {
     public static JsonObject Write(HexAgentChat chat)
     {
-        var options = new JsonObject();
-        foreach (var (key, value) in chat.Options)
-            options[key] = value;
-
         var rows = new JsonArray();
         foreach (HexAgentEntry entry in chat.Entries)
             rows.Add((JsonNode)RowOf(entry));
+
+        JsonObject written = Head(chat);
+        written["rows"] = rows;
+        return written;
+    }
+
+    /// <summary>
+    /// A chat as it's written down without its rows, what it is and what it used, which a link sends on its own when
+    /// only that changed.
+    /// </summary>
+    public static JsonObject Head(HexAgentChat chat, bool includeLinkOwnership = true)
+    {
+        var options = new JsonObject();
+        foreach (var (key, value) in chat.Options)
+            options[key] = value;
 
         return new JsonObject
         {
@@ -28,6 +39,7 @@ internal static class HexAgentChatStore
             ["name"] = chat.Name,
             ["title"] = chat.Title,
             ["session"] = chat.Session,
+            ["linkDraft"] = chat.LinkDraft?.ToString("N"),
             ["model"] = chat.Model,
             ["options"] = options,
             ["input_tokens"] = chat.InputTokens,
@@ -41,7 +53,10 @@ internal static class HexAgentChatStore
             ["key"] = chat.Key,
             ["dropped"] = chat.Dropped,
             ["plan"] = chat.Plan?.ToStored(),
-            ["rows"] = rows
+            ["link_starter"] = includeLinkOwnership ? chat.LinkStarter?.ToJson() : null,
+            ["link_device"] = includeLinkOwnership ? chat.LinkDevice : null,
+            ["link_children"] = includeLinkOwnership && chat.LinkChildren.Count > 0
+                ? new JsonArray([.. chat.LinkChildren.Select(child => (JsonNode)child.Address.ToJson())]) : null
         };
     }
 
@@ -115,9 +130,17 @@ internal static class HexAgentChatStore
             CacheRead = said["cache_read"]?.GetValue<long>() ?? 0,
             Stopped = said["stopped"]?.GetValue<bool>() ?? false
         };
+        chat.LinkStarter = HexLinkAgentStarter.Read(said["link_starter"] as JsonObject);
+        chat.LinkDevice = HexLinkData.String(said, "link_device", 64) is { Length: 64 } startedBy ? startedBy : chat.LinkStarter?.Device;
+        foreach (JsonObject child in HexLinkData.Objects(said, "link_children", 128))
+            if (HexLinkAgentStarter.Read(child) is { } address)
+                chat.LinkChildren.Add(new HexLinkAgentChild(address));
+
         // Chats kept before there was settling were in the Finished group once read back, as they still are
         chat.RestoreSettled(said["settled"]?.GetValue<bool>() ?? true);
 
+        if (said["linkDraft"] is JsonValue draft && draft.TryGetValue(out string? savedDraft) && Guid.TryParseExact(savedDraft, "N", out Guid draftId))
+            chat.LinkDraft = draftId;
         if (said["options"] is JsonObject options)
         {
             foreach (var (key, value) in options)

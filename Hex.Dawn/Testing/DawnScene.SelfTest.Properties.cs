@@ -52,6 +52,8 @@ internal sealed partial class DawnScene
         });
         test.Wait();
 
+        test.Check("properties: a closed panel leaves the project unevaluated", () => !right.Shown && properties.ShownProject is null);
+
         /* A file of a project, the panel up with Alt+Enter's command */
 
         test.Run(() => ShowPropertiesOf(null));

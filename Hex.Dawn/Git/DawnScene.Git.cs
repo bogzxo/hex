@@ -120,7 +120,11 @@ internal sealed partial class DawnScene
         string letter = lettered ? state.Letter : string.Empty;
         row.Badge = count > 0 ? letter.Length > 0 ? $"{count}, {letter}" : count.ToString() : letter;
         row.BadgeColor = wrong ?? (lettered ? changed : null);
-        row.Dot = null;
+        if (linkItem is not null || linkServices is not null)
+        {
+            LinkClaimExplorerRow(row, path);
+            LinkHoldExplorerMark(row, path);
+        }
     }
 
     /// <summary>The colour a tab's title takes from its file's change, null for the skin's.</summary>

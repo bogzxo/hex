@@ -59,7 +59,9 @@ public static class HexData
         if ((Environment.GetEnvironmentVariable("HEX_HOME") ?? Environment.GetEnvironmentVariable("DUSK_HOME")) is { Length: > 0 } home)
             return (Made(Path.Combine(home, FOLDER)), false);
 
-        return found ??= Choose(HexHost.ProgramFolder, Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), Writable);
+        // A bundle is sealed by its signature, nothing is written inside it
+        string localData = OperatingSystem.IsMacOS() ? Horizon.Core.Platform.PlatformPaths.DataRoot : Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        return found ??= Choose(HexHost.ProgramFolder, localData, folder => !HexBundle.Inside && Writable(folder));
     }
 
     /// <summary>

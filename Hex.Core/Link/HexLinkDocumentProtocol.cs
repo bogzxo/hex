@@ -1,0 +1,276 @@
+using System.Text.Json.Nodes;
+
+namespace Hex.Core;
+
+internal static class HexLinkDocumentProtocol
+{
+    internal static string Field(JsonObject message, string key, int limit)
+    {
+        string value = HexLinkData.Need(message, key, limit + 1);
+        if (value.Length > limit)
+            throw new HexLinkException(HexLinkErrors.TOO_BIG, $"Shared document field {key} exceeds its limit.");
+        return value;
+    }
+
+    internal static long Revision(JsonObject message) => message["revision"] is JsonValue value
+        && value.TryGetValue<long>(out long revision) && revision >= 0 ? revision
+        : throw HexLinkException.Invalid("Expected a nonnegative document revision.");
+
+    internal static JsonObject Encode(HexLinkDocSnapshot snapshot) => new()
+    {
+        ["path"] = snapshot.Path, ["session"] = snapshot.Session, ["revision"] = snapshot.Revision,
+        ["text"] = snapshot.Text, ["author"] = snapshot.Author, ["conflict"] = snapshot.Conflict
+    };
+
+    internal static HexLinkDocSnapshot Decode(JsonObject message, string path)
+    {
+        if (Field(message, "path", HexLinkFiles.MOST_PATH) != path)
+            throw HexLinkException.Invalid("Unexpected document path.");
+        string session = Field(message, "session", 32);
+        if (!Guid.TryParseExact(session, "N", out _))
+            throw HexLinkException.Invalid("Invalid document session.");
+        return new(path, session, Revision(message), Field(message, "text", HexLinkDocuments.MOST_TEXT),
+            Field(message, "author", 80), HexLinkData.Bool(message, "conflict") ?? throw HexLinkException.Invalid("Missing conflict flag."));
+    }
+}
+
+internal sealed partial class HexLinkHost
+{
+    private async Task<JsonNode?> Document2Request(string method, JsonObject parameters, CancellationToken cancel)
+    {
+        Need(HexLinkRights.View, method);
+        string path = HexLinkDocumentProtocol.Field(parameters, "path", HexLinkFiles.MOST_PATH);
+        string full = ResolveFile(path);
+        // A room can read the working file on open and write it on save. Serialize both with taking a hold.
+        await using var fileLease = method is "doc2/open" or "doc2/save"
+            ? await HexLinkPublicationFence.ForRoot(full).EnterLive(cancel).ConfigureAwait(false) : null;
+        if (HoldOf(path, full) is not null)
+            throw new HexLinkException(HexLinkErrors.DOCUMENT_HELD, $"Shared editing is paused while {path} is held on {services.Device.Name}.");
+        if (!services.OwnsSharedDocument(path))
+            throw HexLinkException.NotFound("This device no longer owns the shared folder.");
+        var rooms = services.Documents?.Rooms ?? throw HexLinkException.NotFound("No documents are shared.");
+        bool canEdit = HexLinkAllowed.Has(Rights, HexLinkRights.Edit);
+        HexLinkDocumentRoom room = method == "doc2/open"
+            ? await services.OpenSharedDocument(path, full, Device, HexLinkData.Bool(parameters, "automatic") == true, cancel)
+            : rooms.Find(path);
+        Need(HexLinkRights.View, method);
+        string scope = Device.Id;
+        var author = Device;
+        if (HexLinkData.Object(parameters, "relay") is { } envelope && HexLinkData.String(envelope, "origin", 64) is { } origin)
+        {
+            scope = Device.Id + "/" + origin;
+            author = new HexLinkDevice(origin, HexLinkNames.Clean(HexLinkData.String(envelope, "name", 80)) ?? origin[..8]);
+        }
+
+        try
+        {
+            if (method == "doc2/saved")
+            {
+                var snapshot = await room.ReadSaved(scope, HexLinkData.Bool(parameters, "text") == true, cancel).ConfigureAwait(false);
+                Need(HexLinkRights.View, method);
+                if (!services.OwnsSharedDocument(path))
+                    throw HexLinkException.NotFound("This device no longer owns the shared folder.");
+                if (snapshot is null)
+                    return new JsonObject();
+                JsonObject reply = snapshot.Receipt.Encode();
+                if (snapshot.Text is not null)
+                    reply["text"] = snapshot.Text;
+                return reply;
+            }
+            if (method == "doc2/leave")
+            {
+                room.Leave(scope, this);
+                return new JsonObject();
+            }
+
+            Guid? epoch = HexLinkDocumentWire.Epoch(parameters);
+            long revision = HexLinkDocumentWire.Revision(parameters);
+            if (method == "doc2/open")
+                return HexLinkDocumentWire.Encode(room.Join(scope, this, author, epoch, revision) with { CanEdit = canEdit });
+            if (epoch is null)
+                throw HexLinkException.Invalid("The shared document operation needs an epoch.");
+            if (method == "doc2/wait")
+            {
+                HexDocExchange? replay = await room.WaitForRevision(scope, this, epoch.Value, revision, cancel,
+                    HexLinkData.Long(parameters, "roster"), HexLinkData.Long(parameters, "saved")).ConfigureAwait(false);
+                Need(HexLinkRights.View, method);
+                if (!services.OwnsSharedDocument(path))
+                    throw HexLinkException.NotFound("This device no longer owns the shared folder.");
+                return replay is null ? new JsonObject() : HexLinkDocumentWire.Encode(replay with { CanEdit = HexLinkAllowed.Has(Rights, HexLinkRights.Edit) });
+            }
+            if (method == "doc2/save")
+            {
+                Need(HexLinkRights.Edit, method);
+                var saved = await room.Save(scope, this, full, epoch.Value, revision, cancel).ConfigureAwait(false);
+                services.Audit("edit", Device, $"saved shared document {path} at revision {saved.Revision}");
+                return saved.Encode();
+            }
+
+            if (method == "doc2/agent")
+            {
+                Need(HexLinkRights.Edit, method);
+                HexDocAgentChange change = HexDocAgentChange.Decode(parameters);
+                var edited = room.AgentEdit(scope, this, author, epoch.Value, revision, change);
+                services.Audit("edit", Device, $"agent {change.Agent} edited shared document {path}");
+                return HexLinkDocumentWire.Encode(edited);
+            }
+
+            HexDocOperation[] operations = HexLinkDocumentWire.DecodeOperations(parameters);
+            if (operations.Length > 0)
+                Need(HexLinkRights.Edit, method);
+            return HexLinkDocumentWire.Encode(room.Exchange(scope, this, epoch.Value, revision, operations,
+                HexLinkDocumentWire.DecodePoint(parameters["caret"]), HexLinkDocumentWire.DecodePoint(parameters["anchor"]),
+                HexLinkDocumentWire.DecodePoint(parameters["pointer"]), HexLinkData.Bool(parameters, "ready") == true,
+                HexLinkData.Long(parameters, "roster"), HexLinkData.Bool(parameters, "presence") != false) with { CanEdit = canEdit });
+        }
+        catch (ArgumentException e)
+        {
+            throw HexLinkException.Invalid(e.Message);
+        }
+        catch (InvalidOperationException e)
+        {
+            throw new HexLinkException(HexLinkErrors.CONFLICT, e.Message);
+        }
+    }
+
+    private async Task<JsonNode?> Document2Relay(JsonObject parameters, CancellationToken cancel)
+    {
+        Need(HexLinkRights.Steer, "doc2/relay");
+        if (parameters.ContainsKey("relay"))
+            throw HexLinkException.NotAllowed("one document relay hop");
+        string target = HexLinkDocumentProtocol.Field(parameters, "target", 64);
+        string method = HexLinkDocumentProtocol.Field(parameters, "method", 16);
+        if (method is not ("doc2/open" or "doc2/exchange" or "doc2/leave" or "doc2/save" or "doc2/agent" or "doc2/wait" or "doc2/saved") || target == Device.Id)
+            throw HexLinkException.Invalid("Invalid document relay destination or method.");
+        if (services.SharedDocumentPeer(target) is not { IsClosed: false } peer)
+            throw HexLinkException.NotFound("The shared document's owner is offline.");
+        var request = HexLinkData.Object(parameters, "document") ?? throw HexLinkException.Invalid("Missing document request.");
+        if (request.ContainsKey("relay"))
+            throw HexLinkException.NotAllowed("one document relay hop");
+
+        if (method == "doc2/saved")
+            Need(HexLinkRights.View, "relay saved document");
+        if (method is "doc2/save" or "doc2/agent" || method == "doc2/exchange" && request["ops"] is JsonArray { Count: > 0 })
+            Need(HexLinkRights.Edit, "relay document edits");
+        if (method is not ("doc2/wait" or "doc2/saved") && (method != "doc2/exchange" || request["ops"] is JsonArray { Count: > 0 }))
+            services.Audit("relay", Device, $"{method} from {Device.Name} ({Device.Id}) to {peer.Device.Id}");
+
+        var origin = HexLinkAllowed.RelayOrigin;
+        HexLinkDevice? previous = origin.Value;
+        try
+        {
+            origin.Value = Device;
+            JsonObject relayed = await peer.ForwardDocument(method, (JsonObject)request.DeepClone(), cancel);
+            var reply = (JsonObject)relayed.DeepClone();
+            if (method is "doc2/wait" or "doc2/saved")
+                Need(HexLinkRights.Steer, "doc2/relay");
+            if (method == "doc2/saved")
+                Need(HexLinkRights.View, "relay saved document");
+            if (!HexLinkAllowed.Has(Rights, HexLinkRights.Edit) && reply.Count > 0 && method is ("doc2/open" or "doc2/exchange" or "doc2/wait"))
+                reply["editable"] = false;
+            return reply;
+        }
+        finally { origin.Value = previous; }
+    }
+
+    private JsonObject DocumentRequest(string method, JsonObject parameters)
+    {
+        if (!services.LegacyDocumentFixture)
+            throw new HexLinkException(HexLinkErrors.METHOD_NOT_FOUND, "Use the current shared document protocol.");
+        bool edit = method == "doc/edit";
+        Need(edit ? HexLinkRights.Edit : HexLinkRights.View, method);
+        var documents = services.Documents ?? throw new HexLinkException(HexLinkErrors.NOT_FOUND, "No documents are shared.");
+        string path = HexLinkDocumentProtocol.Field(parameters, "path", HexLinkFiles.MOST_PATH);
+        HexLinkFiles.Resolve(Folders, path);
+        if (!edit)
+        {
+            var current = documents.Snapshot(path);
+            if (method == "doc/poll" && HexLinkDocumentProtocol.Field(parameters, "session", 32) == current.Session
+                && HexLinkDocumentProtocol.Revision(parameters) == current.Revision)
+                return new JsonObject { ["unchanged"] = true };
+            return HexLinkDocumentProtocol.Encode(current);
+        }
+
+        var snapshot = documents.Apply(path, HexLinkDocumentProtocol.Field(parameters, "session", 32),
+            HexLinkDocumentProtocol.Revision(parameters), HexLinkDocumentProtocol.Field(parameters, "text", HexLinkDocuments.MOST_TEXT), Device);
+        services.Audit("edit", Device, $"doc/edit {path}, revision {snapshot.Revision}, conflict {snapshot.Conflict}");
+        return HexLinkDocumentProtocol.Encode(snapshot);
+    }
+}
+
+internal sealed partial class HexLinkPeer
+{
+    public async Task<HexDocExchange> OpenDocument(string path, Guid? epoch = null, long revision = 0, CancellationToken cancel = default,
+        bool automatic = false, string? relayTo = null)
+    {
+        var request = HexLinkDocumentWire.Open(path, epoch, revision);
+        request["automatic"] = automatic;
+        return HexLinkDocumentWire.Decode(await ForwardDocument("doc2/open", request, cancel, relayTo));
+    }
+
+    public async Task<HexDocExchange> ExchangeDocument(string path, Guid epoch, long revision, IReadOnlyList<HexDocOperation> operations,
+        HexDocPoint? caret = null, HexDocPoint? anchor = null, HexDocPoint? pointer = null, bool checkpointReady = false,
+        CancellationToken cancel = default, string? relayTo = null, long? knownRoster = null, bool updatePresence = true)
+    {
+        var request = HexLinkDocumentWire.Exchange(path, epoch, revision, operations, caret, anchor, pointer, checkpointReady);
+        request["roster"] = knownRoster;
+        if (!updatePresence)
+            request["presence"] = false;
+        return HexLinkDocumentWire.Decode(await ForwardDocument("doc2/exchange", request, cancel, relayTo));
+    }
+
+    public async Task<HexDocExchange?> WaitForDocumentRevision(string path, Guid epoch, long revision, CancellationToken cancel,
+        string? relayTo = null, long? knownRoster = null, long? knownSaved = null)
+    {
+        var request = HexLinkDocumentWire.Open(path, epoch, revision);
+        request["roster"] = knownRoster;
+        request["saved"] = knownSaved;
+        JsonObject reply = await ForwardDocument("doc2/wait", request, cancel, relayTo);
+        return reply.Count == 0 ? null : HexLinkDocumentWire.Decode(reply);
+    }
+
+    internal async Task<HexDocSavedSnapshot?> ReadSavedDocument(string path, bool includeText, CancellationToken cancel, string? relayTo)
+    {
+        JsonObject reply = await ForwardDocument("doc2/saved", new JsonObject { ["path"] = path, ["text"] = includeText },
+            cancel, relayTo).ConfigureAwait(false);
+        if (reply.Count == 0)
+            return null;
+        var receipt = HexDocSaved.Decode(reply);
+        string? text = reply["text"] is null ? null : HexLinkDocumentProtocol.Field(reply, "text", HexLinkDocumentWire.MaxText);
+        if (text is not null && receipt.TextHash != HexDocSaved.TextDigest(text))
+            throw HexLinkException.Invalid("The saved document text does not match its receipt.");
+        return new(receipt, text);
+    }
+
+    public async Task<HexDocSaved> SaveDocument(string path, Guid epoch, long revision, CancellationToken cancel = default,
+        string? relayTo = null) => HexDocSaved.Decode(await ForwardDocument("doc2/save",
+            HexLinkDocumentWire.Open(path, epoch, revision), cancel, relayTo));
+
+    public async Task<HexDocExchange> EditDocumentAsAgent(string path, Guid epoch, long revision, HexDocAgentChange change,
+        CancellationToken cancel = default, string? relayTo = null) => HexLinkDocumentWire.Decode(await ForwardDocument(
+            "doc2/agent", change.Encode(path, epoch, revision), cancel, relayTo));
+
+    public Task LeaveDocument(string path, CancellationToken cancel = default, string? relayTo = null) =>
+        ForwardDocument("doc2/leave", new JsonObject { ["path"] = path }, cancel, relayTo);
+
+    internal Task<JsonObject> ForwardDocument(string method, JsonObject request, CancellationToken cancel, string? relayTo = null) =>
+        relayTo is null ? AskObject(method, request, cancel) : AskObject("doc2/relay",
+            new JsonObject { ["target"] = relayTo, ["method"] = method, ["document"] = request }, cancel);
+
+    public async Task<HexLinkDocSnapshot> JoinDocument(string path, CancellationToken cancel = default) =>
+        HexLinkDocumentProtocol.Decode(await AskObject("doc/join", new JsonObject { ["path"] = path }, cancel), path);
+
+    public async Task<HexLinkDocSnapshot?> PollDocument(string path, string session, long revision, CancellationToken cancel = default)
+    {
+        var request = new JsonObject { ["path"] = path, ["session"] = session, ["revision"] = revision };
+        var reply = await AskObject("doc/poll", request, cancel);
+        return HexLinkData.Bool(reply, "unchanged") == true ? null : HexLinkDocumentProtocol.Decode(reply, path);
+    }
+
+    public async Task<HexLinkDocSnapshot> EditDocument(string path, string session, long revision, string text, CancellationToken cancel = default)
+    {
+        HexLinkDocuments.CheckText(text);
+        var request = new JsonObject { ["path"] = path, ["session"] = session, ["revision"] = revision, ["text"] = text };
+        return HexLinkDocumentProtocol.Decode(await AskObject("doc/edit", request, cancel), path);
+    }
+}

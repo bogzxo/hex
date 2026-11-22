@@ -15,6 +15,21 @@ internal sealed partial class HexCodeIndex
     public HexAnswer Read(string? path, string? symbol, int? start, int? end, bool numbers, int budget) =>
         Ask("hex_read", $"{path}\n{symbol}\n{start}\n{end}\n{numbers}\n{budget}", index =>
         {
+            Dictionary<string, HexLinkAllowed.HeldRead>? held = null;
+            if (HexLinkAllowed.RemoteHeldRead.Value is { } project)
+            {
+                held = new(PlatformPaths.Comparer);
+                HexIndexedFile[] files = [.. index.Files.Select(each =>
+                {
+                    if (project(each.Path) is not { } published)
+                        return each;
+                    held.Add(each.Path, published);
+                    string[] visible = published.Text is { } text ? HexSearch.SplitLines(text) : [];
+                    return new HexIndexedFile(each.Path, each.Relative, published.Text?.Length ?? 0, each.Written, visible);
+                })];
+                index = new HexIndexSnapshot(index.Generation, index.Roots, files);
+            }
+
             HexIndexedFile? file = path is { Length: > 0 } ? FileOf(index, path) : null;
             if (path is { Length: > 0 } && file is null)
                 return ReadUnindexed(index, path, start, end, numbers, budget) ?? HexAnswer.Wrong(NoFile(index, path));
@@ -22,6 +37,9 @@ internal sealed partial class HexCodeIndex
             string? also = null;
             int first, last;
             HexSymbol? found = null;
+            HexLinkAllowed.HeldRead? projected = file is null ? null : held?.GetValueOrDefault(file.Path);
+            if (projected is { Text: null })
+                return HeldWithoutText(projected, file!.Relative);
             if (symbol is { Length: > 0 })
             {
                 List<(HexIndexedFile File, HexSymbol Symbol, int Score)> fits = file is null
@@ -29,9 +47,10 @@ internal sealed partial class HexCodeIndex
                     : [.. FindSymbols(index, symbol).Where(each => ReferenceEquals(each.File, file))];
                 fits = [.. fits.Where(each => each.Score >= 90)];
                 if (fits.Count == 0)
-                    return HexAnswer.Wrong($"Nothing called {symbol} is declared{(file is null ? string.Empty : $" in {file.Relative}")}. hex_symbols finds names by part of them.");
+                    return HexAnswer.Wrong($"{(projected is null ? "" : projected.Note + "\n")}Nothing called {symbol} is declared{(file is null ? string.Empty : $" in {file.Relative}")}. hex_symbols finds names by part of them.");
 
                 (file, found) = (fits[0].File, fits[0].Symbol);
+                projected = held?.GetValueOrDefault(file.Path);
 
                 // Its text read only now, after it changed since it was indexed: the declarations are found again in what
                 // was read, or the lines handed back were the old line numbers' of the new text
@@ -64,6 +83,8 @@ internal sealed partial class HexCodeIndex
             last = Math.Clamp(last, first, lines.Length - 1);
 
             var said = new HexBudget(budget);
+            if (projected is not null)
+                said.Line(projected.Note);
             said.Line($"{file.Relative}:{first + 1}-{last + 1}{(found is null ? string.Empty : $" {found.Kind} {found.Full}")} of {lines.Length} lines");
             if (also is not null)
                 said.Line(also);
@@ -100,13 +121,14 @@ internal sealed partial class HexCodeIndex
     {
         string? found = null;
         if (Path.IsPathRooted(path))
-            found = File.Exists(path) ? Path.GetFullPath(path) : null;
+            found = Path.GetFullPath(path);
         else
         {
             foreach (string root in index.Roots)
             {
                 string full = Path.GetFullPath(Path.Combine(root, path));
-                if (File.Exists(full))
+                if (File.Exists(full) || (HexLinkAllowed.RemoteFileAllowed.Value?.Invoke(full) == true &&
+                    HexLinkAllowed.RemoteHeldRead.Value?.Invoke(full) is not null))
                 {
                     found = full;
                     break;
@@ -114,15 +136,26 @@ internal sealed partial class HexCodeIndex
             }
         }
 
-        if (found is null)
+        if (found is null || (HexLinkAllowed.RemoteFileAllowed.Value is { } allowed && !allowed(found)))
             return null;
 
         string[] lines;
+        var projected = HexLinkAllowed.RemoteHeldRead.Value?.Invoke(found);
+        if (projected is { Text: null })
+            return HeldWithoutText(projected, found);
+
         try
         {
-            if (new FileInfo(found).Length > MOST_UNINDEXED)
-                return HexAnswer.Wrong($"{found} is too big to read through Hex, past {MOST_UNINDEXED / (1024 * 1024)} MB.");
-            lines = File.ReadAllLines(found);
+            if (projected?.Text is { } published)
+                lines = HexSearch.SplitLines(published);
+            else
+            {
+                if (!File.Exists(found))
+                    return null;
+                if (new FileInfo(found).Length > MOST_UNINDEXED)
+                    return HexAnswer.Wrong($"{found} is too big to read through Hex, past {MOST_UNINDEXED / (1024 * 1024)} MB.");
+                lines = File.ReadAllLines(found);
+            }
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -135,7 +168,10 @@ internal sealed partial class HexCodeIndex
         int first = Math.Clamp(Math.Max(1, start ?? 1) - 1, 0, lines.Length - 1);
         int last = Math.Clamp(Math.Min(lines.Length, end ?? first + MOST_LINES) - 1, first, lines.Length - 1);
         var said = new HexBudget(budget);
-        said.Line($"{found}:{first + 1}-{last + 1} of {lines.Length} lines, from the disk (the index leaves this file out, so there are no symbols to read it by)");
+        if (projected is not null)
+            said.Line(projected.Note);
+        string source = projected is null ? ", from the disk (the index leaves this file out, so there are no symbols to read it by)" : "";
+        said.Line($"{found}:{first + 1}-{last + 1} of {lines.Length} lines{source}");
         int width = (last + 1).ToString().Length;
         int stop = Math.Min(last, first + MOST_LINES - 1);
         for (int i = first; i <= stop; i++)
@@ -151,6 +187,9 @@ internal sealed partial class HexCodeIndex
             said.Line($"... cut at line {stop + 1}, the rest with start_line {stop + 2} and end_line {last + 1}.");
         return new HexAnswer(said.Finish($"read on with start_line {stop + 2}"), lines.Sum(line => (long)line.Length + 8));
     }
+
+    private static HexAnswer HeldWithoutText(HexLinkAllowed.HeldRead held, string path) =>
+        HexAnswer.Wrong(held.Note + "\n" + (held.Absent ? $"{path} has no shared version yet." : $"{path} has no shared text to read."));
 
     /// <summary>The lines a symbol takes up, from 0, the comments and attributes above it among them.</summary>
     internal static (int First, int Last) Extent(HexIndexedFile file, HexSymbol symbol)

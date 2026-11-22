@@ -65,7 +65,7 @@ public static class DuskProgram
 
         // A folder that was named is meant from where Dusk was started, the rest (its skin, fonts, plugins) is next to it
         string startIn = ValueOf(args, ARGUMENT_CWD) is { } named ? Path.GetFullPath(named) : Directory.GetCurrentDirectory();
-        Directory.SetCurrentDirectory(AppContext.BaseDirectory);
+        Directory.SetCurrentDirectory(Hex.Core.HexHost.ProgramFolder);
 
         // The self test keeps a home of its own, made new every run, so it never reads or writes whoever's settings,
         // keys, plugins, history or tabs, and can write those files itself to see them taken in
@@ -114,7 +114,7 @@ public static class DuskProgram
             // A terminal, nobody plays it with a controller
             Gamepads = false,
             // Its settings and caches next to Hex.exe, Program.Main says so already and this says it to the engine
-            FilesBesideProgram = true,
+            FilesBesideProgram = !Hex.Core.HexBundle.Inside,
             WindowConfiguration = WindowManagerConfiguration.Default1600x900 with
             {
                 WindowTitle = "Dusk",

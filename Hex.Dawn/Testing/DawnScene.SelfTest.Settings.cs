@@ -39,6 +39,16 @@ internal sealed partial class DawnScene
         test.MiddleClick(() => chrome.ToWorld(middlePanel!.Bounds.Center));
         test.Check("settings: second middle click stops autoscroll", () => compositor.AutoScrollTarget is null);
         test.Run(() => { if (middlePanel is not null) middlePanel.Offset = middleOffset; });
+
+        // The editor's sections fill the left of a window 900 high, so the list is scrolled to the Extensions heading
+        // first: the parts after the editor are folded to their headings, the heading itself fits in sight
+        test.Run(() =>
+        {
+            // Up is +Y, the heading under the bottom of what's in sight has its Min below the viewport's
+            if (SettingsPage is { } page && page.PartBounds("Extensions") is { IsEmpty: false } heading && heading.Min.Y < page.NavViewport.Min.Y)
+                page.NavScroll.Offset += page.NavViewport.Min.Y - heading.Min.Y;
+        });
+        test.Settle(0.2f);
         test.Check("nav: other parts folded on first open", () =>
             SettingsPage is { } page && !Horizon.UI.Components.SettingsPage.IsPartCollapsed("Editor")
             && Horizon.UI.Components.SettingsPage.IsPartCollapsed("Terminal") && Horizon.UI.Components.SettingsPage.IsPartCollapsed("Appearance")
@@ -198,9 +208,10 @@ internal sealed partial class DawnScene
         Label? rowTitle = null;
         test.Run(() =>
         {
-            SettingsPage!.GoTo(SettingsPage.Settings.First(setting => setting.Key == "wrap_code").Group);
+            SettingsPage!.Reveal("wrap_code");
         });
         test.Wait();
+        test.Settle(1.0f);
         test.Run(() => rowTitle = Descendants(SettingsPage!).OfType<Label>().FirstOrDefault(label =>
             label.Visible && label.Text.Contains(SettingsPage!.Settings.First(setting => setting.Key == "wrap_code").Title, StringComparison.Ordinal)
             && SettingsWindow!.Bounds.Contains(label.Bounds.Center)));
@@ -313,7 +324,7 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Check("settings: a section for the picture behind the code, the one Hex comes with in every editor, set with sliders", () =>
             settings.BackdropOn && settings.BackdropImage.Length == 0 && code.Backdrop is not null && code.BackdropShape is { Rows: > 0 }
-            && SettingsPage!.Settings.Count(setting => setting.Group == Hex.Shell.EditorSettingsCatalog.BACKDROP && setting.Slider) == 11
+            && SettingsPage!.Settings.Count(setting => setting.Group.StartsWith(Hex.Shell.EditorSettingsCatalog.BACKDROP, StringComparison.Ordinal) && setting.Slider) == 11
             && Descendants(SettingsPage).OfType<Slider>().Count() >= 11);
         Enter("backdrop_scale", new NumberValue(0.8f));
         Enter("backdrop_across", new NumberValue(0.25f));

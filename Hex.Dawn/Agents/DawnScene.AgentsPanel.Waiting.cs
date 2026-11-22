@@ -27,7 +27,8 @@ internal sealed partial class DawnScene
     {
         HexAgentChat? chat = agentChat;
         // Plain looks, this runs ten times a second and nothing waits most of the time
-        HexAgentEntry? waiting = chat is not { HasPending: true } ? null
+        // Another device's chat that may only be watched has nothing here to answer it with (DawnScene.LinkChats)
+        HexAgentEntry? waiting = chat is not { HasPending: true } || !LinkMaySteer(chat) ? null
             : HexAgentHub.Approvals(chat).FirstOrDefault() ?? chat.FirstPending(HexAgentEntryKind.Question);
         int others = 0;
         for (int i = 0; i < agentChats.Count; i++)
@@ -145,7 +146,7 @@ internal sealed partial class DawnScene
         }
 
         agentsLatest.Visible = away;
-        agentsLatest.Position = new Vector2(-18, agentsComposeTall + AgentsWaitStripTall + 10.0f);
+        agentsLatest.Position = new Vector2(-18, agentsComposeTall + AgentsWaitStripTall + LinkBannerTall + 10.0f);
     }
 
     /// <summary>The chat on screen scrolled so the row of one of its entries is at the top of what's in sight.</summary>

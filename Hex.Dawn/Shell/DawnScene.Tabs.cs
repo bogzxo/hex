@@ -65,6 +65,8 @@ internal sealed partial class DawnScene
 
     private void RebuildTabs()
     {
+        if (linkEditorNotices is not null)
+            MarkLinkEditorNotices();
         tabButtons.Clear();
 
         // The plain welcome over the empty layout is no file anybody opened, so no tab says "Untitled". Only ever the one
@@ -88,18 +90,30 @@ internal sealed partial class DawnScene
             StripTab tab = docTabs.Tabs[i];
             string icon = IconOfDocument(shown);
 
+            // Another machine's file says whose it is (DawnScene.LinkFiles)
             tab.Title = shown.IsText && shown.Path is { } path ? Path.GetFileName(path) : shown.Name;
             tab.Icon = icon;
             tab.IconColor = shown.IsText ? null : FolderColor;
-            tab.Tooltip = shown.Path is { } where ? where : Said("tabs.never_saved", ("name", shown.Name));
+            tab.Tooltip = shown.Path ?? Said("tabs.never_saved", ("name", shown.Name));
             tab.Modified = shown.Modified;
             tab.Pinned = shown.Pinned;
             tab.TitleColor = TabGitColor(shown);
             tab.Tag = shown;
+            if (linkItem is not null || linkServices is not null)
+                DecorateLinkedTab(shown, tab);
         }
 
         docTabs.Selected = documents.IndexOf(document);
         RetitleWindow();
+    }
+
+    private void DecorateLinkedTab(HexDocument shown, StripTab tab)
+    {
+        tab.Title = LinkRemoteTitle(shown) ?? tab.Title;
+        tab.Tooltip = LinkLiveTooltip(shown) ?? LinkRemoteTooltip(shown) ?? tab.Tooltip;
+        tab.PresenceColors = LinkLiveTabColors(shown);
+        LinkClaimTab(shown, tab);
+        LinkHoldTabMark(shown, tab);
     }
 
     /// <summary>The title bar and the window's title said for what is open.</summary>
@@ -146,6 +160,8 @@ internal sealed partial class DawnScene
         shown.Add(Said("tabs.copy_path"), () => UIClipboard.Copy(tab.Path ?? tab.Name), "Shift+Alt+C", "link").IsEnabled = () => tab.Path is not null;
         shown.Add(Said("tabs.copy_relative_path"), () => UIClipboard.Copy(tab.Path is { } path ? Relative(path) : tab.Name), icon: "file-symlink-file").IsEnabled = () => tab.Path is not null;
         shown.Add(Said("tabs.reveal_in_explorer"), () => RevealInExplorer(tab), icon: "files").IsEnabled = () => tab.Path is not null;
+        AddLinkClaimMenu(shown, tab.Path);
+        AddLinkHoldMenu(shown, tab.Path);
         shown.AddSeparator();
         shown.Add(Said("file_properties.menu"), () => ShowPropertiesOf(tab.Path is { } path ? [path] : null), "Alt+Enter", "info");
         ContextMenu.ShowAt(chrome, compositor.Pointer.Position, shown);

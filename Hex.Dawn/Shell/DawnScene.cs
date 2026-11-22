@@ -201,6 +201,8 @@ internal sealed partial class DawnScene : Scene
             HexAi.Force();
         else
             HexAi.Decide(settings.NoAi);
+        if (!HexAi.Off)
+            _ = Task.Run(() => Horizon.UI.Scripting.CodeLanguages.ForFile("message.md")?.Read("x\n", 1));
         BuildRenderScale();
         ReadBackdropAhead();
         DeclareMenus();
@@ -209,9 +211,6 @@ internal sealed partial class DawnScene : Scene
         explorer = new HexExplorer(Context);
         git = new HexGit(Context);
 
-        // Whether git is there at all is asked by running it once, a good 25 ms the first tick waited for as the editor
-        // came up. Asked on another thread now, it's known long before then
-        _ = Hex.Core.Git.GitProcess.InstalledNow;
         BuildGit();
         explorer.FoldersChanged += codeEditing.ForgetVocabulary;
         running = new HexRunning(Context);
@@ -297,8 +296,11 @@ internal sealed partial class DawnScene : Scene
         BuildDiffs();
         BuildHistory();
         BuildConflicts();
+        BuildMergeEditor();
         BuildPeek();
         AddLanguageModeCommands();
+        if (!HexAi.Off)
+            AddPredictionCommands();
         commands.Build(menu);
         LoadKeys();
         WireViews();
@@ -391,6 +393,9 @@ internal sealed partial class DawnScene : Scene
 
         // The door for agents, once the workspace's folders are known for the bridge to pick this Hex by
         BuildMcp();
+
+        // And the door for other machines, Hex Link, nothing listening unless it's on
+        BuildLink();
 
         Horizon.Core.Diagnostics.StartupTrace.Mark("editor: extensions started, MCP");
         // Every part is made by now, what each tick does is put in order
@@ -606,9 +611,13 @@ internal sealed partial class DawnScene : Scene
 
         if (tabsDirty) RebuildTabs();
         if (treeDirty && !treeHeld) RebuildTree();
-        if (inspectorDirty) RebuildInspector();
+        if (inspectorDirty && right.Shown)
+        {
+            RebuildInspector();
+            inspectorDirty = false;
+        }
 
-        tabsDirty = inspectorDirty = false;
+        tabsDirty = false;
         treeDirty = treeHeld;
         if (codeShown)
             codeDirty = codeShown = false;
@@ -675,7 +684,8 @@ internal sealed partial class DawnScene : Scene
             panelTicks.Add("agents_panel", UpdateAgentsPanel);
         panelTicks
             .Add("spelling", UpdateSpelling)
-            .Add("mcp", UpdateMcp);
+            .Add("mcp", UpdateMcp)
+            .Add("link", UpdateLink);
         if (!HexAi.Off)
             panelTicks.Add("noon", UpdateNoon).Add("chats_kept", UpdateChatsKept).Add("agent_data", UpdateAgentData);
         panelTicks

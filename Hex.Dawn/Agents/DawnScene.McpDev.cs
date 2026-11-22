@@ -48,7 +48,7 @@ internal sealed partial class DawnScene
         return
         [
             new(new McpTool("hex_dev_build", "Build Hex",
-                "Build Hex from the source this Hex was built from, into the folder it runs from, so hex_dev_restart starts the new build. Debug builds of Hex only. The running Hex's own files are moved aside first and put back if the build fails, so a failed build leaves this Hex and its next start as they were. Says the errors, file:line, when there are any.",
+                "Build Hex from the source this Hex was built from, into the folder it runs from, so hex_dev_restart starts the new build. Debug builds of Hex only. Locked build files, including those held by MCP bridges, proxies and the dev guard, are moved aside first and put back if the build fails, so a failed build leaves this Hex and its next start as they were. Says the errors, file:line, when there are any.",
                 McpSchema.Empty()), null, RunAway: (_, cancel) => DevBuild(cancel)),
             new(new McpTool("hex_dev_test", "Test Hex",
                 "Run Hex's unit tests (Hex.Tests), all of them or those a filter picks, and say how many passed and which failed with why. hex_selftest runs the in-editor self tests in a Hex of its own, the newest build once hex_dev_build has made one.",
@@ -421,21 +421,24 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>
-    /// Every file under a folder that's in use moved aside out of a build's way, a running program's own files can't be
-    /// written over but can be renamed. Says what was moved where, to be put back.
+    /// Every file of the build in a folder that's in use moved aside out of a build's way, a running program's own files
+    /// can't be written over but can be renamed. Hex's state (data, settings and the like) is left alone: other builds
+    /// run from agents' scratch in data, and their files aren't this build's to move. Says what was moved where, to be put back.
     /// </summary>
     internal static List<(string From, string Aside)> MoveLockedAside(string folder)
     {
         var moved = new List<(string, string)>();
-        foreach (string file in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories))
+        // Previous builds can still be mapped by Hex or its helpers, even across multiple builds in the same process.
+        string suffix = "." + Guid.NewGuid().ToString("N") + DEV_ASIDE;
+        foreach (string file in Hex.Core.HexDevBuilds.BuildFiles(folder))
         {
             if (file.EndsWith(DEV_ASIDE, StringComparison.OrdinalIgnoreCase) || !IsLocked(file))
                 continue;
 
-            string aside = file + "." + System.Environment.ProcessId + DEV_ASIDE;
+            string aside = file + suffix;
             try
             {
-                File.Move(file, aside, overwrite: true);
+                File.Move(file, aside);
                 moved.Add((file, aside));
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
@@ -457,12 +460,12 @@ internal sealed partial class DawnScene
         }
     }
 
-    /// <summary>The files an earlier Hex moved aside, gone once nothing has them open.</summary>
+    /// <summary>The files of the build an earlier Hex moved aside, gone once nothing has them open.</summary>
     internal static void CleanAside(string folder)
     {
         try
         {
-            foreach (string file in Directory.EnumerateFiles(folder, "*" + DEV_ASIDE, SearchOption.AllDirectories))
+            foreach (string file in Hex.Core.HexDevBuilds.BuildFiles(folder, "*" + DEV_ASIDE))
             {
                 try
                 {

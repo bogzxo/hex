@@ -72,11 +72,10 @@ internal sealed partial class HexExtensions
             HexHarnessGuard.ForCommand(args.Text(0, string.Empty), [.. context.Workspace.Folders]) is { } instead ? new StringValue(instead) : Values.Null)),
         // Given the chat a run is for, the bridge says which it is, so what the agent does through Hex is known to be its
         // (the agents it starts are that chat's, and how deep it is)
-        ("mcp_server", Natives.Function("mcp_server", args => Natives.Object(
-            ("command", new StringValue(System.Environment.ProcessPath ?? Path.Combine(Hex.Core.HexHost.ProgramFolder, "Hex.exe"))),
-            ("args", Natives.List(["--mcp-connect", .. context.Workspace.Folders.Take(1).SelectMany(folder => new[] { "--folder", folder }),
+        ("mcp_server", Natives.Function("mcp_server", args => McpLaunchCommand(
+            ["--mcp-connect", .. context.Workspace.Folders.Take(1).SelectMany(folder => new[] { "--folder", folder }),
                 .. args.Has(0) && args[0] is ObjectValue chat && chat.Properties.TryGetValue("id", out IRuntimeValue? id) && id is StringValue { Value.Length: > 0 } named
-                    ? new[] { "--agent-chat", named.Value } : []]))))),
+                    ? new[] { "--agent-chat", named.Value } : []]))),
         // A heavy stdio MCP server shared by every agent in the chat's worktree, the { command, args } that starts the
         // proxy to it (Hex --mcp-proxy, McpSharedServers), null when the command isn't on the PATH. See HexExtensions.Shared
         ("shared_server", Natives.Function("shared_server", args => SharedServer(args))),
@@ -109,6 +108,17 @@ internal sealed partial class HexExtensions
         ("claude_servers", Natives.Function("claude_servers", args => Hex.Core.HexJson.ToHidl(ClaudeServers(
             System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile), args.Text(0, context.Workspace.Folders.FirstOrDefault() ?? string.Empty)))))
     ];
+
+    private static ObjectValue McpLaunchCommand(string[] arguments)
+    {
+        string command = System.Environment.ProcessPath ?? Path.Combine(Hex.Core.HexHost.ProgramFolder, "Hex.exe");
+        // When Hex was started with dotnet, its entry assembly must come before the MCP arguments.
+        if (string.Equals(Path.GetFileNameWithoutExtension(command), "dotnet", StringComparison.OrdinalIgnoreCase)
+            && System.Reflection.Assembly.GetEntryAssembly()?.Location is { Length: > 0 } assembly)
+            arguments = [assembly, .. arguments];
+
+        return Natives.Object(("command", new StringValue(command)), ("args", Natives.List(arguments)));
+    }
 
     /// <summary>
     /// The MCP servers Claude Code starts for a folder out of the user's own configuration: ~/.claude.json's mcpServers,
@@ -152,7 +162,7 @@ internal sealed partial class HexExtensions
         {
             try
             {
-                return File.Exists(path) ? System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path)) : null;
+                return File.Exists(path) ? System.Text.Json.Nodes.JsonNode.Parse(ReadExtensionFile(path)) : null;
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
             {

@@ -208,6 +208,9 @@ internal sealed partial class HexSettings
     /// <summary>Whether the line the caret is on says faintly at its end who last changed it and when, git blame.</summary>
     public bool GitBlame = true;
 
+    /// <summary>Whether Hex uses its Git integration and background repository checks.</summary>
+    public bool GitEnabled = true;
+
     /// <summary>Whether the code is drawn small down the right of the editor, a slider over what's in sight.</summary>
     public bool Minimap = true;
 
@@ -237,6 +240,13 @@ internal sealed partial class HexSettings
     /// <summary>Whether Getting started was folded to its one line with Hide.</summary>
     public bool WelcomeChecklistHidden;
 
+    /// <summary>
+    /// The groups and sections of the chat lists the person folded or opened, a linked device's group and its Running and
+    /// Finished sections, as HexChatListFolds keeps them ("key=0;key=1"). Kept for the machine, not the workspace, a
+    /// device being the same whichever workspace is open.
+    /// </summary>
+    public string AgentsListFolds = string.Empty;
+
     /// <summary>The colours C# is shown in, resharper, visual_studio, or skin for whatever the skin has.</summary>
     public string CSharpColors = "resharper";
     /// <summary>
@@ -245,6 +255,33 @@ internal sealed partial class HexSettings
     /// user's own settings switch it, never a folder's (see WorkspaceKeys), so a repository somebody cloned can't change it.
     /// </summary>
     public bool McpServer = true;
+
+    /// <summary>
+    /// Whether Hex Link is on: this Hex listening for the devices it has paired with, dialling them, and found on the
+    /// LAN when <see cref="LinkDiscoverable"/> says so (docs/hex-link-plan.md). Off as it comes, nothing listens until the
+    /// person turns it on, and like <see cref="McpServer"/> it's the user's own settings alone that switch it, never a
+    /// folder's, so a repository somebody cloned can't open the door.
+    /// </summary>
+    public bool Link;
+
+    /// <summary>The TCP port Link listens on, 47833 unless somebody changes it.</summary>
+    public int LinkPort = DefaultLinkPort;
+    public const int DefaultLinkPort = 47833;
+
+    /// <summary>What this device is called to the others, empty for the machine's own name.</summary>
+    public string LinkName = string.Empty;
+
+    /// <summary>Whether, while Link is on, this Hex says it's here on the LAN (mDNS) so others can find it to pair.</summary>
+    public bool LinkDiscoverable = true;
+
+    /// <summary>Allow public addresses for Link connections and pairing.</summary>
+    public bool LinkAllowPublic;
+
+    /// <summary>Whether the user approved requesting a router mapping for the public listener.</summary>
+    public bool LinkMapPublicPort;
+
+    /// <summary>Absolute local workspace roots that opt out of Link's default operating system file exclusions.</summary>
+    public string[] LinkSystemFileFolders = [];
 
     /// <summary>
     /// Whether Hex is without its agents, No AI. Agentic, the Agents panel, the chats and the extensions that are agent

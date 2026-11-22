@@ -182,7 +182,7 @@ internal sealed partial class DawnScene
         };
 
         item.Tag = new SideTag(
-            Menu: _ => explorer.ShowExplorerMenu(entry),
+            Menu: _ => LinkExplorerFileMenu(entry, includeClaims: false),
             Toggled: toggled =>
             {
                 toggled.Icon = toggled.Expanded ? "folder-opened" : "folder";
@@ -317,7 +317,7 @@ internal sealed partial class DawnScene
         {
             IconColor = explorer.FileIconColor(file),
             Tooltip = file,
-            Tag = new SideTag(Pressed: () => explorer.ExplorerPressed(entry), Menu: _ => explorer.ShowExplorerMenu(entry))
+            Tag = new SideTag(Pressed: () => explorer.ExplorerPressed(entry), Menu: _ => LinkExplorerFileMenu(entry))
         };
 
         row.Pip = openInTabs.Contains(file) ? openInTabMark : null;

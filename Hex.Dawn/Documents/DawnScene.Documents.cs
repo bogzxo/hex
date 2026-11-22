@@ -302,6 +302,11 @@ internal sealed partial class DawnScene
 
     private void Save()
     {
+        if (document.Merge is not null)
+        {
+            Say("Use Complete merge to write the result.");
+            return;
+        }
         // A picture or a diff is looked at, there's nothing of Hex's in it to write
         if (document.Picture is not null || document.DiffOf is not null || document.Editor.ReadOnly)
             return;
@@ -435,6 +440,7 @@ internal sealed partial class DawnScene
     private void SaveTo(string path)
     {
         if (document.Editor.ReadOnly) return;
+        if (LinkLiveTrySave(document, path)) return;
         // Saving the editor over itself with something broken would be the end of it, that is only ever saved as a copy
         if (SameDirectory(path, EDITOR_LAYOUT))
             path = Path.Combine(Path.GetFullPath(options.Workspace), document.Name + "_edited.hor");
@@ -465,8 +471,8 @@ internal sealed partial class DawnScene
             string onDisk = Hex.Core.DocumentFile.WithLineEndings(written, document.DiskText, document.CrLf, document.SavedCrLf);
             if (Untouched(document, path, written))
                 onDisk = document.DiskText!;
-            else
-                Hex.Core.DocumentFile.Write(path, onDisk, document.DiskEncoding);
+            else if (!Hex.Core.DocumentFile.Write(path, onDisk, document.DiskEncoding, () => SafeToSave(path)))
+                return;
             UILayout.Forget(path);
 
             document.Path = path;
@@ -498,6 +504,11 @@ internal sealed partial class DawnScene
 
     private void Close()
     {
+        if (document.Merge is not null)
+        {
+            CancelMergeEditor(document);
+            return;
+        }
         // A scratchpad is saved or thrown out without asking
         if (ClosedScratchpad())
             return;

@@ -1,3 +1,5 @@
+using System.Text.Json.Nodes;
+
 using Hex.Shell;
 
 using Horizon.UI.Components;
@@ -57,6 +59,49 @@ internal sealed partial class DawnScene
         test.Settle(0.4f);
         test.Check("noon fleet: and none once it's done", () => noonFleetSummary.Text.Contains("0 running", StringComparison.Ordinal));
 
+        const string newWork = "Verify merge results";
+        Task<McpToolResult>? selfRename = null, otherRename = null, unboundRename = null, parentRename = null, resetName = null;
+        bool acceptsNameOnly = false;
+        test.Run(() =>
+        {
+            var args = new JsonObject { ["name"] = newWork };
+            McpTool rename = McpTools.ChatTools.Single(tool => tool.Name == "hex_agent_rename");
+            acceptsNameOnly = McpSchema.Check(rename.InputSchema, args) is null;
+            selfRename = McpTools.CallAs(rename.Name, args, CancellationToken.None, scout!.Id);
+        });
+        test.WaitFor(() => selfRename?.IsCompleted == true, 5);
+        bool ShowsNewWork() => Descendants(noonFleetRows).OfType<AgentCardButton>()
+            .Any(button => button.Chat == scout && button.Title?.Text == newWork);
+        test.WaitFor(ShowsNewWork, 5);
+        test.Check("noon fleet: an agent renames its own chat by name alone and the fleet updates", () =>
+            acceptsNameOnly && selfRename is { IsCompletedSuccessfully: true, Result.IsError: false }
+            && scout!.Shown == newWork && agentStatuses[scout.Id].Shown == newWork && ShowsNewWork());
+
+        test.Run(() =>
+        {
+            otherRename = McpTools.CallAs("hex_agent_rename", new JsonObject { ["id"] = scout!.Id, ["name"] = "Other chat" },
+                CancellationToken.None, builder!.Id);
+            unboundRename = McpTools.Call("hex_agent_rename", new JsonObject { [HexMcpCaller.CALLER] = scout.Id, ["name"] = "Unbound" },
+                CancellationToken.None);
+        });
+        test.WaitFor(() => otherRename?.IsCompleted == true && unboundRename?.IsCompleted == true, 5);
+        test.Check("noon fleet: a sibling cannot rename the chat and an unbound client needs the target id", () =>
+            otherRename is { IsCompletedSuccessfully: true, Result.IsError: true }
+            && unboundRename is { IsCompletedSuccessfully: true, Result.IsError: true }
+            && unboundRename.Result.AllText().Contains("Specify a chat id", StringComparison.Ordinal) && scout!.Shown == newWork);
+
+        test.Run(() => parentRename = McpTools.CallAs("hex_agent_rename",
+            new JsonObject { ["id"] = scout!.Id, ["name"] = "Review verification" }, CancellationToken.None, lead!.Id));
+        test.WaitFor(() => parentRename?.IsCompleted == true, 5);
+        test.Check("noon fleet: a starter still renames its child by explicit id", () =>
+            parentRename is { IsCompletedSuccessfully: true, Result.IsError: false } && scout!.Shown == "Review verification");
+
+        test.Run(() => resetName = McpTools.CallAs("hex_agent_rename",
+            new JsonObject { ["name"] = string.Empty }, CancellationToken.None, scout!.Id));
+        test.WaitFor(() => resetName?.IsCompleted == true, 5);
+        test.Check("noon fleet: an agent restores the automatic title with an empty name", () =>
+            resetName is { IsCompletedSuccessfully: true, Result.IsError: false } && scout!.Name is null && scout.Shown == "look round");
+
         // The one that started them clears one and deletes the other, which nobody else may
         Task<McpToolResult>? stranger = null, cleared = null, deleted = null;
         test.Run(() =>
@@ -85,9 +130,65 @@ internal sealed partial class DawnScene
         test.Run(() => ShowFace(HexFace.Dawn));
         test.Settle(0.2f);
 
+        TestNoonFleetDetach(test);
         TestNoonFleetFinished(test);
         if (OperatingSystem.IsWindows())
             TestNoonFleetSpawned(test);
+    }
+
+    private void TestNoonFleetDetach(HexPointerScript test)
+    {
+        HexAgentChat? lead = null, branch = null, child = null, leaf = null;
+        string detach = Said("agents_panel.chat_detach");
+        AgentCardButton? BranchCard() => Descendants(noonFleetRows).OfType<AgentCardButton>().FirstOrDefault(row => row.Chat == branch);
+        ContextMenu? OpenMenu() => chrome.Root.Children.OfType<ContextMenu>().FirstOrDefault(menu => menu.Showing is not null);
+
+        test.Run(() =>
+        {
+            lead = new HexAgentChat(++agentChatsMade, "noon_agent") { Name = "Former parent" };
+            branch = new HexAgentChat(++agentChatsMade, "noon_agent") { Parent = lead.Id, Depth = 1, Session = "detach-session" };
+            child = new HexAgentChat(++agentChatsMade, "noon_agent") { Parent = branch.Id, Depth = 2 };
+            leaf = new HexAgentChat(++agentChatsMade, "noon_agent") { Parent = child.Id, Depth = 3 };
+            branch.Ask("Detach this work");
+            child.Ask("Child work");
+            foreach (HexAgentChat chat in new[] { lead, branch, child, leaf })
+                agentChats.Add(chat);
+            ShowFace(HexFace.Noon);
+            OpenAgentChat(branch);
+            noonWait = 0;
+        });
+        test.WaitFor(() => BranchCard() is { IsShownInHierarchy: true }, 5);
+        test.Run(() =>
+        {
+            if (BranchCard() is { } card)
+                noonFleetScroll.ScrollIntoView(card);
+        });
+        test.Settle(0.3f);
+        test.RightClick(() => BranchCard() is { Module: { } module } card ? module.ToWorld(card.Bounds.Center) : default);
+        test.WaitFor(() => OpenMenu()?.Showing?.Items.Any(item => item.Label == detach) == true, 5);
+        test.Check("noon fleet: the child card menu offers detach and the top-level chat does not", () =>
+            OpenMenu()?.Showing?.Items.Any(item => item.Label == detach) == true
+            && ChatMenu(lead!).Items.All(item => item.Label != detach));
+        test.Click(() => OpenMenu() is { } menu ? chrome.ToWorld(menu.ItemBounds(detach).Center) : default);
+        test.WaitFor(() => branch is { Parent: null }, 5);
+        test.Check("noon fleet: detaching an active chat keeps its selection, session and descendants", () =>
+        {
+            List<(HexAgentChat Chat, int Step)> order = ChatsInOrder();
+            return agentChat == branch && branch is { Parent: null, Depth: 0, Running: true, Session: "detach-session" }
+                && child!.Parent == branch.Id && child.Depth == 1 && leaf!.Parent == child.Id && leaf.Depth == 2
+                && order.Contains((branch, 0)) && order.Contains((child, 1)) && order.Contains((leaf, 2))
+                && ChatMenu(branch).Items.All(item => item.Label != detach);
+        });
+
+        test.Run(() => CloseAgentChat(lead!));
+        test.Check("noon fleet: closing the former parent leaves the detached branch running", () =>
+            ChatById(lead!.Id) is null && ChatById(branch!.Id) == branch && branch.Running
+            && ChatById(child!.Id) == child && child.Running && ChatById(leaf!.Id) == leaf);
+        test.Run(() =>
+        {
+            CloseAgentChat(branch!);
+            ShowFace(HexFace.Dawn);
+        });
     }
 
     // How many rows the fleet has for its cards: one each, and the Finished group's head under them while it's folded

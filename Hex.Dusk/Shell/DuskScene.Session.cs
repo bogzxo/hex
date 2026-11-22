@@ -12,7 +12,7 @@ internal sealed partial class DuskScene
     private float sessionDue = SESSION_EVERY;
     private TerminalSessions.Snapshot? savedSessionState;
 
-    private string SessionFile => TerminalFiles.Sessions(options.SelfTest ? null : AppContext.BaseDirectory);
+    private string SessionFile => TerminalFiles.Sessions(options.SelfTest ? null : Hex.Core.HexHost.ProgramFolder);
 
     /// <summary>The tabs of last time opened, false when there were none to open.</summary>
     private bool RestoreSession()

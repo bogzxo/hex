@@ -249,6 +249,7 @@ internal sealed partial class DawnScene
     /// <summary>A change to the file from outside reloaded once it has settled. Every tick, nothing to do most of them.</summary>
     private void UpdateSettingsFile()
     {
+        ollamaModels?.Update(SettingsPage);
         UpdateWorkspaceSettings();
         UpdateWorkspaceSettingsFile();
         if (settingsWatch.TakeSettled(SETTINGS_SETTLE))
@@ -365,8 +366,13 @@ internal sealed partial class DawnScene
             ApplyKeyLayer(force: true);
         if (now.McpServer != was.McpServer)
             ApplyMcp();
+        if (now.Link != was.Link || now.LinkPort != was.LinkPort || now.LinkName != was.LinkName
+            || now.LinkDiscoverable != was.LinkDiscoverable || now.LinkAllowPublic != was.LinkAllowPublic || now.LinkMapPublicPort != was.LinkMapPublicPort)
+            ApplyLink(restart: now.LinkPort != was.LinkPort);
         if (now.NoAi != was.NoAi)
             NoAiChanged();
+        if (now.GitEnabled != was.GitEnabled)
+            git.ApplyEnabled();
         if (now.GitSmartCommit != was.GitSmartCommit)
             ((IPanels)this).RefreshSide(HexSide.SourceControl);
 

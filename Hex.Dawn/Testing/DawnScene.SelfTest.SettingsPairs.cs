@@ -147,11 +147,11 @@ internal sealed partial class DawnScene
             page.Reveal(SEARCH_EXCLUDE);
         });
         test.Settle(0.4f);
-        test.Check("settings list: Editor · Search has files_exclude and search_exclude as lists with Add Pattern, and Use .gitignore", () =>
-            page.Settings.FirstOrDefault(setting => setting.Key == SEARCH_EXCLUDE) is { Kind: UIFormKind.List, Group: EditorSettingsCatalog.SEARCH, ValuePlaceholder: "Add Pattern", KeyPlaceholder: "**/fixtures" }
-            && page.Settings.Any(setting => setting is { Key: "files_exclude", Kind: UIFormKind.List, Group: EditorSettingsCatalog.SEARCH })
+        test.Check("settings list: Editor · Files has files_exclude and search_exclude as lists with Add Pattern, and Use .gitignore", () =>
+            page.Settings.FirstOrDefault(setting => setting.Key == SEARCH_EXCLUDE) is { Kind: UIFormKind.List, Group: EditorSettingsCatalog.FILES, ValuePlaceholder: "Add Pattern", KeyPlaceholder: "**/fixtures" }
+            && page.Settings.Any(setting => setting is { Key: "files_exclude", Kind: UIFormKind.List, Group: EditorSettingsCatalog.FILES })
             && page.Settings.Any(setting => setting is { Key: "search_use_ignore_files", Kind: UIFormKind.Flag })
-            && EditorSettingsCatalog.Sections.SkipWhile(section => section != EditorSettingsCatalog.FILES).Skip(1).FirstOrDefault() == EditorSettingsCatalog.SEARCH);
+            && page.Settings.First(setting => setting.Key == "search_use_ignore_files").Group == EditorSettingsCatalog.FILES);
         test.Check("settings list: VS Code's search.exclude as it comes, a pencil and a bin a line, Add Pattern under them", () =>
             Shown().SequenceEqual(HexSettings.UsualSearchExclude) && page.ListBounds(SEARCH_EXCLUDE) is { Add.IsEmpty: false } parts
             && parts.Edits.Length == Shown().Count && parts.Removes.Length == Shown().Count && !page.IsModified!(SEARCH_EXCLUDE));

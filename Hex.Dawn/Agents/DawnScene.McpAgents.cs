@@ -29,6 +29,9 @@ internal sealed partial class DawnScene
         new(new McpTool("hex_agent_spawn", "Start a background agent",
             "Start another agent in the background on a task of its own, scouting, research, a review, a part of the work, of any agent system and model listed by hex_agent_list. It's a chat of the Agents panel under yours, runs on its own while you go on, and has Hex's tools too. Give it everything it needs to know, it doesn't see your conversation. Its last message is what you get back. Returns its id at once, hex_agent_wait waits for it.",
             McpSchema.Object([
+                ("worktree", McpSchema.OneOf("Live workspace or a private worktree.", "live", "private")),
+                ("folder", McpSchema.String("Shared folder for a private worktree.")),
+                ("repositories", new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" }, ["description"] = "Additional shared repository paths to open in a private worktree." }),
                 ("prompt", McpSchema.String("What it's to do, complete in itself.")),
                 ("name", McpSchema.String("A short name for it in the panel, a few words.")),
                 ("agent", McpSchema.String("The agent system's id from hex_agent_list, your own by default, the panel's when you aren't one.")),
@@ -48,11 +51,11 @@ internal sealed partial class DawnScene
             AgentSpawn),
         AgentApproveTool(),
         new(new McpTool("hex_agent_wait", "Wait for agents",
-            "Wait until agents finish their turn and get what they said. By default every agent you started that's running (every running chat when you aren't a chat of the panel), until all of them are done. any returns when the first is. A message sent to you by one of them returns at once with it, so you can steer the others on what it found (messages false waits on regardless). A timeout says what's still running.",
+            "Wait until agents finish their turn and get what they said. By default every agent you started that's running (every running chat when you aren't a chat of the panel), until all of them are done. any returns when the first is. Messages return at once so you can steer the agents. Messages from the person watching and questions or blockers addressed to you always end the wait. A timeout says what's still running.",
             McpSchema.Object([
                 ("ids", new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "integer" }, ["description"] = "The chats to wait for, those you started that are running by default." }),
                 ("mode", McpSchema.OneOf("all (the default) or any.", "all", "any")),
-                ("messages", McpSchema.Flag("Return as soon as a message comes for you, true by default.")),
+                ("messages", McpSchema.Flag("Wake on ordinary agent messages, true by default. The person, questions and blockers always wake the wait.")),
                 ("timeout", McpSchema.Number($"Seconds, {AGENTS_WAIT} by default, {AGENTS_WAIT_MOST} at the most."))])),
             null, RunAway: AgentWait),
         new(new McpTool("hex_agent_read", "Read an agent's chat",
@@ -65,18 +68,24 @@ internal sealed partial class DawnScene
             "Steer a chat's agent, an instruction. A finished one starts another turn with it, going on from where it was. A running one that can be told more takes it in as it works, one that can't finds it in its inbox and starts its next turn with it if it hasn't read it by then. hex_agent_message sends a finding or an answer without it being an instruction.",
             McpSchema.Object([("id", McpSchema.Integer("The chat.")), ("text", McpSchema.String("What to say."))], "id", "text")), AgentSend),
         new(new McpTool("hex_agent_stop", "Stop an agent",
-            "Stop a chat's agent and everything it started. What it said so far stays in its chat.",
+            "Stop a chat's agent and everything it started. What it said so far stays in its chat. Over Hex Link, a chat this device started there takes Steer, any other chat takes Manage agents.",
             McpSchema.Object([("id", McpSchema.Integer("The chat."))], "id")), AgentStopTool),
         new(new McpTool("hex_agent_restart", "Restart a stuck agent",
-            "Kill a chat's agent with everything its process started (its commands, builds, test runs; not the agents it started, which carry on) and start it again on the same session, told to carry on from where it was, with text in front when given and its unread messages after. For an agent that's stuck, hung on a command, or whose turn ended while its process goes on. Only for agents you started, or from a client that isn't an agent of the panel.",
+            "Kill a chat's agent with everything its process started (its commands, builds, test runs; not the agents it started, which carry on) and start it again on the same session, told to carry on from where it was, with text in front when given and its unread messages after. For an agent that's stuck, hung on a command, or whose turn ended while its process goes on. Only for agents you started, or from a client that isn't an agent of the panel. Over Hex Link, a chat this device started there takes Steer, any other chat takes Manage agents.",
             McpSchema.Object([
                 ("id", McpSchema.Integer("The chat.")),
                 ("text", McpSchema.String("What to tell it as it starts again, 'carry on from where you were' by default."))], "id")), AgentRestart),
+        new(new McpTool("hex_agent_rename", "Rename an agent chat",
+            "Rename your own chat in the Agents panel when your task changes. Omit id to rename yourself, or provide the id of a chat you started. Clients outside an agent chat must provide id. An empty name restores the automatic title. Over Hex Link, a chat this device started takes Steer, and any other chat takes Manage agents.",
+            McpSchema.Object([
+                ("id", McpSchema.Integer("The chat to rename. Defaults to your own chat on a Hex agent connection.")),
+                ("name", McpSchema.String("The new name, at most 40 characters, empty for the automatic name."))], "name")), AgentRename),
         new(new McpTool("hex_agent_close", "Close or clear an agent you started",
-            "Delete the chat of an agent you started, its agent stopped and the chats it started deleted with it, when its work is done and its chat would only be in the way. clear true keeps the chat and empties it instead, its rows, mail and session gone, so the next hex_agent_send starts it afresh on a new task without what it knew. Only for agents you started.",
+            "Delete the chat of an agent you started, its agent stopped and the chats it started deleted with it, when its work is done and its chat would only be in the way. clear true keeps the chat and empties it instead, its rows, mail and session gone, so the next hex_agent_send starts it afresh on a new task without what it knew. Only for agents you started. Over Hex Link, a chat this device started there takes Steer, any other chat takes Manage agents, and deleting takes confirm true.",
             McpSchema.Object([
                 ("id", McpSchema.Integer("The chat.")),
-                ("clear", McpSchema.Flag("Keep the chat, emptied, rather than deleting it."))], "id")), AgentClose)
+                ("clear", McpSchema.Flag("Keep the chat, emptied, rather than deleting it.")),
+                ("confirm", McpSchema.Flag("Over Hex Link, yes to delete the chat, which can't be undone."))], "id")), AgentClose)
     ];
 
     /// <summary>The chat a call came from, when it's an agent of the panel's.</summary>
@@ -102,6 +111,9 @@ internal sealed partial class DawnScene
             agentsChanged?.Invoke();
             // Whichever face is up, a turn that began without a checkpoint gets one
             CheckpointNewTurns();
+            // And the devices linked to this one that watch the fleet, or a chat of it, told
+            if (LinkOn)
+                LinkHubMoved();
         }
     }
 
@@ -132,7 +144,21 @@ internal sealed partial class DawnScene
         + (status.Seconds > 0 ? $" {status.Seconds.ToString("0.#", CultureInfo.InvariantCulture)}s" : string.Empty)
         + (status.Cost > 0 ? $" ${status.Cost.ToString("0.000", CultureInfo.InvariantCulture)}" : string.Empty)
         + (status.Parent is { } parent ? $" (started by #{parent})" : string.Empty)
+        + (status.Approvals.Count > 0 ? $" · {string.Join(" · ", status.Approvals.Select(approval => approval.Summary))}" : string.Empty)
         + (status.Unread.Length is > 0 and var unread ? $", {unread} unread message{(unread == 1 ? string.Empty : "s")}" : string.Empty);
+
+    private static readonly (string Id, string Name, string Program)[] CatalogAgents =
+    [
+        ("claude_code", "Claude Code", "claude"),
+        ("codex", "Codex", "codex"),
+        ("antigravity", "Antigravity", "agy")
+    ];
+
+    private bool NeedsAgentExtension(string id) =>
+        !HexAi.Off && !extensions.All.Any(extension => extension.Id == id) && !extensions.AgentRuns.ContainsKey(id);
+
+    private static string InstallAgentExtension(string id, string name, string program) =>
+        $"The '{program}' CLI is installed. On this machine, open Hex Settings → {HexExtensions.AVAILABLE} and install {name} ({id}).";
 
     private IEnumerable<McpToolResult?> AgentsList(JsonObject args)
     {
@@ -142,9 +168,27 @@ internal sealed partial class DawnScene
             said.Append("You are chat #").Append(caller).Append(ChatById(caller)?.Parent is { } parent ? $", started by #{parent}" : string.Empty).Append(".\n\n");
 
         said.Append("Agent systems:\n");
-        foreach (HexAgentProfile profile in RunnableAgents())
+        var systems = RunnableAgents().Select(profile =>
+            (Profile: profile, Program: HexExtensions.Text(extensions.AgentRuns[profile.Id].Run, "program") ?? string.Empty)).ToArray();
+        var installable = CatalogAgents.Where(each => NeedsAgentExtension(each.Id)).ToArray();
+        long checkedAt = System.Environment.TickCount64;
+        Task<string?[]> checking = Task.Run(() =>
         {
-            said.Append("- ").Append(profile.Id).Append(" (").Append(profile.Name).Append(StateOf(profile) == AgentStates.Missing ? ", not installed" : string.Empty).Append(')');
+            HexAgentProgramPaths live = HexAgentProgramPaths.Current();
+            var systemPath = new Lazy<string?>(live.LivePath);
+            var paths = live with { LivePath = () => systemPath.Value };
+            return systems.Select(system => system.Program).Concat(installable.Select(system => system.Program))
+                .Select(program => HexAgentProcess.Find(program, fallback: paths)).ToArray();
+        });
+        while (!checking.IsCompleted)
+            yield return null;
+        string?[] found = checking.GetAwaiter().GetResult();
+        for (int i = 0; i < systems.Length; i++)
+        {
+            var (profile, program) = systems[i];
+            bool missing = found[i] is null;
+            RememberAgentProgram(profile.Id, program, missing, checkedAt);
+            said.Append("- ").Append(profile.Id).Append(" (").Append(profile.Name).Append(missing ? ", not installed" : string.Empty).Append(')');
             foreach (AgentOption option in OptionsOf(profile.Id))
             {
                 string[] values = [.. option.Choices.Select(choice => choice.Value).Where(value => value.Length > 0)];
@@ -155,12 +199,19 @@ internal sealed partial class DawnScene
             said.Append('\n');
         }
 
+        for (int i = 0; i < installable.Length; i++)
+        {
+            var (id, name, program) = installable[i];
+            if (found[systems.Length + i] is not null && NeedsAgentExtension(id))
+                said.Append('\n').Append(InstallAgentExtension(id, name, program)).Append('\n');
+        }
         said.Append("\nChats:\n");
         if (agentChats.Count == 0)
             said.Append("none\n");
         // Each with the step it's doing and the files its open steps name, what chats in the same checkout coordinate on
         foreach (HexHubRow status in agentStatuses.Values.OrderBy(status => status.Id))
             said.Append(StatusLine(status)).Append(PlanLine(status.Chat)).Append('\n');
+        said.Append(LinkAgentClaimFiles(args));
         yield return McpToolResult.Text(said.ToString().TrimEnd());
     }
 
@@ -175,7 +226,7 @@ internal sealed partial class DawnScene
             yield break;
         }
 
-        int going = agentChats.Count(chat => chat.Running && chat.Parent is not null);
+        int going = agentChats.Count(chat => chat.Running && (chat.Parent is not null || chat.LinkStarter is not null));
         if (going >= AGENTS_AT_ONCE)
         {
             yield return McpToolResult.Error($"{going} agents started by agents are running already, the most there can be. hex_agent_wait for some first.");
@@ -186,14 +237,36 @@ internal sealed partial class DawnScene
         HexAgentProfile? profile = HexAgentProfiles.All.FirstOrDefault(each => each.Id == agent);
         if (profile is null || !extensions.AgentRuns.TryGetValue(agent, out var run))
         {
+            var catalog = CatalogAgents.FirstOrDefault(each => each.Id == agent);
+            if (catalog.Program is { } cli && NeedsAgentExtension(agent))
+            {
+                Task<string?> checking = Task.Run(() => HexAgentProcess.Find(cli));
+                while (!checking.IsCompleted)
+                    yield return null;
+                if (checking.GetAwaiter().GetResult() is not null)
+                {
+                    yield return McpToolResult.Error(InstallAgentExtension(agent, catalog.Name, cli));
+                    yield break;
+                }
+            }
             yield return McpToolResult.Error($"There's no agent system '{agent}' that can be started, hex_agent_list says which there are.");
             yield break;
         }
 
         if (StateOf(profile) == AgentStates.Missing)
         {
-            yield return McpToolResult.Error($"{profile.Name} isn't installed on this machine.");
-            yield break;
+            string program = HexExtensions.Text(run.Run, "program") ?? string.Empty;
+            long checkedAt = System.Environment.TickCount64;
+            Task<string?> checking = Task.Run(() => HexAgentProcess.Find(program));
+            while (!checking.IsCompleted)
+                yield return null;
+            bool missing = checking.GetAwaiter().GetResult() is null;
+            RememberAgentProgram(profile.Id, program, missing, checkedAt);
+            if (missing)
+            {
+                yield return McpToolResult.Error($"{profile.Name} isn't installed on this machine.");
+                yield break;
+            }
         }
 
         string prompt = args.String("prompt") ?? string.Empty;
@@ -203,8 +276,23 @@ internal sealed partial class DawnScene
             yield break;
         }
 
+        HexLinkAgentCall? remoteCall = HexLinkAllowed.AgentCall(args);
+        if (remoteCall is not null)
+        {
+            HexLinkPreApproval policy = linkTrust?.Find(remoteCall.Device.Id)?.RemotePreApproval ?? HexLinkPreApproval.Nothing;
+            if (HexLinkSpawnPolicy.Apply(args, agent, policy) is { } reason)
+            {
+                yield return McpToolResult.Error(reason);
+                yield break;
+            }
+        }
+
         string? name = args.String("name") is { Length: > 0 } named ? (named.Length > 40 ? named[..39] + "…" : named) : null;
         var chat = new HexAgentChat(++agentChatsMade, agent) { Parent = parent?.Id, Depth = depth, Name = name };
+        if (remoteCall is not null)
+            chat.LinkDevice = remoteCall.Device.Id;
+        if (remoteCall is { Chat: { } starter, Receipt: { } receipt } remote)
+            chat.LinkStarter = new HexLinkAgentStarter(remote.Device.Id, starter, receipt);
         if (args.String("model") is { Length: > 0 } model)
             chat.Options["model"] = model;
         if (args["options"] is JsonObject options)
@@ -224,6 +312,12 @@ internal sealed partial class DawnScene
             yield break;
         }
 
+        string? invalid = LinkPrivateAgentRequest(args, out var prepare);
+        if (invalid is not null)
+        {
+            yield return McpToolResult.Error(invalid);
+            yield break;
+        }
         agentChats.Add(chat);
 
         // It's told what it is, the one that started it reads its last message
@@ -232,14 +326,19 @@ internal sealed partial class DawnScene
             + "You can talk to it as you both work. hex_agent_message tells it what you find as soon as it matters, asks it what you need or says you're blocked, "
             + "and its instructions, answers and what the other agents it started have found reach you as you work or in hex_agent_inbox, look between steps. hex_agent_list shows who else is working with you.]\n\n"
             + prompt;
-        StartAgent(chat, run.Extension, run.Run, told, prompt);
+        if (prepare is not null)
+            told = "[This agent runs in a private worktree. Hex file tools open a missing private repository as needed. Before using shell tools in an unopened repository, call hex_link_publish with action materialize and its relative path.]\n\n" + told;
+        StartAgent(chat, run.Extension, run.Run, told, prompt, prepare: prepare);
+        if (remoteCall is not null)
+            PublishAgentStatuses();
 
         // A model the agent system doesn't list goes as it was given, a whole name it may know, said so in case it's a typo
         string unlisted = chat.Options.TryGetValue("model", out string? picked) && OptionsOf(agent).FirstOrDefault(option => option.Key == "model") is { } models
             && !models.Choices.Any(choice => string.Equals(choice.Value, picked, StringComparison.OrdinalIgnoreCase))
             ? $" {picked} isn't one {profile.Name} lists, it's passed on as it is."
             : string.Empty;
-        yield return McpToolResult.Text($"Started #{chat.Id}{(name is null ? string.Empty : $" \"{name}\"")} with {profile.Name}{(picked is not null ? " " + picked : string.Empty)}.{unlisted} hex_agent_wait waits for it.");
+        string preparing = prepare is null ? "" : " Preparing its private worktree; the agent runs when it is ready.";
+        yield return McpToolResult.Text($"Started #{chat.Id}{(name is null ? string.Empty : $" \"{name}\"")} with {profile.Name}{(picked is not null ? " " + picked : string.Empty)}.{unlisted}{preparing} hex_agent_wait waits for it.");
     }
 
     private async Task<McpToolResult> AgentWait(JsonObject args, CancellationToken cancel)
@@ -268,7 +367,9 @@ internal sealed partial class DawnScene
         {
             // Those it started, the running ones, or all of them when they're all done already. A client that isn't a chat
             // of the panel didn't start any of its own as far as Hex knows, so it waits for every chat
-            HexHubRow[] mine = [.. now.Values.Where(status => caller is null || status.Parent == caller)];
+            HexLinkAgentCall? remote = HexLinkAllowed.AgentCall(args);
+            HexHubRow[] mine = [.. now.Values.Where(status => caller is not null ? status.Parent == caller
+                : remote is { Chat: not null } ? status.LinkStarter?.Matches(remote) == true : true)];
             ids = [.. (mine.Any(status => status.State.StartsWith("running", StringComparison.Ordinal)) ? mine.Where(status => status.State.StartsWith("running", StringComparison.Ordinal)) : mine).Select(status => status.Id)];
             if (ids.Length == 0)
                 return McpToolResult.Error(caller is null ? "There are no chats to wait for, hex_agent_spawn starts one." : "You haven't started any agents to wait for, hex_agent_spawn starts one.");
@@ -282,29 +383,37 @@ internal sealed partial class DawnScene
         {
             while (true)
             {
-                now = agentStatuses;
+                HexHubSnapshot snapshot = hub.Snapshot;
+                now = snapshot.Rows;
                 HexHubRow[] those = [.. ids.Select(id => now.GetValueOrDefault(id)).OfType<HexHubRow>()];
                 int done = those.Count(status => !status.State.StartsWith("running", StringComparison.Ordinal));
                 bool over = any ? done > 0 : done == those.Length;
-                bool late = System.Environment.TickCount64 >= deadline;
-                HexAgentMail[] mail = caller is { } me && wakes && now.GetValueOrDefault(me) is { } mine ? mine.Unread : [];
-                if (over || late || mail.Length > 0)
+                bool needsApproval = those.Any(status => status.Approvals.Count > 0);
+                long remaining = deadline - System.Environment.TickCount64;
+                bool late = remaining <= 0;
+                HexHubRow? receiver = caller is { } me ? now.GetValueOrDefault(me) : null;
+                HexAgentMail[] mail = receiver?.UnreadForWait(wakes, over || late) ?? [];
+                if (over || needsApproval || late || mail.Length > 0)
                 {
                     // What came for it is read with the report, the waiting one steering the others on it
-                    string report = WaitReport(those, late && !over && mail.Length == 0);
+                    string report = WaitReport(those, late && !over && !needsApproval);
                     if (mail.Length == 0)
                         return McpToolResult.Text(report);
 
-                    now[caller!.Value].Chat.MailRead(mail[^1].Seq);
+                    receiver!.Chat.MailRead(mail.Max(message => message.Seq));
                     return McpToolResult.Text("Messages for you:\n\n" + string.Join("\n\n", mail.Select(MailText))
-                        + (over ? string.Empty : "\n\nThe rest are still working, hex_agent_wait again to go on waiting.") + "\n\n" + report);
+                        + (over || late ? string.Empty : "\n\nThe rest are still working, hex_agent_wait again to go on waiting.") + "\n\n" + report);
                 }
 
                 try
                 {
-                    await Task.Delay(250, cancel);
+                    await hub.ChangedAfter(snapshot).WaitAsync(TimeSpan.FromMilliseconds(remaining), cancel);
                 }
-                catch (TaskCanceledException)
+                catch (TimeoutException)
+                {
+                    // Recheck the published rows and return any mail with the timeout.
+                }
+                catch (OperationCanceledException)
                 {
                     return McpToolResult.Error("hex_agent_wait was cancelled.");
                 }
@@ -326,7 +435,13 @@ internal sealed partial class DawnScene
         foreach (HexHubRow status in those.OrderBy(status => status.State.StartsWith("running", StringComparison.Ordinal)))
         {
             said.Append(StatusLine(status)).Append('\n');
-            if (!status.State.StartsWith("running", StringComparison.Ordinal))
+            if (status.Approvals.Count > 0)
+            {
+                foreach (HexAgentApprovalStatus approval in status.Approvals)
+                    if (approval.Detail.Length > 0)
+                        said.Append(approval.Detail).Append('\n');
+            }
+            else if (!status.State.StartsWith("running", StringComparison.Ordinal))
                 said.Append(status.Reply.Length > 0 ? status.Reply : "(it said nothing)").Append("\n\n");
         }
 
@@ -343,9 +458,16 @@ internal sealed partial class DawnScene
         }
 
         PublishAgentStatuses();
-        string head = StatusLine(agentStatuses[chat.Id]);
+        HexHubRow status = agentStatuses[chat.Id];
+        string head = StatusLine(status);
         if (!args.Flag("full"))
         {
+            if (status.Approvals.Count > 0)
+            {
+                string details = string.Join("\n", status.Approvals.Select(approval => approval.Detail).Where(detail => detail.Length > 0));
+                yield return McpToolResult.Text(details.Length > 0 ? head + "\n" + details[..Math.Min(most, details.Length)] : head);
+                yield break;
+            }
             string reply = chat.LastReply(most);
             yield return McpToolResult.Text($"{head}\n{(reply.Length > 0 ? reply : chat.Running ? "(working, nothing said yet)" : "(it said nothing)")}");
             yield break;
@@ -488,6 +610,40 @@ internal sealed partial class DawnScene
         yield return McpToolResult.Text(killed
             ? $"#{chat.Id} was killed with what it had running and is going again from where it was. hex_agent_wait waits for it."
             : $"#{chat.Id} wasn't running, it's going again from where it was. hex_agent_wait waits for it.");
+    }
+
+    /// <summary>Renames the caller's chat or an explicitly selected chat that the caller may rename.</summary>
+    private IEnumerable<McpToolResult?> AgentRename(JsonObject args)
+    {
+        int? caller = CallerOf(args);
+        bool hasTarget = args.ContainsKey("id");
+        int? target = hasTarget ? args.Integer("id") : caller;
+        if (target is not { } id)
+        {
+            yield return McpToolResult.Error(hasTarget ? "'id' should be a whole number." : "Specify a chat id when calling from outside an agent chat.");
+            yield break;
+        }
+
+        if (ChatById(id) is not { } chat)
+        {
+            yield return McpToolResult.Error("There's no such chat, hex_agent_list says which there are.");
+            yield break;
+        }
+
+        if (caller is { } asking && chat.Parent != asking && chat.Id != asking)
+        {
+            yield return McpToolResult.Error($"You can rename your own chat or chats you started. You did not start #{chat.Id}.");
+            yield break;
+        }
+
+        string name = (args.String("name") ?? string.Empty).Trim();
+        if (name.Length > 40)
+            name = name[..39] + "…";
+        chat.Rename(name);
+        agentsListDrawn = NOT_DRAWN;
+        noonFleetDrawn = NOT_DRAWN;
+        PublishAgentStatuses();
+        yield return McpToolResult.Text(name.Length == 0 ? $"#{chat.Id} has its automatic name again: \"{chat.Shown}\"." : $"Renamed #{chat.Id} to \"{name}\".");
     }
 
     /// <summary>

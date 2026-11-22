@@ -44,8 +44,10 @@
           <li><a href="#numbers">Numbers</a></li>
           <li><a href="#gallery">Gallery</a></li>
           <li><a href="#features">Features</a></li>
+          <li><a href="#predict">Predictions</a></li>
           <li class="dusk"><a href="#dusk">Dusk</a></li>
           <li class="noon"><a href="#agents">Agents</a></li>
+          <li><a href="#link">Hex Link</a></li>
           <li><a href="#looks">Looks</a></li>
           <li><a href="#build">Build</a></li>
           <li class="menu-only"><a href="https://github.com/bogzxo/hex">GitHub</a></li>
@@ -427,6 +429,96 @@
       </div>
     </section>
 
+    <section id="predict">
+      <div class="wrap">
+        <p class="eyebrow">Dawn, edit predictions</p>
+        <h2>It finishes the line. On your own GPU.</h2>
+        <div class="pair">
+          <div>
+            <p class="intro">Pause, and Hex shows what comes next as faint text at the caret. <kbd>Tab</kbd> takes it, <kbd>Escape</kbd> drops it, and typing what it says keeps it. The model is one you run yourself, so <strong>your code goes nowhere</strong>.</p>
+            <p>It predicts the next edit as well. Rename something, and the other call sites show the change waiting on their own lines.</p>
+          </div>
+
+          <figure class="demo" id="demo-predict">
+            <div class="stage" role="img" aria-label="A C# method in Hex. After the line that checks the balance, a prediction in faint text offers to throw an exception and subtract the amount. Tab accepts it.">
+              <p class="stage-bar"><span class="stage-tab">Account.cs</span><span class="stage-chip">Zeta 2, local</span></p>
+              <pre class="stage-code" aria-hidden="true"><code><span class="ln">12</span><span class="k">public void</span> <span class="c">Withdraw</span>(<span class="t">decimal</span> amount)
+<span class="ln">13</span>{
+<span class="ln">14</span>    <span class="typed"><span class="k">if</span> (amount &gt; balance)</span><i class="caret"></i>
+<span class="ln">15</span><span class="ghost">        <span class="k">throw new</span> <span class="t">InvalidOperationException</span>(<span class="s">"Insufficient funds"</span>);</span>
+<span class="ln">16</span><span class="ghost">    balance -= amount;</span>
+<span class="ln">17</span>}</code></pre>
+              <p class="stage-keys" aria-hidden="true"><kbd class="key-tab">Tab</kbd> takes it <kbd>Ctrl+Right</kbd> one word <kbd>Esc</kbd> drops it</p>
+            </div>
+            <figcaption>A real Zeta 2 prediction from the measurements, redrawn. <button type="button" class="link demo-play" data-demo="demo-predict" hidden>Play it</button></figcaption>
+          </figure>
+        </div>
+
+        <ul class="receipts" aria-label="Edit prediction, measured on an RTX 3060">
+          <li><b>60 ms</b><span>to the first piece</span></li>
+          <li><b>0.8 s</b><span>a whole edit, Zeta 2</span></li>
+          <li><b>0.4 s</b><span>a whole edit, Qwen2.5-Coder</span></li>
+          <li><b>0</b><span>bytes off the machine</span></li>
+        </ul>
+        <p class="note">Measured with a warm model on an RTX 3060.</p>
+
+        <ul class="features swipe" data-label="Edit predictions">
+          <li class="rise flip">
+            <h3>Your model, not ours</h3>
+            <div class="faces">
+              <div class="face front">
+                <p>Hex runs no model and sells none. Point it at Ollama and pick one. Off until you switch it on.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-models">More<span class="visually-hidden"> about models</span></button>
+              </div>
+              <div class="face back" id="more-models">
+                <p>Any server with an OpenAI-style completions API works. <strong>Zeta 2</strong> and <strong>Qwen2.5-Coder</strong> are the two tried. And the <a href="#no-ai">No AI</a> switch takes predictions out with the agents: no request, no status bar item.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to models</span></button>
+              </div>
+            </div>
+          </li>
+          <li class="rise flip">
+            <h3>It predicts the next edit too</h3>
+            <div class="faces">
+              <div class="face front">
+                <p>Rename something and the other call sites show the change waiting on their own lines. <kbd>Tab</kbd> applies it as one undo step.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-next-edit">More<span class="visually-hidden"> about next edits</span></button>
+              </div>
+              <div class="face back" id="more-next-edit">
+                <p>What would go is struck through, what would come is in the addition colour. Zeta 2 is the model that does this, which is why it is the slower of the two.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to next edits</span></button>
+              </div>
+            </div>
+          </li>
+          <li class="rise flip">
+            <h3>Secrets are never sent</h3>
+            <div class="faces">
+              <div class="face front">
+                <p><code>.env</code>, keys, certificates and anything named like a credential stay out of every request, even to your own machine.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-private">More<span class="visually-hidden"> about what is sent</span></button>
+              </div>
+              <div class="face back" id="more-private">
+                <p>What is sent: the lines around the caret, your recent edits and excerpts of files you just edited, to the address in your settings. A folder can switch predictions off for itself. It can't switch them on.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to what is sent</span></button>
+              </div>
+            </div>
+          </li>
+          <li class="rise flip">
+            <h3>No GPU here? Borrow one</h3>
+            <div class="faces">
+              <div class="face front">
+                <p>A laptop with no card can ask a machine you linked with <a href="#link">Hex Link</a> to run the model.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-borrow">More<span class="visually-hidden"> about borrowing a GPU</span></button>
+              </div>
+              <div class="face back" id="more-borrow">
+                <p>The machine with the card switches sharing on first. Your code goes to the device you chose over its pinned, encrypted link, and nowhere else.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to borrowing a GPU</span></button>
+              </div>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </section>
+
     <section id="dusk" class="dusk">
       <div class="wrap">
         <p class="eyebrow">Dusk, the terminal</p>
@@ -512,6 +604,159 @@
         <p class="note">Any MCP client can use them, not only the agents Hex runs. The server is off until you switch it on.</p>
 
         <p class="note"><a href="https://github.com/bogzxo/hex/blob/master/docs/agents.md">Agents, MCP and No AI, the long version</a>.</p>
+      </div>
+    </section>
+
+    <section id="link">
+      <div class="wrap">
+        <p class="eyebrow">Hex Link</p>
+        <h2>Three machines. One codebase. No clashes.</h2>
+        <p class="intro">Hex Link joins Hex on the machines you and your team already have. Save on one and the others have it. Type in the same file and see each other's carets. No account, no server of ours in the middle: every connection is encrypted with each device's key pinned, and <strong>each device decides what the others may do on it</strong>.</p>
+
+        <figure class="demo" id="demo-link">
+          <div class="stage machines" role="img" aria-label="Three machines, Desk, Laptop and Mac, with the same file Mixer.cs open. A line typed on Desk appears on Laptop and Mac. A half-finished change on Laptop is marked Held and stays on Laptop until it is submitted.">
+            <div class="machine" style="--who: var(--dawn)">
+              <p class="stage-bar"><span class="stage-tab">Desk</span><span class="stage-chip">source of truth</span></p>
+              <pre class="stage-code" aria-hidden="true"><code><span class="k">float</span> <span class="c">Mix</span>(<span class="t">Voice</span> v)
+{
+    <span class="typed desk">gain = <span class="c">Clamp</span>(gain);</span><i class="caret"></i>
+    <span class="arrive late">v.<span class="c">Retune</span>(semitones);</span>
+}</code></pre>
+            </div>
+            <div class="machine" style="--who: var(--dusk)">
+              <p class="stage-bar"><span class="stage-tab">Laptop</span><span class="stage-chip held">1 held</span></p>
+              <pre class="stage-code" aria-hidden="true"><code><span class="k">float</span> <span class="c">Mix</span>(<span class="t">Voice</span> v)
+{
+    <span class="arrive">gain = <span class="c">Clamp</span>(gain);</span><i class="caret other" data-name="Desk"></i>
+    <span class="typed mine">v.<span class="c">Retune</span>(semitones);</span>
+}</code></pre>
+            </div>
+            <div class="machine" style="--who: var(--noon)">
+              <p class="stage-bar"><span class="stage-tab">Mac</span><span class="stage-chip">LAN, 6 ms</span></p>
+              <pre class="stage-code" aria-hidden="true"><code><span class="k">float</span> <span class="c">Mix</span>(<span class="t">Voice</span> v)
+{
+    <span class="arrive">gain = <span class="c">Clamp</span>(gain);</span><i class="caret other" data-name="Desk"></i>
+    <span class="arrive late">v.<span class="c">Retune</span>(semitones);</span>
+}</code></pre>
+            </div>
+          </div>
+          <figcaption>Desk's line reaches the others as it's typed. Laptop's half-done change is <b>held</b>, so it breaks nobody's build until it's submitted. <button type="button" class="link demo-play" data-demo="demo-link" hidden>Play it</button></figcaption>
+        </figure>
+
+        <ul class="receipts" aria-label="Hex Link, measured over Wi-Fi">
+          <li><b>0.3 s</b><span>a save, to the other machine</span></li>
+          <li><b>12 ms</b><span>a keystroke, to the other editor</span></li>
+          <li><b>17.4 s</b><span>first sync, 3,951 files</span></li>
+          <li><b>0</b><span>servers of ours in between</span></li>
+        </ul>
+        <p class="note">Two Windows machines on the same Wi-Fi. Pair with a six-digit code or an invite, and Link finds your devices on the LAN or reaches them over Tailscale. <a href="https://github.com/bogzxo/hex/blob/master/docs/hex-link-test-evidence.md">All of the test evidence</a>.</p>
+
+        <ul class="features swipe" data-label="Hex Link">
+          <li class="rise flip">
+            <h3>Type in the same file</h3>
+            <div class="faces">
+              <div class="face front">
+                <p>Several people in one file at once, each with a named caret. Follow someone through it. Undo only undoes yours.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-together">More<span class="visually-hidden"> about editing together</span></button>
+              </div>
+              <div class="face back" id="more-together">
+                <p>It works before the file is saved. The edits converge on every machine, a view-only device can watch, and one save writes the file everywhere with each machine's line endings kept.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to editing together</span></button>
+              </div>
+            </div>
+          </li>
+          <li class="rise flip">
+            <h3>Hold your half-done work</h3>
+            <div class="faces">
+              <div class="face front">
+                <p>Mid-refactor and it doesn't build? <strong>Hold</strong> those files. They stay on your machine and everyone else keeps building.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-hold">More<span class="visually-hidden"> about held changes</span></button>
+              </div>
+              <div class="face back" id="more-hold">
+                <p>Others can still change a file you hold, and theirs is kept beside yours. <strong>Submit</strong> merges the two. What collides opens in a merge editor: mine, theirs, both, or your own words.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to held changes</span></button>
+              </div>
+            </div>
+          </li>
+          <li class="rise flip">
+            <h3>Shared folders, kept in step</h3>
+            <div class="faces">
+              <div class="face front">
+                <p>Two-way sync of a folder as you save. Edits that don't collide merge by themselves. Nothing is ever overwritten.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-sync">More<span class="visually-hidden"> about shared folders</span></button>
+              </div>
+              <div class="face back" id="more-sync">
+                <p>One device is the folder's <strong>source of truth</strong>, and each other device gets a permission, read or edit. Commit or switch branch and the linked checkouts follow, history and index with the files.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to shared folders</span></button>
+              </div>
+            </div>
+          </li>
+          <li class="rise flip">
+            <h3>Agents on the machine that has the GPU</h3>
+            <div class="faces">
+              <div class="face front">
+                <p>Start a Claude Code or Codex chat on another device and steer it from here. When it asks leave, the request lands on your screen.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-remote">More<span class="visually-hidden"> about remote agents</span></button>
+              </div>
+              <div class="face back" id="more-remote">
+                <p>Rename, stop, restart or delete the chats you started there. The chat list groups them by device, running and finished, and each device folds away. Its owner decides how much you may manage.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to remote agents</span></button>
+              </div>
+            </div>
+          </li>
+          <li class="rise flip">
+            <h3>Agents don't edit over each other</h3>
+            <div class="faces">
+              <div class="face front">
+                <p>An agent <strong>claims</strong> a file before changing it. The second one is refused in 37 ms and told who holds it.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-claims">More<span class="visually-hidden"> about claims</span></button>
+              </div>
+              <div class="face back" id="more-claims">
+                <p>Or give it an <strong>isolated worktree</strong>: it publishes only when the <strong>pre-publish check</strong> passes. A file with a compile error was refused in 14.2 s and reached no machine.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to claims</span></button>
+              </div>
+            </div>
+          </li>
+          <li class="rise flip">
+            <h3>Commits follow you</h3>
+            <div class="faces">
+              <div class="face front">
+                <p>Commit or switch branch on one machine and the linked checkouts follow within a quarter of a second.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-follow">More<span class="visually-hidden"> about commits</span></button>
+              </div>
+              <div class="face back" id="more-follow">
+                <p>History and index come with the files, so the Mac that builds your release is already on the commit you just made.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to commits</span></button>
+              </div>
+            </div>
+          </li>
+          <li class="rise flip">
+            <h3>You say who can do what</h3>
+            <div class="faces">
+              <div class="face front">
+                <p>Each device gets its own permissions on yours: read files, edit files, control agents, use your model.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-rights">More<span class="visually-hidden"> about permissions</span></button>
+              </div>
+              <div class="face back" id="more-rights">
+                <p>A lab partner can watch without touching anything. A build machine can run agents and nothing else. Change it any time from the Devices window.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to permissions</span></button>
+              </div>
+            </div>
+          </li>
+          <li class="rise flip">
+            <h3>New machine? Send it the lot</h3>
+            <div class="faces">
+              <div class="face front">
+                <p><strong>Send workspace</strong> clones every repository onto another device, history and nested repositories included, then keeps them in step.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-send">More<span class="visually-hidden"> about sending a workspace</span></button>
+              </div>
+              <div class="face back" id="more-send">
+                <p>A Mac got nine repositories, about 413 MB, in three to four minutes and built them in 50 s. Anything skipped is listed with the reason, and the rest carries on.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to sending a workspace</span></button>
+              </div>
+            </div>
+          </li>
+        </ul>
       </div>
     </section>
 

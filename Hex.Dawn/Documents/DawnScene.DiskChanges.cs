@@ -35,6 +35,12 @@ internal sealed partial class DawnScene
         if (open.Picture is not null)
             return;
 
+        var shared = LinkLiveOf(open);
+        if (shared is not null && (shared.DiskSaveInFlight > 0 || shared.Room?.SavingFile == true))
+        {
+            disk.Again(path);
+            return;
+        }
         if (!File.Exists(path))
         {
             if (open.DiskText is not null)
@@ -56,6 +62,19 @@ internal sealed partial class DawnScene
         if (text == open.DiskText)
             return;
 
+        if (shared is { Draft: null, Room: { } room } && room.SavedOnDisk() is { } saved && text == saved.Text)
+        {
+            LinkLiveSetDiskSave(shared, saved.Receipt, text, open.DiskText);
+            return;
+        }
+        if (shared is { Room: null, Draft: null } && LinkLiveCheckObservedDisk(shared, path, text))
+            return;
+
+        DiskChangedText(open, text);
+    }
+
+    private void DiskChangedText(HexDocument open, string text)
+    {
         if (!HasChanges(open))
         {
             if (TakeFromDisk(open, text))

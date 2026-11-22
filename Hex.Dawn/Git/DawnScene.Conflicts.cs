@@ -1,6 +1,7 @@
 using System.Numerics;
 
 using Hex.Core.Git;
+using Horizon.Rendering;
 
 namespace Hex.Dawn;
 
@@ -14,6 +15,8 @@ internal sealed partial class DawnScene
     // The conflicts of the file on screen, and the version of its text they were found in
     private List<GitConflict> conflicts = [];
     private (HexDocument? Of, int Version) conflictsFor = (null, -1);
+    private Panel? gitConflictBanner;
+    private const float GIT_CONFLICT_BANNER_HEIGHT = 32.0f;
 
     // When the text last changed, to look again once the typing stops
     private const long CONFLICTS_SETTLE_MS = 300;
@@ -73,16 +76,53 @@ internal sealed partial class DawnScene
 
         // Most files have none, which costs a look at the start of each line and nothing put together (the whole text as one
         // string every key was what made typing in a big file slow before)
-        if (!document.IsText || document.DiffOf is not null || document.Picture is not null || !HasConflictMarker())
+        if (!document.IsText || document.Merge is not null || document.DiffOf is not null || document.Picture is not null || !HasConflictMarker())
         {
             conflicts = [];
+            ShowGitConflictBanner(false);
             if (had)
                 LightConflicts();
             return;
         }
 
         conflicts = GitConflicts.Find(code.Text.Replace("\r\n", "\n").Split('\n'));
+        ShowGitConflictBanner(conflicts.Count > 0);
         LightConflicts();
+    }
+
+    private void ShowGitConflictBanner(bool show)
+    {
+        if ((gitConflictBanner?.Visible ?? false) == show)
+            return;
+
+        if (show && gitConflictBanner is null)
+        {
+            gitConflictBanner = codeScroll.Add(new Panel
+            {
+                Anchor = Origin.Top,
+                Pivot = Origin.Top,
+                Fill = UIFill.Horizontal,
+                Size = new Vector2(0, GIT_CONFLICT_BANNER_HEIGHT),
+                Position = new Vector2(0, GIT_CONFLICT_BANNER_HEIGHT),
+                Padding = new UIEdges(10, 2, 10, 2),
+            });
+            var row = gitConflictBanner.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 14, Fill = UIFill.Both });
+            row.Add(new Label { Text = "This file has merge conflicts", TextScale = 0.13f, Align = Origin.Left });
+            row.Add(new Button
+            {
+                Label = "Open merge editor",
+                Tooltip = "Open merge editor",
+                LabelScale = 0.13f,
+                OnPressed = OpenMarkedMergeEditor,
+            });
+        }
+
+        if (gitConflictBanner is { } banner)
+        {
+            banner.Visible = show;
+            banner.Color = WarningColor with { W = 0.14f };
+        }
+        codeScroll.Padding = new UIEdges(0, show ? GIT_CONFLICT_BANNER_HEIGHT : 0, 0, 0);
     }
 
     private bool HasConflictMarker()
@@ -105,7 +145,7 @@ internal sealed partial class DawnScene
 
         var lit = new List<UICodeLineHighlight>();
         var lenses = new List<UICodeLens>();
-        string[] actions = [Said("conflicts.lens_current"), Said("conflicts.lens_incoming"), Said("conflicts.lens_both")];
+        string[] actions = [Said("conflicts.lens_current"), Said("conflicts.lens_incoming"), Said("conflicts.lens_both"), "Open merge editor"];
         foreach (GitConflict conflict in conflicts)
         {
             lit.Add(new UICodeLineHighlight(conflict.Start, 1, marker));
@@ -134,6 +174,11 @@ internal sealed partial class DawnScene
     /// <summary>A lens of a conflict pressed, the caret put in its block and the block settled the way the lens says.</summary>
     private void PressConflictLens(UICodeLens lens, int action)
     {
+        if (action == 3)
+        {
+            OpenMarkedMergeEditor();
+            return;
+        }
         code.Document.CollapseCarets();
         code.Document.MoveTo(new UITextPosition(lens.Line, 0));
         SettleConflict(action switch
@@ -228,6 +273,8 @@ internal sealed partial class DawnScene
             GitConflictPick.Incoming => "conflicts.kept_incoming",
             _ => "conflicts.kept_both"
         }));
+
+        if (conflicts.Count == 0 && LinkOfferResolvedMerge(document)) return;
 
         // The last of the file settled, a card offers to stage it, which is what tells git the file is settled
         if (conflicts.Count == 0 && document.Path is { } path && git.RepositoryFor(path) is not null)

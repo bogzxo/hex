@@ -2298,6 +2298,214 @@ details:not([open])::details-content {
 /* Things come up a little as they scroll into sight. Decoration only, so where a browser can't it's left out,
    and so it is for anyone who asked for less motion */
 
+/* Demos drawn in the page from its own colours, where a screenshot would only show a moment: a prediction arriving at
+   the caret, and one file open on three machines. They stand still as the thing they show until Play is pressed, then
+   run once, so nothing moves that nobody asked to move */
+
+.demo {
+  margin: var(--gap) 0 0;
+
+  @media (width >= 70rem) {
+    .pair > & {
+      margin-block-start: 0;
+    }
+  }
+}
+
+.demo-play[hidden] {
+  display: none;
+}
+
+.stage {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 1.5rem 4rem -1.5rem var(--shadow);
+
+  /* Three machines side by side, a line between them, one under another on a phone */
+  &.machines {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+    gap: 1px;
+    background: var(--border);
+  }
+}
+
+.machine {
+  min-inline-size: 0;
+  background: var(--surface);
+}
+
+.stage-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0.55rem 0.9rem;
+  border-block-end: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+
+.stage-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 650;
+
+  /* Whose machine it is, in the colour its caret has on the others */
+  .machine &::before {
+    content: "";
+    inline-size: 0.6rem;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: var(--who);
+  }
+}
+
+.stage-chip {
+  padding: 0.1rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--dim);
+  font-size: 0.78rem;
+  white-space: nowrap;
+
+  &.held {
+    border-color: var(--who);
+    color: var(--who);
+  }
+}
+
+.stage-code {
+  margin: 0;
+  padding: 1rem 0.9rem;
+  /* The stage is the frame, so the code inside it has none of its own */
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  overflow-x: auto;
+  font: 0.85rem/1.7 var(--mono);
+  tab-size: 4;
+
+  & .ln {
+    display: inline-block;
+    inline-size: 2ch;
+    margin-inline-end: 1.25ch;
+    color: var(--comment);
+    text-align: end;
+    user-select: none;
+  }
+
+  & .k { color: var(--keyword); }
+  & .t { color: var(--type); }
+  & .c { color: var(--call); }
+  & .s { color: var(--string); }
+
+  & .typed,
+  & .arrive,
+  & .ghost {
+    display: inline-block;
+  }
+
+  /* What the model offers, faint until it's taken */
+  & .ghost {
+    opacity: 0.5;
+  }
+
+  /* The held line hasn't reached the other machines: there once it's submitted, which is how the demo ends */
+  & .arrive.late {
+    opacity: 0;
+  }
+}
+
+.caret {
+  position: relative;
+  display: inline-block;
+  inline-size: 2px;
+  block-size: 1.15em;
+  margin-inline-start: 1px;
+  background: var(--who, var(--accent));
+  vertical-align: text-bottom;
+
+  /* Somebody else's caret, with their name on it */
+  &.other {
+    background: var(--dawn);
+
+    &::after {
+      content: attr(data-name);
+      position: absolute;
+      inset-block-end: 100%;
+      inset-inline-start: 0;
+      padding: 0 0.3rem;
+      border-radius: 3px 3px 3px 0;
+      background: var(--dawn);
+      color: var(--on-accent);
+      font: 650 0.65rem/1.4 var(--sans);
+    }
+  }
+}
+
+.stage-keys {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+  margin: 0;
+  padding: 0.6rem 0.9rem;
+  border-block-start: 1px solid var(--border);
+  color: var(--dim);
+  font-size: 0.82rem;
+}
+
+@keyframes demo-type {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+
+@keyframes demo-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes demo-out {
+  to { opacity: 0; }
+}
+
+@keyframes demo-offer {
+  from { opacity: 0; }
+  to { opacity: 0.5; }
+}
+
+@keyframes demo-take {
+  to { opacity: 1; }
+}
+
+@keyframes demo-press {
+  50% { scale: 0.88; }
+}
+
+/* Only for somebody who hasn't asked for less motion, and only once Play was pressed (site.js shows the button to them
+   alone). Opacity, scale and a clip, nothing that lays the page out again */
+@media (prefers-reduced-motion: no-preference) {
+  #demo-predict.playing {
+    & .typed { animation: demo-type 1.1s steps(20) both; }
+    & .ghost { animation: demo-offer 0.25s 1.5s both, demo-take 0.2s 3.3s forwards; }
+    & .key-tab { animation: demo-press 0.3s 3.1s; }
+  }
+
+  #demo-link.playing {
+    & .typed.desk { animation: demo-type 1s steps(18) both; }
+    & .arrive:not(.late),
+    & .caret.other { animation: demo-in 0.2s 1.3s both; }
+    & .typed.mine { animation: demo-type 1.1s steps(22) 2.2s both; }
+    & .stage-chip.held { animation: demo-in 0.2s 3.3s both, demo-out 0.2s 5.2s forwards; }
+    & .arrive.late { animation: demo-in 0.25s 5.3s both; }
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   @supports ((animation-timeline: view()) and (animation-range: entry)) {
     @keyframes rise {

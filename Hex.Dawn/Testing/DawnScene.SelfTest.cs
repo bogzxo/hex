@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 
 using Horizon.HIDL.Runtime;
 using Horizon.UI;
@@ -187,6 +187,7 @@ internal sealed partial class DawnScene
     private (string Name, string About, Action<HexPointerScript> Run)[] SelfTestSuites =>
     [
         ("native-shortcuts", "Windows key messages through the native keyboard and application shortcut dispatcher", TestNativeShortcuts),
+        ("titlebar-targets", "locate a rendered caption gap and source-text control in native window points", TestTitlebarTargets),
         ("ux", "mode focus, panel alignment, editor tab overflow and narrow layouts", TestUx),
         ("accessibility", "every look's colours measured against their grounds, Tab round the main window with every stop ringed, named and big enough, Ctrl+M out of the code, and nothing moving with the motion at 0", TestAccessibility),
         ("interactions", "palette dismissal, single-click results, empty queries, focus and confirmation boundaries", TestInteractions),
@@ -212,6 +213,8 @@ internal sealed partial class DawnScene
         ("file-icons", "file-type font glyphs, extension matching and unknown-file fallbacks", TestFileIcons),
         ("tree-looks", "the explorer and a file's Properties in every look Hex comes with at 100, 150 and 200%, several picked, a folder and no workspace", TestTreeLooks),
         ("problems", "search, severity groups, colours and navigation in the problems panel", TestProblems),
+        ("prediction", "edit prediction against a fake model server: ghost text, Tab, typing through, cancelling, a diff, the status item, secrets never sent, errors said, frame time", TestPrediction),
+        ("prediction-live", "edit prediction against a real model, only when HEX_LIVE_PREDICT names the server: the load while frames are timed, ghost text, Tab, Escape, typing through and on", TestPredictionLive),
         ("updates", "update close-prompt cancellation and failed handoff preserve the editor", TestUpdateHandoff),
         ("save-integrity", "encoding, Save As and failed-write preservation", TestDocumentSave),
         ("lossless", "every .hor of the engine's Assets and Hex's own saved unchanged byte for byte, a hand written layout edited in place", TestLossless),
@@ -276,6 +279,8 @@ internal sealed partial class DawnScene
             TestCompletion(test);
             TestParity(test);
         }),
+        ("link-layout", "conflict notification actions wrap within their card and respond to pointer clicks", TestLinkLayout),
+        ("merge-result-lsp", "Pyright keeps the pathless merge Result independent and closes it on Cancel and Complete", TestMergeResultLanguageServer),
         ("reload-integrity", "failed layout reloads preserve the open document", TestReloadIntegrity),
         ("workspace", "folders, the explorer, copying, moving and renaming files in it, closing tabs, the help windows, the conveniences, files changed on the disk", test =>
         {
@@ -482,6 +487,7 @@ internal sealed partial class DawnScene
             testExplorer.TestSingleTargetFrameworkRetry(test, Path.Combine(testFolder, "single-target-retry"), OpenTests);
         }),
         ("test-workspace", "Test Explorer replaces discovery and ignores old results when the workspace changes", test => testExplorer.TestWorkspaceSwitch(test, Path.Combine(testFolder, "test-workspaces"), explorer.OpenFolder)),
+        ("git-support", "Git settings disable repository discovery and controls until enabled again", TestGitSupport),
         ("git", "git in a repository made for it, what changed coloured in the explorer and the tabs, and taken off again by a commit", TestGit),
         ("conflicts", "a real merge conflict settled by a click on its lens and staged from the card, the Accept commands greyed out without one, the words a diff changed and a diff that says nothing is wrong", TestConflicts),
         ("recent", "the commands and files picked last over the rest, a closed file brought back, a save tidying, saving by itself, the glass sliders", TestRecentAndTidy),
@@ -524,6 +530,25 @@ internal sealed partial class DawnScene
         ("launch", "how Hex starts, the test's folders its own, a step that throws a failure and not a crash, a folder's start bringing back only its tabs", TestLaunch),
         ("mcp", "the MCP server for agents, a client at its door with the token, a screenshot, the ui tree, a click, typing, a command, problems and waiting", TestMcp),
         ("mcp-check", "the check after hex_edit through csharp-ls, timed, one after another and three at once, when csharp-ls is on this machine", TestMcpCheck),
+        ("link", "Hex Link between this Hex and a second one it starts: pairing by code, hello, the fleet and a chat mirrored, tools, an approval, a file written, conflicted and read, rights taken away, a stranger refused, the hex_link tools, forgetting", TestLink),
+        ("link-files", "sharing the code over Hex Link with a second Hex: a folder synced both ways, a conflict kept and resolved, what git ignores left, hex_link_sync flush, a remote file opened and saved back, the repository cloned and fetched, pull-only, a patch offered", TestLinkFiles),
+        ("link-hold", "hold, update, resolve and submit, or discard from an ordinary linked editor tab", TestLinkHeldChanges),
+        ("link-worktree", "private Git worktree gate, merge, and publish receipts between two editors", TestLinkWorktree),
+        ("link-provision", "a second editor gets a workspace with nested Git history and a submodule, then syncs both ways", TestLinkProvision),
+        ("link-sync-upgrade", "an older Get profile recovers its source and explicitly resumes both sides", TestLinkSyncUpgrade),
+        ("link-git-follow", "two linked editors keep Git branches, commits, index and working files in sync", TestLinkGitFollow),
+        ("link-missing-repository", "two editors sync common files while a nested checkout awaits its own Get", TestLinkMissingRepository),
+        ("link-documents", "three linked editors share unsaved text, edit ownership, carets and saves", TestLinkDocuments),
+        ("link-public", "public connection controls and router consent with a loopback listener and simulated router", TestLinkPublic),
+        ("link-public-invites", "public invite creation and pinned join override using loopback fixtures", TestLinkPublicInvites),
+        ("link-editor-notices", "claim marks, shared document notices and Follow in the editor", TestLinkEditorNotices),
+        ("link-claims", "two linked editors coordinate claims, then merge disjoint edits and settle overlaps", TestLinkClaims),
+        ("merge-editor", "three-way conflict resolution, manual edits, undo, cancellation, and binary choices", TestMergeEditor),
+        ("link-peer", "the other end of the link part, or a Hex to link to from another machine (HEX_LINK_TEST_DIAL or HEX_LINK_TEST_LISTEN)", TestLinkPeer),
+        ("link-cross", "Hex Link across two machines, one command a side (HEX_LINK_TEST_LISTEN on one, HEX_LINK_TEST_DIAL on the other): each pairs, watches and steers the other, writes into its workspace, has its rights dropped, and the listener forgets the dialler", TestLinkCross),
+        ("link-nearby", "Hex Link's discovery on the real LAN, run on two machines at once: Link up with link_discoverable on, passing once another Hex is heard", TestLinkNearby),
+        ("link-ui", "Hex Link's window, the pairing dialog, a linked device's section in the fleet, its chat on screen and steered, Runs on and Forget, driven by the pointer against a second Hex", TestLinkUi),
+        ("link-chats", "Linked chat groups, saved folds, keyboard actions, offline devices, layout and fleet redraw timing", TestLinkChats),
         ("garbage", "what sweeping the pointer over the designer and the code allocates", test =>
         {
             // The first hover over a word makes what's kept for every hover after (the docs of the library), the first
@@ -555,7 +580,7 @@ internal sealed partial class DawnScene
     {
         // OS input tests take the foreground briefly, so they only run when explicitly named, and so does dusk-noon, the
         // window having Dusk in it only when it's named
-        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts" or "repository" or "dusk-noon" or "face-switch" or "webshots" or DawnProgram.NO_AI_SUITE)).Select(suite => suite.Name)];
+        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts" or "titlebar-targets" or "repository" or "dusk-noon" or "face-switch" or "webshots" or "link" or "link-files" or "link-hold" or "link-worktree" or "link-claims" or "link-provision" or "link-missing-repository" or "link-documents" or "link-editor-notices" or "link-peer" or "link-cross" or "link-nearby" or "link-ui" or "link-chats" or "link-public-invites" or DawnProgram.NO_AI_SUITE)).Select(suite => suite.Name)];
         string[] unknown = [.. asked.Where(name => !SelfTestSuites.Any(suite => suite.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))];
         if (unknown.Length == 0)
             return true;

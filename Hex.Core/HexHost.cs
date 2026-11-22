@@ -10,7 +10,14 @@ namespace Hex.Core;
 public static class HexHost
 {
     /// <summary>The folder Hex's own files are in (Assets, shaders, the built in extensions), the exe's on a desktop.</summary>
-    public static string ProgramFolder { get; set; } = AppContext.BaseDirectory;
+    public static string ProgramFolder { get; set; } = HexBundle.Resources ?? AppContext.BaseDirectory;
+
+    /// <summary>
+    /// The folder what Hex adds next to itself goes in (the layouts folder new files start in, the extensions a person installs
+    /// and the catalog they come from). <see cref="ProgramFolder"/> everywhere but in a macOS bundle, which is sealed by its
+    /// signature and so never written, there it's Hex's folder in the user's Library (HEX_HOME moves it).
+    /// </summary>
+    public static string WritableFolder => HexBundle.Inside ? Horizon.UI.Components.TerminalFiles.UserFolder : ProgramFolder;
 
     /// <summary>What the place Hex runs on is called where a person reads it, "Android" on a tablet.</summary>
     public static string Name { get; set; } = "desktop";
@@ -30,6 +37,12 @@ public static class HexHost
 
     /// <summary>Whether another Hex (or an MCP client) can reach this one over a named pipe.</summary>
     public static bool Pipes { get; set; } = true;
+
+    /// <summary>
+    /// Whether this Hex may listen for other devices (Hex Link), false on a tablet, which only dials the machines it
+    /// paired with and watches them.
+    /// </summary>
+    public static bool Listens { get; set; } = true;
 
     /// <summary>Whether the desktop's own file dialogs are there (Windows' common item dialog, a portal on Linux).</summary>
     public static bool NativeDialogs { get; set; } = true;

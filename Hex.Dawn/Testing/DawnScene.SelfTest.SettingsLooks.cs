@@ -16,20 +16,35 @@ internal sealed partial class DawnScene
         string? Group(string key) => SettingsPage?.Settings.FirstOrDefault(setting => setting.Key == key)?.Group;
         test.Run(() => OpenSettings());
         test.Wait();
-        test.Check("settings looks: the editor comes first, then the terminal, how Hex looks and the extensions", () =>
-            SettingsPage!.Settings.Select(setting => setting.Group.Split(" · ")[0]).Distinct().SequenceEqual(["Editor", "Terminal", "Appearance", "Extensions"])
+        test.Check("settings looks: the editor comes first, then the terminal, how Hex looks, AI, Link and the extensions", () =>
+            SettingsPage!.Settings.Select(setting => setting.Group.Split(" · ")[0]).Distinct().SequenceEqual(["Editor", "Terminal", "Appearance", "AI", "Link", "Extensions"])
             && SettingsPage.Settings.Where(setting => setting.Group == EditorSettingsCatalog.THEME).Select(setting => setting.Key).SequenceEqual(["editor_skin", "theme"]));
-        test.Check("settings looks: the sections go Editor · Text first, then Code, Files, Search and Git, with Profiles first of Appearance", () =>
+        test.Check("settings looks: the sections go Editor · Text first, then Caret, Code, Save and format, Files and Git, with Looks first of Appearance", () =>
             SettingsPage!.SectionsShown.ToList() is { Count: > 0 } shown && shown[0] == EditorSettingsCatalog.TEXT
-            && shown.IndexOf(EditorSettingsCatalog.CODE) == 1 && shown.IndexOf(EditorSettingsCatalog.FILES) == 2 && shown.IndexOf(EditorSettingsCatalog.SEARCH) == 3
-            && shown.IndexOf(EditorSettingsCatalog.GIT) == 4
-            && shown.IndexOf(EditorSettingsCatalog.PROFILES) > shown.IndexOf(EditorSettingsCatalog.DESIGNER)
-            && shown.IndexOf(EditorSettingsCatalog.PROFILES) < shown.IndexOf(EditorSettingsCatalog.THEME));
+            && shown.IndexOf(EditorSettingsCatalog.CARET) == 1 && shown.IndexOf(EditorSettingsCatalog.CODE) == 2 && shown.IndexOf(EditorSettingsCatalog.SAVE) == 3 && shown.IndexOf(EditorSettingsCatalog.FILES) == 4
+            && shown.IndexOf(EditorSettingsCatalog.GIT) == 5
+            && shown.IndexOf(EditorSettingsCatalog.LOOKS) > shown.IndexOf(EditorSettingsCatalog.DESIGNER)
+            && shown.IndexOf(EditorSettingsCatalog.LOOKS) < shown.IndexOf(EditorSettingsCatalog.THEME));
         test.Check("settings looks: the git rows are under Editor · Git", () =>
             Group("git_blame") == EditorSettingsCatalog.GIT && Group("git_autofetch") == EditorSettingsCatalog.GIT && EditorSettingsCatalog.GIT == "Editor · Git");
         test.Check("settings looks: running and debugging are under Editor · Run and debug, the code's zoom a slider of times", () =>
             Group("debugger_path") == EditorSettingsCatalog.RUN && Group("run_to_terminal") == EditorSettingsCatalog.RUN
-            && SettingsPage!.Settings.First(setting => setting.Key == "code_zoom") is { Slider: true, Unit: "×", Group: EditorSettingsCatalog.CODE });
+            && SettingsPage!.Settings.First(setting => setting.Key == "code_zoom") is { Slider: true, Unit: "×", Group: EditorSettingsCatalog.TEXT });
+        // Agents, prediction and Link each have a home of their own, and a row that moved is still found by the section it was in
+        test.Check("settings looks: agents, prediction and Link have their own sections, the system files row is Link · Sync", () =>
+            Group("mcp_server") == EditorSettingsCatalog.AGENTS && Group("no_ai") == EditorSettingsCatalog.AGENTS && Group("edit_predictions_model") == EditorSettingsCatalog.AI
+            && Group("link") == EditorSettingsCatalog.LINK && Group("link_system_file_folders") == EditorSettingsCatalog.LINK_SYNC
+            && Group("interface_size") == EditorSettingsCatalog.INTERFACE && Group("caret_glide") == EditorSettingsCatalog.CARET && Group("visual_studio_keys") == EditorSettingsCatalog.KEYS
+            && Group("link_system_file_folders") is { } syncGroup && SettingsPage!.SectionsShown.Contains(syncGroup));
+        test.Run(() => SettingsPage!.Find("run and debug"));
+        test.Settle(0.3f);
+        test.Check("settings looks: the old section words still find the rows that moved out of them", () =>
+            SettingsPage!.IsRowShown("link") && SettingsPage.IsRowShown("mcp_server") && SettingsPage.IsRowShown("debugger_path"));
+        test.Run(() => SettingsPage!.Find("motion"));
+        test.Settle(0.3f);
+        test.Check("settings looks: motion finds the caret's glide and the scroll speed", () =>
+            SettingsPage!.IsRowShown("caret_glide") && SettingsPage.IsRowShown("scroll_speed"));
+        test.Run(() => SettingsPage!.Find(string.Empty));
 
         // Liquid glass, what's under the window comes through, blurred enough that it's colour behind the rows and not words,
         // and less clear than a popup's so a page of sentences on it still reads

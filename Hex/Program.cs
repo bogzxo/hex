@@ -27,7 +27,8 @@ internal static partial class Program
 
         // Everything Hex keeps (settings, backups, compiled shaders, the driver's pipeline cache) goes next to the exe,
         // before anything asks where. A copy carried about on a stick has it all with it
-        Horizon.Core.Platform.PlatformPaths.BesideProgram = true;
+        // (not a Hex in a macOS .app, whose signature breaks if anything inside it is written: its files are in the user's Library)
+        Horizon.Core.Platform.PlatformPaths.BesideProgram = !Hex.Core.HexBundle.Inside;
 
         // The guard an agent system runs before each of its own tools, which keeps the agent on Hex's harness. First of
         // all, since it's started for every shell command an agent runs and has to answer at once
@@ -67,7 +68,7 @@ internal static partial class Program
         if (Hex.Core.McpBridge.IsBridgeMode(args))
             return Hex.Core.McpBridge.Run(args, Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "Hex.exe"));
 
-        HexLog.Initialize(AppContext.BaseDirectory);
+        HexLog.Initialize(Hex.Core.HexBundle.Inside ? Hex.Core.HexBundle.LogFolder : AppContext.BaseDirectory);
         // Trace only after selecting Hex's logger. Tracing earlier creates the default logger,
         // which holds debug.log open and prevents Hex's single-file logger from writing it.
         Horizon.Core.Diagnostics.StartupTrace.Mark("main");
@@ -224,6 +225,8 @@ internal static partial class Program
           --view <design|code|table>  which view a file comes up in
           --face <dawn|noon>       start in the editor or in Agentic, the agents' face (the one the workspace was left in otherwise)
           --no-ai                  this run without any of the agents, No AI whatever the settings say
+          --link                   Hex Link on for this run whatever the settings say, this Hex linked to the ones it paired with
+          --link-port <n>          the port Link listens on for this run, the link_port setting's otherwise
           --workspace <folder>     where layouts go when nobody says otherwise
           --scale <n>              how big the UI is drawn, 1 as it comes
           --size <w>x<h>           the window's size, maximised otherwise

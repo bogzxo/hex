@@ -25,9 +25,7 @@ internal sealed partial class HexExtensions
         if (name.Length == 0 || command.Length == 0 || string.IsNullOrEmpty(folder) || Hex.Core.HexAgentProcess.Find(command) is null)
             return Values.Null;
 
-        return Natives.Object(
-            ("command", new StringValue(System.Environment.ProcessPath ?? Path.Combine(Hex.Core.HexHost.ProgramFolder, "Hex.exe"))),
-            ("args", Natives.List(SharedServerArguments(name, folder, chat, System.Environment.ProcessId, command, arguments))));
+        return McpLaunchCommand(SharedServerArguments(name, folder, chat, System.Environment.ProcessId, command, arguments));
     }
 
     /// <summary>What the proxy is started with, its own arguments and after -- the server's command line.</summary>
@@ -48,7 +46,8 @@ internal sealed partial class HexExtensions
         try
         {
             string path = Path.Combine(home, ".claude", "settings.json");
-            if (!File.Exists(path) || System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))?["enabledPlugins"] is not System.Text.Json.Nodes.JsonObject enabled)
+            if (!File.Exists(path) || System.Text.Json.Nodes.JsonNode.Parse(ReadExtensionFile(path)) is not System.Text.Json.Nodes.JsonObject settings ||
+                settings["enabledPlugins"] is not System.Text.Json.Nodes.JsonObject enabled)
                 return false;
             return enabled.Any(pair => (pair.Key == plugin || pair.Key.StartsWith(plugin + "@", StringComparison.Ordinal))
                 && pair.Value is System.Text.Json.Nodes.JsonValue on && on.TryGetValue(out bool yes) && yes);

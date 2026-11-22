@@ -51,6 +51,20 @@ internal sealed class HexAgentHub
     public HexHubSnapshot Snapshot => snapshot;
 
     private volatile HexHubSnapshot snapshot = HexHubSnapshot.Empty;
+    private readonly Lock snapshotGate = new();
+    private TaskCompletionSource? snapshotChanged;
+
+    /// <summary>Signals when a snapshot after the observed one is published, including all mail in that pump.</summary>
+    public Task ChangedAfter(HexHubSnapshot observed)
+    {
+        lock (snapshotGate)
+        {
+            if (!ReferenceEquals(snapshot, observed))
+                return Task.CompletedTask;
+
+            return (snapshotChanged ??= new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+        }
+    }
 
     /// <summary>An approval a chat's agent asked, for whoever decides them besides the person (the agent that started it).</summary>
     public Action<HexAgentChat, HexAgentEntry>? ApprovalAsked { get; set; }
@@ -58,6 +72,29 @@ internal sealed class HexAgentHub
     /// <summary>The approvals a chat's agent is waiting on, oldest first.</summary>
     public static IEnumerable<HexAgentEntry> Approvals(HexAgentChat chat) =>
         chat.Pending.Where(entry => entry.Kind == HexAgentEntryKind.Approval);
+
+    internal static int RequestNumber(HexAgentChat chat, HexAgentEntry asked)
+    {
+        int number = 0;
+        foreach (HexAgentEntry entry in chat.Entries)
+        {
+            if (entry.Kind == HexAgentEntryKind.Approval)
+                number++;
+            if (ReferenceEquals(entry, asked))
+                return number;
+        }
+        return number;
+    }
+
+    private static HexAgentApprovalStatus ApprovalStatus(HexAgentChat chat, HexAgentEntry entry) =>
+        new(RequestNumber(chat, entry), ApprovalLine(entry.Text, 300),
+            ApprovalLine(entry.Input ?? string.Empty, 600));
+
+    private static string ApprovalLine(string text, int most)
+    {
+        string line = text.ReplaceLineEndings(" ").Trim();
+        return line.Length > most ? line[..(most - 1)] + "…" : line;
+    }
 
     /// <summary>Where the rows chats no longer keep in memory go, null for nowhere (they're let go of).</summary>
     public HexAgentHistory? History { get; set; }
@@ -98,8 +135,44 @@ internal sealed class HexAgentHub
         return at;
     }
 
-    /// <summary>The chats a chat started, in the order they were.</summary>
+    /// <summary>The chats directly under a chat, in the order they were started.</summary>
     public IEnumerable<HexAgentChat> Children(HexAgentChat chat) => sessions.Where(session => session.Parent == chat.Id).Select(session => session.Chat);
+
+    /// <summary>Makes a chat the root of its own family, keeping its descendants and their sessions.</summary>
+    public bool Detach(HexAgentChat chat)
+    {
+        if (chat.Parent is null || ChatById(chat.Id) != chat)
+            return false;
+
+        int oldRoot = RootOf(chat).Id;
+        chat.SetFamilyPosition(null, 0);
+        var family = new HashSet<int> { chat.Id };
+        var pending = new Queue<HexAgentChat>();
+        pending.Enqueue(chat);
+        while (pending.TryDequeue(out HexAgentChat? parent))
+        {
+            foreach (HexAgentChat child in Children(parent))
+            {
+                if (!family.Add(child.Id))
+                    continue;
+                child.SetFamilyPosition(parent.Id, parent.Depth + 1);
+                pending.Enqueue(child);
+            }
+        }
+
+        // Keep the new family's conversation and the old family's historical record.
+        if (oldRoot != chat.Id && mail.TryGetValue(oldRoot, out HexMailLog? previous))
+        {
+            HexMailLog next = MailOf(chat);
+            foreach (HexMailEntry entry in previous.All)
+            {
+                if (family.Contains(entry.Mail.To) || (entry.Mail.From is { } from && family.Contains(from)))
+                    next.Add(entry.Mail, entry.Route);
+            }
+        }
+
+        return true;
+    }
 
     /// <summary>Whether a chat's agent is waiting in hex_agent_wait, which a message to it wakes.</summary>
     public bool IsWaiting(HexAgentChat chat) => Waiting.TryGetValue(chat.Id, out int count) && count > 0;
@@ -138,7 +211,14 @@ internal sealed class HexAgentHub
                 rowsMade.Remove(gone);
         }
 
-        snapshot = new HexHubSnapshot(Version, rows);
+        TaskCompletionSource? changed;
+        lock (snapshotGate)
+        {
+            snapshot = new HexHubSnapshot(Version, rows);
+            changed = snapshotChanged;
+            snapshotChanged = null;
+        }
+        changed?.TrySetResult();
         return true;
     }
 
@@ -151,11 +231,17 @@ internal sealed class HexAgentHub
         chat.Model is { Length: > 0 } running ? running : chat.Options.GetValueOrDefault("model"), chat.Parent, chat.Depth, StateWord(chat),
         chat.Running ? string.Empty : chat.LastReply(reply), chat.TurnSeconds, chat.Cost, chat.Version, chat,
         // Nothing unread is the usual, a row is made again for every line an agent streams
-        chat.UnreadMailCount() > 0 ? chat.UnreadMail() : []);
+        chat.UnreadMailCount() > 0 ? chat.UnreadMail() : [])
+        {
+            Approvals = chat.HasPending ? [.. Approvals(chat).Take(16).Select(entry => ApprovalStatus(chat, entry))] : [],
+            LinkStarter = chat.LinkStarter,
+            LinkDevice = chat.LinkDevice ?? chat.LinkStarter?.Device,
+            RouteLinkApprovals = chat.Options.GetValueOrDefault("approvals") != "person"
+        };
 
     /// <summary>A chat's state in a word, as the tools say it.</summary>
     public static string StateWord(HexAgentChat chat) =>
-        chat.Running ? "running" : chat.RunGoing ? "running (its turn ended but its process goes on, hex_agent_restart if it's stuck)"
+        chat.Running ? (chat.LinkPreparation is { } preparing ? "running (" + preparing + ")" : "running") : chat.RunGoing ? "running (its turn ended but its process goes on, hex_agent_restart if it's stuck)"
         : chat.Stopped ? "stopped" : chat.Failed ? "failed" : chat.Entries.Count == 0 ? "new" : "done";
 }
 

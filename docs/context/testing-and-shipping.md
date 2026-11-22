@@ -138,6 +138,40 @@ stdout/stderr, keeps only `[Hex self-test]` lines and returns: `<suites>: <last 
 (lines beginning `FAIL` or `step threw`). Error result when exit code != 0 or on timeout (process tree killed). Because it launches the running exe, it is only as good as
 that exe's location (see 3.4).
 
+### Hex Link suites
+
+Run these from the build output of a disposable checkout. Give each process a fresh `HEX_HOME` and a unique `HEX_REMOTE_PIPE`, set `HORIZON_AUDIO=off`, and use `--exit`. The local suites start their own peers over IPv4 loopback and skip LAN discovery. Keep the engine and HIDL project references pointed at the matching checkout when building. See the [Wave 2 evidence and rerun commands](../hex-link-test-evidence.md).
+
+| Suite | Covers |
+| --- | --- |
+| `link` | Pairing, symmetric TLS session, rights, fleet/chat mirroring, approval and revocation |
+| `link-files` | Sync, exact-byte saves, conflicts, remote files, clone/fetch, patch offer, presence and Follow |
+| `link-provision` | Workspace Get, nested repositories and submodules, then working-tree sync |
+| `link-missing-repository` | Continued sync of a common tree while a missing nested checkout is offered separately |
+| `link-documents` | Three editors, automatic join, live unsaved edits, View-only participation, overlap, named agent edit, undo and shared save |
+| `link-claims` | Claims and guards between editors, plus auto-merge and unresolved overlap |
+| `link-worktree` | Private working copy, the publication gate, and receipt on the replica |
+| `link-git-follow` | Authority branch and commit follow, file sync after Git moves, and the reverse path |
+| `link-ui` | Devices, invites, connection state, workspace offers and remote approval UI |
+| `link-editor-notices` | Claim and shared-session notices, named collaborators, Follow and narrow/scale layout |
+
+`link-peer` is primarily a companion process. `link-cross` and `link-nearby` need two explicit invocations and use a real network route unless the cross test is configured for loopback. `HEX_LINK_TEST_WORKTREE=1` with `link-cross` runs the older paired working-tree **sync** fixture. Use `link-worktree` for private drafts and checked publication. The old cross-document fixture exercises the legacy protocol. Use `link-documents` for the current CRDT.
+
+### Linked prediction across two devices
+
+Set `HEX_LINK_TEST_PREDICTION=1` and `HORIZON_AUDIO=off` on both machines. Launch an isolated `Hex --selftest link-cross --exit` on each:
+
+- On the listener, set `HEX_LINK_TEST_LISTEN=<port>` and leave `HEX_LINK_TEST_DIAL` unset.
+- On the client, set `HEX_LINK_TEST_DIAL=<listener-host>:<port>` and leave `HEX_LINK_TEST_LISTEN` unset.
+- With a tunnel, set `HEX_LINK_TEST_LOOPBACK=1` on both machines and dial `127.0.0.1:<forwarded-port>` on the client.
+- Leave `HEX_LINK_TEST_DOCUMENTS`, `HEX_LINK_TEST_DOCUMENT_RECOVERY`, `HEX_LINK_TEST_WORKTREE`, `HEX_LINK_TEST_AGENT` and `HEX_LINK_TEST_CODING` unset. Allow at least 165 seconds per process when `HEX_LINK_TEST_SECONDS=90`.
+
+Expect six checks on the listener and seven on the client. The fixture grants Predict alone and opts in to serving on the listener. Its scripted HTTP server binds to listener loopback and receives synthetic editor text. The checks cover Tab acceptance, cancellation propagated to the HTTP stream, exclusion of a local `.env` edit, refusal to read a host file and refusal to predict after revocation. The in-memory `HexLinkPredictGlueTests` cover switching serving devices and invalidating cached answers.
+
+The direct-LAN run (`netpred4`) passed 6/6 on the macOS listener and 7/7 on the Windows client. The reverse run through SSH forwarding (`predreverse5`) passed 6/6 on the Windows listener and 7/7 on the macOS client. Both role combinations reported Predict as the only granted right. These results cover linked acceptance and permission handling with a scripted provider.
+
+Model quality and inference latency require a separate run using a locally hosted model, its model name and format, and representative code fixtures cleared for that provider.
+
 ### 3.6 How to add a self-test suite
 1. New file `Hex.Dawn/Testing/DawnScene.SelfTest.Foo.cs`, `internal sealed partial class DawnScene { private void TestFoo(HexPointerScript test) { ... } }`.
    Model: `DawnScene.SelfTest.Emmet.cs` (write a file under `testFolder`, `Open(path)`, `test.Settle`, `test.Check(...)`, `document.Editor.*`, `Save()`, `CloseDocument(document)`).

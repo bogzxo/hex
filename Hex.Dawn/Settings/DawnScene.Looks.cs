@@ -77,7 +77,7 @@ internal sealed partial class DawnScene : IHexLookOwner
         }
 
         menu.AddSeparator();
-        menu.Add(Said("looks.all"), () => OpenSettings(EditorSettingsCatalog.PROFILES), icon: "settings-gear");
+        menu.Add(Said("looks.all"), () => OpenSettings(EditorSettingsCatalog.LOOKS), icon: "settings-gear");
     }
 
     /// <summary>A look put on from outside the settings, the palette or the menu, the same as a click on its card.</summary>

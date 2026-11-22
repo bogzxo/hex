@@ -137,8 +137,8 @@ internal sealed partial class DawnScene
             return File.ReadAllText(HexSettings.WorkspacePathOf(root)).Contains("\"**/fixtures\"", StringComparison.Ordinal)
                 && read.LoadWorkspace(root) is null && read.SearchExclude.SequenceEqual(["**/fixtures"]) && read.IsOverridden("search_exclude");
         });
-        test.Check("excludes: every row of Editor, Search is found by its VS Code id", () =>
-            EditorSettingsCatalog.Text.Where(setting => setting.Group == EditorSettingsCatalog.SEARCH).ToList() is { Count: 3 } rows
+        test.Check("excludes: every row of the excludes is found by its VS Code id", () =>
+            EditorSettingsCatalog.Text.Where(setting => setting.Key is "files_exclude" or "search_exclude" or "search_use_ignore_files").ToList() is { Count: 3 } rows
             && rows.First(setting => setting.Key == "files_exclude").Keywords.Contains("files.exclude", StringComparison.Ordinal)
             && rows.First(setting => setting.Key == "search_exclude").Keywords.Contains("search.exclude", StringComparison.Ordinal)
             && rows.First(setting => setting.Key == "search_use_ignore_files").Keywords.Contains("search.useIgnoreFiles", StringComparison.Ordinal));

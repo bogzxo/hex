@@ -20,12 +20,12 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+# Upload in one job and deploy in the next, GitHub's own pattern. In one job the deploy asked for the artifact the
+# moment it was uploaded, found none ("No artifacts named github-pages"), and every first run failed until it was
+# run again by hand
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -43,5 +43,12 @@ jobs:
         with:
           path: site
 
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v4

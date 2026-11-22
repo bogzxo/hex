@@ -138,6 +138,8 @@ internal sealed partial class DawnScene
         UpdateNativeFolding();
         UpdateReferenceLenses();
         UpdateSemantics();
+        if (predictionSession is not null || settings.EditPredictions && !HexAi.Off)
+            UpdatePredictions();
 
         // An error stays until it's pressed or something else is said, gone after ten seconds like the rest nobody saw it
         if (messageItem.Text.Length > 0 && !saidError && System.Environment.TickCount64 - saidAt > SAID_FOR)
