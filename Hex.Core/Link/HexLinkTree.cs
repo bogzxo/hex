@@ -113,7 +113,7 @@ internal sealed partial class HexLinkTree
         relative ??= Walk();
         // Detect a capped root listing before nested repositories replace any of its entries.
         CheckCount(relative.Count);
-        var nested = AddNestedGitFiles(relative, issues);
+        var nested = AddNestedGitFiles(relative, issues, provision);
         CheckCount(relative.Count);
         var files = new List<HexLinkTreeFile>(relative.Count);
         HashSet<string>? actual = movedCase.IsEmpty ? null : new(StringComparer.Ordinal);

@@ -66,7 +66,7 @@ internal sealed partial class HexLinkTree
         return repositories;
     }
 
-    private IReadOnlyDictionary<string, string?>? AddNestedGitFiles(List<string> relative, Dictionary<string, HexLinkGitIssue> issues)
+    private IReadOnlyDictionary<string, string?>? AddNestedGitFiles(List<string> relative, Dictionary<string, HexLinkGitIssue> issues, bool provision)
     {
         if (HexLinkGit.Why() is not null)
             return null;
@@ -84,6 +84,7 @@ internal sealed partial class HexLinkTree
         relative.RemoveAll(path => RepositoryContaining(path, repositories) is not null);
         var heads = new Dictionary<string, string?>(StringComparer.Ordinal);
         var folders = new[] { Folder };
+        TimeSpan patience = TimeSpan.FromSeconds(provision ? 60 : 15);
         foreach (string path in repositories.Reverse())
         {
             if (issues.Any(each => each.Value.Unavailable && HexLinkMissingRepositories.Under(path, each.Key)))
@@ -100,7 +101,7 @@ internal sealed partial class HexLinkTree
                 continue;
             }
 
-            GitResult listed = GitProcess.Run(directory, ["ls-files", "-co", "--exclude-standard", "-z"], patience: TimeSpan.FromSeconds(15));
+            GitResult listed = GitProcess.Run(directory, ["ls-files", "-co", "--exclude-standard", "-z"], patience: patience);
             if (!listed.Ok)
             {
                 issues[path] = new HexLinkGitIssue(OneLine(listed.Why), Unavailable: true);
@@ -108,7 +109,7 @@ internal sealed partial class HexLinkTree
             }
             RecordGitWarning(issues, path, listed.Error);
 
-            GitResult head = GitProcess.Run(directory, ["rev-parse", "--verify", "--quiet", "HEAD"], patience: TimeSpan.FromSeconds(15));
+            GitResult head = GitProcess.Run(directory, ["rev-parse", "--verify", "--quiet", "HEAD"], patience: patience);
             string commit = head.Output.Trim();
             if (head.Exit != 1 && (!head.Ok || !HexLinkGit.IsCommitId(commit)))
             {

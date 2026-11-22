@@ -290,7 +290,12 @@ internal static partial class HexLinkProvision
                     if (!HexLinkProvisionPlan.Skips(skipped, relative)
                         && (local.NestedHeads?.ContainsKey(path) != true || remote.NestedHeads?.ContainsKey(path) != true
                             || local.NestedHeads[path] != remote.NestedHeads[path]))
-                        skipped.Add(new(relative, "The repository changed or could not be listed while the workspace was transferred."));
+                    {
+                        string reason = local.GitIssues?.GetValueOrDefault(path)?.Message
+                            ?? remote.GitIssues?.GetValueOrDefault(path)?.Message
+                            ?? "The repository's HEAD changed while the workspace was transferred.";
+                        skipped.Add(new(relative, reason));
+                    }
                 }
             }
             HexLinkMissingRepositories? omitted = (skipped ?? plan.Skipped) is { Count: > 0 } skip
