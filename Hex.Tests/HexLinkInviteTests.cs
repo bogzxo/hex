@@ -23,6 +23,34 @@ public sealed class HexLinkInviteTests : IDisposable
     }
 
     [Fact]
+    public async Task A_vpn_winner_gives_pending_lan_routes_a_chance_to_finish()
+    {
+        var lan = new TaskCompletionSource<string>();
+        var grace = new TaskCompletionSource();
+        Task<string> unreachable = Task.FromCanceled<string>(new CancellationToken(true));
+
+        Task<Task<string>?> choice = HexLinkTransport.FindInviteLan([unreachable, lan.Task], grace.Task);
+        Assert.False(choice.IsCompleted);
+        lan.SetResult("LAN");
+
+        Assert.Same(lan.Task, await choice);
+    }
+
+    [Fact]
+    public async Task A_vpn_winner_can_proceed_when_lan_routes_fail_or_grace_expires()
+    {
+        var lan = new TaskCompletionSource<string>();
+        var grace = new TaskCompletionSource();
+        Task<string> unreachable = Task.FromCanceled<string>(new CancellationToken(true));
+
+        Assert.Null(await HexLinkTransport.FindInviteLan([unreachable], grace.Task));
+        Task<Task<string>?> choice = HexLinkTransport.FindInviteLan([lan.Task], grace.Task);
+        grace.SetResult();
+
+        Assert.Null(await choice);
+    }
+
+    [Fact]
     public async Task An_invitation_races_routes_and_can_only_be_confirmed_once()
     {
         host.Listen();

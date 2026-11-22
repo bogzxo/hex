@@ -105,10 +105,11 @@ internal sealed partial class DawnScene
         string address = peer?.Session.Connection.Address ?? known.Address;
         if (address.Length > 0)
         {
-            string route = IPAddress.TryParse(address, out IPAddress? ip)
-                ? Said(LinkIsVpn(ip) ? "link.devices_route_vpn" : "link.devices_route_lan")
-                : Said("link.devices_route_network");
-            row.Add(new Badge { Text = route, Tooltip = address, TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left });
+            bool knownIp = IPAddress.TryParse(address, out IPAddress? ip);
+            bool vpn = ip is not null && LinkIsVpn(ip);
+            string route = Said(!knownIp ? "link.devices_route_network" : vpn ? "link.devices_route_vpn" : "link.devices_route_lan");
+            string tip = vpn && peer is not null ? Said("link.devices_route_vpn_active", ("address", address)) : address;
+            row.Add(new Badge { Text = route, Tooltip = tip, TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left });
         }
         if (peer is not null && linkLatencies.TryGetValue(known.Device.Id, out var sampled) && sampled.Peer == peer && sampled.Milliseconds is { } ms)
             row.Add(new Badge
@@ -118,6 +119,10 @@ internal sealed partial class DawnScene
                 TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left
             });
     }
+
+    private (string Host, int Port)[] LinkReconnectAddresses(HexLinkKnown known) =>
+        [.. LinkAddressesOf(known, LinkNearby, linkRedial.Addresses(known.Device.Id))
+            .OrderBy(route => IPAddress.TryParse(route.Host, out IPAddress? address) && LinkIsVpn(address))];
 
     private void LinkChangeDeviceRights(HexLinkKnown known)
     {
@@ -195,8 +200,14 @@ internal sealed partial class DawnScene
             else if (state?.Reason != "version")
             {
                 string key = state?.RetryAtUtc is not null || state?.Reason is "unreachable" or "timeout" or "firewall" ? "link.devices_try_now" : "link.device_connect";
-                AddLinkAction(actions, key, "plug", LinkOn && state?.Connecting != true && LinkAddressesOf(known, LinkNearby).Count > 0
-                    ? () => LinkConnectKnown(known) : null, "link.devices_no_reconnect");
+                if (LinkOn && state?.Connecting != true && LinkReconnectAddresses(known).Length == 0)
+                {
+                    actions.Add(LinkButton(Said("link.devices_join"), "link", () => ShowLinkDevicePage(LinkDevicePage.Join)));
+                    column.Add(LinkLine(Said("link.devices_no_reconnect")));
+                }
+                else
+                    AddLinkAction(actions, key, "plug", LinkOn && state?.Connecting != true ? () => LinkConnectKnown(known) : null,
+                        LinkOn ? "link.devices_connecting" : "link.pair_off_text");
             }
         }
 
@@ -308,7 +319,7 @@ internal sealed partial class DawnScene
         "version" => Said("link.devices_version_help"),
         "refused" or "pin" or "unknown" => Said("link.devices_refused_help"),
         "unreachable" or "timeout" or "firewall" => Said("link.devices_firewall_help"),
-        _ => Said("link.devices_dial_help", ("why", OneLine(reason, 150)))
+        _ => Said("link.devices_dial_help", ("why", OneLine(reason, 150).TrimEnd('.')))
     };
 
     private void TickLinkDeviceRows()

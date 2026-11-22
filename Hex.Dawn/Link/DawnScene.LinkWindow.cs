@@ -411,9 +411,9 @@ internal sealed partial class DawnScene
     // A known device dialled at the addresses it was last at and those the LAN says, the first that answers kept
     private void LinkConnectKnown(HexLinkKnown known)
     {
-        List<(string Host, int Port)> tries = LinkAddressesOf(known, LinkNearby);
         string id = known.Device.Id;
-        if (tries.Count == 0 || linkManualDials.GetValueOrDefault(id)?.Connecting == true)
+        var tries = LinkReconnectAddresses(known);
+        if (tries.Length == 0 || linkManualDials.GetValueOrDefault(id)?.Connecting == true)
             return;
         var attempt = CancellationTokenSource.CreateLinkedTokenSource(linkCancel?.Token ?? CancellationToken.None);
         var connecting = new LinkDeviceConnection(true, null, null, attempt);

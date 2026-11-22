@@ -116,7 +116,8 @@ million, and a miss closes the window. No secret is typed, so there's nothing to
 
 An invitation is a single `hex-link:v1.` token carrying private addresses, a port, the host's full
 public-key pin, expiry, and a random 256-bit secret. Send it privately to the person pairing. The joiner
-tries the listed endpoints in parallel and uses the first successful TLS handshake with the expected pin.
+tries the listed endpoints in parallel and only considers TLS handshakes with the expected pin. If a VPN
+answers first, the joiner gives pending LAN handshakes up to 300 ms to finish before using the VPN.
 It sends no invitation proof until TLS authenticates the host's key.
 
 The new `invite` handshake mode exchanges fresh nonces, then role-specific HMAC-SHA256 proofs over both
