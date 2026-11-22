@@ -182,8 +182,10 @@ public sealed partial class HexLinkWorktreeTests
         Assert.Equal("base\n", File.ReadAllText(Path.Combine(shared.Path, "tracked.txt")));
     }
 
-    [Fact]
-    public async Task Worktree_safety_a_later_draft_edit_keeps_authority_changes_merged_into_the_receipt()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Worktree_safety_a_later_draft_edit_keeps_authority_changes_merged_into_the_receipt(bool legacy)
     {
         if (HexLinkGit.Why() is not null)
             return;
@@ -205,6 +207,15 @@ public sealed partial class HexLinkWorktreeTests
             });
         await Assert.ThrowsAsync<IOException>(() => draft.Publish(route, new HexLinkWorktreeGateOptions(), true, CancellationToken.None));
         Assert.NotNull(receipt);
+        if (legacy)
+        {
+            string data = Path.GetDirectoryName(draft.Root)!;
+            string path = Path.Combine(data, "pending.json");
+            var pending = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+            Assert.Single(pending["files"]!.AsArray())!.AsObject().Remove("merge_input");
+            File.WriteAllText(path, pending.ToJsonString());
+            File.Delete(Path.Combine(data, $"pending-{receipt.Id:N}", "draft-0"));
+        }
 
         Guid id = Guid.ParseExact(Path.GetFileName(Path.GetDirectoryName(draft.Root)!), "N");
         var reopened = await HexLinkPrivateWorktree.Open(storage, id, shared, null, null, CancellationToken.None);
@@ -213,8 +224,17 @@ public sealed partial class HexLinkWorktreeTests
         Assert.StartsWith("private v2\n", File.ReadAllText(draftPath));
         reopened = await HexLinkPrivateWorktree.Open(storage, id, shared, null, null, CancellationToken.None);
         var next = await reopened.Prepare(tree.Manifest(), CancellationToken.None);
-        Assert.Empty(next.Conflicts);
-        Assert.Equal(Bytes("private v2\nbase two\nbase three\nauthority change\n"), Assert.Single(next.Edits).Bytes);
+        if (legacy)
+        {
+            // The old journal cannot separate v2 from v1, so it must hold the overlap for resolution.
+            Assert.Equal("work/tracked.txt", Assert.Single(next.Conflicts).Path);
+            Assert.Empty(next.Edits);
+        }
+        else
+        {
+            Assert.Empty(next.Conflicts);
+            Assert.Equal(Bytes("private v2\nbase two\nbase three\nauthority change\n"), Assert.Single(next.Edits).Bytes);
+        }
     }
 
     private async Task<(HexLinkPrivateWorktree Draft, HexLinkTree Tree, HexLinkFolder Shared, string Storage)> SafetyDraft(string contents = "base\n")

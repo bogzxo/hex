@@ -314,12 +314,13 @@ internal sealed partial class HexLinkPrivateWorktree
         }
     }
 
-    public async Task Accept(HexLinkDraftPlan published, CancellationToken cancel)
+    public async Task Accept(HexLinkDraftPlan published, CancellationToken cancel, bool legacyPending = false)
     {
         await operation.WaitAsync(cancel);
         try
         {
-            await Adopt(published.Edits, published.DraftHashes, cancel, published: true, mergeInputs: published.MergeInputs);
+            await Adopt(published.Edits, published.DraftHashes, cancel, published: true,
+                mergeInputs: published.MergeInputs, legacyPending: legacyPending);
         }
         finally
         {
@@ -328,7 +329,8 @@ internal sealed partial class HexLinkPrivateWorktree
     }
 
     private async Task Adopt(IReadOnlyList<HexLinkPublishEdit> edits, IReadOnlyDictionary<string, string?> expectedDrafts,
-        CancellationToken cancel, bool published = false, IReadOnlyDictionary<string, byte[]>? mergeInputs = null)
+        CancellationToken cancel, bool published = false, IReadOnlyDictionary<string, byte[]>? mergeInputs = null,
+        bool legacyPending = false)
     {
         if (edits.Count == 0)
             return;
@@ -384,6 +386,11 @@ internal sealed partial class HexLinkPrivateWorktree
                 // The next publish can apply only the later draft edits to the published version.
                 if (retained && expected is not null && mergeInputs?.TryGetValue(edit.Path, out byte[]? input) == true)
                     RetainDraftMergeBase(edit.Path, expected, input);
+                else if (retained && legacyPending && await ReadBasis(edit.Path, cancel) is { } previous)
+                {
+                    // Older journals kept only the input hash. Use the previous base to protect authority changes.
+                    RetainDraftMergeBase(edit.Path, HexLinkFiles.Hash(previous), previous);
+                }
                 else
                     draftMergeBases.Remove(edit.Path);
 

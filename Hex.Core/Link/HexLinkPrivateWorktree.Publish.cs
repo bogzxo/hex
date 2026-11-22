@@ -15,7 +15,7 @@ internal sealed record HexLinkDraftPublication(HexLinkPublishReceipt? Receipt, H
 
 internal sealed partial class HexLinkPrivateWorktree
 {
-    private sealed record PendingPublish(Guid Id, HexLinkDraftPlan Plan, bool Bypass);
+    private sealed record PendingPublish(Guid Id, HexLinkDraftPlan Plan, bool Bypass, bool Legacy = false);
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> Publications = new(PlatformPaths.Comparer);
     private string PendingFile => Path.Combine(data, "pending.json");
 
@@ -99,7 +99,7 @@ internal sealed partial class HexLinkPrivateWorktree
             }
             if (receipt.Id != pending.Id || receipt.Files != pending.Plan.Edits.Count || !HexLinkGit.IsCommitId(receipt.Commit))
                 throw new IOException("The authority returned a different publication receipt.");
-            await Accept(pending.Plan, cancel);
+            await Accept(pending.Plan, cancel, legacyPending: pending.Legacy);
             ClearPending(pending);
             return new(receipt, gate, []);
         }
@@ -172,6 +172,7 @@ internal sealed partial class HexLinkPrivateWorktree
         var edits = new HexLinkPublishEdit[rows.Count];
         var hashes = new Dictionary<string, string?>(StringComparer.Ordinal);
         var mergeInputs = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        bool legacy = false;
         for (int at = 0; at < rows.Count; at++)
         {
             if (rows[at] is not JsonObject row || HexLinkData.String(row, "path", HexLinkFiles.MOST_PATH) is not { } wire)
@@ -183,6 +184,7 @@ internal sealed partial class HexLinkPrivateWorktree
             edits[at] = new HexLinkPublishEdit(wire, HexLinkData.String(row, "base", 64), content);
             string? draftHash = HexLinkData.String(row, "draft", 64);
             hashes.Add(wire, draftHash);
+            legacy |= !row.ContainsKey("merge_input");
             if (HexLinkData.Bool(row, "merge_input") == true)
             {
                 byte[] input = await HexLinkFiles.ReadSharedAsync(PendingDraftBlob(id, at), cancel);
@@ -191,7 +193,7 @@ internal sealed partial class HexLinkPrivateWorktree
                 mergeInputs.Add(wire, input);
             }
         }
-        return new PendingPublish(id, new HexLinkDraftPlan(edits, [], hashes, mergeInputs), HexLinkData.Bool(data, "bypass") == true);
+        return new PendingPublish(id, new HexLinkDraftPlan(edits, [], hashes, mergeInputs), HexLinkData.Bool(data, "bypass") == true, legacy);
     }
 
     private void ClearPending(PendingPublish pending)
