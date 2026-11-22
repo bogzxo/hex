@@ -13,6 +13,8 @@ internal sealed record HexHubRow(int Id, string Shown, string Agent, string? Mod
     string Reply, double Seconds, double Cost, int Version, HexAgentChat Chat, HexAgentMail[] Mail)
 {
     public IReadOnlyList<HexAgentApprovalStatus> Approvals { get; init; } = [];
+    public HexLinkAgentStarter? LinkStarter { get; init; }
+    public bool RouteLinkApprovals { get; init; }
 
     /// <summary>Its messages not read yet, read off any thread by the number the chat has read up to.</summary>
     public HexAgentMail[] Unread => [.. Mail.Where(message => message.Seq > Chat.MailSeen)];

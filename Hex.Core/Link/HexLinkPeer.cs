@@ -13,6 +13,7 @@ internal sealed record HexLinkRow(int Id, string Name, string Agent, string? Mod
     double Seconds, double Cost, int Version, bool Waiting, string? PlanStep)
 {
     public IReadOnlyList<HexAgentApprovalStatus> Approvals { get; init; } = [];
+    public string? StarterReceipt { get; init; }
 }
 
 /// <summary>
@@ -338,6 +339,7 @@ internal sealed partial class HexLinkPeer : IDisposable
                 Math.Max(0, HexLinkData.Double(row, "seconds") ?? 0), Math.Max(0, HexLinkData.Double(row, "cost") ?? 0), HexLinkData.Int(row, "version") ?? 0,
                 HexLinkData.Bool(row, "waiting") == true, HexLinkData.String(row, "plan_step", 1000))
             {
+                StarterReceipt = HexLinkData.String(row, "starter_receipt", 32),
                 Approvals = [.. HexLinkData.Objects(row, "approvals", 16)
                     .Where(each => HexLinkData.Int(each, "request") is > 0 && HexLinkData.String(each, "title", 300) is { Length: > 0 })
                     .Select(each => new HexAgentApprovalStatus(HexLinkData.Int(each, "request")!.Value,
@@ -371,9 +373,15 @@ internal sealed partial class HexLinkPeer : IDisposable
     /// One of the other machine's tools called, its answer as it gave it (text and pictures). A refusal (a right this
     /// machine wasn't granted, a tool never let over a link) is thrown as the <see cref="HexLinkException"/> it was.
     /// </summary>
-    public async Task<McpToolResult> Call(string tool, JsonObject arguments, CancellationToken cancel = default, TimeSpan? timeout = null)
+    public async Task<McpToolResult> Call(string tool, JsonObject arguments, CancellationToken cancel = default, TimeSpan? timeout = null,
+        int? starter = null, string? receipt = null)
     {
-        JsonObject said = await AskObject("tools/call", new JsonObject { ["name"] = tool, ["arguments"] = arguments.DeepClone() }, cancel, timeout);
+        var request = new JsonObject { ["name"] = tool, ["arguments"] = arguments.DeepClone() };
+        if (starter is > 0)
+            request["starter_chat"] = starter;
+        if (receipt is not null)
+            request["starter_receipt"] = receipt;
+        JsonObject said = await AskObject("tools/call", request, cancel, timeout);
         var result = new McpToolResult { IsError = HexLinkData.Bool(said, "isError") == true };
         foreach (JsonObject item in HexLinkData.Objects(said, "content", MOST_CONTENT))
         {

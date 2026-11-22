@@ -268,7 +268,8 @@ internal sealed partial class HexLinkHost : IDisposable
                 ["waiting"] = row.Approvals.Count > 0 || extra?.Waiting == true,
                 ["approvals"] = row.Approvals.Count > 0 ? new JsonArray([.. row.Approvals.Select(approval => (JsonNode)new JsonObject
                     { ["request"] = approval.Number, ["title"] = approval.Title, ["detail"] = approval.Detail })]) : null,
-                ["plan_step"] = extra?.PlanStep
+                ["plan_step"] = extra?.PlanStep,
+                ["starter_receipt"] = row.RouteLinkApprovals && row.LinkStarter is { } starter && starter.Device == Device.Id ? starter.Receipt : null
             });
         }
 
@@ -304,6 +305,14 @@ internal sealed partial class HexLinkHost : IDisposable
         arguments = HexLinkAllowed.Stripped(McpSchema.Normalize(tool.InputSchema, arguments));
         if (McpSchema.Check(tool.InputSchema, arguments) is { } wrong)
             return McpToolResult.Error($"{name} can't take those arguments. {wrong}").ToJson();
+
+        if (name is "hex_agent_spawn" or "hex_agent_approve" or "hex_agent_wait")
+        {
+            int? chat = HexLinkData.Int(parameters, "starter_chat") is > 0 and var id ? id : null;
+            string? receipt = HexLinkData.String(parameters, "starter_receipt", 32);
+            HexLinkAllowed.SetAgentCall(arguments, new HexLinkAgentCall(Device, chat,
+                Guid.TryParseExact(receipt, "N", out _) ? receipt : null));
+        }
 
         if (right != HexLinkRights.View)
             services.Audit(HexLinkData.Word(right), Device, $"tool {name} {Cut(arguments.ToJsonString(), 300)}");

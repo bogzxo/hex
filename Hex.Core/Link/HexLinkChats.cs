@@ -35,7 +35,7 @@ internal static class HexLinkChats
     /// <summary>A chat's head as the link sends it: the store's, and whether it's running and how long its turn took.</summary>
     public static JsonObject Head(HexAgentChat chat)
     {
-        JsonObject head = HexAgentChatStore.Head(chat);
+        JsonObject head = HexAgentChatStore.Head(chat, includeLinkOwnership: false);
         head["running"] = chat.Running;
         head["turn_seconds"] = chat.TurnSeconds;
         head["state"] = HexAgentHub.StateWord(chat);

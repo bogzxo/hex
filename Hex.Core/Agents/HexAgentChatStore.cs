@@ -24,7 +24,7 @@ internal static class HexAgentChatStore
     /// A chat as it's written down without its rows, what it is and what it used, which a link sends on its own when
     /// only that changed.
     /// </summary>
-    public static JsonObject Head(HexAgentChat chat)
+    public static JsonObject Head(HexAgentChat chat, bool includeLinkOwnership = true)
     {
         var options = new JsonObject();
         foreach (var (key, value) in chat.Options)
@@ -51,7 +51,10 @@ internal static class HexAgentChatStore
             ["settled"] = chat.Settled,
             ["key"] = chat.Key,
             ["dropped"] = chat.Dropped,
-            ["plan"] = chat.Plan?.ToStored()
+            ["plan"] = chat.Plan?.ToStored(),
+            ["link_starter"] = includeLinkOwnership ? chat.LinkStarter?.ToJson() : null,
+            ["link_children"] = includeLinkOwnership && chat.LinkChildren.Count > 0
+                ? new JsonArray([.. chat.LinkChildren.Select(child => (JsonNode)child.Address.ToJson())]) : null
         };
     }
 
@@ -125,6 +128,11 @@ internal static class HexAgentChatStore
             CacheRead = said["cache_read"]?.GetValue<long>() ?? 0,
             Stopped = said["stopped"]?.GetValue<bool>() ?? false
         };
+        chat.LinkStarter = HexLinkAgentStarter.Read(said["link_starter"] as JsonObject);
+        foreach (JsonObject child in HexLinkData.Objects(said, "link_children", 128))
+            if (HexLinkAgentStarter.Read(child) is { } address)
+                chat.LinkChildren.Add(new HexLinkAgentChild(address));
+
         // Chats kept before there was settling were in the Finished group once read back, as they still are
         chat.RestoreSettled(said["settled"]?.GetValue<bool>() ?? true);
 

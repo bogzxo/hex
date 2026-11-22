@@ -15,6 +15,8 @@ internal sealed record HexLinkKnown(HexLinkDevice Device, HexLinkRights Rights, 
     /// <summary>What the person here calls it, which wins over what it calls itself, null to go by its own name.</summary>
     public string? Named { get; init; }
 
+    public HexLinkPreApproval RemotePreApproval { get; init; } = HexLinkPreApproval.Edits;
+
     /// <summary>The name it's shown by here, the person's for it or its own.</summary>
     public string Shown => Named ?? Device.Name;
 }
@@ -75,7 +77,10 @@ internal sealed class HexLinkTrust
         {
             DateTime now = DateTime.UtcNow;
             DateTime first = devices.TryGetValue(device.Id, out HexLinkKnown? was) ? was.Added : now;
-            added = new HexLinkKnown(device, rights, first, now, address, port) { Named = was?.Named };
+            added = new HexLinkKnown(device, rights, first, now, address, port)
+            {
+                Named = was?.Named, RemotePreApproval = was?.RemotePreApproval ?? HexLinkPreApproval.Edits
+            };
             devices[device.Id] = added;
             Save();
         }
@@ -86,6 +91,8 @@ internal sealed class HexLinkTrust
 
     /// <summary>Says what a device may do here from now on, false when it isn't known.</summary>
     public bool SetRights(string id, HexLinkRights rights) => Change(id, known => known with { Rights = rights });
+
+    public bool SetRemotePreApproval(string id, HexLinkPreApproval policy) => Change(id, known => known with { RemotePreApproval = policy });
 
     /// <summary>
     /// Calls a device something of the person's own here, which wins over what it calls itself, or goes back to its own
@@ -150,6 +157,7 @@ internal sealed class HexLinkTrust
                 ["id"] = known.Device.Id,
                 ["name"] = known.Device.Name,
                 ["named"] = known.Named,
+                ["remote_preapproval"] = HexLinkSpawnPolicy.Word(known.RemotePreApproval),
                 ["os"] = known.Device.Os,
                 ["arch"] = known.Device.Arch,
                 ["version"] = known.Device.Version,
@@ -214,7 +222,11 @@ internal sealed class HexLinkTrust
                 DateTime added = Time(device, "added"), seen = Time(device, "seen");
                 int port = device["port"] is JsonValue portValue && portValue.TryGetValue(out int number) ? number : 0;
                 read.Add(new HexLinkKnown(new HexLinkDevice(id.ToUpperInvariant(), Text(device, "name") ?? "", Text(device, "os") ?? "", Text(device, "arch") ?? "", Text(device, "version") ?? ""),
-                    rights, added, seen, Text(device, "address") ?? "", port) { Named = HexLinkNames.Clean(Text(device, "named")) });
+                    rights, added, seen, Text(device, "address") ?? "", port)
+                {
+                    Named = HexLinkNames.Clean(Text(device, "named")),
+                    RemotePreApproval = HexLinkSpawnPolicy.Read(Text(device, "remote_preapproval"))
+                });
             }
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)

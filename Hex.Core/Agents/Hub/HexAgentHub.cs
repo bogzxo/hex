@@ -88,7 +88,7 @@ internal sealed class HexAgentHub
 
     private static HexAgentApprovalStatus ApprovalStatus(HexAgentChat chat, HexAgentEntry entry) =>
         new(RequestNumber(chat, entry), ApprovalLine(entry.Text, 300),
-            ApprovalLine(HexAgentRows.Readable(entry.Input ?? string.Empty), 600));
+            ApprovalLine(entry.Input ?? string.Empty, 600));
 
     private static string ApprovalLine(string text, int most)
     {
@@ -197,7 +197,9 @@ internal sealed class HexAgentHub
         // Nothing unread is the usual, a row is made again for every line an agent streams
         chat.UnreadMailCount() > 0 ? chat.UnreadMail() : [])
         {
-            Approvals = chat.HasPending ? [.. Approvals(chat).Take(16).Select(entry => ApprovalStatus(chat, entry))] : []
+            Approvals = chat.HasPending ? [.. Approvals(chat).Take(16).Select(entry => ApprovalStatus(chat, entry))] : [],
+            LinkStarter = chat.LinkStarter,
+            RouteLinkApprovals = chat.Options.GetValueOrDefault("approvals") != "person"
         };
 
     /// <summary>A chat's state in a word, as the tools say it.</summary>
