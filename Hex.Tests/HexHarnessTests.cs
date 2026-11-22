@@ -281,6 +281,35 @@ public sealed class HexHarnessTests : IDisposable
     }
 
     [Fact]
+    public void A_file_written_through_the_harness_is_in_the_next_answer_and_a_folder_added_has_all_its_files()
+    {
+        var roots = new List<string> { folder };
+        var index = new HexCodeIndex(() => [.. roots]) { StaleAfter = 60_000 };
+        index.Current();
+
+        File.WriteAllText(Path.Combine(folder, "Fresh.cs"), "class FreshOnly { }\n");
+        Assert.DoesNotContain("FreshOnly.cs", index.Files("Fresh", 10, 4000, null).Text);
+        index.Touch();
+        Assert.Contains("Fresh.cs", index.Files("Fresh", 10, 4000, null).Text);
+        Assert.Contains("FreshOnly", index.Symbols("FreshOnly", null, null, 10, 4000).Text);
+
+        string other = Directory.CreateTempSubdirectory("hex-added-").FullName;
+        try
+        {
+            string old = Path.Combine(other, "Program.cs");
+            File.WriteAllText(old, "class OlderThanTheAdd { }\n");
+            File.SetLastWriteTimeUtc(old, DateTime.UtcNow.AddYears(-2));
+            roots.Add(other);
+            Assert.Contains("Program.cs", index.Files("Program", 10, 4000, null).Text);
+            Assert.Contains("OlderThanTheAdd", index.Symbols("OlderThanTheAdd", null, null, 10, 4000).Text);
+        }
+        finally
+        {
+            Directory.Delete(other, true);
+        }
+    }
+
+    [Fact]
     public void The_same_question_twice_is_kept()
     {
         var slow = new HexCodeIndex(() => [folder]) { StaleAfter = 60_000 };
