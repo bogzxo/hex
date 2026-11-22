@@ -39,6 +39,39 @@ public sealed class HexLinkTreeCacheTests
     }
 
     [Fact]
+    public void A_clean_index_reuses_paths_but_never_hides_a_new_untracked_file()
+    {
+        if (HexLinkGit.Why() is not null)
+            return;
+
+        using var site = new LinkServices(HexLinkTestKit.DeviceA);
+        HexLinkFolder folder = site.Workspace.Folders[0];
+        Run("init", "-q");
+        File.WriteAllText(Path.Combine(site.Work, "tracked.txt"), "tracked");
+        Run("add", "tracked.txt");
+        Run("-c", "user.name=Link test", "-c", "user.email=link-test@example.invalid", "commit", "-qm", "tracked");
+
+        HexLinkTree tree = HexLinkTree.Shared(folder, () => HexExcludes.Usual, cacheDirectory: null, streamLarge: true);
+        HexLinkManifest first = tree.Manifest();
+        Assert.Empty(tree.Ignored(["tracked.txt"]));
+        Assert.Equal(first.Files, tree.Manifest(verify: false, reuse: false).Files);
+        Assert.Equal(1, tree.ReusedGitListings);
+
+        DateTime stamp = Directory.GetLastWriteTimeUtc(site.Work);
+        File.WriteAllText(Path.Combine(site.Work, "untracked.txt"), "new while disconnected");
+        Directory.SetLastWriteTimeUtc(site.Work, stamp);
+        HexLinkManifest next = tree.Manifest(verify: false, reuse: false);
+        Assert.Contains(next.Files, file => file.Path == "work/untracked.txt");
+        Assert.Equal(1, tree.ReusedGitListings);
+
+        void Run(params string[] args)
+        {
+            GitResult result = GitProcess.Run(site.Work, args);
+            Assert.True(result.Ok, result.Why);
+        }
+    }
+
+    [Fact]
     public async Task Explicit_flush_certifies_a_directory_created_during_a_pack()
     {
         using var site = new LinkServices(HexLinkTestKit.DeviceA);

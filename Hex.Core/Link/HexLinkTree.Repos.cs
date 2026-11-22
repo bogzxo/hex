@@ -25,7 +25,7 @@ internal sealed partial class HexLinkTree
 
     // Read .git markers and directory names together, including below directories ignored by the outer repo.
     internal static List<string> FindNestedRepositories(string root, CancellationToken cancel = default,
-        Action<string, string>? unavailable = null)
+        Action<string, string>? unavailable = null, List<string>? inventory = null)
     {
         using var timing = HexLinkSyncTiming.Measure("tree.discover-repositories");
         var repositories = new List<string>();
@@ -41,23 +41,33 @@ internal sealed partial class HexLinkTree
             bool marker = false, linked = false;
             try
             {
-                var entries = new FileSystemEnumerable<(string? Directory, bool Link)>(parent, static (ref FileSystemEntry entry) =>
-                    entry.FileName.Equals(".git", PlatformPaths.Comparison)
-                        ? (null, (entry.Attributes & FileAttributes.ReparsePoint) != 0) : (entry.ToFullPath(), false), options)
+                var entries = new FileSystemEnumerable<(string? Path, bool Directory, bool Link)>(parent,
+                    static (ref FileSystemEntry entry) => entry.FileName.Equals(".git", PlatformPaths.Comparison)
+                        ? (null, false, (entry.Attributes & FileAttributes.ReparsePoint) != 0)
+                        : (entry.ToFullPath(), entry.IsDirectory, false), options)
                 {
-                    ShouldIncludePredicate = static (ref FileSystemEntry entry) => entry.FileName.Equals(".git", PlatformPaths.Comparison)
-                        || (entry.IsDirectory && (entry.Attributes & FileAttributes.ReparsePoint) == 0
-                            && !SKIPPED.Contains(entry.FileName.ToString()) && !entry.FileName.SequenceEqual(".vs") && !entry.FileName.SequenceEqual(".venv"))
+                    ShouldIncludePredicate = (ref FileSystemEntry entry) => entry.FileName.Equals(".git", PlatformPaths.Comparison)
+                        || (entry.IsDirectory || inventory is not null) && (entry.Attributes & FileAttributes.ReparsePoint) == 0
                 };
-                foreach (var (directory, link) in entries)
+                foreach (var (path, directory, link) in entries)
                 {
-                    if (directory is null)
+                    if (path is null)
                     {
                         marker = true;
                         linked = link;
                     }
+                    else if (!directory)
+                    {
+                        AddCandidate(path);
+                    }
                     else
-                        children.Add(directory);
+                    {
+                        string leaf = Path.GetFileName(path);
+                        if (SKIPPED.Contains(leaf) || leaf is ".vs" or ".venv")
+                            AddCandidate(path, uncheckedDirectory: true);
+                        else
+                            children.Add(path);
+                    }
                 }
             }
             catch (Exception error) when (unavailable is not null && parent != root && error is IOException or UnauthorizedAccessException)
@@ -80,16 +90,22 @@ internal sealed partial class HexLinkTree
         }
 
         return repositories;
+
+        void AddCandidate(string path, bool uncheckedDirectory = false)
+        {
+            if (inventory is not null && inventory.Count <= MOST_FILES)
+            {
+                string relative = Path.GetRelativePath(root, path).Replace(Path.DirectorySeparatorChar, '/');
+                // A skipped directory might have untracked candidates. Require Git for that scope.
+                inventory.Add(uncheckedDirectory ? relative + "/" : relative);
+            }
+        }
     }
 
-    private IReadOnlyDictionary<string, string?>? AddNestedGitFiles(List<string> relative, Dictionary<string, HexLinkGitIssue> issues, bool provision)
+    private IReadOnlyDictionary<string, string?>? AddNestedGitFiles(List<string> relative, Dictionary<string, HexLinkGitIssue> issues,
+        bool provision, DiskGitLayout layout)
     {
-        if (HexLinkGit.Why() is not null)
-            return null;
-
-        string[] repositories = [.. FindNestedRepositories(Root, unavailable: (path, why) =>
-            issues[path] = new HexLinkGitIssue(OneLine(why), Unavailable: true))
-            .Where(path => !Hidden(path, folder: true)).OrderByDescending(path => path.Length)];
+        string[] repositories = layout.Repositories;
         string[] unknown = [.. issues.Where(each => each.Value.Unavailable).Select(each => each.Key)];
         if (unknown.Length != 0)
             relative.RemoveAll(path => unknown.Any(scope => HexLinkMissingRepositories.Under(path, scope)));
@@ -112,15 +128,13 @@ internal sealed partial class HexLinkTree
             {
                 string path = repositories[i];
                 string directory = HexLinkFiles.Resolve(folders, Folder.Name + "/" + path);
-                GitResult listed;
-                using (HexLinkSyncTiming.Measure("tree.list-nested-git"))
-                    listed = GitProcess.Run(directory, ["ls-files", "-co", "--exclude-standard", "-z"], patience: patience);
+                GitResult listed = ListGitWorkingFiles(directory, path, layout, patience, out GitResult? headAlreadyRead);
                 if (!listed.Ok)
                 {
                     scans[i] = ("", null, null, OneLine(listed.Why));
                     return;
                 }
-                GitResult head = GitProcess.Run(directory, ["rev-parse", "--verify", "--quiet", "HEAD"], patience: patience);
+                GitResult head = headAlreadyRead ?? GitProcess.Run(directory, ["rev-parse", "--verify", "--quiet", "HEAD"], patience: patience);
                 string commit = head.Output.Trim();
                 if (head.Exit != 1 && (!head.Ok || !HexLinkGit.IsCommitId(commit)))
                 {

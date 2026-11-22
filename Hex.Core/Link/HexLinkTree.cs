@@ -115,17 +115,17 @@ internal sealed partial class HexLinkTree
         List<string>? relative = null;
         var listing = HexLinkSyncTiming.Measure("tree.list-and-git");
         var issues = new Dictionary<string, HexLinkGitIssue>(StringComparer.Ordinal);
+        DiskGitLayout? layout = null;
         if (HexLinkGit.Why() is null)
         {
-            GitResult listed;
-            using (HexLinkSyncTiming.Measure("tree.list-root-git"))
-                listed = GitProcess.Run(Root, ["ls-files", "-co", "--exclude-standard", "-z"], patience: TimeSpan.FromMinutes(2));
+            layout = DiscoverGitLayout(issues, allowIndexReuse: !verify && !provision);
+            GitResult listed = ListGitWorkingFiles(Root, string.Empty, layout, TimeSpan.FromMinutes(2), out GitResult? headAlreadyRead);
             if (listed.Ok)
             {
                 RecordGitWarning(issues, string.Empty, listed.Error);
                 InRepository = true;
                 relative = [.. listed.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.Ordinal).Take(MOST_FILES + 1)];
-                GitResult at = GitProcess.Run(Root, ["rev-parse", "--verify", "--quiet", "HEAD"]);
+                GitResult at = headAlreadyRead ?? GitProcess.Run(Root, ["rev-parse", "--verify", "--quiet", "HEAD"]);
                 if (at.Exit != 1 && (!at.Ok || !HexLinkGit.IsCommitId(at.Output.Trim())))
                     throw new IOException($"Git could not read HEAD in {Folder.Name}: {at.Why}");
                 RecordGitWarning(issues, string.Empty, at.Error);
@@ -146,7 +146,7 @@ internal sealed partial class HexLinkTree
         relative ??= Walk();
         // Detect a capped root listing before nested repositories replace any of its entries.
         CheckCount(relative.Count);
-        var nested = AddNestedGitFiles(relative, issues, provision);
+        var nested = layout is not null ? AddNestedGitFiles(relative, issues, provision, layout) : null;
         CheckCount(relative.Count);
         var actual = new HashSet<string>(StringComparer.Ordinal);
         var paths = new List<string>(relative.Count);

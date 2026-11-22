@@ -18,8 +18,10 @@ internal sealed partial class HexLinkTree
         public IReadOnlySet<string>? Paths;
     }
 
-    private IReadOnlySet<string>? TrackedNow(string repository)
+    private IReadOnlySet<string>? TrackedNow(string repository, bool cachedOnly = false)
     {
+        if (cachedOnly && !trackedIndexes.ContainsKey(repository))
+            return null;
         if (Environment.GetEnvironmentVariable("GIT_INDEX_FILE") is not null ||
             Environment.GetEnvironmentVariable("GIT_DIR") is not null ||
             Environment.GetEnvironmentVariable("GIT_WORK_TREE") is not null ||
@@ -46,6 +48,8 @@ internal sealed partial class HexLinkTree
                 string hash = HexLinkFiles.Hash(bytes);
                 if (hash == cached.Hash)
                     return cached.Paths;
+                if (cachedOnly)
+                    return null;
 
                 IReadOnlySet<string>? tracked = ReadTracked(repository, git, bytes);
                 cached.Hash = hash;
