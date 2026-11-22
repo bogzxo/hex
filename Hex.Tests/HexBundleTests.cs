@@ -10,7 +10,8 @@ public sealed class HexBundleTests
     [InlineData("/Users/a/Hex Dev.app/Contents/MacOS", "/Users/a/Hex Dev.app")]
     public void AnAppsMacOSFolderHasItsBundle(string folder, string app)
     {
-        Assert.Equal(app, HexBundle.RootOf(folder));
+        // Off macOS the path comes back with this system's separators.
+        Assert.Equal(app, HexBundle.RootOf(folder)?.Replace('\\', '/'));
         Assert.True(HexBundle.IsBundleProgram(folder));
     }
 
