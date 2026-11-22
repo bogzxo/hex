@@ -207,17 +207,4 @@ internal sealed partial class DawnScene
         return wide + 6.0f;
     }
 
-    /// <summary>A remote chat's menu: open it, stop or restart it there when Steer was granted.</summary>
-    private Menu LinkRemoteMenu(LinkRemoteCard remote)
-    {
-        var menu = new Menu("remote chat");
-        bool Online() => LinkChatOnline(remote.DeviceId);
-        if (!Online())
-            menu.Add(new MenuItem { Label = LinkChatOfflineReason(remote.DeviceName), Icon = "info", IsEnabled = () => false });
-        menu.Add(Said("agents_panel.chat_open"), () => OpenRemoteChat(remote), icon: "comment").IsEnabled = Online;
-        bool steer = LinkPeerOf(remote.DeviceId) is { } peer && HexLinkAllowed.Has(peer.Granted, HexLinkRights.Steer);
-        menu.Add(Said("link.chat_stop"), () => LinkRemoteStop(remote), icon: "debug-stop").IsEnabled = () => steer;
-        menu.Add(Said("link.chat_restart"), () => LinkRemoteRestart(remote), icon: "debug-restart").IsEnabled = () => steer;
-        return menu;
-    }
 }

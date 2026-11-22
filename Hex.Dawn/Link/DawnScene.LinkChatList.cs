@@ -251,7 +251,13 @@ internal sealed partial class DawnScene
     {
         var head = new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, LINK_CHAT_HEAD), Color = Vector4.Zero };
         string tip = Said("link.fleet_head_tip", ("device", device.Name), ("there", LinkRightsSaid(device.Granted)));
-        head.Add(new ChatListHeadButton(this, key, open, shown => SetLinkChatOpen(key, shown)) { Tooltip = tip });
+        if (!device.Online)
+            tip += "\n" + LinkChatOfflineReason(device.Name);
+        head.Add(new ChatListHeadButton(this, key, open, shown => SetLinkChatOpen(key, shown))
+        {
+            Tooltip = tip,
+            OnContextMenu = at => ContextMenu.Show(chrome, at, LinkDeviceMenu(device))
+        });
         var name = head.Add(new Label
         {
             Bold = true, Dim = !device.Online, TextScale = 0.13f, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft,
