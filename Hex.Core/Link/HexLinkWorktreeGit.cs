@@ -41,33 +41,48 @@ internal sealed class HexLinkWorktreeGit
             sources.Append(full).Append('\n');
         }
 
-        string[] blobs = files.Count == 0 ? [] :
-            (await Need(["hash-object", "-w", "--no-filters", "--stdin-paths"], cancel, sources.ToString())).Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-        if (blobs.Length != files.Count || blobs.Any(blob => !HexLinkGit.IsCommitId(blob)))
-            throw new IOException("Git did not return all the snapshot blobs.");
+        // One git fast-import writes every file into a single pack with the tree and commit, rather than hash-object
+        // writing a loose object a file and four more processes making the tree: 1,677 files (37 MB) took 10-12 s as
+        // loose objects and 1.6-2 s as one pack, the same tree. Light compression, no deltas: the pack is local and
+        // short-lived, the time is in zlib
+        string capture = $"refs/hexlink/capture/{Guid.NewGuid():N}";
+        string[] resolved = [.. sources.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries)];
+        GitOutput imported = await Run(["-c", "core.compression=1", "fast-import", "--quiet", "--depth=0"], cancel,
+            stream: input => WriteImport(input, resolved, files, capture, cancel));
+        if (imported.Exit != 0)
+            throw new IOException($"Git fast-import failed: {imported.Error}");
 
-        string index = Path.Combine(repository, $"hex-index-{Guid.NewGuid():N}");
-        try
-        {
-            await Need(["read-tree", "--empty"], cancel, index: index);
-            if (files.Count > 0)
-            {
-                var entries = new StringBuilder();
-                for (int i = 0; i < files.Count; i++)
-                    entries.Append(files[i].Executable ? "100755 " : "100644 ").Append(blobs[i]).Append('\t').Append(files[i].Path).Append('\0');
-                await Need(["update-index", "-z", "--index-info"], cancel, entries.ToString(), index);
-            }
-
-            string tree = await Need(["write-tree"], cancel, index: index);
-            string commit = await Need(["commit-tree", tree, "-m", "Hex Link snapshot"], cancel);
-            await Need(["update-ref", "refs/hexlink/snapshots/" + commit, commit], cancel);
-            return commit;
-        }
-        finally
-        {
-            File.Delete(index);
-        }
+        string commit = CheckedObject(await Need(["rev-parse", "--verify", capture + "^{commit}"], cancel));
+        await Need(["update-ref", "--stdin"], cancel, $"start\ncreate refs/hexlink/snapshots/{commit} {commit}\ndelete {capture} {commit}\nprepare\ncommit\n");
+        return commit;
     }
+
+    /// <summary>The fast-import stream of a snapshot: each file's bytes as read now, then one commit of them all.</summary>
+    private static async Task WriteImport(Stream input, string[] full, IReadOnlyList<HexLinkWorktreeFile> files, string capture, CancellationToken cancel)
+    {
+        await using var output = new BufferedStream(input, 1 << 16);
+        await output.WriteAsync(Utf8.GetBytes("feature done\n"), cancel);
+        for (int i = 0; i < files.Count; i++)
+        {
+            byte[] data = await File.ReadAllBytesAsync(full[i], cancel);
+            await output.WriteAsync(Utf8.GetBytes($"blob\nmark :{i + 1}\ndata {data.Length}\n"), cancel);
+            await output.WriteAsync(data, cancel);
+            output.WriteByte((byte)'\n');
+        }
+
+        var commit = new StringBuilder();
+        commit.Append($"commit {capture}\ncommitter Hex Link <hex-link@localhost> {DateTimeOffset.UtcNow.ToUnixTimeSeconds()} +0000\n");
+        byte[] message = Utf8.GetBytes("Hex Link snapshot");
+        commit.Append($"data {message.Length}\nHex Link snapshot\n");
+        for (int i = 0; i < files.Count; i++)
+            commit.Append(files[i].Executable ? "M 100755 :" : "M 100644 :").Append(i + 1).Append(' ').Append(Quoted(files[i].Path)).Append('\n');
+        commit.Append("\ndone\n");
+        await output.WriteAsync(Utf8.GetBytes(commit.ToString()), cancel);
+        await output.FlushAsync(cancel);
+    }
+
+    /// <summary>A path as fast-import reads a quoted one, the backslash and the quote escaped (control characters are refused before).</summary>
+    private static string Quoted(string path) => "\"" + path.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
 
     public Task<string> Checkout(string commit, string path, CancellationToken cancel) =>
         Need(["worktree", "add", "--detach", "--quiet", Path.GetFullPath(path), CheckedObject(commit)], cancel);
@@ -122,14 +137,15 @@ internal sealed class HexLinkWorktreeGit
         public string Text => Utf8.GetString(Bytes).Trim();
     }
 
-    private async Task<GitOutput> Run(string[] args, CancellationToken cancel, string? input = null, string? index = null)
+    private async Task<GitOutput> Run(string[] args, CancellationToken cancel, string? input = null, string? index = null,
+        Func<Stream, Task>? stream = null)
     {
         var start = new ProcessStartInfo("git")
         {
             WorkingDirectory = repository,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            RedirectStandardInput = input is not null,
+            RedirectStandardInput = input is not null || stream is not null,
             StandardErrorEncoding = Utf8,
             UseShellExecute = false,
             CreateNoWindow = true
@@ -170,6 +186,11 @@ internal sealed class HexLinkWorktreeGit
             {
                 await using Stream inputStream = process.StandardInput.BaseStream;
                 await inputStream.WriteAsync(Utf8.GetBytes(input), cancel);
+            }
+            else if (stream is not null)
+            {
+                await using Stream inputStream = process.StandardInput.BaseStream;
+                await stream(inputStream);
             }
 
             await Task.WhenAll(process.WaitForExitAsync(cancel), output, error);

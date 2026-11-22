@@ -120,12 +120,15 @@ internal sealed partial class HexLinkPrivateWorktree
         var added = new List<string>();
         try
         {
-            for (int i = 0; i < paths.Length; i++)
+            // Each repository has its own object store, so they're captured at once, the biggest setting the time rather
+            // than the sum of them all. Checked out a level of nesting at a time (git won't add a worktree into a folder
+            // a nested one already made), those of a level at once; added to the worktree in their order after
+            var versionsOf = paths.Select(relative => grouped[relative].ToArray()).ToArray();
+            int started = 0;
+            var captured = await Task.WhenAll(paths.Select(async (relative, i) =>
             {
                 cancel.ThrowIfCancellationRequested();
-                string relative = paths[i];
-                var versionsHere = grouped[relative].ToArray();
-                progress?.Invoke(new(relative, i + 1, paths.Length, versionsHere.Length, versionsHere.Sum(item => item.Value.Size)));
+                var versionsHere = versionsOf[i];
                 var files = new List<HexLinkWorktreeFile>(versionsHere.Length);
                 foreach (var (wire, _) in versionsHere)
                 {
@@ -133,15 +136,21 @@ internal sealed partial class HexLinkPrivateWorktree
                     bool executable = !OperatingSystem.IsWindows() && File.GetUnixFileMode(full).HasFlag(UnixFileMode.UserExecute);
                     files.Add(new HexLinkWorktreeFile(Inside(relative, Relative(shared, wire)), executable));
                 }
-                string target = Path.Combine(Root, relative);
+                progress?.Invoke(new(relative, Interlocked.Increment(ref started), paths.Length, versionsHere.Length, versionsHere.Sum(item => item.Value.Size)));
                 HexLinkWorktreeGit git = await HexLinkWorktreeGit.Open(ObjectDirectory(home, source, relative), cancel);
                 string commit = await git.Capture(Path.Combine(source, relative), files, cancel);
-                await git.Checkout(commit, target, cancel);
+                return (Relative: relative, Commit: commit, Git: git);
+            }));
+            foreach (var level in captured.GroupBy(repo => Depth(repo.Relative)).OrderBy(level => level.Key))
+                await Task.WhenAll(level.Select(repo => repo.Git.Checkout(repo.Commit, Path.Combine(Root, repo.Relative), cancel)));
+            var made = captured;
+            for (int i = 0; i < made.Length; i++)
+            {
                 int index = repositories.Count;
-                repositories.Add(new Repository(relative, commit, git));
-                foreach (var (wire, version) in versionsHere)
+                repositories.Add(new Repository(made[i].Relative, made[i].Commit, made[i].Git));
+                foreach (var (wire, version) in versionsOf[i])
                 {
-                    basis.Add(wire, new Basis(version.Hash, index, commit));
+                    basis.Add(wire, new Basis(version.Hash, index, made[i].Commit));
                     added.Add(wire);
                 }
             }
@@ -160,6 +169,10 @@ internal sealed partial class HexLinkPrivateWorktree
         }
         File.Delete(SetupFile(data));
     }
+
+    /// <summary>How deep a repository is in the worktree, the top one 0, one a folder of it in 1 and so on.</summary>
+    private static int Depth(string relative) =>
+        relative.Length == 0 ? 0 : 1 + relative.Count(c => c is '/' or '\\');
 
     public async Task EnsureRepositories(IReadOnlySet<string> desired, HexLinkManifest snapshot,
         Action<HexLinkWorktreeProgress>? progress, CancellationToken cancel)

@@ -58,6 +58,55 @@ public sealed class HexLinkWorktreeTests : IDisposable
     }
 
     [Fact]
+    public async Task A_snapshot_keeps_unusual_names_nested_folders_and_an_empty_set()
+    {
+        if (HexLinkGit.Why() is not null)
+            return;
+        string shared = Folder("names");
+        string[] names = ["with space.txt", "deep/er/ünïcode ✓.md", "deep/plain", "#hash;semi'quote.cs"];
+        for (int i = 0; i < names.Length; i++)
+        {
+            string full = Path.Combine(shared, names[i]);
+            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+            File.WriteAllBytes(full, Bytes($"file {i}\r\n"));
+        }
+
+        var store = await HexLinkWorktreeGit.Open(Folder("names-objects"), CancellationToken.None);
+        string snapshot = await store.Capture(shared, [.. names.Select(name => new HexLinkWorktreeFile(name))], CancellationToken.None);
+        string draft = Path.Combine(scratch, "names-draft");
+        await store.Checkout(snapshot, draft, CancellationToken.None);
+        for (int i = 0; i < names.Length; i++)
+            Assert.Equal(Bytes($"file {i}\r\n"), File.ReadAllBytes(Path.Combine(draft, names[i])));
+        Assert.Equal(Bytes("file 1\r\n"), await store.ReadFile(snapshot, names[1], CancellationToken.None));
+
+        string empty = await store.Capture(Folder("empty"), [], CancellationToken.None);
+        Assert.True(HexLinkGit.IsCommitId(empty));
+        Assert.NotEqual(snapshot, empty);
+    }
+
+    /// <summary>
+    /// How long a snapshot of a real repository's files takes, HEX_LINK_WORKTREE_BENCH naming its folder: capture
+    /// (one fast-import pack) and checkout, printed for docs. Not run without it.
+    /// </summary>
+    [Fact]
+    public async Task Bench_capture_and_checkout_of_a_real_repository()
+    {
+        if (Environment.GetEnvironmentVariable("HEX_LINK_WORKTREE_BENCH") is not { Length: > 0 } source || HexLinkGit.Why() is not null)
+            return;
+        string[] files = [.. Git(source, "ls-files", "-s").Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Where(line => !line.StartsWith("160000", StringComparison.Ordinal)).Select(line => line[(line.IndexOf('\t') + 1)..])];
+        var store = await HexLinkWorktreeGit.Open(Folder("bench-objects"), CancellationToken.None);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        string snapshot = await store.Capture(source, [.. files.Select(file => new HexLinkWorktreeFile(file))], CancellationToken.None);
+        long capture = clock.ElapsedMilliseconds;
+        await store.Checkout(snapshot, Path.Combine(scratch, "bench-draft"), CancellationToken.None);
+        long checkout = clock.ElapsedMilliseconds - capture;
+        Console.WriteLine($"HEX_LINK_WORKTREE_BENCH files={files.Length} capture={capture} ms checkout={checkout} ms");
+        File.AppendAllText(Path.Combine(Path.GetTempPath(), "hex-link-worktree-bench.txt"),
+            $"files={files.Length} capture={capture} ms checkout={checkout} ms\n");
+    }
+
+    [Fact]
     public async Task Merge_applies_disjoint_changes_and_keeps_overlaps_for_resolution()
     {
         if (HexLinkGit.Why() is not null)
