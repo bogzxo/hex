@@ -100,7 +100,8 @@ measurements. The [working-tree benchmark](#working-tree-benchmark) uses a contr
 | HEAD follow | `5a27611` | Local reflogs recorded the authority at 07:08:15 +02, the Mac at 07:08:17 +02 and BOGROG at 07:08:19 +02, apparent delays of 2 s and 4 s. Clock skew was not measured. BOGROG was clean. The Mac retained only the five known EOL-only changes. |
 | Shared save | `223dd02` | Two Mac profiles, one relayed through the other, and BOGROG edited together while the authority had no tab open. A single Mac save cleared all three modified indicators and updated every disk. Both links were idle with zero conflicts. |
 | Private worktree spawn | `223dd02` | The real request returned in 30 ms with “Preparing its private worktree; the agent runs when it is ready.” The reply measures acknowledgement, before checkout preparation completes. |
-| Private worktree Publish | `223dd02` | Pending. The first live attempt stopped before the compile gate with “Files changed outside the exact gate candidate. Retry the publication.” The comparison used authority byte hashes for the replica's files, which can have different line endings. A real gate refusal followed by successful publication still needs verification. |
+| Private worktree Publish | `223dd02`, then `470a441` | Verified on `470a441`. The first live attempt at `223dd02` stopped before the compile gate with “Files changed outside the exact gate candidate. Retry the publication.” That did not recur. A BOGROG private worktree with the authority's scoped gate (`hex/docs/_linkpass/proj`, `dotnet build LinkPass.csproj -m:4 -v:q`, 40 s) added two files. One held a compile error. Publish was refused after 14.2 s with “Build gate exited 1” and `error CS0029: Cannot implicitly convert type 'string' to 'int'`, and neither file reached BOGZPC or the Mac. After the fix, Publish returned “Published 2 files” in 10.3 s with 0 errors. Both files appeared on BOGZPC and the Mac with identical content, both syncs were idle with zero conflicts, and the draft reported 0 unpublished files. |
+| Codex start after extension recovery | `470a441` | A Codex chat on BOGROG started and answered in 7.7 s. The earlier sharing violation on `models_cache.json`, which left the extension failing every later call, did not recur after the contention fix. Installed extensions were Codex 1.9.1 and Claude Code 1.12.1. |
 
 ### Claims, remote approval and steering
 
@@ -137,7 +138,7 @@ includes agent reporting delay, so it gives no save-latency measurement.
 | A live upgrade could retain an elected authority and a persisted stop, leaving sync off after reconnect. | `5af4f78` restores sync choices and lets explicit Start override an old stop. Verified in the `7ba581f` rollout and upgrade fixture. |
 | A replica installed before folder authority could reconnect without a pin and fail to resume sync. | The `7ba581f` rollout includes authority migration from `5af4f78` and the trusted legacy-source check in `f85cded`. The Mac resumed automatically after the authority restarted. |
 | A live room could save on the authority and Mac while BOGROG treated the CRLF/LF difference as unsaved editor changes. The authority had no tab open. | `63d8081` verifies the saved revision by content across line endings and updates each replica's disk baseline. The four-process fixture and the three-machine save now cover this topology. |
-| Publish could not scope the compile gate to the authority's selected project. | The range `ed31f4f` through `5a27611` added an authority-owned scoped gate and local timeout handling. The end-to-end live Publish remains pending. |
+| Publish could not scope the compile gate to the authority's selected project. | The range `ed31f4f` through `5a27611` added an authority-owned scoped gate and local timeout handling. The end-to-end live Publish was verified on `470a441`: refused in 14.2 s with a compiler error, then published in 10.3 s. |
 | Private worktree preparation took 83.05 s for 4,292 files and 223 MiB, past the 30 s spawn timeout. | `19bcd46` acknowledges spawn while preparing and reuses required repositories. A nine-repository scratch clone measured 19.945 s cold and 0.869 s reused, opening four repositories and preparing 3,066 files and 47.2 MiB. |
 | Approvals could be invisible to the device that started a remote agent. | `957170c` corrected the stored starter chat number. The live Claude prompt and approval then reached the starter. |
 | Redial picked LAN even when the operator needed to test a VPN-only route. | `7d1a3d8` added a remembered route choice. The Tailscale-only probe used it on both ends. |
@@ -239,8 +240,30 @@ transfers. These are working-tree measurements. The cold Mac Get above also prov
 | 500 changed paths | 15.728 s | **5.989 s** |
 | 200 MiB file | Skipped by legacy limit | **2.466 s** |
 
-The two modes use the same fixture shape and exact-byte checks. A controlled real-LAN repeat, the 1 GB benchmark and the same-HEAD
-blob ID shortcut are pending.
+The two modes use the same fixture shape and exact-byte checks. The same-HEAD blob ID shortcut is pending.
+
+### Real LAN, BOGROG to BOGZPC
+
+Release Hex core from `223dd02` with the bridge-only fix `9fd3636`, Horizon `0e01c6c`, HIDL `bf0f436`. Two
+scratch workspaces with eight pinned repositories, the source fixture on BOGROG. Pinned TLS and Zstandard over
+direct Wi-Fi to `192.168.0.50:48543`, no tunnel. ICMP round trip 5–7 ms (6 ms average, six probes, no loss).
+Both endpoints passed. The receiver verified the 200 MiB and 1 GiB files by SHA-256. The payload alternated
+independent random and zero 256 KiB blocks. The two large-file clocks started when an already generated file
+moved into the watched tree and stopped on the receiver's acknowledged write. SHA-256 verification was untimed.
+CPU is whole-machine utilization, not process CPU. The cold run transferred 72,642,150 bytes with zero skipped
+and zero conflicts. An earlier trial measured cold at 14.369 s before a fixture readiness race stopped it at
+warm reconnect.
+
+| Scenario | Wall seconds | Logical MiB/s | BOGROG CPU | BOGZPC CPU |
+| --- | ---: | ---: | ---: | ---: |
+| Cold, 3,951 files | 17.416 | 4.0 | 37% | 56% |
+| Warm reconnect, 0 files | 0.992 | — | 24% | 64% |
+| One save | 0.308 | — | 16% | 40% |
+| 500-path checkout | 6.754 | — | 23% | 43% |
+| 200 MiB | 5.743 | 34.8 | 16% | 41% |
+| 1 GiB | 26.901 | 38.1 | 29% | 43% |
+
+Measured TLS payload totals: cold 50,710,765 bytes, 200 MiB 104,868,000 bytes, 1 GiB 536,924,160 bytes.
 
 ## Rerun
 
@@ -316,5 +339,5 @@ leaves every live copy unchanged, then fix it and verify the same approved revis
 
 The historical report at `9ee5f55` (`git show 9ee5f55:docs/hex-link-test-evidence.md`) covers the original
 pairing, wire inspection and agent probes. Native Keychain and `secret-tool` acceptance, measured native UI
-contrast, a controlled real-LAN throughput run and the 1 GB benchmark remain pending. Linked prediction was
+contrast remain pending. Linked prediction was
 not rerun on the real devices during Wave 2.
