@@ -62,8 +62,12 @@ internal sealed class HexExtension : Horizon.UI.Scripting.IUIScriptOwner
     /// <summary>Whether it is switched on in the settings.</summary>
     public bool Enabled { get; set; }
 
-    /// <summary>What went wrong with it, null while nothing has. One that went wrong is left alone for the rest of the run.</summary>
+    /// <summary>The failure that disabled this extension, if any.</summary>
     public string? Failed { get; private set; }
+
+    /// <summary>The current call's error, including an I/O failure that leaves the extension enabled.</summary>
+    public string? CallError => Failed ?? callError;
+    private string? callError;
 
     /// <summary>The runtime it lives in, null until it is loaded.</summary>
     public HIDLRuntime? Runtime { get; private set; }
@@ -86,6 +90,7 @@ internal sealed class HexExtension : Horizon.UI.Scripting.IUIScriptOwner
         CommandKeys.Clear();
         Settings.Clear();
         Failed = null;
+        callError = null;
         Runtime = new HIDLRuntime { BaseDirectory = Folder, Output = printed };
         Runtime.UserScope.DeclareSystem("hex", hex);
         HexInterop.Declare(Runtime, Folder);
@@ -125,7 +130,7 @@ internal sealed class HexExtension : Horizon.UI.Scripting.IUIScriptOwner
     /// <summary>The keys its commands said they're on, as they were written ("Ctrl+Shift+K").</summary>
     public List<(string Name, string Key)> CommandKeys { get; } = [];
 
-    /// <summary>Calls one of its functions if it has one by that name. False if it went wrong, which switches it off.</summary>
+    /// <summary>Calls one of its functions if it has one by that name. False if it went wrong.</summary>
     public bool Raise(string name, params IRuntimeValue[] arguments) => Raise(name, arguments, out _);
 
     /// <summary>Calls one of its functions if it has one by that name, with what it handed back (null if it hasn't one).</summary>
@@ -138,10 +143,10 @@ internal sealed class HexExtension : Horizon.UI.Scripting.IUIScriptOwner
         return Call(runtime, function, arguments, out returned);
     }
 
-    /// <summary>Calls a function it handed over (a command), false if it went wrong, which switches it off.</summary>
+    /// <summary>Calls a function it handed over (a command), false if it went wrong.</summary>
     public bool Invoke(IRuntimeValue function, params IRuntimeValue[] arguments) => Invoke(function, arguments, out _);
 
-    /// <summary>Calls a function it handed over, with what it handed back, false if it went wrong, which switches it off.</summary>
+    /// <summary>Calls a function it handed over, with what it handed back, false if it went wrong.</summary>
     public bool Invoke(IRuntimeValue function, IRuntimeValue[] arguments, out IRuntimeValue returned)
     {
         returned = Values.Null;
@@ -183,12 +188,16 @@ internal sealed class HexExtension : Horizon.UI.Scripting.IUIScriptOwner
 
         try
         {
+            callError = null;
             returned = runtime.Invoke(function, arguments);
             return true;
         }
         catch (Exception e)
         {
-            Failed = cancel.IsCancellationRequested ? "it went on for more than a second and was stopped" : e.Message;
+            bool timedOut = cancel.IsCancellationRequested;
+            callError = timedOut ? "it went on for more than a second and was stopped" : e.Message;
+            if (timedOut || !IsIoFailure(e))
+                Failed = callError;
             returned = Values.Null;
             return false;
         }
@@ -196,6 +205,14 @@ internal sealed class HexExtension : Horizon.UI.Scripting.IUIScriptOwner
         {
             Disarm(cancel);
         }
+    }
+
+    private static bool IsIoFailure(Exception error)
+    {
+        for (Exception? current = error; current is not null; current = current.InnerException)
+            if (current is IOException or UnauthorizedAccessException)
+                return true;
+        return false;
     }
 
     // The second a call has, kept from one call to the next and set going again, where a new one made a timer of its own

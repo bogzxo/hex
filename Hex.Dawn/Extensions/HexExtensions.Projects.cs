@@ -106,7 +106,7 @@ internal sealed partial class HexExtensions
             if (!extension.Invoke(function, [project], out IRuntimeValue returned))
             {
                 extensions.Failed(extension);
-                throw new InvalidOperationException($"{extension.Name} went wrong making the project. {extension.Failed}");
+                throw new InvalidOperationException($"{extension.Name} went wrong making the project. {extension.CallError}");
             }
 
             return returned;

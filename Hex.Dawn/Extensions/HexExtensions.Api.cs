@@ -94,6 +94,7 @@ internal sealed partial class HexExtensions
     private (string, IRuntimeValue)[] Files(HexExtension extension) =>
     [
         ("read", Natives.Function("read", args => new StringValue(ReadForExtension(PathFor(extension, args.Text(0)))))),
+        ("try_read", Natives.Function("try_read", args => TryReadForExtension(() => ReadForExtension(PathFor(extension, args.Text(0)))))),
         ("write", Natives.Action("write", args => WriteForExtension(PathFor(extension, args.Text(0)), args.Text(1)))),
         ("exists", Natives.Function("exists", args => Values.Bool(PathFor(extension, args.Text(0)) is var path && (File.Exists(path) || Directory.Exists(path))))),
         ("find_up", Natives.Function("find_up", args => FindUp(PathFor(extension, args.Text(0)), args.Text(1)) is { } found ? new StringValue(found) : Values.Null)),
@@ -209,7 +210,44 @@ internal sealed partial class HexExtensions
         if (context.Documents.Find(path) is { IsText: true } open)
             return open.Editor.Text;
 
-        return File.Exists(path) ? File.ReadAllText(path) : throw new HidlRuntimeException($"There is no '{path}' to read.");
+        try
+        {
+            return ReadExtensionFile(path);
+        }
+        catch (IOException e) when (e is FileNotFoundException or DirectoryNotFoundException)
+        {
+            throw new HidlRuntimeException($"There is no '{path}' to read.");
+        }
+    }
+
+    internal static string ReadExtensionFile(string path)
+    {
+        const int sharingViolation = unchecked((int)0x80070020);
+        for (int retries = 0; ; retries++)
+        {
+            try
+            {
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var reader = new StreamReader(stream);
+                return reader.ReadToEnd();
+            }
+            catch (IOException e) when (OperatingSystem.IsWindows() && e.HResult == sharingViolation && retries < 2)
+            {
+                Thread.Sleep(50);
+            }
+        }
+    }
+
+    internal static ObjectValue TryReadForExtension(Func<string> read)
+    {
+        try
+        {
+            return Natives.Object(("text", new StringValue(read())), ("error", Values.Null));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or HidlRuntimeException)
+        {
+            return Natives.Object(("text", Values.Null), ("error", new StringValue(e.Message)));
+        }
     }
 
     /// <summary>

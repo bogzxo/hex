@@ -46,7 +46,8 @@ internal sealed partial class HexExtensions
         try
         {
             string path = Path.Combine(home, ".claude", "settings.json");
-            if (!File.Exists(path) || System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))?["enabledPlugins"] is not System.Text.Json.Nodes.JsonObject enabled)
+            if (!File.Exists(path) || System.Text.Json.Nodes.JsonNode.Parse(ReadExtensionFile(path)) is not System.Text.Json.Nodes.JsonObject settings ||
+                settings["enabledPlugins"] is not System.Text.Json.Nodes.JsonObject enabled)
                 return false;
             return enabled.Any(pair => (pair.Key == plugin || pair.Key.StartsWith(plugin + "@", StringComparison.Ordinal))
                 && pair.Value is System.Text.Json.Nodes.JsonValue on && on.TryGetValue(out bool yes) && yes);

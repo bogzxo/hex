@@ -156,7 +156,7 @@ internal sealed partial class HexExtensions
 
     internal void Failed(HexExtension extension)
     {
-        context.Notices.Notify(context.Strings.Said("extensions.failed", ("name", extension.Name), ("why", extension.Failed ?? "?")), error: true, (context.Strings.Said("extensions.open"), () =>
+        context.Notices.Notify(context.Strings.Said("extensions.failed", ("name", extension.Name), ("why", extension.CallError ?? "?")), error: true, (context.Strings.Said("extensions.open"), () =>
         {
             context.Windows.OpenSettings(SETTINGS);
         }));

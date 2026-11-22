@@ -230,7 +230,7 @@ internal sealed partial class DawnScene
             if (!extension.Invoke(making, [new StringValue(prompt), chatObject], out IRuntimeValue made))
             {
                 agentsStarting.Remove(chat);
-                chat.Error($"{extension.Name}, {extension.Failed}");
+                chat.Error($"{extension.Name}, {extension.CallError}");
                 chat.Done();
                 return;
             }
@@ -249,7 +249,7 @@ internal sealed partial class DawnScene
             if (MessageLine(extension, run, prompt, chatObject) is not { } first)
             {
                 agentsStarting.Remove(chat);
-                chat.Error($"{extension.Name}, {extension.Failed}");
+                chat.Error($"{extension.Name}, {extension.CallError}");
                 chat.Done();
                 return;
             }
@@ -568,7 +568,7 @@ internal sealed partial class DawnScene
 
         if (!run.Extension.Invoke(heard, [run.ChatObject, parsed]))
         {
-            run.Chat.Error($"{run.Extension.Name} couldn't read what its agent said, {run.Extension.Failed}");
+            run.Chat.Error($"{run.Extension.Name} couldn't read what its agent said, {run.Extension.CallError}");
             run.SaidWrong = true;
             extensions.Failed(run.Extension);
             run.Process.Dispose();

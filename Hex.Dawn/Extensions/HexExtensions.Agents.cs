@@ -162,7 +162,7 @@ internal sealed partial class HexExtensions
         {
             try
             {
-                return File.Exists(path) ? System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path)) : null;
+                return File.Exists(path) ? System.Text.Json.Nodes.JsonNode.Parse(ReadExtensionFile(path)) : null;
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
             {
