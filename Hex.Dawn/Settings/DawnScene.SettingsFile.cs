@@ -249,6 +249,7 @@ internal sealed partial class DawnScene
     /// <summary>A change to the file from outside reloaded once it has settled. Every tick, nothing to do most of them.</summary>
     private void UpdateSettingsFile()
     {
+        ollamaModels?.Update(SettingsPage);
         UpdateWorkspaceSettings();
         UpdateWorkspaceSettingsFile();
         if (settingsWatch.TakeSettled(SETTINGS_SETTLE))

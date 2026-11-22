@@ -29,7 +29,7 @@ internal sealed partial class DawnScene
     private const string INTERFACE_SIZE = "interface_size";
 
     private SettingsWindow? settingsView;
-    private readonly OllamaModelPicker ollamaModels = new();
+    private OllamaModelPicker? ollamaModels;
 
     /// <summary>The page while it is up, for the self test.</summary>
     internal SettingsPage? SettingsPage => settingsView?.Window.Parent is not null ? settingsView.Page : null;
@@ -69,6 +69,8 @@ internal sealed partial class DawnScene
         sources.Add(new WindowsSource());
         sources.Add(new DefaultTerminalSource(said => Notify(said, error: true)));
         sources.Add(new ExtensionSettingsSource(this));
+        if (!HexAi.Off)
+            ollamaModels = new();
         settingsView = new SettingsWindow(sources, CloseSettings, EditorSettingsCatalog.Parts, sections: EditorSettingsCatalog.Sections, texts: SettingsPageTexts.Make());
 
         // Dawn's window is the editor's, the other parts fold away the first time it opens and a search puts the
@@ -163,6 +165,8 @@ internal sealed partial class DawnScene
             settingsLeft = settingsView.Page.Place;
             parent.Remove(window);
         }
+        ollamaModels?.Update(null);
+        ollamaModels = null;
         settingsView = null;
         lookPicker = null;
         userScopeTab = workspaceScopeTab = null;
