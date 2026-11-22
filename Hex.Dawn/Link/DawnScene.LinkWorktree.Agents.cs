@@ -84,6 +84,8 @@ internal sealed partial class DawnScene
             return null;
         if (!Directory.Exists(root))
             return "This agent's private worktree was discarded.";
+        if (tool is "hex_link_authority" or "hex_link_worktree_gate")
+            return "A person on the folder authority manages publish gate settings and authority transfers.";
 
         if (tool is "hex_edit" or "hex_write" or "hex_open" or "hex_read")
         {

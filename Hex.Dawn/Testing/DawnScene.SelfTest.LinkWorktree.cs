@@ -124,7 +124,9 @@ internal sealed partial class DawnScene
         test.Check("link-worktree: hex_link_publish status reports private files for this agent", () =>
             draftStatus is { IsCompletedSuccessfully: true, Result.IsError: false } &&
             draftStatus.Result.AllText().Contains("2 unpublished files", StringComparison.Ordinal) &&
-            draftStatus.Result.AllText().Contains("src | exit 7 | 15s", StringComparison.Ordinal));
+            draftStatus.Result.AllText().Contains("src | exit 7 | 15s", StringComparison.Ordinal) &&
+            LinkScopePrivateAgentCall(agent!.Id, "hex_link_worktree_gate", []) is not null &&
+            LinkScopePrivateAgentCall(agent.Id, "hex_link_authority", []) is not null);
         test.Check("link-worktree: the failed gate leaves both editors at the shared version", () =>
             result is { IsCompletedSuccessfully: true, Result: { Gate.ExitCode: 7, Receipt: null } } &&
             ReadLinkTestFile(target) == Seed && ReadLinkTestFile(remote) == Seed &&
