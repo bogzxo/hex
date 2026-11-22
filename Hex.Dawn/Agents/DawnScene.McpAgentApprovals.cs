@@ -21,6 +21,20 @@ internal sealed partial class DawnScene
             AgentApprove);
 
     /// <summary>
+    /// A chat started by another one of the same agent system works at the permission level its parent does (what it may do
+    /// without asking), never above it: the option the parent has in effect is the child's too, unless the spawn's options
+    /// said another. Of the agent system's options <paramref name="optionKeys"/>, those that name a permission level.
+    /// </summary>
+    internal static void InheritPermissions(IDictionary<string, string> child, IEnumerable<string> optionKeys, Func<string, string?> parentValue)
+    {
+        foreach (string key in optionKeys.Where(key => PERMISSION_KEYS.Contains(key)))
+        {
+            if (!child.ContainsKey(key) && parentValue(key) is { Length: > 0 } level)
+                child[key] = level;
+        }
+    }
+
+    /// <summary>
     /// The rules a spawn says for the agent, kept as its chat's options a rule a line, and whose word its requests wait on.
     /// False with why when they aren't lists of rules.
     /// </summary>

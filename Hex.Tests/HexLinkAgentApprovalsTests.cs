@@ -75,6 +75,23 @@ public sealed class HexLinkAgentApprovalsTests
     }
 
     [Fact]
+    public void A_chat_started_by_another_takes_its_permission_level_unless_its_options_say_otherwise()
+    {
+        var inherited = new Dictionary<string, string>();
+        Hex.Dawn.DawnScene.InheritPermissions(inherited, ["model", "permission_mode"], key => key == "permission_mode" ? "bypassPermissions" : "opus");
+        Assert.Equal("bypassPermissions", inherited["permission_mode"]);
+        Assert.False(inherited.ContainsKey("model"));
+
+        var chosen = new Dictionary<string, string> { ["permission_mode"] = "plan" };
+        Hex.Dawn.DawnScene.InheritPermissions(chosen, ["permission_mode"], _ => "bypassPermissions");
+        Assert.Equal("plan", chosen["permission_mode"]);
+
+        var none = new Dictionary<string, string>();
+        Hex.Dawn.DawnScene.InheritPermissions(none, ["permission_mode"], _ => null);
+        Assert.Empty(none);
+    }
+
+    [Fact]
     public void Edits_do_not_authorize_shell_rules_bypass_flags_or_hidden_options()
     {
         var edit = JsonNode.Parse("""{"permissions":{"allow":["Edit"],"deny":["PowerShell"]}}""")!.AsObject();
