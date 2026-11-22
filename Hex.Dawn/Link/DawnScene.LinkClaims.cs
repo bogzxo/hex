@@ -256,16 +256,31 @@ internal sealed partial class DawnScene
     private static string ClaimHolder(HexLinkClaim claim) => claim.ChatId is { } id
         ? $"#{id} '{claim.Holder}' on {claim.DeviceName}" : $"{claim.Holder} on {claim.DeviceName}";
 
-    private static string ClaimAge(HexLinkClaim claim) =>
-        TimeSpan.FromMilliseconds(Math.Max(0, System.Environment.TickCount64 - claim.SinceTick)) is var age
-        && age.TotalMinutes >= 1 ? $"claimed {(int)age.TotalMinutes} min ago" : $"claimed {(int)age.TotalSeconds} s ago";
+    // One zone for every time said to an agent, local with its offset
+    internal static string ClaimTime(DateTimeOffset time) => time.ToLocalTime().ToString("HH:mm:ss zzz", CultureInfo.InvariantCulture);
+
+    internal static string ClaimAge(HexLinkClaim claim) =>
+        (TimeSpan.FromMilliseconds(Math.Max(0, System.Environment.TickCount64 - claim.SinceTick)) is var age && age.TotalMinutes >= 1
+            ? $"claimed {(int)age.TotalMinutes} min ago" : $"claimed {(int)age.TotalSeconds} s ago") + $", since {ClaimTime(claim.Since)}";
+
+    /// <summary>What an agent is told when the file it changed is claimed by another device or held here, empty when neither.</summary>
+    private string LinkEditNotes(string path)
+    {
+        var notes = new StringBuilder();
+        if (LinkHeldFile(path) is { } held)
+            notes.Append($" The file is held on this device since {ClaimTime(held.HeldAt)}{(held.HasIncoming ? $" and {held.IncomingFrom ?? "another device"} changed it too, see hex_link_hold update" : string.Empty)}, hex_link_hold submit sends it.");
+        string? local = linkServices?.Device.Id;
+        foreach (HexLinkClaim claim in LinkClaimsAt(path).Where(claim => claim.DeviceId != local).Take(3))
+            notes.Append($" Claimed by {ClaimHolder(claim)} ({claim.Kind.ToString().ToLowerInvariant()}, {ClaimAge(claim)}).");
+        return notes.ToString();
+    }
 
     private static string ClaimPlan(HexLinkClaim claim)
     {
         string plan = claim.PlanStep is { Length: > 0 } step ? $"Its step \"{step}\" is {claim.PlanState ?? "open"}. " : string.Empty;
         if (claim.Eta is not { } eta)
             return plan + "ETA unknown.";
-        return plan + $"ETA {eta.ToLocalTime():HH:mm:ss}.";
+        return plan + $"ETA {ClaimTime(eta)}.";
     }
 
     private string ClaimContact(HexLinkClaim claim)

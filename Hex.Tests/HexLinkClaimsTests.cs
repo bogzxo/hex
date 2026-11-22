@@ -100,6 +100,61 @@ public sealed class HexLinkClaimsTests
     }
 
     [Fact]
+    public async Task A_folder_kept_in_sync_with_a_device_exchanges_claims_both_ways_without_an_authority()
+    {
+        using var pair = await LinkedPair.Up(HexLinkRights.View, HexLinkRights.View);
+        pair.A.Chosen[DeviceB.Id] = ["work"];
+        pair.B.Chosen[DeviceA.Id] = ["work"];
+        var empty = new Dictionary<HexLinkClaimScope, Dictionary<HexLinkClaimKey, HexLinkClaimDraft>>();
+        pair.LinkA.Claims.RefreshFolders();
+        pair.LinkB.Claims.RefreshFolders();
+        var scope = Assert.Single(pair.LinkA.Claims.Folders).Scope;
+        Assert.Equal(scope, Assert.Single(pair.LinkB.Claims.Folders).Scope);
+
+        var mine = new HexLinkClaimKey("src/a.cs", false, 7, HexLinkClaimKind.Planned);
+        var theirs = new HexLinkClaimKey("src/b.cs", false, 9, HexLinkClaimKind.Planned);
+        var fromA = new Dictionary<HexLinkClaimScope, Dictionary<HexLinkClaimKey, HexLinkClaimDraft>> { [scope] = new() { [mine] = new(mine, "Builder") } };
+        var fromB = new Dictionary<HexLinkClaimScope, Dictionary<HexLinkClaimKey, HexLinkClaimDraft>> { [scope] = new() { [theirs] = new(theirs, "Tester") } };
+        Assert.True(Eventually(() =>
+        {
+            pair.LinkA.Claims.Update(fromA);
+            pair.LinkB.Claims.Update(fromB);
+            return pair.LinkB.Claims.Board.At(scope, mine.Path, false, Environment.TickCount64).Any(claim => claim.DeviceId == DeviceA.Id)
+                && pair.LinkA.Claims.Board.At(scope, theirs.Path, false, Environment.TickCount64).Any(claim => claim.DeviceId == DeviceB.Id);
+        }));
+
+        // Not synced there, nothing is exchanged
+        pair.B.Chosen.Clear();
+        pair.A.Chosen.Clear();
+        pair.LinkA.Claims.RefreshFolders();
+        Assert.Empty(pair.LinkA.Claims.Folders);
+    }
+
+    [Fact]
+    public void A_claim_keeps_the_time_it_was_first_made_across_changes_and_a_short_gap()
+    {
+        using var services = Services(DeviceA);
+        using var link = new HexLink(services);
+        link.Claims.RefreshFolders();
+        var scope = Assert.Single(link.Claims.Folders).Scope;
+        var key = new HexLinkClaimKey("src/a.cs", false, 7, HexLinkClaimKind.Planned);
+        Dictionary<HexLinkClaimScope, Dictionary<HexLinkClaimKey, HexLinkClaimDraft>> Drafts(string step) =>
+            new() { [scope] = new() { [key] = new(key, "Builder", step) } };
+
+        link.Claims.Update(Drafts("one"));
+        long first = Assert.Single(link.Claims.Board.At(scope, key.Path, false, Environment.TickCount64)).SinceTick;
+        Thread.Sleep(40);
+        link.Claims.Update(Drafts("two"));
+        Assert.Equal(first, Assert.Single(link.Claims.Board.At(scope, key.Path, false, Environment.TickCount64)).SinceTick);
+
+        link.Claims.Update(new Dictionary<HexLinkClaimScope, Dictionary<HexLinkClaimKey, HexLinkClaimDraft>>());
+        Assert.Empty(link.Claims.Board.At(scope, key.Path, false, Environment.TickCount64));
+        Thread.Sleep(40);
+        link.Claims.Update(Drafts("two"));
+        Assert.Equal(first, Assert.Single(link.Claims.Board.At(scope, key.Path, false, Environment.TickCount64)).SinceTick);
+    }
+
+    [Fact]
     public void Worktree_safety_claims_exclude_ignored_files_and_directory_prefixes()
     {
         using var services = Services(DeviceA);
