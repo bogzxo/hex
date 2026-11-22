@@ -382,6 +382,7 @@ internal sealed partial class DawnScene
             "edit_predictions_model" => new StringValue(hex.settings.EditPredictionsModel),
             "edit_predictions_prompt_format" => new StringValue(hex.settings.EditPredictionsPromptFormat),
             "edit_predictions_max_tokens" => new NumberValue(hex.settings.EditPredictionsMaxTokens),
+            "edit_predictions_invocation" => new StringValue(hex.settings.EditPredictionsInvocation),
             "edit_predictions_debounce" => new NumberValue(hex.settings.EditPredictionsDebounce),
             "edit_predictions_disabled_languages" => Natives.List(hex.settings.EditPredictionsDisabledLanguages),
             HexSettings.EDIT_PREDICTIONS_EXCLUDE => Natives.List(hex.settings.EditPredictionsExclude),
@@ -747,6 +748,9 @@ internal sealed partial class DawnScene
                     break;
                 case ("edit_predictions_max_tokens", NumberValue predictionTokens):
                     settings.EditPredictionsMaxTokens = (int)Math.Clamp(MathF.Round(predictionTokens.Value), 16.0f, 2048.0f);
+                    break;
+                case ("edit_predictions_invocation", StringValue { Value: "after_typing" or "shortcut" } invocation):
+                    settings.EditPredictionsInvocation = invocation.Value;
                     break;
                 case ("edit_predictions_debounce", NumberValue predictionPause):
                     settings.EditPredictionsDebounce = (int)Math.Clamp(MathF.Round(predictionPause.Value), 0.0f, 2000.0f);

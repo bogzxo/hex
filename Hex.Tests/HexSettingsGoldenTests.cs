@@ -59,6 +59,7 @@ public class HexSettingsGoldenTests
         ["last_workspace"] = Text(@"C:\work\hex"),
         ["extension_catalog"] = Text(@"C:\catalogue"),
         ["git_account"] = Text("  somebody  "),
+        ["edit_predictions_invocation"] = Text("shortcut"),
         ["edit_predictions_provider"] = Text("openai"),
         ["edit_predictions_prompt_format"] = Text("zeta2"),
         ["edit_predictions_api_key"] = Text("sk-test-not-a-key"),

@@ -225,6 +225,7 @@ public static class EditorSettingsCatalog
             KeyPlaceholder: HexText.Get("settings_catalog.files_associations_key_placeholder"), ValuePlaceholder: HexText.Get("settings_catalog.files_associations_value_placeholder")),
 
         new("edit_predictions", HexText.Get("settings_catalog.edit_predictions_title"), UIFormKind.Flag, HexText.Get("settings_catalog.edit_predictions_help"), AI),
+        Choice("edit_predictions_invocation", AI, ["after_typing", "shortcut"]),
         Choice("edit_predictions_provider", AI, ["ollama", "openai", "link"]),
         new("edit_predictions_api_url", HexText.Get("settings_catalog.edit_predictions_api_url_title"), UIFormKind.Text, HexText.Get("settings_catalog.edit_predictions_api_url_help"), AI,
             Placeholder: HexText.Get("settings_catalog.edit_predictions_api_url_placeholder")),
@@ -443,7 +444,8 @@ public static class EditorSettingsCatalog
         ["edit_predictions_model"] = new StringValue(string.Empty),
         ["edit_predictions_prompt_format"] = new StringValue("infer"),
         ["edit_predictions_max_tokens"] = new NumberValue(256.0f),
-        ["edit_predictions_debounce"] = new NumberValue(200.0f),
+        ["edit_predictions_debounce"] = new NumberValue(100.0f),
+        ["edit_predictions_invocation"] = new StringValue("after_typing"),
         ["edit_predictions_disabled_languages"] = Horizon.HIDL.Library.Natives.List(Hex.Core.HexSettings.UsualEditPredictionsDisabledLanguages),
         [Hex.Core.HexSettings.EDIT_PREDICTIONS_EXCLUDE] = Horizon.HIDL.Library.Natives.List(Hex.Core.HexSettings.UsualEditPredictionsExclude),
         ["edit_predictions_workspace"] = Values.Bool(true),

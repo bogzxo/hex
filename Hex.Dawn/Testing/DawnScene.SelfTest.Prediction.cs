@@ -31,6 +31,7 @@ internal sealed partial class DawnScene
         HexFakePredictionServer server = null!;
         (bool On, string Provider, string Url, string Key, string Model, string Format, int Debounce, string[] Languages, string[] Exclude, bool Folder, bool Notice) kept =
             (false, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, 0, [], [], true, false);
+        string invocation = string.Empty;
         int requests = 0, taken = 0, notices = 0, cancelled = 0, stalled = 0;
         string before = string.Empty;
 
@@ -53,6 +54,7 @@ internal sealed partial class DawnScene
                 server.Next = new HexFakePredictionServer.Reply(HexFakePredictionServer.Kind.Answer, _ => string.Empty);
                 code.Document.Replace(text);
                 code.Document.MoveTo(new UITextPosition(line, column));
+                predictions?.Forget(document);
                 code.Focus();
             });
             test.Settle(0.3f);
@@ -90,6 +92,8 @@ internal sealed partial class DawnScene
         test.Run(() =>
         {
             server = new HexFakePredictionServer();
+            invocation = settings.EditPredictionsInvocation;
+            settings.EditPredictionsInvocation = "after_typing";
             kept = (settings.EditPredictions, settings.EditPredictionsProvider, settings.EditPredictionsApiUrl, settings.EditPredictionsApiKey,
                 settings.EditPredictionsModel, settings.EditPredictionsPromptFormat, settings.EditPredictionsDebounce,
                 settings.EditPredictionsDisabledLanguages, settings.EditPredictionsExclude, settings.EditPredictionsWorkspace, settings.EditPredictionsNoticeDone);
@@ -328,22 +332,58 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Check("prediction: a 404 says there's no such model", () => ItemSays("prediction.item_no_model"));
 
-        // Predict Now (Alt+\) asks at once, with a debounce that would otherwise wait two seconds
+        test.Run(() => settings.EditPredictionsInvocation = "shortcut");
         Start(GREETER.Replace("Greeter", "Garbled"), 4, 22, new HexFakePredictionServer.Reply(HexFakePredictionServer.Kind.Garbage));
-        test.Run(() => settings.EditPredictionsDebounce = 2000);
+        test.Run(() => settings.EditPredictionsDebounce = 100);
         Type(".");
-        PressKeys(test, "Alt+\\");
+        test.Settle(0.35f);
+        test.Check("prediction: shortcut mode leaves typing local", () => server.Requests == requests);
+        PressKeys(test, "Ctrl+Alt+.");
         test.WaitFor(() => predictions.Status == PredictionStatus.BadAnswer, 1.5f);
         test.Check("prediction: Predict Now asks at once, and an answer that isn't JSON is said", () =>
             server.Requests == requests + 1 && ItemSays("prediction.item_bad_answer"));
-        test.Run(() => settings.EditPredictionsDebounce = 60);
+        test.Run(() => Rebind(Said("prediction.predict_now"), "Ctrl+Alt+F9"));
+        Start(GREETER.Replace("Greeter", "Rebound"), 4, 22, Answer("WriteLine();"));
+        Type(".");
+        test.Settle(0.35f);
+        PressKeys(test, "Ctrl+Alt+F9");
+        test.WaitFor(() => code.HasPrediction, 5.0f);
+        test.Check("prediction: rebound shortcut requests one prediction", () => Ghost() == "WriteLine();" && server.Requests == requests + 1);
+        test.Run(() =>
+        {
+            code.ClearPrediction();
+            Rebind(Said("prediction.predict_now"), "Ctrl+Alt+.", keepOthers: true);
+        });
         Type("Out");
         test.Check("prediction: the editor still types fine", () => Line(4) == "        System.Console.Out");
+
+        HexAgentChat? waiting = null;
+        test.Run(() =>
+        {
+            ShowFace(HexFace.Noon);
+            waiting = new HexAgentChat(++agentChatsMade, "noon_agent");
+            agentChats.Add(waiting);
+            waiting.Ask("fixture");
+            waiting.Say("done");
+            waiting.Done();
+            requests = server.Requests;
+        });
+        PressKeys(test, "Ctrl+Alt+.");
+        test.Settle(0.2f);
+        test.Check("prediction: Agentic keeps the shared shortcut while predictions are enabled", () =>
+            agentChat == waiting && server.Requests == requests);
+        test.Run(() =>
+        {
+            agentChats.Remove(waiting!);
+            agentChat = null;
+            ShowFace(HexFace.Dawn);
+        });
 
         // Everything as it was
         test.Run(() =>
         {
             code.ClearPrediction();
+            settings.EditPredictionsInvocation = invocation;
             (settings.EditPredictions, settings.EditPredictionsProvider, settings.EditPredictionsApiUrl, settings.EditPredictionsApiKey,
                 settings.EditPredictionsModel, settings.EditPredictionsPromptFormat, settings.EditPredictionsDebounce,
                 settings.EditPredictionsDisabledLanguages, settings.EditPredictionsExclude, settings.EditPredictionsWorkspace, settings.EditPredictionsNoticeDone) = kept;

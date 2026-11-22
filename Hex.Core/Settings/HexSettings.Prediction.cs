@@ -31,6 +31,9 @@ internal sealed partial class HexSettings
     /// <summary>Whether a model is asked what comes next as the code is typed. Off until the user switches it on, and only the user can.</summary>
     public bool EditPredictions;
 
+    public string EditPredictionsInvocation = "after_typing";
+    public bool PredictionShortcutOnly => EditPredictionsInvocation == "shortcut";
+
     /// <summary>What kind of server is asked: ollama for Ollama's own API, openai for any server with OpenAI's completions, link for the device Hex Link is attached to.</summary>
     public string EditPredictionsProvider = "ollama";
 
@@ -47,7 +50,7 @@ internal sealed partial class HexSettings
     public int EditPredictionsMaxTokens = 256;
 
     /// <summary>How many milliseconds typing has to pause for before a model is asked.</summary>
-    public int EditPredictionsDebounce = 200;
+    public int EditPredictionsDebounce = 100;
 
     /// <summary>The languages nothing is predicted in, by their ids. Each change is a new array.</summary>
     public string[] EditPredictionsDisabledLanguages = UsualEditPredictionsDisabledLanguages;
@@ -142,6 +145,7 @@ internal sealed partial class HexSettings
     private static HexSettingRow[] PredictionRows =>
     [
         Flag("edit_predictions", settings => settings.EditPredictions, (settings, value) => settings.EditPredictions = value),
+        Choice("edit_predictions_invocation", settings => settings.EditPredictionsInvocation, (settings, value) => settings.EditPredictionsInvocation = value, "after_typing", "shortcut"),
         Choice("edit_predictions_provider", settings => settings.EditPredictionsProvider, (settings, value) => settings.EditPredictionsProvider = value, "ollama", "openai", "link"),
         Text("edit_predictions_api_url", settings => settings.EditPredictionsApiUrl, (settings, value) => settings.EditPredictionsApiUrl = value.Trim()),
         Special("edit_predictions_api_key",

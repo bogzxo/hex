@@ -68,7 +68,8 @@ public class PredictionSettingsTests
         Assert.Equal(string.Empty, PredictionSettings.Model(settings));
         Assert.Equal("infer", PredictionSettings.PromptFormat(settings));
         Assert.Equal(256, PredictionSettings.MaxTokens(settings));
-        Assert.Equal(TimeSpan.FromMilliseconds(200), PredictionSettings.Debounce(settings));
+        Assert.False(settings.PredictionShortcutOnly);
+        Assert.Equal(TimeSpan.FromMilliseconds(100), PredictionSettings.Debounce(settings));
         Assert.True(settings.EditPredictionsWorkspace);
         Assert.False(PredictionSettings.Share(settings));
         Assert.False(PredictionSettings.Configured(settings));
@@ -205,12 +206,13 @@ public class PredictionSettingsTests
         InFolder(folder =>
         {
             string user = Path.Combine(folder, "settings.hor");
-            WriteEditor(user, new HIDLObject().Add("edit_predictions_model", "mine"));
+            WriteEditor(user, new HIDLObject().Add("edit_predictions_model", "mine").Add("edit_predictions_debounce", 375));
             var settings = new HexSettings(user);
 
             string project = Path.Combine(folder, "project");
             WriteEditor(HexSettings.WorkspacePathOf(project), new HIDLObject()
                 .Add("edit_predictions", true)
+                .Add("edit_predictions_invocation", "shortcut")
                 .Add("edit_predictions_provider", "openai")
                 .Add("edit_predictions_api_url", "http://elsewhere.example:8080")
                 .Add("edit_predictions_api_key", FAKE_KEY)
@@ -224,6 +226,8 @@ public class PredictionSettingsTests
             Assert.Equal("http://localhost:11434", settings.EditPredictionsApiUrl);
             Assert.Equal(string.Empty, settings.EditPredictionsApiKey);
             Assert.Equal("mine", settings.EditPredictionsModel);
+            Assert.False(settings.PredictionShortcutOnly);
+            Assert.Equal(375, settings.EditPredictionsDebounce);
             Assert.False(settings.EditPredictionsShare);
             Assert.Equal(["plaintext", "markdown"], settings.EditPredictionsDisabledLanguages);
             Assert.Empty(settings.WorkspaceValues);
@@ -268,7 +272,8 @@ public class PredictionSettingsTests
     public void The_rows_are_in_the_AI_section_under_the_switch_and_the_key_is_listed_only_as_set()
     {
         UISetting[] rows = [.. EditorSettingsCatalog.Settings.Where(row => row.Key.StartsWith("edit_predictions", StringComparison.Ordinal))];
-        Assert.Equal(12, rows.Length);
+        Assert.Equal(13, rows.Length);
+        Assert.Equal(["after_typing", "shortcut"], rows.Single(row => row.Key == "edit_predictions_invocation").Choices!);
         Assert.All(rows, row => Assert.Equal(EditorSettingsCatalog.AI, row.Group));
         Assert.All(rows.Where(row => row.Key != "edit_predictions"), row => Assert.Equal("edit_predictions", row.DependsOn));
         Assert.Contains(EditorSettingsCatalog.AI, EditorSettingsCatalog.Sections);

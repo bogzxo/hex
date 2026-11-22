@@ -40,6 +40,57 @@ public sealed class PredictionEngineTests
     }
 
     [Fact]
+    public async Task Latest_edit_restarts_the_full_hundred_millisecond_delay()
+    {
+        var provider = new ScriptedProvider("42;");
+        var engine = Engine(provider);
+        engine.Options = () => PredictionTestKit.Options(debounce: 100);
+        Type(engine);
+        clock.Advance(99);
+        Type(engine);
+        clock.Advance(99);
+        engine.Tick();
+        Assert.Equal(0, engine.Requests);
+        clock.Advance(1);
+        engine.Tick();
+        await engine.Running;
+        Assert.Equal(version, engine.Take()!.Version);
+        Assert.Equal(1, provider.Asked);
+    }
+
+    [Fact]
+    public async Task Shortcut_only_cancels_on_edit_and_never_retries_or_chains()
+    {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var provider = new ScriptedProvider((_, cancel) =>
+        {
+            started.TrySetResult();
+            return Stall(cancel);
+        });
+        var engine = Engine(provider);
+        Type(engine);
+        engine.ShortcutOnly = true;
+        Type(engine);
+        engine.Accepted(document);
+        engine.Warm();
+        Pause(engine);
+        Assert.Equal(0, engine.Requests);
+        engine.PredictNow(document);
+        engine.Tick();
+        Task manual = engine.Running;
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(PredictionStatus.Waiting, engine.Status);
+        Type(engine);
+        await manual;
+        Assert.Equal(PredictionStatus.Ok, engine.Status);
+        engine.LinkSourceChanged();
+        Pause(engine);
+        Assert.Equal(1, provider.Asked);
+        Assert.Equal(1, engine.Cancelled);
+        Assert.Null(engine.Take());
+    }
+
+    [Fact]
     public async Task A_burst_of_typing_is_one_request()
     {
         var provider = new ScriptedProvider("42;");
@@ -97,7 +148,7 @@ public sealed class PredictionEngineTests
         answer.SetResult();
         await engine.Running;
 
-        Assert.Equal(0, engine.Cancelled);
+        Assert.Equal(1, engine.Cancelled);
         Assert.Null(engine.Take());
     }
 
