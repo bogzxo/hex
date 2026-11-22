@@ -1,3 +1,12 @@
+# Unreleased
+
+## Hex Link
+
+- Connect your machines from the Devices window. Copy an invite, paste it on the other machine, and approve what each device can do. Choose a viewer, collaborator, or build and test worker.
+- Share a workspace or get a copy from another device, including its Git history and nested repositories. Hex keeps saved files in sync and can follow the owner's branch and commits. Progress, skipped paths, and conflicts appear in Devices.
+- Open the same file to edit together, even before it is saved. See named carets and selections, follow someone through the file, and undo your own edits. Viewers can watch the shared buffer without changing it.
+- Run an agent on another machine and answer its approval requests from your own. File claims show who is working on a path. Use a private worktree to build and test a change before publishing it back to the shared workspace.
+
 # Hex 3.3.0 Amphetamine
 
 Ctrl+. as a menu of everything that can be done to a line, an explorer you work in place, faces that switch without a flash, a C# language server that answers in under a second, and a pass over the whole of Hex and its engine to make it lighter.

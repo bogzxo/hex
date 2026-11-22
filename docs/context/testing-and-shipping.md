@@ -138,6 +138,25 @@ stdout/stderr, keeps only `[Hex self-test]` lines and returns: `<suites>: <last 
 (lines beginning `FAIL` or `step threw`). Error result when exit code != 0 or on timeout (process tree killed). Because it launches the running exe, it is only as good as
 that exe's location (see 3.4).
 
+### Hex Link suites
+
+Run these from the build output of a disposable checkout. Give each process a fresh `HEX_HOME` and a unique `HEX_REMOTE_PIPE`, set `HORIZON_AUDIO=off`, and use `--exit`. The local suites start their own peers over IPv4 loopback and skip LAN discovery. Keep the engine and HIDL project references pointed at the matching checkout when building. See the [Wave 2 evidence and rerun commands](../hex-link-test-evidence.md).
+
+| Suite | Covers |
+| --- | --- |
+| `link` | Pairing, symmetric TLS session, rights, fleet/chat mirroring, approval and revocation |
+| `link-files` | Sync, exact-byte saves, conflicts, remote files, clone/fetch, patch offer, presence and Follow |
+| `link-provision` | Workspace Get, nested repositories and submodules, then working-tree sync |
+| `link-missing-repository` | Continued sync of a common tree while a missing nested checkout is offered separately |
+| `link-documents` | Three editors, automatic join, live unsaved edits, View-only participation, overlap, named agent edit, undo and shared save |
+| `link-claims` | Claims and guards between editors, plus auto-merge and unresolved overlap |
+| `link-worktree` | Private working copy, the publication gate, and receipt on the replica |
+| `link-git-follow` | Authority branch and commit follow, file sync after Git moves, and the reverse path |
+| `link-ui` | Devices, invites, connection state, workspace offers and remote approval UI |
+| `link-editor-notices` | Claim and shared-session notices, named collaborators, Follow and narrow/scale layout |
+
+`link-peer` is primarily a companion process. `link-cross` and `link-nearby` need two explicit invocations and use a real network route unless the cross test is configured for loopback. `HEX_LINK_TEST_WORKTREE=1` with `link-cross` runs the older paired working-tree **sync** fixture. Use `link-worktree` for private drafts and checked publication. The old cross-document fixture exercises the legacy protocol. Use `link-documents` for the current CRDT.
+
 ### Linked prediction across two devices
 
 Set `HEX_LINK_TEST_PREDICTION=1` and `HORIZON_AUDIO=off` on both machines. Launch an isolated `Hex --selftest link-cross --exit` on each:

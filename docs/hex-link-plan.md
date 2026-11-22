@@ -1,473 +1,283 @@
-# Hex Link: design and plan
-
-Hex Link joins Hex on one machine to Hex on others over an encrypted, mutually authenticated connection, so the
-agents running on any of them can be watched and steered from any other, and the codebase one of them has open can
-be browsed, edited and cloned from the rest. Any number of machines, any mix of Windows, Linux and macOS, x64 and
-arm64. Nothing listens until the person turns Link on.
-
-Decided with the person (2026-11-21):
-
-- **Shared code, v1:** the remote workspace (browse, search, open, save back with a conflict check), presence
-  (who has what open, follow them), and the repository handed over by git (clone or fetch over the link, a patch
-  offered). Development also supports live co-editing of one text buffer (section 5.7).
-- **Reach:** the LAN, found by mDNS, or an address typed in, which also works over a VPN the person runs
-  (Tailscale, WireGuard). No relay, no server of ours.
-- **Rights:** asked at every pairing, on both machines, changeable per device afterwards.
-
-## 1. What rides on what exists
-
-| Existing piece | Its part in Link |
-| --- | --- |
-| `HexAgentHub` and `HexHubSnapshot` (`Hex.Core/Agents/Hub`) | The fleet that's sent: the snapshot's rows, made again only when a chat moved, are what `fleet/changed` carries. Read off the editor's thread as `hex_agent_wait` does. |
-| `HexAgentChatStore.Write/RowOf/EntryOf/Read` | A chat on the wire is a chat as it's kept on disk. The watching side reads it back into a `HexAgentChat` of its own, so every row, card and plan the Agents view and Agentic draw for a local chat they draw for a remote one. |
-| `HexMcpTools.CallAs` and the tool registry (`DawnScene.McpWorkbench.McpToolList`) | Steering and reading are the tools that already do them (`hex_agent_send`, `hex_agent_stop`, `hex_agent_restart`, `hex_agent_approve`, `hex_agent_spawn`, `hex_read`, `hex_search`, `hex_symbols`, `hex_edit`, ...), called with no calling chat, behind a list of which tools each right allows. No second implementation of any of them. |
-| `McpProtocol.WriteLine`, the line-of-JSON framing of `McpSession` | The link speaks JSON-RPC 2.0, a message a line, in both directions over one connection. |
-| `McpPipeHost`, `McpGate`, `McpDiscovery` | Untouched. The pipe stays this user on this machine only. Link is a second door with its own, much stronger, lock; it never forwards to the pipe. |
-| `HexSettings` rows, `EditorSettingsCatalog` | `link`, `link_port`, `link_name`, `link_discoverable`, user settings only, never a workspace's (a cloned repository must not open the door, as with `mcp_server`). |
-| `HexData`, `TerminalFiles.UserFolder` | The device's key and the known devices live in the settings folder (`link/`), the audit log and the copies of remote files in the data folder (`data/link/`). |
-| The persistent process | The listener is the scene's, like the MCP server's, and stays up while the window sleeps. |
-| Status bar, Agentic (Noon), settings window | A status item, a Link window, a section of the fleet per connected device. |
-| Native AOT | `SslStream`, `CertificateRequest`, `JsonNode`, sockets and P/Invoke only. No reflection, no serializer, no new packages. |
-
-Spiked before choosing (scratch `link/spike`): mutual TLS between two self-signed P-256 certificates, each pinned
-by the other by the SHA-256 of its public key, with `SslStream` on .NET 11. Windows 11 negotiates TLS 1.3
-(`TLS_AES_256_GCM_SHA384`), macOS 27 on arm64 TLS 1.2 (`TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384`). A wrong pin and
-a missing client certificate are both refused on both. So TLS, the platform's own audited implementation, rather
-than a Noise handshake written by hand over primitives the BCL only half has (no X25519).
-
-## 2. Architecture
-
-```
- Hex A (PC)                                              Hex B (Mac)
- ┌───────────────────────────────┐                      ┌───────────────────────────────┐
- │ DawnScene.Link*  (Hex.Dawn)   │                      │ DawnScene.Link*               │
- │  services: hub, tools, files  │                      │  UI: fleet section, Link window│
- │  UI: status item, Link window │                      │                               │
- ├───────────────────────────────┤                      ├───────────────────────────────┤
- │ HexLink          (Hex.Core)   │   one TLS connection │ HexLink                       │
- │  HexLinkHost   answers  ◄─────┼──── JSON-RPC both ───┼────►  HexLinkPeer  asks       │
- │  HexLinkPeer   asks     ──────┼──── ways ────────────┼────►  HexLinkHost  answers    │
- │  HexLinkSession (framing)     │                      │                               │
- │  HexLinkTransport (TLS, pins) │                      │                               │
- │  HexLinkPairing (SAS)         │                      │                               │
- │  HexLinkTrust (known devices) │                      │                               │
- │  HexLinkIdentity (key, cert)  │                      │                               │
- │  HexLinkDiscovery (mDNS)      │                      │                               │
- └───────────────────────────────┘                      └───────────────────────────────┘
-```
-
-- **A link is symmetric.** Whoever dialled, both ends ask and both answer over the one connection. What each may
-  ask is what the *other* granted it, from the other's own list of known devices. The Mac watching the PC and the
-  PC watching the Mac are the same link.
-- **Many devices.** A Hex holds a link to each paired device that's up (8 at once at most). Presence and changes
-  go to every one of them that may see them.
-- **`Hex.Core/Link`** has no window and is unit tested alone: identity, trust, transport, pairing, discovery, the
-  session, the host (which asks an `IHexLinkServices` for everything that's the editor's) and the peer (the other
-  machine as this one sees it: its fleet, its chats mirrored as `HexAgentChat`, its files).
-- **`Hex.Dawn/Link`** (`DawnScene.Link*.cs`) implements the services over the hub, the tools and the workspace,
-  marshals to the editor's thread through the queue the MCP calls use, and draws the UI.
-- **Threads.** The listener and each link's reader are background threads. Nothing of the editor's is touched off
-  its thread: the fleet is read from the hub's snapshot, everything else is queued (`HexMcpCall`, or a queue of
-  the link's own drained each tick), and what arrives for the UI waits in a queue the tick drains.
-
-## 3. Security model
-
-### 3.1 Identity
-Each Hex installation has one P-256 key, made the first time Link is turned on, and a self-signed certificate over
-it (20 years, the name is only a label). The **device id** is the SHA-256 of the certificate's
-SubjectPublicKeyInfo; its first 80 bits in base32 groups are the fingerprint people can read out.
-
-The private key never enters the repository or the workspace. It's kept in `<settings>/link/identity`, wrapped:
-
-| Platform | Protection |
-| --- | --- |
-| Windows | DPAPI, `CryptProtectData` for the current user (P/Invoke, no package). |
-| macOS | A random 256-bit wrapping key in the login Keychain (`SecKeychainAddGenericPassword` / `Find`, service `Hex Link`), the file AES-256-GCM under it. |
-| Linux | The same with libsecret through `secret-tool` (the secret on stdin, never on a command line). |
-| Fallback (no Keychain in an ssh session, no secret service) | The file alone, mode 0600, and Link's window says the key is protected by file permissions only. |
-
-### 3.2 Transport
-TLS 1.3 where the platform has it, TLS 1.2 with ECDHE and an AEAD suite otherwise, nothing older. Both ends
-present their certificate. Neither is checked against a CA or a host name: the only question is whether the
-SHA-256 of the peer's public key is a pin in the list of known devices (or, during pairing, what the code is
-computed over). Revocation lists, renegotiation and session resumption are off. After the handshake each end
-sends one line, `HEX-LINK 1 link|pair`, and an end that isn't let in is told `NO` and dropped having been shown
-nothing.
-
-### 3.3 Pairing
-Pairing is the one moment two unknown keys are introduced, so it's the one moment a person has to look.
-
-1. On the host: **Link › Pair a Device**. For five minutes it accepts one unknown device. Outside that window an
-   unknown certificate is dropped straight after the handshake.
-2. On the joiner: pick the host from **Nearby** (mDNS) or type its address, **Pair**.
-3. TLS comes up between the two unknown certificates. The joiner sends a commitment, SHA-256 of a 32-byte nonce.
-   The host answers with its own nonce. The joiner reveals its nonce, the host checks it against the commitment.
-4. Both compute a six-digit code from SHA-256 over both public-key pins and both nonces, and show it with the
-   other device's name and fingerprint.
-5. The person checks the code is the same on both screens and, on each, ticks what that machine grants the
-   other (View, Steer, Edit; nothing ticked beforehand), then **Pair**. Either side declining, a mismatch or two
-   minutes passing ends it, and the pairing window with it.
-6. Each stores the other's pin, name and what it granted.
-
-Why this holds: somebody in the middle has to use keys of their own on each side, so the two sides hash different
-pins. Because the joiner committed to its nonce before seeing the host's, and the host sent its nonce before
-seeing the joiner's, neither nonce can be chosen to steer the code, so the codes agree by chance once in a
-million, and a miss closes the window. No secret is typed, so there's nothing to guess offline.
-
-An invitation is a single `hex-link:v1.` token carrying private addresses, a port, the host's full
-public-key pin, expiry, and a random 256-bit secret. Send it privately to the person pairing. The joiner
-tries the listed endpoints in parallel and only considers TLS handshakes with the expected pin. If a VPN
-answers first, the joiner gives pending LAN handshakes up to 300 ms to finish before using the VPN.
-It sends no invitation proof until TLS authenticates the host's key.
-
-The new `invite` handshake mode exchanges fresh nonces, then role-specific HMAC-SHA256 proofs over both
-TLS pins and both nonces. The host keeps the invitation in memory for at most five minutes, removes it
-atomically after one valid proof, and invalidates it after five incorrect proofs. Wrong proofs are audited
-without recording the token or secret. Even a declined or interrupted confirmation consumes a valid invite.
-After proving possession, the host sends the proposed preset and its suggested grants in each direction.
-The suggestions exclude Predict and grant no rights. The proof replaces comparing the six-digit code.
-Both operators still explicitly approve their local grants, with Predict off by default. Entering an address or choosing Nearby still uses the original code comparison.
-
-### 3.4 Rights, least privilege
-What a device may do is the host's to say, per device, and is checked by the host on every request.
-
-| Right | Allows | Tools let through |
-| --- | --- | --- |
-| **View** | The fleet, chats, plans, mail. The workspace's tree, files and search. Presence. Git's state, a clone or fetch of the repository. | `hex_agent_list`, `hex_agent_read`, `hex_plan_read`, `hex_map`, `hex_files`, `hex_symbols`, `hex_search`, `hex_refs`, `hex_read`, `hex_skim`, `hex_changes`, `hex_projects`, `hex_git_diff` |
-| **Steer** | View, and: say something to an agent, answer its questions and approvals, stop, restart, start and close agents. | plus `hex_agent_send`, `hex_agent_message`, `hex_agent_stop`, `hex_agent_restart`, `hex_agent_spawn`, `hex_agent_approve`, `hex_agent_close` |
-| **Edit** | View, and: write the workspace's files. | plus `hex_edit`, `hex_write`, `hex_edit_symbol`, `hex_rename` (and `fs/write`) |
-| **Predict** | Use this machine's model for autocomplete (5.6), while this machine shares its predictions. Nothing else, and it needs nothing else: not even View, so a device may borrow the model without seeing a file. Never given by another right, unticked at pairing. | none (`predict/start`, `predict/cancel`) |
-
-Never over a link, whatever was granted: the terminal, tasks, clicking, typing and keys, screenshots, the
-debugger, settings, `hex_dev_*`, the self test, notebooks' kernels. The list is an allow list, a tool added to
-Hex later is not reachable until somebody adds it here.
-
-Steer is said plainly in the pairing dialog to be as much as sitting at the machine: an agent told to run a
-command runs it. Edit without Steer still can't run anything.
-
-### 3.5 The listener
-Off until `link` is on. One TCP port (`link_port`, 47833 unless changed). Connections from addresses that aren't
-private (RFC 1918, link-local, loopback, CGNAT 100.64/10 which VPNs use, IPv6 unique-local and link-local) are
-dropped before TLS. At most 8 links and 4 handshakes at once, 10 s to finish a handshake, a line of at most 8 MB,
-60 requests a second a device, a ping every 20 s and a link that misses three is closed. mDNS announces only
-while `link_discoverable` is on, and says the device's name and the first 8 characters of its id, nothing of the
-workspace.
-
-### 3.6 Revocation
-**Forget** on a device removes its pin and cuts its link the same tick. It can't come back without pairing again.
-Rights changed on a device apply to its next request. **Turn Link off** closes the listener and every link.
-
-### 3.7 Audit
-`data/link/audit.log`, a line an event: links up and down, pairings, refusals and why, every Steer and Edit
-request (the device, the tool, the chat or file). Kept to 2 MB. Link's window shows the latest.
-
-### 3.8 Threats
-
-| Threat | Answer |
-| --- | --- |
-| Somebody on the LAN reads the traffic | TLS, AEAD, forward secret (ECDHE). |
-| Somebody on the LAN pretends to be a known device | It hasn't the private key for the pin, the handshake fails. |
-| In the middle of a pairing | The code differs (3.3). One try a window. |
-| An unknown device probes the port | Dropped after the handshake with nothing shown, counted, rate limited. Nothing before pairing mode. |
-| A paired device asks for more than it was granted | Checked per request on the host, refused and logged. |
-| A paired device with View reads outside the workspace | Paths are relative to a workspace folder, made whole and checked to be inside it after links are followed, `.git` and what `files_exclude` hides are refused. |
-| A paired device floods | Line, request-rate and link limits. |
-| A stolen laptop that was paired | Forget it on the other machines. Its key is wrapped by its OS account. |
-| A cloned repository turns Link on | `link*` are never workspace settings. |
-| A hostile host sends a chat or file made to break the watcher | JSON is parsed with `JsonNode` and read field by field with limits, a remote chat's rows are data, never instructions, remote file copies are opened as files of an untrusted folder (no tasks run, no extensions loaded from them). |
-| A remote agent's text steers a local agent | What a local agent reads through `hex_link_call` is marked as coming from another machine. |
-| Downgrade | TLS 1.2 is the floor, the protocol version is in the first line and an older one is refused. |
-| The key is copied off the disk | DPAPI, Keychain or libsecret wrapping; the fallback is said in the UI. |
-| Steer is remote code execution | Said in the dialog, never granted by default, logged. |
-
-## 4. Protocol
-
-JSON-RPC 2.0, a message a line of UTF-8 JSON, after the TLS handshake and the `HEX-LINK 1 link` line. Both ends
-send requests, responses and notifications. Errors use JSON-RPC's codes plus `-32001` not allowed (the right it
-would take is in `data.needs`), `-32002` conflict, `-32003` not found, `-32004` too big, `-32005` busy, `-32006`
-prediction failed (`data.status` says how in a word: `refused` when the machine doesn't share its predictions,
-otherwise the prediction side's own, `unreachable`, `timedout`, ...).
-
-| Method | Right | What |
-| --- | --- | --- |
-| `link/hello` | none | `{protocol, device{id,name,os,arch,version}}` → the same of the other, with `granted` (what it lets the asker do) and `workspace{name, folders[{name}], repositories[{name, branch, head}]}`. |
-| `link/ping` | none | Keeps the link up. |
-| `link/rights` (notification) | none | What the asker may do changed. |
-| `fleet/get` | View | `{version, rows[{id,name,agent,model,parent,depth,state,reply,seconds,cost,version,waiting,plan_step}]}`. |
-| `fleet/changed` (notification) | View | The same, sent when the hub's snapshot moved, at most 5 a second, to links that asked `fleet/get`. |
-| `chat/get` | View | `{id, since}` → a chat as `HexAgentChatStore.Write` says it, with `version`; with `since` only the rows whose version is newer, each with its index, and the count, so the mirror is patched rather than sent whole. |
-| `chat/watch`, `chat/unwatch` | View | `chat/changed` notifications for a chat while somebody has it open, the same patch. |
-| `tools/list`, `tools/call` | by tool | The tools 3.4 lets this device call, as MCP describes and answers them. |
-| `fs/list` | View | `{path}` → entries `{name, kind, size}` of a folder of the workspace. |
-| `fs/read` | View | `{path}` → `{text or base64, hash, encoding, eol, size, modified}`, 8 MB at most. |
-| `fs/write` | Edit | `{path, base, text or base64}` → `{hash}`, or conflict with the file's hash now when it isn't `base`. `base` null makes a new file and conflicts when there is one. |
-| `fs/watch`, `fs/unwatch` | View | `fs/changed {path, hash}` for files the asker has open. |
-| `presence/set` (notification) | View | `{file, line, column, selection}` of the sender; the receiver shows it and passes it on to its other links. |
-| `git/bundle` | View | `{repository, have[]}` → `{id, size, refs}` then `git/chunk {id, data}` notifications and `git/done`. What `git bundle create` wrote of the branches, less what the asker has. |
-| `sync/manifest`, `sync/watch` | View | `{folder}` → `{folder, head, root, entries[{path, hash or big, size}]}`, every file git would carry; `root` is the repository's first commit, which tells two clones of one repository from two that share a folder name. `sync/watch` then sends `sync/changed {folder, changes[{path, hash or big or deleted}]}`; `sync/unwatch`, `sync/flush`, `fs/delete {path, base}` (Edit). |
-| `patch/offer` | View | `{title, diff}` → a card on the receiver, which applies it, keeps it as a file or throws it away. The answer says which. |
-| `link/serves` (notification) | none | `{serves: ["predictions"] or []}`, what the host would do for the asker changed (hello says it first, as `serves`). |
-| `predict/start` | Predict | `{id, prompt, suffix, max_tokens, stop[], format}` → `{id}` once checked, the id the asker's. Then `predict/chunk {id, text}` notifications in order and `predict/done {id, ok, error?, status?}`. Refused with `-32001` (needs `predict`) or `-32006`. |
-| `predict/cancel` (notification) | Predict | `{id}`, the model's token cancelled at once; `predict/done` follows with status `cancelled`. |
-
-Paths are `folder-name/relative/path` with forward slashes, the folder one of the workspace's by name.
-
-## 5. What's shared and how
-
-### 5.1 The fleet
-A connected device granted View sends `fleet/get` and then hears `fleet/changed`. Agentic's fleet gets a section
-per device under the local one, headed by the device's name and what this machine may do there, its cards the
-same cards. Picking one opens its chat: `chat/get` then `chat/watch`, read into a mirrored `HexAgentChat` held by
-the `HexLinkPeer` (never added to the local hub, so local ids, runs and limits never see it). The box under a
-remote chat sends with `hex_agent_send` over `tools/call` when Steer was granted, and says what's missing when it
-wasn't. Approval and question cards answer through `hex_agent_approve` and `chat/answer`. Stop and Restart are
-the cards' usual buttons. The plan is the chat's stored plan, shown in the Plan tab read-only.
-
-### 5.2 Agents across machines
-With a link up, local agents get `hex_link_devices` (who's connected and what they allow) and
-`hex_link_call {device, tool, arguments}`, which calls one of the other machine's allowed tools and marks the
-answer as another machine's. So an agent on the Mac can read and search the PC's workspace, list its agents,
-message one or start one there, as far as the PC allowed the Mac.
-
-### 5.3 The remote workspace
-**Link › Open Remote File** browses folders with `fs/list` and finds files by name or path with `hex_files`.
-Picking a remote file reads it with `fs/read` into `data/link/remote/<device>/<folder>/<path>` and opens a tab
-whose title names the device. **Go to Symbol** uses `hex_symbols` over `tools/call` and opens the selected
-declaration at its line. Peers advertising `link_locations` return the host's wire path and zero-based line for each declaration. This distinguishes identically named roots and directories even when their display paths coincide. Older peers still return text rows. The `hex_search` tool is also available over `tools/call` for text search.
-
-**Saving** a remote tab sends `fs/write` with the hash the file had when it was read. The host writes it through
-the same path `hex_write` takes (an open tab with unsaved changes is changed in the editor, undo kept).
-
-**Conflicts.** The host answers conflict when the file's hash isn't the base. The saver is shown the three ways
-out: open the difference (theirs against mine), take theirs (the tab reloads, what was typed stays in undo), or
-overwrite (sent again with the new hash as base). Nothing is ever merged silently. While a remote tab is open,
-`fs/watch` says when the file moves on the host: an unmodified tab reloads, a modified one says so in its bar.
-
-**Presence.** Each end says where its caret is at most twice a second while it moves. The Link window lists who's
-in which file. In a file two people have open the other's caret is a thin coloured mark with their name, and
-**Follow** keeps the view on it.
-
-### 5.4 The repository
-**Link › Clone from Device** asks `git/bundle`, writes the chunks to a temp file, `git clone`s it into a folder
-the person picks and sets nothing as its remote. In a clone that already exists, **Fetch from Device** sends what
-it has and fetches the rest into `refs/remotes/<device>/*`, so work goes back and forth by ordinary merges with no
-server between. **Offer Changes** sends the working tree's diff as `patch/offer`.
-
-### 5.5 Agents started on another device, and the code kept the same (added 2026-11-21)
-An agent, or the person, on one machine starts an agent on another: the PC's agent tells an agent on the Mac to
-build, test or change what only a Mac can. Two things make that work.
-
-**Where it runs is a choice.** The box of the Agents view and Agentic has a **Runs on** picker beside the model,
-this device or any connected device that granted Steer. A chat started on another device is that device's chat
-(its process, its tools, its limits), and it shows in the chat lists of both machines, like every other chat of a
-linked device, with a badge naming the device it runs on. Agents get the same through `hex_link_call` with
-`hex_agent_spawn`, `hex_agent_send`, `hex_agent_wait` and `hex_agent_read` on the other device, and the shorter
-`hex_link_spawn {device, prompt, ...}`.
-
-**The working tree is synced.** With **Sync** on for a workspace folder both machines have open (the same
-repository, matched by its first commit, each side having granted the other Edit), a change saved on one is
-written on the other within a moment, both ways:
-
-- Each side knows, per file, the hash both last agreed on (the base). `sync/manifest` gives every file git would
-  carry (tracked, and untracked but not ignored, so no build output), `sync/watch` then says what changes.
-- Local changed, remote still at base: sent with `fs/write` and the base. Remote changed, local at base: read and
-  written here. Both changed to different things: nothing is overwritten, the other machine's version is kept
-  beside the file as `name.theirs-<device>.ext`, both sides are told and the Link window lists it. The same for a
-  delete against a change.
-- Before the first sync the two trees are compared. Different commits checked out are brought together by git
-  over the link first (5.4), then files that differ are listed for the person to pick a side, once.
-- `sync/flush`, and `hex_link_sync {device, wait: true}` for agents, answer when everything written here is
-  there, so "now build it on the Mac" is said after the code arrived, not before.
-- Files over 8 MB, `.git` and ignored files never travel.
-
-### 5.6 Predictions over a link (added 2026-11-21)
-A weaker machine borrows the autocomplete (edit predictions, ghost text) of a stronger one it's linked to: the Mac
-types, the desktop's model answers. Two things have to be so on the desktop, checked on every request: the Mac has
-the **Predict** right (3.4), and the desktop shares its predictions (`edit_predictions_share` on, with a provider of
-its own it can reach, never one that is itself another device). Hello says `serves: ["predictions"]` when both are,
-and `link/serves` says it again whenever either changes (the right in Link's window, the setting, the model coming
-or going, looked at once a second). With several devices that serve, the first linked is used, and kept while it
-serves.
-
-The asker cancels on every keystroke, so nothing waits: `predict/start` is answered as soon as its fields are
-checked, the model runs on a task of its own and its pieces go back as `predict/chunk`, which may arrive before the
-start's answer (the asker picked the id, so it takes them from the first moment). `predict/cancel` is taken on the
-reading task and cancels the model's token there and then. None of it touches the editor's thread on either side.
-
-Limits on the host: prompt and suffix 256 KB together (UTF-8), `max_tokens` clamped to 1..1024, at most 16 stop
-strings of 64 characters, two predictions of a device running at once (a third cancels the oldest, which the asker
-has typed past), and one audit line a minute at most saying how many were asked, not one a keystroke. A model that
-fails ends the stream with `-32006` and its status; the link closing ends it with the link's own closed error.
-
-What it can't do: a link is one stream, so a prediction's piece written just after a big answer (an 8 MB `fs/read`)
-waits for that answer to be written. Requests are answered on tasks of their own, so a slow request in flight never
-holds a prediction up, only a big one being sent at that moment does.
-
-In the code: `HexLinkHost.Predict.cs`, `HexLinkPeer.Predict.cs` (`ServesPredictions`, `Predict`),
-`HexLinkPrediction` (the request and its limits), `IHexLinkServices.ServesPredictions/Predict`, and in Dawn
-`DawnScene.LinkPredict.cs`: `LinkPredictServing` and `LinkPredictServe`, which the prediction side binds, and
-`LinkPredictSource` with `LinkPredictSourceChanged`, which it reads to send its prompts to another machine.
-
-### 5.7 Editing a shared document
-
-Open the same text file on connected devices with its folder synced. Hex joins a shared session at that folder's
-persisted authority. **View** can join and read unsaved text. **Edit** can also change and save it. The command
-palette can host or join a shared workspace path explicitly, and **Leave** keeps the tab's current text. The
-folder authority stays pinned when it is unreachable. An allowed one-hop relay can reach it, with rights checked
-at both links.
-
-Each participant sees the others' named carets, selections and pointers. Tabs show who is in the file and
-**Follow** can track a participant's caret. Updates are sampled at most 20 times per second. Agent edits from
-`hex_edit`, `hex_write` and `hex_edit_symbol` enter the shared buffer as edits by the named agent.
-
-`doc2` carries operations over immutable text runs. Each operation has an author and a stable atom range. The
-authority acknowledges a single ordered tail for replay, while concurrent overlapping inserts and deletes
-converge deterministically. Undo and Redo only change the visibility of that author's edits. An acknowledged
-checkpoint compacts idle replicas, resets their undo history and gives new participants a snapshot and bounded
-tail. A room accepts up to 64 remote devices and a checkpoint can contain up to 2,097,152 UTF-16 code units.
-
-When an authority disconnects, existing editors can continue locally. Reconnecting to the same epoch replays
-the missing tail and retries unsent edits. If a new epoch cannot accept the local operations, Hex keeps the
-draft open for comparison with the shared text.
-
-A save by an editor goes to the authority after its own edits have been acknowledged. The authority compares
-the file's original disk hash before publishing the shared buffer with its existing encoding and line endings.
-Working-tree sync carries the saved bytes. The save receipt identifies those bytes, so syncing a shared save
-does not overwrite a newer unsaved buffer.
-
-## 6. UI
-
-- **Status bar.** A link item while Link is on: how many devices are connected, breathing while one is steering.
-  Its tooltip names them and what each may do. A press opens the Link window.
-- **Link window** (View › Link, the palette's "Link: ..."). This device's name and fingerprint and the switch.
-  **Devices**: each known device with whether it's connected, its address, four toggles for what it may do
-  here, what this machine may do there, and Forget. **Nearby**: Hex's found on the LAN, Pair or Connect.
-  **Connect to address**. **Pair a Device** with its countdown. The latest of the audit log.
-- **Pairing dialog** on both machines: the other's name and fingerprint, the code in large type, the three
-  rights with a line each on what they mean (Steer's in the warning colour), Pair and Cancel.
-- **Agentic.** A section per device in the fleet, remote chats in the middle, a banner over the box of a remote
-  chat saying whose machine it runs on.
-- **Notices.** A device connecting, a refusal, a conflict.
-- All text in `localisation/en-gb.hor` under `link.*`.
-
-## 7. Platforms
-
-| Part | Windows | macOS | Linux |
-| --- | --- | --- | --- |
-| TLS | SChannel, 1.3 | Apple's, 1.2 with .NET 11 | OpenSSL, 1.3 |
-| Key protection | DPAPI | Keychain, else 0600 file | libsecret, else 0600 file |
-| mDNS | Own responder on 5353 with address reuse, beside the system's | The same beside mDNSResponder | The same beside Avahi |
-| Firewall | A new Hex executable can prompt when it opens LAN-facing Link sockets. Local-only suites bind IPv4 loopback and skip mDNS. | Local Network permission for a bundled app | Whatever the distribution runs |
-| Everything else | Shared | Shared | Shared |
-
-Android (`HexHost`): can dial and watch, never listens (`HexHost.Listens` false).
-
-## 8. Phases and acceptance
-
-| Phase | Work | Accepted when |
-| --- | --- | --- |
-| 1a Transport | Identity, key protection, trust store, TLS listener and dialer, address rule, pairing, mDNS. | Unit tests: two identities link over loopback; an unknown pin is refused; no certificate is refused; pairing gives both the same code and stores both pins; a changed nonce or a different key gives different codes; a forgotten device is cut and refused; a public address is refused; the key file doesn't hold the key in the clear. |
-| 1b Protocol | Session, host with the rights check, peer with the fleet and chat mirrors, files with the path jail and conflict, git bundle, patch. Over any pair of streams. | Unit tests over an in-memory pair: fleet and chat mirror follow a changing hub; every method refuses without its right; a tool outside the list is refused whatever was granted; path escapes are refused; a stale base conflicts; a bundle clones. |
-| 2 Wiring | `DawnScene.Link`, settings, CLI and environment for tests, services over the hub, tools and workspace, `hex_link_*` tools, the audit log. | Self test `link`: two Hex on one machine with their own pipes, settings and data pair, link, one sees the other's chat and steers it, a file edit goes across, forgetting cuts the link. |
-| 3 UI | Status item, Link window, pairing dialog, Agentic's sections and remote chats. | Self test `link-ui`; screenshots looked at. |
-| 4 Sharing | Open Remote File, save back, conflicts, presence, clone, fetch, offer changes. | Self test `link-files`; unit tests of the conflict paths. |
-| 5 Two machines | PC and Mac. | The Mac watches and steers an agent on the PC and the PC one on the Mac; pairing; revocation; an unpaired peer refused; a capture of the wire shows TLS and none of the text sent; a file edited on one is saved on the other. |
-
-## 9. Later
-
-A relay for machines with no route between them, the debugger shared read-only, a tablet as a watcher, terminals.
-
-## 10. Risks
-
-| Risk | What's done about it |
-| --- | --- |
-| TLS behaves differently per platform (1.2 on macOS, when a refusal is seen) | Spiked on both first; the first line after the handshake is the real admission, not the handshake's exceptions. |
-| No Keychain in an ssh session on the Mac | The 0600 fallback, said in the UI; the Mac test runs with it. |
-| mDNS beside the system's responder, firewalls | An address typed in always works; discovery is a convenience. |
-| A remote chat mirrored at the cost of a big chat every change | Patches by row version, only for the chat on screen, the fleet is rows only. |
-| Editor-thread stalls from a busy link | Rate limits; everything off the editor's thread but the queued calls. |
-| The UI's size | Remote chats reuse the local rows; the Link window is one layout. |
+# Hex Link design
+
+Hex Link connects Hex installations over mutually authenticated TLS. Devices can share a workspace, work on the
+same text buffer, and run agents where the right tools are available. Each device decides what the others may do
+on it. The [test evidence](hex-link-test-evidence.md) distinguishes the deployed baseline from the Wave 2
+integration gates.
 
 ## Status
 
-Kept current by the orchestrator (chat #107) at every phase change, so another agent can take over.
-Last updated 2026-11-21 19:40, phases 3, 4 and 5 running.
+- **What ships in Wave 2.** Devices and invite pairing, folder authority, checked working-tree sync and bulk
+  transfers, workspace provisioning, HEAD follow, claims and clean text merges, shared documents, private
+  worktrees and checked publication, remote agent approvals.
+- **Known limits.** One relay may forward permitted control RPC. Bulk publication needs a direct link to the
+  authority. Handle case-only directory renames manually. Native Keychain and `secret-tool` paths and native UI
+  colour contrast have no recorded acceptance runs. Shared editing meets the 50 ms loopback target in the fast
+  run and misses it at CPU saturation.
+- **Not done.** A current Tailscale-only sync run, a controlled real-LAN throughput benchmark, and a live
+  64-device GUI load test. The recorded throughput comparison uses pinned loopback TLS.
 
-**Where things are**
-- Integration branch: hex `feat/hex-link`, worktree `../hexwt-link` (beside `hex/`). No engine changes so far (engine
-  stays at development 68b7e11, HIDL bf0f436). Nothing is pushed.
-- Engine copies to build against (never the live engine), in
-  `hex/Hex/bin/Debug/net11.0/data/agents/temp/scratch/link/`: `engine` (orchestrator), `engine-transport`
-  (wiring worker), `engine-protocol` (sync worker). Build: `dotnet build Hex/Hex.csproj -p:HorizonRoot=<engine>/
-  -p:HidlRoot=<engine>/Horizon.HIDL/`.
-- Mac rig: `scratch/link/mac/` (`mac-sync.sh [branch]`, `mac-build.sh`, `mac-test.sh [filter]`,
-  `mac-hex.sh ENV=.. -- args`, `mac-kill.sh`, README.md). Mac clones in `~/hexmac/link/{hex,horizon}`. PC is
-  192.168.0.50 / Tailscale 100.81.32.118, Mac 192.168.0.30 / 100.80.122.37. A windowed Hex runs on the Mac from
-  plain ssh while the person is logged in there. On the PC a worktree `Hex.exe` listening needs the Windows
-  Firewall prompt allowed once; `dotnet Hex.dll` uses the existing .NET Host rule.
+## 1. Architecture
 
-**Done**
-- Design, decisions, TLS spike (this document).
-- Phase 1a transport + pairing: merged (5c9b371, bdc9722). Phase 1b protocol + remote hub + sync wire pieces: merged
-  (106c471, f340236). Glue 1d1cb46. 141 `HexLink` unit tests pass on Windows and macOS. PC and Mac paired and
-  linked over LAN and Tailscale with the transport's console harness (TLS 1.2 to the Mac).
+`Hex.Core/Link` owns identity, transport, permission checks, peer state, sync and document rooms.
+`Hex.Dawn/Link` adapts the editor, workspace and agent hub. A TLS connection is symmetric. Both ends serve
+requests and send notifications, regardless of who dialled. Each endpoint applies its current local rights,
+workspace rules and feature availability. Network and disk work run off the editor thread. The editor applies
+posted changes and updates its UI. The local MCP pipe remains a separate entry point.
 
-**Merged since** (`feat/hex-link` d9d7b32): phase 2 wiring (#111: 768604f, 50deefc, 94e2b75, e37dbe6) and the sync
-engine (#112: bb03029, c61191b). 408 unit tests in the Link, settings, MCP and agents filters; self test `link`
-22 of 22 (two Hex on the PC).
+## 2. Devices and routes
 
-**Running** (each commits work in progress often and messages the orchestrator its commit and what is left)
-- #118 `feat/hex-link-ui` (`../hexwt-link-ui`, engine-transport): phase 3. Link window, pairing dialog, device
-  sections and badges in the fleet and chat list, a remote chat on screen, the Runs on picker, suite `link-ui`.
-  Owns `DawnScene.LinkWindow*/LinkPairing*/LinkFleet*/LinkChats*/LinkRunsOn*.cs`.
-- #119 `feat/hex-link-share` (`../hexwt-link-share`, engine-protocol): phase 4 and 4b glue. Working-tree sync
-  per device and folder with `hex_link_sync` (first), open remote file with save back and conflicts, presence,
-  clone, fetch and offered changes, suite `link-files`. Owns `DawnScene.LinkFiles*/LinkSync*/LinkGit*/
-  LinkPresence*.cs` and `DawnScene.McpLink.cs`.
-- #120 `feat/hex-link-test` (`../hexwt-link-test`, engine-test): phase 5 on what is merged. `link` on the Mac,
-  the four route and direction combinations (LAN, Tailscale; who listens), a real agent started across machines
-  both ways (haiku), the wire through a logging relay, mDNS, fixes, `docs/hex-link-test-evidence.md`.
+Link is opt-in in this installation's settings. A repository cannot turn it on. The listener defaults to TCP
+47833 and accepts private addresses, including private VPN ranges. Discovery is optional LAN mDNS. It advertises
+the device name and a short identifier. Known devices remember eligible endpoints and can redial after reconnect
+or restart with backoff. The Devices window shows the route, last failure, and retry state where known.
+Disconnect holds off redial. Forget removes trust.
 
-**Next, in order**
-1. Merge #120's fixes as they come, then #119, then #118 (the UI shows #119's `LinkSyncs` and `LinkConflicts`;
-   a small follow-up for the UI worker once #119 says their signatures). Unit tests, `link`, `link-ui`,
-   `link-files` green on the PC; `mac-sync`, `mac-build`, `mac-test`.
-2. Phase 6: predictions over Link with chat #110 (`feat/edit-prediction`): right `Predict = 8`,
-   `predict/start|chunk|done|cancel`, glue to their `HexPredictionRelay` seam. Waits on their seam commit.
-3. A last two-machine pass on the whole (sync between PC and Mac with an agent on each, over LAN and Tailscale),
-   the evidence gathered, then the report to chat #3.
+A device can have up to **64 active links**. The listener admits at most four handshakes at once. The initial
+handshake budget is ten seconds before user confirmation. Each link bounds request rate and message sizes and
+checks liveness with pings. A full or inaccessible listener can refuse the connection before sharing workspace
+data.
 
-**Open**
-- The Keychain path on macOS and `secret-tool` on Linux are untested (ssh has no unlocked Keychain; the file
-  fallback is what runs there).
-- mDNS from the Mac to the PC wasn't heard when the Mac's process was started over ssh; an address typed in works.
-- The `mcp` self test fails 6 of 44 on the Mac (keys and file writes), not a Link suite, not looked into.
-- Later work includes a relay and a shared debugger.
+## 3. Security model
 
-### Development follow-up
+### 3.1 Identity and storage
 
-Development includes folder browsing, file-name search, and presence with Follow. From **Link › Open Remote File**
-for a device that grants View, choose **Go to Symbol** at the workspace root when the peer offers `hex_symbols`.
-The results use the shared workspace paths and show declaration names and line numbers. Picking one opens the file
-through the existing remote-file workflow and moves the caret to its declaration. A synced file opens locally.
-The host continues to check View for symbol queries and remote reads, and Edit for writes. Symbol navigation uses
-folder names from the index, so use folder browsing to distinguish roots that share a directory name.
+Each installation uses a P-256 key and a self-signed certificate. Its device ID is the SHA-256 of the
+certificate's public key in SubjectPublicKeyInfo format. The name is a label. The fingerprint is a shortened
+representation of the key ID.
 
-### Windows firewall and local tests
+Windows uses DPAPI for the current user. macOS and Linux can wrap the private key using a secret from the login
+Keychain or `secret-tool`. The Unix file-only fallback uses mode `0600`. If the store cannot be read now, Link
+reports that state and keeps the key for a retry. An explicit reset archives the old identity, records the reset
+and creates a new identity that must pair again.
 
-The local `link`, `link-ui`, and `link-files` suites dial `127.0.0.1`. Both the host and its spawned
-`link-peer` used to open wildcard TCP listeners (`[::]` dual stack or `0.0.0.0` as a fallback), even with
-discovery off. They now request an ephemeral listener bound to `127.0.0.1` and skip LAN discovery. Each suite
-checks the actual bound address and checks that no discovery socket was started. The transport and pairing unit
-test fixture uses the same loopback bind.
+### 3.2 TLS and admission
 
-The discovery unit suite used to call `Browse()`, which binds `0.0.0.0:5353` and joins the mDNS multicast
-group. Its packet encoding, answers, and browser state are covered without sockets. The explicit two-device
-`link-nearby` suite asserts that the real mDNS browser starts without a socket error and then checks that it
-hears the second device. `link-cross`, standalone `link-peer` by default, and
-normal Link remain available across devices. Their LAN-facing sockets can still prompt on Windows, depending on
-the executable's firewall rules. See [two-machine test evidence](hex-link-test-evidence.md).
+Both ends present certificates. TLS 1.3 is used where supported, or TLS 1.2 with ECDHE and an AEAD cipher.
+Direct trust checks the pinned key on each side. The protocol starts with
+`HEX-LINK 1 link|pair|invite <device-json>`, where the middle field is one of the three mode words. Admission
+can return `NO <reason>`. The hello also advertises capabilities such as bulk framing.
 
-Combined runs queue all suites before executing their steps. Each Link suite now creates and registers its temp
-folders while its own steps run, so the previous suite's cleanup cannot remove the next suite's Git working
-directory. Cleanup also stops a suite-owned listener if that suite times out before creating any folders.
+### 3.3 Pairing and invitations
+
+For address or Nearby pairing, the host opens a short pairing window. The joiner commits to a fresh nonce before
+it sees the host nonce, then reveals it. Both sides derive a six-digit code from the nonces and both TLS pins.
+Confirm the code against the other screen and approve the grants on each device. A decline or a timeout ends the
+pairing.
+
+**Invite a device** makes a private `hex-link:v1.` token containing candidate private endpoints, the port, the
+full host key pin, expiry and a random 256-bit secret. The joiner races endpoints and verifies the pinned host
+before sending proof. If a VPN endpoint wins first, pending LAN candidates get up to 300 ms to finish. After the
+`invite` hello, fresh 32-byte nonces travel in `nonce <hex>` lines. Each side proves possession with a
+role-separated HMAC-SHA256 over both TLS pins and both nonces, in `proof <hex>` lines. The host consumes the
+invite on one valid proof, even if approval is later declined. It expires after at most five minutes and is
+invalidated after five wrong proofs.
+
+After the host proof it sends `terms <preset> <host-grants> <host-requests>`, with decimal fields, or `terms -`. Preset values 0–3 are Collaborator, Build and test worker, Viewer, and Custom. The masks contain View (1),
+Steer (2), and Edit (4). The proposal carries no Predict bit. A valid invite replaces the code comparison. Both
+devices still explicitly approve their own grants. The optional workspace share happens after pairing.
+
+### 3.4 Rights and presets
+
+| Right | Scope |
+| --- | --- |
+| View | Read the visible workspace, fleet, chat and plan data. Subscribe to presence, join a shared buffer read-only, and get a workspace or a Git bundle the host exposes. |
+| Edit | With View, write visible files and edit or save shared buffers. Write requests still need a valid base and must respect the folder's authority and publication rules. |
+| Steer | With View, start and steer agents and answer approvals. An agent can run commands on the host under that host's agent policy. Treat Steer as access to run work on the machine. |
+| Predict | Use a model that the host explicitly shares for autocomplete. Independent of View and off by default. |
+
+**Collaborator** suggests View + Edit. **Build and test worker** suggests View + Edit + Steer. **Viewer**
+suggests View. **Custom** sets the rights individually. The two directions are independent. Only allowlisted MCP
+tools are callable over Link. Direct terminal, debugger, UI input, screenshot, settings, and development-build
+tools stay local.
+
+Rights changes apply to new requests and ongoing work that depends on the revoked right. A loss of Edit makes an
+existing sync pull-only. View regrant restores watches and refreshes their state. Forget removes the pin and
+closes its connection. Turning off Link closes the listener and sessions. The bounded local audit records
+pairings, refusals, Steer, edits, authority transfers and overrides. Relayed agent calls include the origin and
+each authenticated hop. Invite secrets and model prompt text are kept out of the audit.
+
+### 3.5 One-hop relay
+
+A device with Steer on the relay can ask for supported control operations on a third device. The third device
+applies the grants it gave the relay, and relayed document edits also require Edit at the first hop. The relay
+scope carries the origin for attribution. It is no substitute for authenticating that origin directly. No second
+relay hop, opaque tunnel, or relayed bulk transfer. Private Publish and authority transfer use the direct
+authenticated identity of the relevant device.
+
+## 4. Folder authority and wire transport
+
+An exported folder has a persisted authority device ID and epoch. Share and Get bind the identity of the
+exporter. Peers advertise it with folder metadata. Legacy two-device folders can use the existing sync-owner
+rule until a binding is established. An explicit transfer is audited, advances the epoch and invalidates
+operations expecting the old one. The old pinned authority can attest its successor. Recovery when the old owner
+is permanently unavailable requires explicit local consent. An unreachable authority does not trigger an
+election. Sync ownership, document ordering, claims, HEAD follow and publication use this binding where they
+depend on an authority.
+
+Request/response and notification messages are JSON-RPC over TLS. Capable endpoints negotiate raw or Zstandard
+bulk framing, with JSON fallback for older peers. A bulk stream is associated with its authenticated connection
+and operation. Length and SHA-256 are checked before applying bytes. Streams use 256 KiB frames, up to four
+streams per direction, and an eight-frame (2 MiB) flow-control window per stream. A control message can go
+between frames. Sync can pack up to 128 small files or 18 MiB and use resumable raw streams for larger files.
+Legacy JSON file operations keep their 8 MiB limit. A resumable stream still requires a matching transfer
+identity and file basis.
+
+## 5. Shared work
+
+### 5.1 Fleet and remote approvals
+
+Remote chats display the machine running them. Fleet snapshots show status and pending approvals. A watched chat
+follows versioned row changes and falls back to a snapshot if the patch base is unavailable. Use the **Runs on**
+picker or `hex_link_spawn` to run an agent on a connected device that grants Steer. The remote machine owns the
+process, workspace and permissions.
+
+The spawning chat can receive the linked child's approval requests and answer through `hex_link_call` with
+`hex_agent_approve`. The person can also answer in the remote chat card. The host binds routed approvals to the
+device and chat that started the agent and rechecks Steer. A per-device pre-approval setting limits remote spawn
+options to **Nothing**, **Edits** (the default), or **Everything**. These settings bound what a remote starter
+may pre-approve. They do not grant permissions to a provider that would otherwise deny them.
+
+### 5.2 Claims, guards and merge
+
+The authority keeps advisory file and directory-prefix claims. The first edit starts an editing claim. Reading
+alone leaves a file unclaimed. Planned claims can include context or an ETA. Private publication can reserve its
+paths. View gates claim visibility. A live claim uses a 10-second heartbeat, a 35-second lease and a 15-second
+disconnect grace period. The limits are 2,048 claims per device and 8,192 per folder.
+
+`hex_link_claims` lists, takes or releases claims. Agent file edits and renames check the local claim index
+before applying changes. A refusal identifies the holder and can offer waiting, contacting the holder or using a
+private worktree. An explicit `override_claim` is audited. `hex_plan_update` reports overlapping plans and
+`hex_agent_list` can show claimed paths. A linked agent can address `hex_agent_message` to `<device>:<chat>`
+through a Steer-authorized route. A claim warns about intent and cannot replace the content check at write time.
+
+Sync and Publish share a Git three-way text merge helper. A clean merge can be applied with a verified base and
+compare-and-replace. Ordinary sync caps auto-merge inputs at 256 KiB and retains up to 32 MiB of recent bases. The shared helper accepts up to 1 MiB per input. Overlapping hunks, unavailable bases and unsupported or binary
+content use the conflict path, which keeps both versions for resolution.
+
+### 5.3 Remote files
+
+Browse or search a peer's shared files with View. **Go to Symbol** opens a declaration at its line. A file
+already in a synced folder opens locally. Otherwise, Hex opens a remote tab. Path resolution stays inside the
+selected workspace root. The workspace's exclusions apply to names, reads, writes, watches and search results.
+Linked edit tools reject a multi-file change if any target is outside the allowed workspace.
+
+A remote save carries the hash the tab read. A stale base opens a conflict with the other version available for
+comparison or explicit resolution. Watched clean tabs can refresh. Dirty buffers and concurrent disk changes are
+protected.
+
+### 5.4 Provisioning, repositories and HEAD follow
+
+**Get workspace** and `hex_link_provision` can populate an empty destination or update an eligible older
+checkout with View. Get transfers Git objects, restores branch and origin information, recreates initialized
+submodules and nested repositories, and hydrates visible tracked and nonignored untracked files. It adds the
+folder and starts sync. Uninitialized submodules keep their gitlink and URL. Bad individual paths or nested
+repositories may be skipped with reasons while the rest copies. A failed root repository, unusable destination,
+revoked rights, disk full or cancellation stops the operation. A skipped nested checkout can be fetched
+separately without stopping sync of the rest.
+
+Bulk-capable peers stream bundles and working files using checked transfers. On an older host, the legacy
+working-file limit still applies. Provisioning preserves genuine mixed-line-ending edits. A tracked file that is
+Git-clean keeps the checkout's bytes.
+
+**Clone from Device** and **Fetch from Device** remain available for repository history. A bundle can contain
+committed versions of files excluded from the current working-tree view. Fetch places refs under the device's
+remote-tracking namespace. **Offer Changes** sends a patch for review. Automatic **HEAD follow** is
+a per-folder option to follow the pinned authority's branch, commits and index, including nested repositories
+and submodules. File sync carries the working changes. The follower preserves its local edits, config and stash,
+backs up its old HEAD and audits agreed rewrites. Divergence keeps both tips and file sync available. **Align**
+is the explicit choice for a divergent checkout.
+
+### 5.5 Working-tree sync
+
+A pair runs one automatic sync for the selected folder. It compares certified, paged manifests and uses watches
+for incremental changes. Directory digests and a shared scan and hash cache reduce repeat work. Git inventory
+includes tracked files and untracked files eligible under ignore and workspace exclusion rules. Nested
+repositories retain their own boundaries. Cached metadata or digests can avoid scans or reads. A transfer still
+checks exact content and the agreed base before publication. Cache data lives outside the exported tree.
+
+A single-sided edit is sent or pulled against the last agreed value. A verified common Git base can seed the
+first comparison. If both sides changed, a safe clean merge may apply. Otherwise, Hex preserves both versions and
+offers a resolution. A delete requires a certified view and confirmation that the path is absent. A skipped
+path, locked file, truncated page, broken repository or inaccessible directory is not proof of deletion.
+Untrustworthy scope is held or quarantined and reported while safe scopes may continue. A working-tree write
+uses a process-wide per-path guard, a fresh base check and atomic replacement as the OS permits. A dirty editor
+or a lost race stops the write instead of clobbering it.
+
+The sync engine recognizes equivalent LF and CRLF text and keeps the destination's line-ending style where
+applicable. Exact byte hashes still protect writes and receipts. `hex_link_sync` can start, stop, report or
+flush a folder. A flush can report remaining conflicts, skipped paths or pull-only rights. An explicit alignment
+or recovery decision is required when repository history cannot be reconciled automatically.
+
+### 5.6 Linked predictions
+
+A device can borrow autocomplete from a consenting peer. The provider must be local to that peer and available.
+Link sends the prediction context only when Predict and serving are enabled. Keystrokes, disconnects, rights
+loss, turning off sharing and provider loss cancel work. Streams are bounded. A prediction grant gives no file
+access.
+
+### 5.7 Shared documents
+
+Open the same text file on devices with that folder synced to join its shared session. Commands can also host,
+join or leave explicitly. View allows read-only participation, including unsaved text. Edit allows typing and
+saving. Device-coloured carets and selections, the tab roster and Follow use positions in the shared buffer.
+Only room viewers receive its scoped caret updates, capped at 20 Hz. A file announcement outside the room has no
+caret coordinates. `hex_edit`, `hex_write` and `hex_edit_symbol` enter active shared buffers as named agent
+edits.
+
+`doc2` uses a run-based sequence CRDT. Inserts and deletions refer to stable atom positions. The authority
+orders and acknowledges a bounded operation tail for replay. Overlapping concurrent operations converge. Edits
+leave the change handler immediately, with pending edits batched behind the exchange in flight. A waiting reader
+receives ordered replay in its wake response. Undo and Redo affect only that author's edits. A quiet
+acknowledged checkpoint compacts history and resets old undo history. A late joiner gets a checkpoint and tail.
+A room can hold 64 remote participants and a checkpoint can hold 2,097,152 UTF-16 code units.
+
+If the authority is offline, editors can keep typing locally. On return, same-epoch replicas replay missing
+operations and retry pending IDs. When an epoch change cannot apply pending operations, Hex retains a draft and
+offers comparison. The editor continues to identify a View-only participant as read-only.
+
+An Edit participant can save once its operations are acknowledged. The authority compares the saved file's disk
+basis before writing through checked replacement and retains the file's encoding and line endings. The resulting
+receipt lets working-tree sync distribute the saved bytes without replacing a newer unsaved room buffer.
+[Loopback latency and convergence evidence](hex-link-test-evidence.md#shared-document-timing) records where the
+time went.
+
+### 5.8 Private worktrees and Publish
+
+The normal mode writes to the live workspace. People and agents can choose an isolated Git worktree, including
+eligible nested repositories. `hex_agent_spawn` and `hex_link_spawn` accept `worktree: private`. A private
+draft can follow incoming changes to untouched paths or hold them. Peers see names of unpublished paths without
+receiving draft contents. If profile storage overlaps an export, Hex keeps drafts in a stable per-profile
+directory outside the share, using the platform's user data location.
+
+**Publish** checks the draft in an isolated copy using the folder's configured build task or `dotnet build`. It
+can run a requested `dotnet test` filter. If upstream moved, a clean merge is checked again. Overlapping edits
+preserve both sides for resolution. A failed gate leaves the draft available and shows its output. **Publish
+anyway** explicitly bypasses the build gate and is audited. It cannot bypass authority, rights, path or base
+checks.
+
+Publication to another device uses direct pinned TLS and bulk transport. The authority validates the
+epoch and exact bases, fences the affected paths from live sync, journals and projects the checked set, and
+returns a durable receipt. Retrying a completed request returns the receipt. A failed or interrupted projection
+is recovered before ordinary sync proceeds. Manual reapplication of individual files is unnecessary.
+`hex_link_publish` offers `status`, `publish` and `discard` for the calling agent's draft.
+
+## 6. Devices and editor UI
+
+The Devices window shows this installation's identity, Invite and Join, nearby devices and cards for known
+peers. Cards show connection and route, grants in both directions, sync progress and conflicts. Each device uses
+the same tint in its card and caret. State and rights have text labels and Steer has a warning. The window
+offers retry, disconnect, Forget and recovery for a temporarily unavailable or damaged identity. A destructive
+reset asks for confirmation.
+
+In a file, the editor and Explorer show claims and shared-session states. A claim notice can offer
+**Open shared** or explain why that action is unavailable. Session notices and the tab roster identify
+readers, offline sessions and collaborators. **Follow** tracks a named collaborator and local caret movement releases it. Remote
+name tags fade while carets remain. The native review covered narrow and scaled layouts. Colour contrast
+measurement remains open.
+
+## 7. Verification
+
+See the [Wave 2 test evidence](hex-link-test-evidence.md) for commit IDs, per-machine counts, and rerun
+commands. Local suites use isolated profiles and IPv4 loopback without discovery. `link-cross` and `link-nearby`
+are separate, explicit paired runs for network and discovery checks.
