@@ -72,10 +72,10 @@ internal sealed partial class DawnScene
         return true;
     }
 
-    internal bool LinkOpenInvite()
+    internal bool LinkOpenInvite(HexLinkInviteRoute? publicRoute = null)
     {
         if (linkTransport is not { Listening: true } transport || !transport.OpenInvite(InviteAddresses(), LINK_PAIRING_WINDOW,
-            pairing => LinkAskPerson(pairing, host: true), LinkInvitationTerms))
+            pairing => LinkAskPerson(pairing, host: true), LinkInvitationTerms, publicRoute))
             return false;
         linkDirty = true;
         return true;
@@ -99,14 +99,16 @@ internal sealed partial class DawnScene
     /// it as the person there is, unless <paramref name="ask"/> answers instead (a self test, never the program). Once
     /// paired the connection carries on as a link. How it ended, never throws but for Link being off.
     /// </summary>
-    internal async Task<HexLinkPairResult> LinkPair(string host, int port, Func<HexLinkPairing, Task<HexLinkRights?>>? ask = null, HexLinkInvite? invite = null)
+    internal async Task<HexLinkPairResult> LinkPair(string host, int port, Func<HexLinkPairing, Task<HexLinkRights?>>? ask = null,
+        HexLinkInvite? invite = null, HexLinkInviteRoute? overrideRoute = null)
     {
         HexLinkTransport transport = linkTransport ?? throw new InvalidOperationException(Said("link.off"));
         CancellationToken stop = linkCancel?.Token ?? CancellationToken.None;
         HexLinkPairResult result;
         try
         {
-            result = await transport.Pair(host, port, ask ?? (pairing => LinkAskPerson(pairing, host: false)), stop, invite);
+            result = await transport.Pair(host, port, ask ?? (pairing => LinkAskPerson(pairing, host: false)),
+                stop, invite, overrideRoute);
         }
         catch (OperationCanceledException)
         {

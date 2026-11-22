@@ -28,9 +28,10 @@ internal sealed partial class DawnScene
     private ToggleButton? linkInviteShare;
     private Label? linkJoinStatus;
     private Panel? linkJoinField;
-    private bool linkJoining, linkJoinError, linkReopenJoin, linkInviteExpired;
+    private TextBox? linkJoinRouteBox, linkInviteRouteBox;
+    private bool linkJoining, linkJoinError, linkReopenJoin, linkInviteExpired, linkInviteRouteEditing;
     private string? linkJoinMessage, linkInviteError;
-    private string linkJoinTyped = string.Empty;
+    private string linkJoinTyped = string.Empty, linkJoinRouteTyped = string.Empty, linkInviteRouteTyped = string.Empty;
     private long linkInviteCopiedUntil;
     private bool linkAutoShareAvailable;
     private string? linkShareAfterPairing;
@@ -75,13 +76,15 @@ internal sealed partial class DawnScene
                 return;
             linkOnboardingDialog = null;
             linkWindowNearby = null;
-            linkAddressBox = null;
+            linkAddressBox = linkJoinRouteBox = linkInviteRouteBox = null;
             linkJoinField = null;
+            linkInviteRouteEditing = false;
+            linkInviteRouteTyped = string.Empty;
             linkJoinSubmit = linkCopyInvite = null;
             linkJoinStatus = linkPairingCountdown = null;
             linkDevicePage = LinkDevicePage.Overview;
             if (!linkJoining)
-                linkJoinTyped = string.Empty;
+                linkJoinTyped = linkJoinRouteTyped = string.Empty;
         };
 
         if (page == LinkDevicePage.Invite)
@@ -117,12 +120,79 @@ internal sealed partial class DawnScene
             DrawLinkJoinStatus();
     }
 
-    private void LinkCreateInvite()
+    private void LinkCreateInvite() => LinkCreateInvite(null);
+
+    private void LinkCreateInvite(HexLinkInviteRoute? route)
     {
-        linkInviteError = LinkOpenInvite() ? null : Said("link.devices_no_route");
+        if (LinkOpenInvite(route))
+        {
+            linkInviteError = null;
+            linkInviteRouteEditing = false;
+        }
+        else
+            linkInviteError = Said(route is null ? "link.devices_no_route" : "link.devices_public_invite_failed");
         linkInviteExpired = false;
         linkInviteCopiedUntil = 0;
         linkWindowStale = true;
+    }
+
+    private void LinkChoosePublicInvite()
+    {
+        if (!settings.LinkAllowPublic || LinkPort == 0)
+            return;
+        linkInviteRouteTyped = LinkActiveInvite?.PublicRoute?.ToString() ?? LinkMappedEndPoint?.ToString() ?? string.Empty;
+        linkInviteRouteEditing = true;
+        DrawLinkPairing();
+        linkInviteRouteBox?.Focus();
+    }
+
+    private void DrawInviteRoute(StackPanel body, HexLinkInvite? token)
+    {
+        if (token?.PublicRoute is { } route)
+        {
+            body.Add(LinkLine(Said("link.devices_public_invite_route", ("address", route.ToString()))));
+            LinkActionRow(body).Add(LinkButton(Said("link.devices_private_invite"), "add", LinkCreateInvite));
+        }
+
+        if (!settings.LinkAllowPublic)
+            return;
+        if (!linkInviteRouteEditing)
+        {
+            LinkActionRow(body).Add(LinkButton(Said("link.devices_public_invite"), "plug", LinkChoosePublicInvite));
+            return;
+        }
+
+        string prompt = Said("link.devices_public_invite_prompt");
+        body.Add(LinkLine(prompt));
+        TextBox field = linkInviteRouteBox = body.Add(new TextBox
+        {
+            Text = linkInviteRouteTyped, Placeholder = Said("link.devices_public_invite_host"),
+            MaxLength = HexLinkInviteRoute.MaxHostLength + 8, Size = new Vector2(Math.Min(body.Size.X, 360), LINK_ROW),
+            Anchor = Origin.Left, Pivot = Origin.Left, Tooltip = prompt
+        });
+        field.OnChanged = _ => linkInviteRouteTyped = field.Text;
+        field.OnSubmitted = _ => LinkConfirmPublicInvite();
+        StackPanel actions = LinkActionRow(body);
+        actions.Add(LinkButton(Said("link.devices_public_invite_create"), "plug", LinkConfirmPublicInvite)).Primary = true;
+        actions.Add(LinkButton(Said("link.pair_cancel"), string.Empty, () =>
+        {
+            linkInviteRouteEditing = false;
+            linkInviteError = null;
+            DrawLinkPairing();
+        }));
+    }
+
+    private void LinkConfirmPublicInvite()
+    {
+        string address = linkInviteRouteBox?.Text ?? linkInviteRouteTyped;
+        if (TryInviteRoute(address, LinkMappedPort ?? LinkPort, out var route))
+            LinkCreateInvite(route);
+        else
+            linkInviteError = Said("link.devices_invite_bad_route");
+
+        DrawLinkPairing();
+        if (linkInviteRouteEditing)
+            linkInviteRouteBox?.Focus();
     }
 
     private void DrawInvite(StackPanel body)
@@ -131,6 +201,7 @@ internal sealed partial class DawnScene
         linkPairingCountdown = null;
         linkCopyInvite = null;
         linkInviteShare = null;
+        linkInviteRouteBox = null;
         linkCountdownShown = -1;
         if (!LinkOn || LinkPort == 0)
         {
@@ -148,13 +219,19 @@ internal sealed partial class DawnScene
                 DrawInviteToken(body, token);
 
             IReadOnlyList<IPAddress> addresses = token?.Addresses ?? InviteAddresses();
-            if (addresses.Count == 0)
+            if (addresses.Count == 0 && token?.PublicRoute is null)
                 body.Add(LinkLine(Said("link.pair_addresses_none", ("port", LinkPort.ToString(CultureInfo.InvariantCulture)))));
-            else
+            else if (addresses.Count > 0)
                 body.Add(LinkLine(string.Join("   ·   ", addresses.Select(address =>
                     Said(LinkIsVpn(address) ? "link.devices_endpoint_vpn" : "link.devices_endpoint_lan",
                         ("address", new IPEndPoint(address, LinkPort).ToString()))))));
 
+            if (token is not null)
+            {
+                DrawInviteRoute(body, token);
+                if (linkInviteError is not null)
+                    body.Add(LinkLine(linkInviteError));
+            }
             StackPanel commands = LinkActionRow(body);
             linkPairingCountdown = commands.Add(new Label { TextScale = LINK_TEXT, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left, Size = new Vector2(110, LINK_ROW) });
             if (token is null)
@@ -190,6 +267,7 @@ internal sealed partial class DawnScene
             body.Add(LinkLine(linkInviteError ?? Said(linkInviteExpired ? "link.devices_invite_expired" : "link.devices_invite_intro")));
             StackPanel row = LinkActionRow(body);
             row.Add(LinkButton(Said("link.devices_create_invite"), "add", LinkCreateInvite)).Primary = true;
+            DrawInviteRoute(body, null);
         }
     }
 
@@ -242,13 +320,21 @@ internal sealed partial class DawnScene
         });
         linkAddressBox = linkJoinField.Add(new TextBox
         {
-            Text = linkJoinTyped, Placeholder = Said("link.devices_join_placeholder"), MaxLength = 320,
+            Text = linkJoinTyped, Placeholder = Said("link.devices_join_placeholder"), MaxLength = HexLinkInvite.MaxTokenLength,
             Fill = UIFill.Both, Tooltip = Said("link.devices_join_help")
         });
         linkAddressBox.OnSubmitted = _ => JoinTyped();
         linkAddressBox.OnChanged = _ => LinkSetJoinMessage(null);
         linkJoinSubmit = row.Add(LinkButton(Said("link.devices_join_submit"), "plug", JoinTyped));
         linkJoinSubmit.Primary = true;
+        linkJoinRouteBox = body.Add(new TextBox
+        {
+            Text = linkJoinRouteTyped, Placeholder = Said("link.devices_join_route"), MaxLength = HexLinkInviteRoute.MaxHostLength + 8,
+            Size = linkJoinField.Size, Anchor = Origin.Left, Pivot = Origin.Left, Tooltip = Said("link.devices_join_route_tip"),
+            Visible = StartsWithInvite(linkJoinTyped)
+        });
+        linkJoinRouteBox.OnSubmitted = _ => JoinTyped();
+        linkJoinRouteBox.OnChanged = _ => LinkSetJoinMessage(null);
         linkJoinStatus = body.Add(LinkLine(string.Empty));
         linkWindowNearby = body.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 5 });
     }
@@ -258,6 +344,11 @@ internal sealed partial class DawnScene
         if (linkAddressBox is null || linkJoinSubmit is null || linkJoinStatus is null)
             return;
         linkAddressBox.Enabled = LinkOn && !linkJoining;
+        if (linkJoinRouteBox is not null)
+        {
+            linkJoinRouteBox.Visible = StartsWithInvite(linkAddressBox.Text.TrimStart());
+            linkJoinRouteBox.Enabled = LinkOn && !linkJoining;
+        }
         linkJoinSubmit.Enabled = LinkOn && !linkJoining && !linkJoinError && linkAddressBox.Text.Trim().Length > 0;
         string said = UIRichText.Literal(linkJoinMessage ?? Said(LinkOn ? "link.devices_join_help" : "link.pair_off_text"));
         bool error = linkJoinError && linkJoinMessage is not null;
@@ -268,13 +359,22 @@ internal sealed partial class DawnScene
         linkJoinStatus.Dim = linkJoinMessage is null;
     }
 
+    private static bool StartsWithInvite(string text) => text.StartsWith("hex-link:", StringComparison.OrdinalIgnoreCase);
+
+    private static bool TryInviteRoute(string text, int defaultPort, out HexLinkInviteRoute? route)
+    {
+        route = null;
+        return TryLinkAddress(text, defaultPort, out string host, out int port) &&
+            HexLinkInviteRoute.TryCreate(host, port, out route);
+    }
+
     private void JoinTyped()
     {
         if (!LinkOn || linkJoining || linkJoinError || linkAddressBox is null)
             return;
         string text = linkAddressBox.Text.Trim();
         linkJoinTyped = text;
-        if (text.StartsWith("hex-link:", StringComparison.OrdinalIgnoreCase))
+        if (StartsWithInvite(text))
         {
             if (!HexLinkInvite.TryParse(text, out HexLinkInvite? parsed) || parsed is null)
             {
@@ -282,7 +382,14 @@ internal sealed partial class DawnScene
                 return;
             }
 
-            JoinDevice("", parsed.Port, parsed);
+            linkJoinRouteTyped = linkJoinRouteBox?.Text.Trim() ?? string.Empty;
+            HexLinkInviteRoute? route = null;
+            if (linkJoinRouteTyped.Length > 0 && !TryInviteRoute(linkJoinRouteTyped, parsed.PublicRoute?.Port ?? parsed.Port, out route))
+            {
+                LinkSetJoinMessage(Said("link.devices_invite_bad_route"), error: true);
+                return;
+            }
+            JoinDevice("", parsed.Port, parsed, route);
         }
         else if (TryLinkAddress(text, HexLinkTransport.DEFAULT_PORT, out string host, out int port))
             JoinDevice(host, port);
@@ -290,12 +397,13 @@ internal sealed partial class DawnScene
             LinkSetJoinMessage(Said("link.devices_bad_address"), error: true);
     }
 
-    private void JoinDevice(string host, int port, HexLinkInvite? invite = null)
+    private void JoinDevice(string host, int port, HexLinkInvite? invite = null, HexLinkInviteRoute? overrideRoute = null)
     {
         if (!LinkOn || linkJoining)
             return;
         linkJoining = true;
         LinkSetJoinMessage(Said("link.devices_connecting"));
+        string? inviteEndpoint = (overrideRoute ?? (settings.LinkAllowPublic ? invite?.PublicRoute : null))?.ToString();
         HexLinkKnown? known = invite is null ? LinkKnown.FirstOrDefault(each => each.Address == host && (each.Port == port || each.Port == 0)) : null;
         _ = Task.Run(async () =>
         {
@@ -316,21 +424,23 @@ internal sealed partial class DawnScene
                     }
                 }
 
-                HexLinkPairResult result = await LinkPair(host, port, invite: invite);
-                outcome = result.Paired ? null : LinkJoinFailure(result.Reason, host);
+                HexLinkPairResult result = await LinkPair(host, port, invite: invite, overrideRoute: overrideRoute);
+                outcome = result.Paired ? null : LinkJoinFailure(result.Reason, host, inviteEndpoint);
             }
             catch (Exception e) when (e is IOException or InvalidOperationException or OperationCanceledException)
             {
-                outcome = LinkJoinFailure(e is HexLinkRefused refused ? refused.Reason : "failed", host);
+                outcome = LinkJoinFailure(e is HexLinkRefused refused ? refused.Reason : "failed", host, inviteEndpoint);
             }
 
             PostLink(() => LinkFinishJoin(outcome));
         });
     }
 
-    private static string LinkJoinFailure(string reason, string host) => reason switch
+    private static string LinkJoinFailure(string reason, string host, string? inviteEndpoint) => reason switch
     {
         "invite_expired" => Said("link.devices_invite_expired_join"),
+        "unreachable" or "timeout" when inviteEndpoint is not null =>
+            Said("link.devices_invite_endpoint_unreachable", ("address", inviteEndpoint)),
         "unreachable" or "timeout" => Said("link.devices_join_unreachable", ("address", host.Length > 0 ? host : Said("link.devices_invite_address"))),
         "version" => Said("link.devices_version_help"),
         "declined-there" => Said("link.devices_join_declined"),
@@ -345,7 +455,7 @@ internal sealed partial class DawnScene
         LinkSetJoinMessage(outcome, error: outcome is not null);
         if (outcome is null)
         {
-            linkJoinTyped = string.Empty;
+            linkJoinTyped = linkJoinRouteTyped = string.Empty;
             if (linkDevicePage == LinkDevicePage.Join)
                 linkOnboardingDialog?.Close();
         }

@@ -539,6 +539,7 @@ internal sealed partial class DawnScene
         ("link-missing-repository", "two editors sync common files while a nested checkout awaits its own Get", TestLinkMissingRepository),
         ("link-documents", "three linked editors share unsaved text, edit ownership, carets and saves", TestLinkDocuments),
         ("link-public", "public connection controls and router consent with a loopback listener and simulated router", TestLinkPublic),
+        ("link-public-invites", "public invite creation and pinned join override using loopback fixtures", TestLinkPublicInvites),
         ("link-editor-notices", "claim marks, shared document notices and Follow in the editor", TestLinkEditorNotices),
         ("link-claims", "two linked editors coordinate claims, then merge disjoint edits and settle overlaps", TestLinkClaims),
         ("merge-editor", "three-way conflict resolution, manual edits, undo, cancellation, and binary choices", TestMergeEditor),
@@ -578,7 +579,7 @@ internal sealed partial class DawnScene
     {
         // OS input tests take the foreground briefly, so they only run when explicitly named, and so does dusk-noon, the
         // window having Dusk in it only when it's named
-        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts" or "titlebar-targets" or "repository" or "dusk-noon" or "face-switch" or "webshots" or "link" or "link-files" or "link-hold" or "link-worktree" or "link-claims" or "link-provision" or "link-missing-repository" or "link-documents" or "link-editor-notices" or "link-peer" or "link-cross" or "link-nearby" or "link-ui" or "link-chats" or DawnProgram.NO_AI_SUITE)).Select(suite => suite.Name)];
+        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts" or "titlebar-targets" or "repository" or "dusk-noon" or "face-switch" or "webshots" or "link" or "link-files" or "link-hold" or "link-worktree" or "link-claims" or "link-provision" or "link-missing-repository" or "link-documents" or "link-editor-notices" or "link-peer" or "link-cross" or "link-nearby" or "link-ui" or "link-chats" or "link-public-invites" or DawnProgram.NO_AI_SUITE)).Select(suite => suite.Name)];
         string[] unknown = [.. asked.Where(name => !SelfTestSuites.Any(suite => suite.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))];
         if (unknown.Length == 0)
             return true;
