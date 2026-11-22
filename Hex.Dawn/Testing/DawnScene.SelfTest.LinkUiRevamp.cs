@@ -44,6 +44,23 @@ internal sealed partial class DawnScene
         test.Check("link-ui: the status item says who is linked", () =>
             LinkPeers.Count == 1 && linkItem.Text.Contains(OneLine(LinkNameOf(LinkPeers[0].Device.Id, LinkPeers[0].Device.Name), 18), StringComparison.Ordinal));
 
+        test.Check("link-ui: permission captions and chips occupy separate rows inside the device card", () =>
+        {
+            if (linkWindowDevices is null) return false;
+            var captions = Descendants(linkWindowDevices).OfType<Label>().Where(label =>
+                label.Tooltip == Said("link.devices_rights_here_tip") || label.Tooltip == Said("link.devices_rights_there_tip")).ToArray();
+            if (captions.Length < 2) return false;
+            foreach (Label caption in captions)
+            {
+                if (caption.Parent is not StackPanel column) return false;
+                var row = column.Children.SkipWhile(child => child != caption).Skip(1).FirstOrDefault();
+                if (row is not StackPanel || !row.Children.OfType<Badge>().Any()) return false;
+                if (caption.Bounds.Min.Y < row.Bounds.Max.Y || row.Children.Any(child =>
+                    child.Bounds.Min.X < column.Bounds.Min.X - 1 || child.Bounds.Max.X > column.Bounds.Max.X + 1)) return false;
+            }
+            return true;
+        });
+
         // An initial sync adds progress rows. Compare two rebuilds only once those transfers finish.
         float before = 0.0f;
         bool measuredIdle = false;

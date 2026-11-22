@@ -95,6 +95,8 @@ internal sealed partial class DawnScene
             LinkDeviceSyncRows(column, peer);
 
         StackPanel here = LinkRightChipsRow(column, Said("link.devices_rights_here", ("device", known.Shown)), known.Rights, Said("link.devices_rights_here_tip"));
+        if (linkDeviceRowsNarrow)
+            here = LinkActionRow(column);
         here.Add(LinkButton(Said("link.devices_change_rights"), "edit", () => LinkChangeDeviceRights(known))).Tooltip = Said("link.tip_edit_permissions");
         if (HexLinkAllowed.Has(known.Rights, HexLinkRights.Steer))
             column.Add(LinkLine(LinkPreApprovalLabel(known.RemotePreApproval, known.Shown)));
@@ -102,9 +104,8 @@ internal sealed partial class DawnScene
             LinkRightChipsRow(column, Said("link.devices_rights_there", ("device", known.Shown)), peer.Granted, Said("link.devices_rights_there_tip"));
         else
         {
-            var there = LinkActionRow(column, 23);
-            there.Add(new Label { Text = Said("link.devices_rights_there", ("device", known.Shown)), TextScale = LINK_SMALL, Bold = true, Anchor = Origin.Left, Pivot = Origin.Left });
-            there.Add(new Label { Text = Said("link.device_there_unknown"), TextScale = LINK_SMALL, Dim = true, Anchor = Origin.Left, Pivot = Origin.Left });
+            LinkRightsCaption(column, Said("link.devices_rights_there", ("device", known.Shown)), Said("link.devices_rights_there_tip"));
+            column.Add(LinkLine(Said("link.device_there_unknown")));
         }
 
         DrawLinkDeviceActions(column, known, peer, hasAddress);
@@ -182,11 +183,19 @@ internal sealed partial class DawnScene
 
     private StackPanel LinkRightChipsRow(StackPanel column, string caption, HexLinkRights rights, string tip = "")
     {
+        LinkRightsCaption(column, caption, tip);
         StackPanel row = LinkActionRow(column);
-        row.Add(new Label { Text = caption, TextScale = LINK_SMALL, Bold = true, Anchor = Origin.Left, Pivot = Origin.Left, Size = new Vector2(88, 23), Align = Origin.Left, Tooltip = tip });
         foreach (Badge chip in LinkRightsChips(rights))
             row.Add(chip);
         return row;
+    }
+
+    private static void LinkRightsCaption(StackPanel column, string caption, string tip)
+    {
+        var label = column.Add(LinkLine(caption));
+        label.Bold = true;
+        label.Dim = false;
+        label.Tooltip = tip;
     }
 
     private static string LinkPlatform(HexLinkDevice device)

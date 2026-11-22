@@ -279,6 +279,7 @@ internal sealed partial class DawnScene
             TestCompletion(test);
             TestParity(test);
         }),
+        ("link-layout", "conflict notification actions wrap within their card and respond to pointer clicks", TestLinkLayout),
         ("merge-result-lsp", "Pyright keeps the pathless merge Result independent and closes it on Cancel and Complete", TestMergeResultLanguageServer),
         ("reload-integrity", "failed layout reloads preserve the open document", TestReloadIntegrity),
         ("workspace", "folders, the explorer, copying, moving and renaming files in it, closing tabs, the help windows, the conveniences, files changed on the disk", test =>
