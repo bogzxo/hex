@@ -434,6 +434,9 @@ internal sealed class HexMcpTools : IMcpTools
         if (!byName.TryGetValue(name, out HexMcpTool? tool))
             return Task.FromResult(McpToolResult.Error($"There's no tool called {name}."));
 
+        if (caller is { } scoped && hex.LinkScopePrivateAgentCall(scoped, name, arguments) is { } rejected)
+            return Task.FromResult(McpToolResult.Error(rejected));
+
         if (caller is { } chat && (tool.TakesCaller || name.StartsWith("hex_agent", StringComparison.Ordinal)))
             arguments[HexMcpCaller.CALLER] = chat;
 

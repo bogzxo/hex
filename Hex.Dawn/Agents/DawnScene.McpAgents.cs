@@ -29,6 +29,8 @@ internal sealed partial class DawnScene
         new(new McpTool("hex_agent_spawn", "Start a background agent",
             "Start another agent in the background on a task of its own, scouting, research, a review, a part of the work, of any agent system and model listed by hex_agent_list. It's a chat of the Agents panel under yours, runs on its own while you go on, and has Hex's tools too. Give it everything it needs to know, it doesn't see your conversation. Its last message is what you get back. Returns its id at once, hex_agent_wait waits for it.",
             McpSchema.Object([
+                ("worktree", McpSchema.OneOf("Live workspace or a private worktree.", "live", "private")),
+                ("folder", McpSchema.String("Shared folder for a private worktree.")),
                 ("prompt", McpSchema.String("What it's to do, complete in itself.")),
                 ("name", McpSchema.String("A short name for it in the panel, a few words.")),
                 ("agent", McpSchema.String("The agent system's id from hex_agent_list, your own by default, the panel's when you aren't one.")),
@@ -285,6 +287,11 @@ internal sealed partial class DawnScene
             yield break;
         }
 
+        foreach (McpToolResult? step in LinkPrivateAgentStartup(chat, args))
+        {
+            yield return step;
+            if (step?.IsError == true) yield break;
+        }
         agentChats.Add(chat);
 
         // It's told what it is, the one that started it reads its last message

@@ -39,6 +39,7 @@ internal static class HexAgentChatStore
             ["name"] = chat.Name,
             ["title"] = chat.Title,
             ["session"] = chat.Session,
+            ["linkDraft"] = chat.LinkDraft?.ToString("N"),
             ["model"] = chat.Model,
             ["options"] = options,
             ["input_tokens"] = chat.InputTokens,
@@ -128,6 +129,8 @@ internal static class HexAgentChatStore
         // Chats kept before there was settling were in the Finished group once read back, as they still are
         chat.RestoreSettled(said["settled"]?.GetValue<bool>() ?? true);
 
+        if (said["linkDraft"] is JsonValue draft && draft.TryGetValue(out string? savedDraft) && Guid.TryParseExact(savedDraft, "N", out Guid draftId))
+            chat.LinkDraft = draftId;
         if (said["options"] is JsonObject options)
         {
             foreach (var (key, value) in options)
