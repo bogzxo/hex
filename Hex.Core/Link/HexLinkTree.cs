@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text;
 using System.Text.Json.Nodes;
 using Hex.Core.Git;
 
@@ -23,7 +24,8 @@ internal sealed record HexLinkTreeFile(string Path, string? Hash, long Size, str
 /// clones of one repository from two repositories that only share a folder name.
 /// </summary>
 internal sealed record HexLinkManifest(string Folder, string? Head, IReadOnlyList<HexLinkTreeFile> Files, string? Root = null,
-    bool Certified = true, IReadOnlyDictionary<string, string?>? NestedHeads = null, bool? CaseSensitive = null);
+    bool Certified = true, IReadOnlyDictionary<string, string?>? NestedHeads = null, bool? CaseSensitive = null,
+    string? Checkout = null, HexLinkAuthority? Authority = null);
 
 /// <summary>
 /// A file of a watched tree that changed, its new hash (null with <see cref="Deleted"/> when it went, or when it's too
@@ -131,7 +133,10 @@ internal sealed partial class HexLinkTree
                 hashes.TryRemove(full, out _);
         }
 
-        return new HexLinkManifest(Folder.Name, head, files, root, NestedHeads: nested, CaseSensitive: PlatformPaths.Comparison == StringComparison.Ordinal);
+        string location = PlatformPaths.Comparison == StringComparison.Ordinal ? Root : Root.ToUpperInvariant();
+        string checkout = HexLinkFiles.Hash(Encoding.UTF8.GetBytes(FormattableString.Invariant($"{location}\n{Directory.GetCreationTimeUtc(Root).Ticks}")));
+        return new HexLinkManifest(Folder.Name, head, files, root, NestedHeads: nested,
+            CaseSensitive: PlatformPaths.Comparison == StringComparison.Ordinal, Checkout: checkout, Authority: Folder.Authority);
     }
 
     // The first commit of the repository, worked out once per head (it only moves if history is rewritten). A history
@@ -413,6 +418,10 @@ internal sealed partial class HexLinkTree
         var said = new JsonObject { ["folder"] = manifest.Folder, ["head"] = manifest.Head, ["root"] = manifest.Root, ["entries"] = entries, ["complete"] = manifest.Certified };
         if (manifest.CaseSensitive is { } caseSensitive)
             said["case_sensitive"] = caseSensitive;
+        if (manifest.Checkout is { } checkout)
+            said["checkout"] = checkout;
+        if (manifest.Authority is { } authority)
+            said["authority"] = authority.ToJson();
         if (NestedHeadsJson(manifest.NestedHeads) is { } heads)
             said["repositories"] = heads;
         return said;
@@ -455,8 +464,12 @@ internal sealed partial class HexLinkTree
         }
 
         string? head = HexLinkData.String(said, "head", 64), root = HexLinkData.String(said, "root", 64);
+        string? checkout = HexLinkData.String(said, "checkout", 64);
+        if (checkout is not { Length: 64 } || !checkout.All(char.IsAsciiHexDigit))
+            checkout = null;
         return new HexLinkManifest(folder, head is not null && HexLinkGit.IsCommitId(head) ? head : null, files,
-            root is not null && HexLinkGit.IsCommitId(root) ? root : null, certified, NestedHeadsOf(said), HexLinkData.Bool(said, "case_sensitive"));
+            root is not null && HexLinkGit.IsCommitId(root) ? root : null, certified, NestedHeadsOf(said),
+            HexLinkData.Bool(said, "case_sensitive"), checkout, HexLinkAuthority.Of(HexLinkData.Object(said, "authority")));
     }
 
     // A file's text hash and line ends said beside its hash, when it has them; a peer from before they were said sends

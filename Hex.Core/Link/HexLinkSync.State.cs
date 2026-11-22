@@ -70,8 +70,10 @@ internal sealed partial class HexLinkSync
 
     // The bases and the conflicts kept from last time read, when they're of this device and folder. A file that isn't
     // there or can't be read is no bases, everything compared afresh, which only ever costs conflicts, never a loss.
-    private void Load()
+    private void Load(HexLinkManifest mine, HexLinkManifest theirs, CancellationToken cancel)
     {
+        JsonObject agreement = AgreementOf(mine, theirs);
+        JsonObject? savedAgreement = null;
         var keptBases = new Dictionary<string, HexLinkSyncAgreed>(StringComparer.Ordinal);
         var keptConflicts = new Dictionary<string, HexLinkSyncConflict>(StringComparer.Ordinal);
         try
@@ -81,6 +83,7 @@ internal sealed partial class HexLinkSync
                 && HexLinkData.String(state, "device", 200) == peer.Device.Id
                 && HexLinkData.String(state, "folder", 200) == folder.Name)
             {
+                savedAgreement = HexLinkData.Object(state, "agreement");
                 if (HexLinkData.Object(state, "bases") is { } said)
                 {
                     foreach (var (path, kept) in said)
@@ -115,8 +118,18 @@ internal sealed partial class HexLinkSync
         {
         }
 
+        var stale = StaleTracked(savedAgreement, agreement, keptBases.Keys.Union(keptConflicts.Keys, StringComparer.Ordinal), cancel);
+        foreach (string path in stale)
+        {
+            keptBases.Remove(path);
+            if (keptConflicts.GetValueOrDefault(path)?.HasUnsavedChanges != true)
+                keptConflicts.Remove(path);
+        }
+
         lock (gate)
         {
+            baseAgreement = agreement;
+            staleTracked = stale;
             bases.Clear();
             conflicts.Clear();
             skipped.Clear();
@@ -188,6 +201,7 @@ internal sealed partial class HexLinkSync
                 ["version"] = STATE_VERSION,
                 ["device"] = peer.Device.Id,
                 ["folder"] = folder.Name,
+                ["agreement"] = baseAgreement?.DeepClone(),
                 ["bases"] = said,
                 ["conflicts"] = new JsonArray([.. conflicts.Values.OrderBy(each => each.Path, StringComparer.Ordinal).Select(conflict => (JsonNode)new JsonObject
                 {

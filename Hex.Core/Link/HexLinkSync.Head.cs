@@ -13,12 +13,8 @@ internal sealed partial class HexLinkSync
     {
         string? Same(string? here, string? there) =>
             here is not null && here.Equals(there, StringComparison.OrdinalIgnoreCase) ? here : null;
-        headRepositories = [
-            .. (mine.NestedHeads?.Keys ?? []).Union(theirs.NestedHeads?.Keys ?? [], StringComparer.Ordinal)
-                .OrderByDescending(path => path.Length)
-                .Select(path => new HeadRepository(path + "/", Same(mine.NestedHeads?.GetValueOrDefault(path), theirs.NestedHeads?.GetValueOrDefault(path)))),
-            new HeadRepository(string.Empty, Same(mine.Head, theirs.Head))
-        ];
+        headRepositories = [.. RepositoryPaths(mine, theirs).OrderByDescending(path => path.Length)
+            .Select(path => new HeadRepository(path.Length == 0 ? path : path + "/", Same(HeadAt(mine, path), HeadAt(theirs, path))))];
     }
 
     // A shared checked-out commit is an initial base only for paths tracked by that exact repository.
@@ -57,7 +53,12 @@ internal sealed partial class HexLinkSync
             return true;
         }
 
-        if (localBytes is null || theirs?.Hash is not { } expected || pullOnly)
+        if (localBytes is null || theirs?.Hash is not { } expected)
+        {
+            await Conflict(wire, full, mine?.Hash, theirs?.Hash, stop);
+            return true;
+        }
+        if (pullOnly)
             return false;
         HexLinkFile remoteFile = await Fetch(wire, stop);
         if (remoteFile.Hash != expected)

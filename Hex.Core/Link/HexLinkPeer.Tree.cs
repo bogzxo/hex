@@ -61,7 +61,8 @@ internal sealed partial class HexLinkPeer
             HexLinkManifest page = HexLinkTree.Of(said);
             if (HexLinkData.String(said, "snapshot", 64) != id || HexLinkData.Int(said, "offset") != files.Count ||
                 HexLinkData.Int(said, "total") != total || page.Folder != first.Folder || page.Head != first.Head ||
-                page.Root != first.Root || page.CaseSensitive != first.CaseSensitive || !JsonNode.DeepEquals(said["repositories"], repositories) || !page.Certified || page.Files.Count == 0 || page.Files.Count > total - files.Count)
+                page.Root != first.Root || page.CaseSensitive != first.CaseSensitive || page.Checkout != first.Checkout ||
+                page.Authority != first.Authority || !JsonNode.DeepEquals(said["repositories"], repositories) || !page.Certified || page.Files.Count == 0 || page.Files.Count > total - files.Count)
                 throw HexLinkException.Invalid("The peer sent an inconsistent manifest page.");
             foreach (HexLinkTreeFile file in page.Files)
             {

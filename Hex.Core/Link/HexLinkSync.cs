@@ -331,7 +331,7 @@ internal sealed partial class HexLinkSync : IDisposable
                 return;
             }
 
-            Load();
+            await Task.Run(() => Load(mine, theirs, cancel), cancel);
             Begin(mine, theirs, watch);
             watch = null;
         }

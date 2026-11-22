@@ -784,6 +784,11 @@ internal sealed partial class HexLinkSync
         {
             return;
         }
+        else if (firstComparison && staleTracked.Contains(wire))
+        {
+            await Conflict(wire, full, m, t, stop);
+            return;
+        }
         else if (m is null)
         {
             await Pull(wire, full, null, theirs, stop);
