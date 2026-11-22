@@ -564,13 +564,15 @@ internal sealed partial class DawnScene
 
         foreach (string name in HexLinkTrust.RightsNames(rights))
         {
-            chips.Add(new Badge
+            var chip = new Badge
             {
                 Text = Said("link.right_title_" + name), Icon = name == "steer" ? "warning" : string.Empty,
                 Tone = name == "steer" ? UIBadgeTone.Warning : name is "edit" or "predict" ? UIBadgeTone.Info : UIBadgeTone.Neutral,
-                Colour = name is "edit" or "predict" ? LinkBadgeInfoColour : null,
                 TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left, Tooltip = Said("link.right_means_" + name)
-            });
+            };
+            if (chip.Tone == UIBadgeTone.Info && Skin is { Palette.LightField: true } skin)
+                chip.Colour = Vector4.Lerp(chip.ColourIn(skin), skin.Palette.Text, 0.55f);
+            chips.Add(chip);
         }
 
         return chips;

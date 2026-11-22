@@ -705,6 +705,9 @@ internal sealed partial class DawnScene
         test.Check("link-ui: a verified invite becomes a connected device and consumes the invitation", () =>
             LinkPeers.Any(peer => peer.Device.Name == Device) && other?.ActiveInvite is null && HasBadge("link.device_connected"));
         test.WaitFor(() => linkLatencies.Values.Any(sample => sample.Milliseconds is not null), 5);
+        test.Check("link-ui: the connected card shows the advertised branch and abbreviated commit", () =>
+            linkWindowDevices is { } devices && Descendants(devices).OfType<Label>()
+                .Any(label => label.Text.Contains("main @ 01234567", StringComparison.Ordinal)));
         shot("link_ui_invite_connected.png");
         clickWindow("link.devices_share");
         test.WaitFor(() => Volatile.Read(ref workspaceOffers) == 1, 5);

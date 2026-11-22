@@ -67,6 +67,8 @@ internal sealed partial class DawnScene
             column.Add(LinkLine(platform.Length > 0 ? $"{platform} · {shownWorkspace}" : shownWorkspace));
             foreach (HexLinkRepository repository in workspace.Repositories)
                 column.Add(LinkWorkspaceCommit(repository));
+            if (workspace.Folders.Count > 0 && workspace.Repositories.Count == 0)
+                column.Add(LinkLine(Said("link.devices_commit_unavailable")));
         }
 
         else if (platform.Length > 0)
@@ -320,6 +322,8 @@ internal sealed partial class DawnScene
                 continue;
             linkLatencies[id] = (peer, now, old.Peer == peer ? old.Milliseconds : null);
             _ = LinkMeasureLatency(peer, now);
+            if (HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))
+                _ = TryRefreshLinkWorkspace(peer);
         }
     }
 
