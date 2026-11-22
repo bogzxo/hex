@@ -4,10 +4,10 @@ using System.Net.Sockets;
 namespace Hex.Core;
 
 /// <summary>
-/// Which addresses a link may come from (docs/hex-link-plan.md, 3.5). Only the ones that can't be reached from the open
+/// Which addresses a link may come from by default (docs/hex-link-plan.md, 3.5). Only the ones that can't be reached from the open
 /// internet: this machine, the private ranges a home or office network hands out, link-local, and the 100.64/10 block
 /// carrier-grade NAT and the VPNs people run (Tailscale) use. Anything else is dropped before TLS starts, so a router
-/// that forwards the port by mistake still lets nobody in.
+/// that forwards the port by mistake still lets nobody in unless the user has enabled public connections.
 /// </summary>
 internal static class HexLinkAddresses
 {
