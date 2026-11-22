@@ -7,9 +7,9 @@ namespace Hex.Dawn;
 
 internal sealed partial class DawnScene
 {
-    private readonly Dictionary<Guid, HexLinkDraftStatus> privateDeviceStatus = [];
-    private readonly HashSet<Guid> privateDeviceJobs = [];
-    private readonly Dictionary<Guid, Process> privateDeviceEditors = [];
+    private Dictionary<Guid, HexLinkDraftStatus> privateDeviceStatus { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
+    private HashSet<Guid> privateDeviceJobs { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
+    private Dictionary<Guid, Process> privateDeviceEditors { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
 
     private void DrawLinkPrivateWorktree(StackPanel holder, string folder, HexLinkFolder? provisioned = null)
     {

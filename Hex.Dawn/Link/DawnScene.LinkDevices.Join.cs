@@ -14,7 +14,7 @@ internal sealed partial class DawnScene
     private enum LinkDevicePage { Overview, Invite, Join }
 
     private sealed record LinkInviteOptions(HexLinkPreset Preset, HexLinkRights Rights, bool Share);
-    private LinkInviteOptions linkInviteOptions = new(HexLinkPreset.Collaborator, LinkPresetRights(HexLinkPreset.Collaborator), true);
+    private LinkInviteOptions linkInviteOptions { get => field ??= new(HexLinkPreset.Collaborator, LinkPresetRights(HexLinkPreset.Collaborator), true); set; }
     private HexLinkPreset linkInvitePreset => linkInviteOptions.Preset;
     private HexLinkRights linkInviteRights => linkInviteOptions.Rights;
 

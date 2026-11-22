@@ -10,7 +10,7 @@ internal sealed partial class DawnScene
         public bool Presented { get; set; }
     }
 
-    private readonly Dictionary<string, LinkWorkspaceOffer> linkWorkspaceOffers = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, LinkWorkspaceOffer> linkWorkspaceOffers { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.OrdinalIgnoreCase)); }
 
     private void QueueLinkWorkspaceOffer(HexLinkDevice device, string workspace)
     {

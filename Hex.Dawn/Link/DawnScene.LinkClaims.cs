@@ -9,11 +9,11 @@ internal sealed partial class DawnScene
     private sealed record ClaimInput(HexLinkClaimScope Scope, HexLinkClaimDraft Draft);
     private sealed record ClaimPlanCache(HexAgentPlan Plan, IReadOnlyList<HexLinkClaimFolder> Folders, ClaimInput[] Inputs);
     private sealed record ClaimEditorStamp(string Path, long Version, long LastEdit);
-    private readonly Dictionary<int, ClaimPlanCache> linkClaimPlans = [];
-    private readonly Dictionary<HexDocument, ClaimEditorStamp> linkClaimEditors = [];
-    private readonly Dictionary<(HexLinkClaimScope Scope, HexLinkClaimKey Key), HexLinkClaimDraft> linkExplicitClaims = [];
-    private readonly Dictionary<string, ClaimInput> linkPrivateClaims = new(StringComparer.Ordinal);
-    private readonly Dictionary<(int Chat, string Step), (long Utc, long Monotonic)> linkClaimEtas = [];
+    private Dictionary<int, ClaimPlanCache> linkClaimPlans { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
+    private Dictionary<HexDocument, ClaimEditorStamp> linkClaimEditors { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
+    private Dictionary<(HexLinkClaimScope Scope, HexLinkClaimKey Key), HexLinkClaimDraft> linkExplicitClaims { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
+    private Dictionary<string, ClaimInput> linkPrivateClaims { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.Ordinal)); }
+    private Dictionary<(int Chat, string Step), (long Utc, long Monotonic)> linkClaimEtas { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
     private HexLink? linkClaimSession;
     private float linkClaimWait;
 

@@ -49,10 +49,10 @@ internal sealed partial class DawnScene
     private sealed record ScopedDocumentDraft(string SharedText, string Reason);
     private sealed record LinkLiveAgentWork(string Agent, string Name, string Before, string After, TaskCompletionSource<string?> Done);
 
-    private readonly Dictionary<HexDocument, LinkLiveDocument> linkLiveDocuments = [];
-    private readonly HashSet<string> linkLiveJoining = new(PlatformPaths.Comparer);
-    private readonly HashSet<string> linkLivePaused = new(PlatformPaths.Comparer);
-    private readonly Dictionary<string, long> linkLiveRetry = new(PlatformPaths.Comparer);
+    private Dictionary<HexDocument, LinkLiveDocument> linkLiveDocuments { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
+    private HashSet<string> linkLiveJoining { get => LazyInitializer.EnsureInitialized(ref field, static () => new(PlatformPaths.Comparer)); }
+    private HashSet<string> linkLivePaused { get => LazyInitializer.EnsureInitialized(ref field, static () => new(PlatformPaths.Comparer)); }
+    private Dictionary<string, long> linkLiveRetry { get => LazyInitializer.EnsureInitialized(ref field, static () => new(PlatformPaths.Comparer)); }
     private float linkLiveScan;
     private uint linkLiveRelayCursor;
 

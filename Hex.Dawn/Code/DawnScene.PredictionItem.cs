@@ -80,11 +80,8 @@ internal sealed partial class DawnScene
         if (HexAi.Off)
             return;
         settings.EditPredictions = !settings.EditPredictions;
-        if (!settings.EditPredictions)
-        {
-            code.ClearPrediction();
-            predictions.Forget(document);
-        }
+        if (!settings.EditPredictions && predictions is not null)
+            StopPredictions();
         SaveSettings();
         SettingsPage?.Refresh("edit_predictions");
         Say(Said(settings.EditPredictions ? "prediction.on_now" : "prediction.off_now"));
@@ -104,7 +101,7 @@ internal sealed partial class DawnScene
         if (!off)
         {
             code.ClearPrediction();
-            predictions.Forget(document);
+            predictions?.Forget(document);
         }
         SaveSettings();
         SettingsPage?.Refresh("edit_predictions_disabled_languages");
@@ -115,8 +112,10 @@ internal sealed partial class DawnScene
     /// <summary>A prediction asked for now, whatever was dismissed or failed before.</summary>
     private void PredictNow()
     {
-        if (HexAi.Off || LayoutTools || !IsPredictedCode(document))
+        if (!PredictionSettings.On(settings) || LayoutTools || !IsPredictedCode(document))
             return;
+        if (predictions is null)
+            StartPredictions();
         predictions.Edited(document, code.Document.Version);
         predictions.PredictNow(document);
     }

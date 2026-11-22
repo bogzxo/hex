@@ -25,10 +25,10 @@ internal sealed partial class DawnScene
 
     // The stand-in chats the cards are drawn from, by device and the chat's id there, with the fleet version each was
     // made at, and every remote chat (stand-in or mirror) to the card it is
-    private readonly Dictionary<(string Device, int Id), HexAgentChat> linkStandIns = [];
-    private readonly Dictionary<HexAgentChat, LinkRemoteCard> linkRemoteOf = [];
-    private readonly HashSet<(string Device, int Id)> linkStartedHere = [];
-    private readonly Dictionary<string, (long Version, string Name, IReadOnlyList<HexLinkRow> Rows)> linkStandInsAt = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<(string Device, int Id), HexAgentChat> linkStandIns { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
+    private Dictionary<HexAgentChat, LinkRemoteCard> linkRemoteOf { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
+    private HashSet<(string Device, int Id)> linkStartedHere { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
+    private Dictionary<string, (long Version, string Name, IReadOnlyList<HexLinkRow> Rows)> linkStandInsAt { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.OrdinalIgnoreCase)); }
 
     /// <summary>Whether the cards carry the badge of the machine they run on, while any device is linked.</summary>
     private bool LinkBadgesShown => link is not null && LinkPeers.Count > 0;

@@ -5,7 +5,7 @@ namespace Hex.Dawn;
 
 internal sealed partial class DawnScene
 {
-    private readonly ConcurrentDictionary<int, string> privateAgentRoots = new();
+    private ConcurrentDictionary<int, string> privateAgentRoots { get => LazyInitializer.EnsureInitialized(ref field, static () => new()); }
 
     private const string LINK_PRIVATE_STORAGE_UNAVAILABLE = "No private Link storage is available outside the shared folders.";
 
@@ -33,7 +33,7 @@ internal sealed partial class DawnScene
     }
 
     private sealed record LinkPrivateAgentStart(string? Folder, Guid? Inherited, string Family, string[] Repositories);
-    private readonly Dictionary<HexAgentChat, CancellationTokenSource> privateAgentStarting = [];
+    private Dictionary<HexAgentChat, CancellationTokenSource> privateAgentStarting { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
 
     private string? LinkPrivateAgentRequest(JsonObject args, out LinkPrivateAgentStart? prepare)
     {

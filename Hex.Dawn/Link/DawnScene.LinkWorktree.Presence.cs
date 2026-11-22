@@ -5,9 +5,9 @@ namespace Hex.Dawn;
 
 internal sealed partial class DawnScene
 {
-    private readonly Lock privatePresenceGate = new();
-    private readonly Dictionary<string, (long Until, Task<HexLinkDraftPresence> Scan)> privatePresence = new(PlatformPaths.Comparer);
-    private readonly Dictionary<(string Peer, string Folder), (long Until, HexLinkDraftPresence? Status)> remotePrivatePresence = [];
+    private Lock privatePresenceGate { get => LazyInitializer.EnsureInitialized(ref field, static () => new()); }
+    private Dictionary<string, (long Until, Task<HexLinkDraftPresence> Scan)> privatePresence { get => LazyInitializer.EnsureInitialized(ref field, static () => new(PlatformPaths.Comparer)); }
+    private Dictionary<(string Peer, string Folder), (long Until, HexLinkDraftPresence? Status)> remotePrivatePresence { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
 
     private async Task<HexLinkDraftPresence> ReadPrivateWorktreePresence(HexLinkFolder folder, CancellationToken cancel)
     {

@@ -47,15 +47,16 @@ internal sealed partial class DawnScene
     private bool linkByTest;
 
     // What arrived off the editor's thread for it, run by the next tick
-    private readonly ConcurrentQueue<Action> linkPosted = new();
+    private ConcurrentQueue<Action>? pendingLinkPosts;
+    private ConcurrentQueue<Action> linkPosted => LazyInitializer.EnsureInitialized(ref pendingLinkPosts);
     private volatile bool linkDirty;
 
     // The redials: when each known device is next dialled, those being dialled now, and those the person cut, which
     // aren't dialled again until they're connected by hand or Hex starts again
-    private readonly HexLinkRedial linkRedial = new();
-    private readonly HashSet<string> linkDialling = new(StringComparer.OrdinalIgnoreCase);
-    private readonly HashSet<string> linkHeldOff = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, string> linkNearbyAddresses = new(StringComparer.OrdinalIgnoreCase);
+    private HexLinkRedial linkRedial { get => LazyInitializer.EnsureInitialized(ref field, static () => new()); }
+    private HashSet<string> linkDialling { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.OrdinalIgnoreCase)); }
+    private HashSet<string> linkHeldOff { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.OrdinalIgnoreCase)); }
+    private Dictionary<string, string> linkNearbyAddresses { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.OrdinalIgnoreCase)); }
     private volatile IReadOnlyList<string> linkListenAddresses = [];
     private bool linkListeningForAddressChanges;
 
@@ -63,14 +64,14 @@ internal sealed partial class DawnScene
         ? null : linkRedial.State(deviceId, linkDialling.Contains(deviceId));
 
     // The versions of the chats as the hub last had them, so only the chats that moved are said to have
-    private readonly Dictionary<int, int> linkChatVersions = [];
+    private Dictionary<int, int> linkChatVersions { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
 
     private float linkLookWait, linkGitWait;
     private string[] linkFoldersSeen = [];
     private bool linkWorkspaceAsking;
 
     // Where each device's person is, the latest said, by device id, for the UI to draw
-    private readonly Dictionary<string, LinkPresenceSeen> linkPresence = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, LinkPresenceSeen> linkPresence { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.OrdinalIgnoreCase)); }
 
     // The pairing waiting on the person here, and the dialog asking them
     private LinkPairingAsk? linkPairingPending;
@@ -79,13 +80,9 @@ internal sealed partial class DawnScene
     /// <summary>The status bar's item and Link itself, when the settings or the command line say so.</summary>
     private void BuildLink()
     {
-        linkItem = statusBar.Add("$(link)", right: true, pressed: ShowLinkWindow, tooltip: Said("link.status_tip_none"));
-        linkItem.IsVisible = () => linkTransport is not null;
         BuildLinkUi();
-        BindLinkPredictions();
-        ApplyLink();
-        AppDomain.CurrentDomain.ProcessExit -= StopLinkAtExit;
-        AppDomain.CurrentDomain.ProcessExit += StopLinkAtExit;
+        if (LinkWanted)
+            StartLink();
     }
 
     /// <summary>
@@ -235,6 +232,16 @@ internal sealed partial class DawnScene
                 }
             }
             linkOwner = this;
+            if (linkItem is null)
+            {
+                linkItem = statusBar.Add("$(link)", right: true, pressed: ShowLinkWindow, tooltip: Said("link.status_tip_none"));
+                linkItem.IsVisible = () => linkTransport is not null;
+            }
+            if (linkEditorNotices is null)
+                BuildLinkEditorNotices();
+            BindLinkPredictions();
+            mcpTools?.Refresh();
+            AppDomain.CurrentDomain.ProcessExit += StopLinkAtExit;
             linkFoldersSeen = [];
             linkLookWait = 0.0f;
             LinkLookAtWorkspace(force: true);
@@ -263,6 +270,7 @@ internal sealed partial class DawnScene
     /// <summary>Takes Link down: the listener closed, every link cut, the LAN told goodbye and a pairing asked about answered no.</summary>
     internal void StopLink()
     {
+        AppDomain.CurrentDomain.ProcessExit -= StopLinkAtExit;
         linkCancel?.Cancel();
         if (linkListeningForAddressChanges)
         {
@@ -287,6 +295,7 @@ internal sealed partial class DawnScene
             linkTrust.Changed -= LinkTrustChanged;
         linkTransport?.Dispose();
         linkTransport = null;
+        mcpTools?.Refresh();
         linkIdentity?.Dispose();
         linkIdentity = null;
         linkTrust = null;
@@ -359,12 +368,11 @@ internal sealed partial class DawnScene
     /// </summary>
     private void UpdateLink(float dt)
     {
-        // Link's window and dialog first, nothing while neither is up and nothing steers (DawnScene.LinkWindow)
-        UpdateLinkUi();
-        if (linkTransport is null && linkPosted.IsEmpty && !linkDirty)
+        if (linkTransport is null && linkWindow is null && !linkDirty && pendingLinkPosts is not { IsEmpty: false })
             return;
+        UpdateLinkUi();
 
-        while (linkPosted.TryDequeue(out Action? posted))
+        while (pendingLinkPosts?.TryDequeue(out Action? posted) == true)
         {
             try
             {

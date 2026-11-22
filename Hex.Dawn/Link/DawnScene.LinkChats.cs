@@ -367,7 +367,7 @@ internal sealed partial class DawnScene
     /* Rights changed on the other side */
 
     // What each linked device granted this one as last seen, to say when it changes there
-    private readonly Dictionary<string, HexLinkRights> linkGrantsSeen = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, HexLinkRights> linkGrantsSeen { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.OrdinalIgnoreCase)); }
     private int linkGrantsSeenAt = -1;
 
     /// <summary>A notice when a linked device changed what it lets this machine do, looked at only when Link moved.</summary>

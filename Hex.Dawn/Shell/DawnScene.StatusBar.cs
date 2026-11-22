@@ -97,8 +97,6 @@ internal sealed partial class DawnScene
         setupItem.IsVisible = () => Code() && setupItemFor is not null;
         languageItem = statusBar.Add("HIDL", right: true, pressed: ChangeLanguageMode, tooltip: Said("language_mode.status_tip"));
         languageItem.IsVisible = Code;
-        // Edit prediction's state beside the language, see DawnScene.PredictionItem
-        BuildPredictionItem();
         codeZoomItem = statusBar.Add(string.Empty, right: true, pressed: () => ZoomCode(0.0f), tooltip: Said("status_bar.code_zoom_tip"));
         codeZoomItem.IsVisible = () => !LayoutTools && settings.CodeZoom != 1.0f;
 
@@ -140,7 +138,8 @@ internal sealed partial class DawnScene
         UpdateNativeFolding();
         UpdateReferenceLenses();
         UpdateSemantics();
-        UpdatePredictions();
+        if (predictions is not null || settings.EditPredictions && !HexAi.Off)
+            UpdatePredictions();
 
         // An error stays until it's pressed or something else is said, gone after ten seconds like the rest nobody saw it
         if (messageItem.Text.Length > 0 && !saidError && System.Environment.TickCount64 - saidAt > SAID_FOR)

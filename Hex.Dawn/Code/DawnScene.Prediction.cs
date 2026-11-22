@@ -12,7 +12,7 @@ namespace Hex.Dawn;
 // for the text and the caret as they are. On the editor's thread nothing is made for a keystroke: two fields and a call.
 internal sealed partial class DawnScene
 {
-    private readonly PredictionEngine predictions = new(TimeProvider.System);
+    private PredictionEngine predictions = null!;
 
     // The options last made and what they were made from, so the engine's question every tick of the debounce makes none
     private PredictionOptions? predictionOptions;
@@ -40,7 +40,7 @@ internal sealed partial class DawnScene
     private HexDocument? predictionAcceptedIn;
 
     // The code files most recently typed in, newest first, with their caret's line then, for the excerpts sent along
-    private readonly (HexDocument? Document, int Line)[] predictionRecent = new (HexDocument?, int)[3];
+    private (HexDocument? Document, int Line)[] predictionRecent = [];
 
     // Which files may be sent, made again when the patterns or the folders change
     private PredictionPrivacy? predictionPrivacy;
@@ -51,14 +51,45 @@ internal sealed partial class DawnScene
     // For the self test: predictions shown and taken
     private int predictionsShown, predictionsTaken;
 
-    /// <summary>The engine is told where the settings are, and Hex Link's relay with it. Once, as the editor is made.</summary>
-    private void BuildPredictions()
+    private void StartPredictions()
     {
-        predictions.Options = PredictionOptionsNow;
-        predictions.Snapshot = PredictionSnapshotOf;
-        HexPredictionRelay.Configure(() => MakePredictionOptions(settings), () => !HexAi.Off && PredictionSettings.Share(settings));
+        predictions = new PredictionEngine(TimeProvider.System)
+        {
+            Options = PredictionOptionsNow,
+            Snapshot = PredictionSnapshotOf
+        };
+        predictionRecent = new (HexDocument?, int)[3];
         documentClosed += PredictionClosed;
-        AddPredictionCommands();
+        foreach (var open in documents)
+            PreparePrediction(open);
+        if (predictionItem is null)
+            BuildPredictionItem();
+        predictionItemWritten = false;
+    }
+
+    private void StopPredictions()
+    {
+        predictions.ShutDown();
+        documentClosed -= PredictionClosed;
+        predictionShownIn = null;
+        foreach (var open in documents)
+        {
+            open.Editor.OnPredictionEnded = null;
+            open.Editor.OnPredictionTypedThrough = null;
+            open.Editor.ClearPrediction();
+        }
+        predictions = null!;
+        predictionRecent = [];
+        predictionAccepting = null;
+        predictionAcceptedIn = predictionAsked = predictionAllowedFor = null;
+        predictionShownLines = predictionAskedLines = null;
+        predictionOptions = null;
+        predictionPrivacy = null;
+        predictionPrivacyRoots = null;
+        predictionOptionsOf = predictionPrivacyOf = predictionAllowedOf = null;
+        predictionKeyOf = predictionFailureNoticed = predictionItemStatusText = null;
+        predictionItemState = PredictionItemState.Hidden;
+        predictionWaitingSince = -1;
     }
 
     /// <summary>An editor told what to call when its prediction ends or is typed through. Once, as its document is made.</summary>
@@ -79,7 +110,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private void PredictionEdited(HexDocument changed)
     {
-        if (changed != document || !PredictionSettings.On(settings))
+        if (predictions is null || changed != document || !PredictionSettings.On(settings))
             return;
 
         // An edit the prediction is still showing after was its own, typed through or a word of it taken (Ctrl+Right):
@@ -99,10 +130,14 @@ internal sealed partial class DawnScene
     /// <summary>Every tick: the engine asked, a finished prediction given to the editor, the status item brought up to date.</summary>
     private void UpdatePredictions()
     {
-        if (HexAi.Off)
+        if (!settings.EditPredictions || HexAi.Off)
+        {
+            if (predictions is not null)
+                StopPredictions();
             return;
-
-        ollamaModels.Update(SettingsPage);
+        }
+        if (predictions is null)
+            StartPredictions();
         SayPredictionsOnce();
 
         // A prediction taken is in the history now, the next is asked for at once

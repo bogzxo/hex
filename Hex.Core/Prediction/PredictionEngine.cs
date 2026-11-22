@@ -220,9 +220,12 @@ internal sealed class PredictionEngine(TimeProvider time)
         if ((ProviderOverride ?? Provider(options)) is not OllamaProvider ollama)
             return;
 
+        var warming = new CancellationTokenSource();
+        var previous = Interlocked.Exchange(ref preload, warming);
+        previous?.Cancel();
         _ = Task.Run(async () =>
         {
-            PredictionException? problem = await ollama.Preload(default).ConfigureAwait(false);
+            PredictionException? problem = await ollama.Preload(warming.Token).ConfigureAwait(false);
             lock (gate)
             {
                 if (warmedFor != options || Status is PredictionStatus.Waiting)
@@ -248,7 +251,21 @@ internal sealed class PredictionEngine(TimeProvider time)
         _ = cancel.CancelAsync();
     }
 
+    private CancellationTokenSource? preload;
     private PredictionOptions? warmedFor;
+
+    public void ShutDown()
+    {
+        lock (gate)
+        {
+            Stop(counted: false);
+            warmedFor = null;
+            pending = false;
+            document = null;
+            Volatile.Write(ref ready, null);
+        }
+        Interlocked.Exchange(ref preload, null)?.Cancel();
+    }
 
     private IPredictionProvider? Provider(PredictionOptions options)
     {

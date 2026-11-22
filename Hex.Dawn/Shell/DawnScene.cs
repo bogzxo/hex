@@ -300,7 +300,7 @@ internal sealed partial class DawnScene : Scene
         BuildMergeEditor();
         BuildPeek();
         AddLanguageModeCommands();
-        BuildPredictions();
+        AddPredictionCommands();
         commands.Build(menu);
         LoadKeys();
         WireViews();

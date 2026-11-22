@@ -19,14 +19,14 @@ internal sealed partial class DawnScene
     internal sealed record LinkRemoteSystem(string Id, string Name, bool Missing, string[] Models);
 
     // The device picked to run new chats on, by workspace, for this session
-    private readonly Dictionary<string, string> linkRunsOn = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, string> linkRunsOn { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.OrdinalIgnoreCase)); }
 
     // What each device offers, as its hex_agent_list said, and the devices being asked now
-    private readonly Dictionary<string, List<LinkRemoteSystem>> linkRemoteSystems = new(StringComparer.OrdinalIgnoreCase);
-    private readonly HashSet<string> linkSystemsAsking = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, List<LinkRemoteSystem>> linkRemoteSystems { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.OrdinalIgnoreCase)); }
+    private HashSet<string> linkSystemsAsking { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.OrdinalIgnoreCase)); }
 
     // The agent system and model picked for a device, by device
-    private readonly Dictionary<string, (string? Agent, string? Model)> linkRemotePicked = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, (string? Agent, string? Model)> linkRemotePicked { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.OrdinalIgnoreCase)); }
 
     // The workspace the choice is kept under
     private string LinkWorkspaceKey => explorer.workspace.FilePath ?? explorer.workspace.Folders.FirstOrDefault() ?? string.Empty;

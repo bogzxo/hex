@@ -5,7 +5,7 @@ namespace Hex.Dawn;
 
 internal sealed partial class DawnScene
 {
-    private readonly ConcurrentDictionary<Guid, HexLinkPrivateWorktree> linkPrivateDrafts = new();
+    private ConcurrentDictionary<Guid, HexLinkPrivateWorktree> linkPrivateDrafts { get => LazyInitializer.EnsureInitialized(ref field, static () => new()); }
 
     private HexMcpTool LinkPublishTool() => new(new McpTool("hex_link_publish", "Publish private worktree changes",
         "Check an agent's private worktree, build and publish its changes, or discard the draft.",

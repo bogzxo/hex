@@ -45,7 +45,6 @@ internal sealed partial class DawnScene
             ChooseFrom(Said("tabs.all"), string.Empty, choices);
         };
         crumbs = layout.Get<Breadcrumbs>("crumbs");
-        BuildLinkEditorNotices();
 
         docTabs.OnSelected = index => Show(documents[index]);
         docTabs.OnClose = index => CloseDocument(documents[index]);

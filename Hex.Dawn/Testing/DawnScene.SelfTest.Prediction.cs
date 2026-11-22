@@ -110,7 +110,8 @@ internal sealed partial class DawnScene
             QuietCompletion();
         });
         test.Settle(0.5f);
-        test.Check("prediction: the status item says predictions are off while they are", () => ItemSays("prediction.item_off") && predictionItem.IsVisible?.Invoke() == true);
+        test.Check("prediction: a disabled editor has no prediction engine, editor callbacks or status item", () =>
+            predictions is null && code.OnPredictionEnded is null && (predictionItem is null || predictionItem.IsVisible?.Invoke() == false));
 
         test.Run(TogglePredictions);
         test.Wait();

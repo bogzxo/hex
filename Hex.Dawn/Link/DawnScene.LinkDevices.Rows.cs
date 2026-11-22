@@ -12,9 +12,9 @@ namespace Hex.Dawn;
 internal sealed partial class DawnScene
 {
     private sealed record LinkDeviceConnection(bool Connecting, DateTime? RetryAtUtc, string? Reason, CancellationTokenSource? Attempt = null);
-    private readonly Dictionary<string, LinkDeviceConnection> linkManualDials = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, (HexLinkPeer Peer, long Sampled, double? Milliseconds)> linkLatencies = new(StringComparer.OrdinalIgnoreCase);
-    private readonly List<(Badge State, Label Details, HexLinkKnown Device, bool HasAddress)> linkOfflineRows = [];
+    private Dictionary<string, LinkDeviceConnection> linkManualDials { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.OrdinalIgnoreCase)); }
+    private Dictionary<string, (HexLinkPeer Peer, long Sampled, double? Milliseconds)> linkLatencies { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.OrdinalIgnoreCase)); }
+    private List<(Badge State, Label Details, HexLinkKnown Device, bool HasAddress)> linkOfflineRows { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
 
     private Panel LinkDeviceCard(HexLinkKnown known, IReadOnlyList<LinkConflictShown> conflicts)
     {
