@@ -107,8 +107,10 @@ internal sealed partial class DawnScene
             ReadProvisionTestFile(Path.Combine(joiner, "committed.txt")) == "Uncommitted root edit.\n"
             && ReadProvisionTestFile(Path.Combine(joinedNested, "untracked.txt")) == "Untracked nested file.\n"
             && ReadProvisionTestFile(Path.Combine(joinedModule, "committed.txt")) == "Uncommitted submodule edit.\n"
-            && !Directory.Exists(Path.Combine(joiner, "out"))
-            && !File.Exists(Path.Combine(joiner, "outside-limit.tar")));
+            && !Directory.Exists(Path.Combine(joiner, "out")));
+        test.Check("link-provision: a working file over 8 MB arrived through bulk with only View", () =>
+            File.Exists(Path.Combine(joiner, "outside-limit.tar"))
+            && new FileInfo(Path.Combine(joiner, "outside-limit.tar")).Length == HexLinkFiles.MOST_READ + 20L);
 
         HexLinkPeer? replacement = null;
         test.Run(() =>
@@ -180,7 +182,7 @@ internal sealed partial class DawnScene
         test.Check("link-provision: MCP listed the skipped submodule and its reason", () =>
             getting is { IsCompletedSuccessfully: true, Result.IsError: false }
             && getting.Result.AllText().Contains($"Skipped nested/module/{PROVISION_TEST_UNINITIALIZED}. Submodule is uninitialized", StringComparison.Ordinal)
-            && getting.Result.AllText().Contains("Skipped outside-limit.tar. The working file exceeds", StringComparison.Ordinal));
+            && !getting.Result.AllText().Contains("Skipped outside-limit.tar", StringComparison.Ordinal));
 
         string changed = Path.Combine(destination, "nested", "module", "committed.txt");
         test.WaitFor(() => ReadProvisionTestFile(changed) == PROVISION_TEST_AFTER

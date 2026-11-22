@@ -141,11 +141,29 @@ internal sealed partial class HexLinkSync : IDisposable
     public string StateFile { get; }
 
     /// <summary>Apply a checked incoming change, optionally through the editor's dirty-tab guard.</summary>
-    public Func<string, string, string?, byte[]?, CancellationToken, bool?, Task<string?>> ApplyLocal { get; init; }
+    public Func<string, string, string?, byte[]?, CancellationToken, bool?, Task<string?>> ApplyLocal
+    {
+        get;
+        init => field = async (full, wire, expected, bytes, cancel, executable) =>
+        {
+            await using var lease = await HexLinkPublicationFence.ForRoot(full).EnterLive(cancel);
+            await EnsureLocalGitFollowFile(full, cancel);
+            return await value(full, wire, expected, bytes, cancel, executable);
+        };
+    }
 
     public Func<string, string, string?, Stream?, long, string?, CancellationToken, bool?, Task<string?>> ApplyStream { get; init; }
 
-    public Func<string, string, string, CancellationToken, Task> RenameLocal { get; init; }
+    public Func<string, string, string, CancellationToken, Task> RenameLocal
+    {
+        get;
+        init => field = async (from, to, expected, cancel) =>
+        {
+            await using var lease = await HexLinkPublicationFence.ForRoot(Path.GetDirectoryName(from)!).EnterLive(cancel);
+            await EnsureLocalGitFollowFile(from, cancel);
+            await value(from, to, expected, cancel);
+        };
+    }
 
     /// <summary>How long this side's tree is quiet before a batch of its changes is looked at, 150 ms unless a test says.</summary>
     public TimeSpan Quiet { get; init; } = TimeSpan.FromMilliseconds(150);
@@ -263,6 +281,8 @@ internal sealed partial class HexLinkSync : IDisposable
                 counts += $", {retryCount} retrying";
             if (gitIssue is { } issue)
                 counts += $". {issue}";
+            if (GitFollowIssue is { } follow)
+                counts += $". {follow}";
             return State switch
             {
                 HexLinkSyncState.Comparing => $"Comparing {with}",
@@ -357,7 +377,8 @@ internal sealed partial class HexLinkSync : IDisposable
 
             gitIssue = DescribeGitIssue(mine, theirs);
             missingRepositories = HexLinkMissingRepositories.Compare(mine, theirs);
-            if (!force && HexLinkTree.CommitsDiffer(mine, theirs, missingRepositories) is { } difference)
+            bool followsGit = await StartGitFollow(mine, theirs, cancel);
+            if (!force && !followsGit && HexLinkTree.CommitsDiffer(mine, theirs, missingRepositories) is { } difference)
             {
                 await Unwatch();
                 lock (gate)
@@ -411,6 +432,7 @@ internal sealed partial class HexLinkSync : IDisposable
             watch = local;
         }
 
+        await CheckGitFollow(cancel);
         if (watch is not null)
             await watch.Flush().WaitAsync(cancel);
         await peer.Flush(folder.Name, cancel);

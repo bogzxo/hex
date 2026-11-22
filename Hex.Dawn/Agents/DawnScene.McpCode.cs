@@ -71,7 +71,7 @@ internal sealed partial class DawnScene
                 "Rename a symbol everywhere it's used, across files, as one change by its language server (not text replace, so other things of the same name are left alone). Written to the disk, or to a file open with unsaved changes in the editor. dry_run lists the places only.",
                 McpSchema.Object([Symbol(), PathOf(), Line(), Column(),
                     ("new_name", McpSchema.String("What it's to be called.")),
-                    ("dry_run", McpSchema.Flag("Only say what would change.")), Max()], "new_name")),
+                    ("dry_run", McpSchema.Flag("Only say what would change.")), ClaimOverride(), Max()], "new_name")),
                 McpRename, Timeout: 120.0f),
 
             new(new McpTool("hex_fix", "Fixes for a line",
@@ -95,7 +95,7 @@ internal sealed partial class DawnScene
                 "Replace a whole declaration (a method, a class, a function, a property) found by its name with new text, no old_string and no reading it first. Its comments and attributes above stay unless with_comments. Empty new_text deletes it. The errors its server says after come back with it.",
                 McpSchema.Object([Symbol(), PathOf(),
                     ("new_text", McpSchema.String("The declaration as it's to be, its signature and body, indented as the file is.")),
-                    ("with_comments", McpSchema.Flag("Replace the comments and attributes above it too.")),
+                    ("with_comments", McpSchema.Flag("Replace the comments and attributes above it too.")), ClaimOverride(),
                     ("check", McpSchema.Flag("Wait a moment for what its language server says is wrong after, true by default."))], "symbol", "new_text")),
                 McpEditSymbol, Timeout: 30.0f),
 
@@ -757,6 +757,7 @@ internal sealed partial class DawnScene
             }
             Func<string, string> relative = McpRelative();
             string moved = at != all[0] ? $" ({all[0].Place(relative)} gave nothing to rename, {at.Place(relative)} did)" : string.Empty;
+            if (!args.Flag("dry_run") && LinkClaimGuard(args, edits.Where(edit => edit.Value.Count > 0).Select(edit => edit.Key)) is { } blocked) { yield return blocked; yield break; }
             string said = McpApplyEdits(edits, args.Flag("dry_run"), $"{(args.Flag("dry_run") ? "Would rename" : "Renamed")} {at.Name} to {renamed}{moved}", budget);
             yield return said.StartsWith('!') ? McpToolResult.Error(said[1..]) : McpToolResult.Text(said);
             yield break;
@@ -1147,6 +1148,7 @@ internal sealed partial class DawnScene
             yield return McpToolResult.Error("The declaration is outside the shared workspace.");
             yield break;
         }
+        if (LinkClaimGuard(args, [path]) is { } blocked) { yield return blocked; yield break; }
         HexDocument? candidate = Context.Documents.Find(path);
         var live = LinkLiveOf(candidate);
         HexDocument? open = candidate is { Modified: true } || live is not null ? candidate : null;

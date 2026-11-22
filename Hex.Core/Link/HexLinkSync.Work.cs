@@ -159,6 +159,8 @@ internal sealed partial class HexLinkSync
         watch.Seed(actual);
         Notify();
         _ = Task.Run(() => Work(stop));
+        if (followRepositories.Length != 0)
+            _ = Task.Run(() => PollGitFollow(stop));
         if (differ.Count > 0)
             wake.Release((differ.Count + MOST_BATCH - 1) / MOST_BATCH);
         CheckIdle();
@@ -601,8 +603,12 @@ internal sealed partial class HexLinkSync
         return new HashSet<string>(tree.Ignored(relative).Select(each => start + each), StringComparer.Ordinal);
     }
 
-    private async Task<byte[]?> ReadLocal(string full, CancellationToken stop) =>
-        HexLinkTree.RegularFile(full, tree.Root) is null ? null : await HexLinkFiles.ReadSharedAsync(full, stop);
+    private async Task<byte[]?> ReadLocal(string full, CancellationToken stop)
+    {
+        await using var lease = await HexLinkPublicationFence.ForRoot(full).EnterLive(stop);
+        await EnsureLocalGitFollowFile(full, stop);
+        return HexLinkTree.RegularFile(full, tree.Root) is null ? null : await HexLinkFiles.ReadSharedAsync(full, stop);
+    }
 
     // One path worked on, whatever happens the queue going on after it
     private async Task Run(string wire, bool ignored, CancellationToken stop)
@@ -610,6 +616,7 @@ internal sealed partial class HexLinkSync
         Volatile.Write(ref detail, wire);
         try
         {
+            using var follow = AdmitGitFollowPath(wire);
             await Reconcile(wire, ignored, stop);
         }
         catch (OperationCanceledException)
@@ -697,7 +704,10 @@ internal sealed partial class HexLinkSync
             return;
         }
 
-        if (DefersPublication(wire) || await ReconcileCase(wire, stop))
+        if (DefersPublication(wire))
+            return;
+        await EnsureLocalGitFollowFile(full, stop);
+        if (await ReconcileCase(wire, stop))
             return;
 
         // This side's file hashed from what's on the disk now, never a hash cached by its length and time written, which
@@ -826,7 +836,7 @@ internal sealed partial class HexLinkSync
                 return;
             }
         }
-        else if (firstComparison && await ReconcileFromHead(wire, full, mine, theirs, localBytes, stop))
+        else if ((firstComparison || HasFollowBase(wire)) && await ReconcileFromHead(wire, full, mine, theirs, localBytes, stop))
         {
             return;
         }
@@ -846,6 +856,7 @@ internal sealed partial class HexLinkSync
             return;
         }
 
+        if (await TryTextMerge(wire, full, agreed, localBytes, m, t, stop)) return;
         await Conflict(wire, full, m, t, stop);
     }
 

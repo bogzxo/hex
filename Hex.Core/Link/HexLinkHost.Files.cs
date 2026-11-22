@@ -17,11 +17,15 @@ internal sealed partial class HexLinkHost
         return HexLinkFiles.List(Folders, HexLinkData.String(parameters, "path", HexLinkFiles.MOST_PATH) ?? string.Empty, services.Excludes);
     }
 
-    private JsonObject FsRead(JsonObject parameters)
+    private async Task<JsonNode?> FsRead(JsonObject parameters, CancellationToken cancel)
     {
         Need(HexLinkRights.View, "fs/read");
         string wire = HexLinkData.Need(parameters, "path", HexLinkFiles.MOST_PATH);
-        return HexLinkFiles.Read(ResolveFile(wire), wire);
+        string full = ResolveFile(wire);
+        await using var lease = await HexLinkPublicationFence.ForRoot(full).EnterLive(cancel);
+        await EnsureGitFollowFile(full, cancel);
+        Need(HexLinkRights.View, "fs/read");
+        return HexLinkFiles.Read(full, wire);
     }
 
     // A file written if it's still what the writer read, through the editor so an open tab takes it
@@ -32,6 +36,9 @@ internal sealed partial class HexLinkHost
         string full = ResolveFile(wire);
         string? baseHash = HexLinkData.String(parameters, "base", 64);
         byte[] bytes = BytesOf(parameters);
+        await using var lease = await HexLinkPublicationFence.ForRoot(full).EnterLive(cancel);
+        await EnsureGitFollowFile(full, cancel);
+        Need(HexLinkRights.Edit, "fs/write");
         services.Audit("edit", Device, $"fs/write {wire}, {bytes.Length} bytes");
 
         string? hash = await services.CompareAndReplace(full, wire, baseHash, bytes, cancel);
@@ -44,6 +51,9 @@ internal sealed partial class HexLinkHost
         string wire = HexLinkData.Need(parameters, "path", HexLinkFiles.MOST_PATH);
         string full = ResolveFile(wire);
         string baseHash = HexLinkData.Need(parameters, "base", 64);
+        await using var lease = await HexLinkPublicationFence.ForRoot(full).EnterLive(cancel);
+        await EnsureGitFollowFile(full, cancel);
+        Need(HexLinkRights.Edit, "fs/delete");
         services.Audit("edit", Device, $"fs/delete {wire}");
         if (!File.Exists(full))
             throw HexLinkException.NotFound($"There's no file {wire}.");

@@ -159,7 +159,7 @@ internal sealed class LinkTools : IMcpTools
 }
 
 /// <summary>An editor's services in memory: a hub, a temp workspace, tools standing in, and what the link told it.</summary>
-internal sealed class LinkServices : IHexLinkServices, IDisposable
+internal sealed partial class LinkServices : IHexLinkServices, IDisposable
 {
     public LinkServices(HexLinkDevice device)
     {

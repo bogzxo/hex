@@ -19,6 +19,7 @@ internal sealed partial class DawnScene
                 ("old_string", McpSchema.String("The exact text to replace, enough of it to be found once.")),
                 ("new_string", McpSchema.String("What goes in its place.")),
                 ("replace_all", McpSchema.Flag("Every place it's found rather than the one.")),
+                ClaimOverride(),
                 ("check", McpSchema.Flag("Wait a moment for the errors its language server says after, when one's running for it, true by default."))], "path", "old_string", "new_string")),
             McpEditFile),
         new(new McpTool("hex_write", "Write a file",
@@ -26,6 +27,7 @@ internal sealed partial class DawnScene
             McpSchema.Object([
                 ("path", McpSchema.String("The file, inside the workspace or whole.")),
                 ("content", McpSchema.String("All of what it's to say.")),
+                ClaimOverride(),
                 ("check", McpSchema.Flag("Wait a moment for the errors its language server says after, when one's running for it, true by default."))], "path", "content")),
             McpWriteFile)
     ];
@@ -33,6 +35,7 @@ internal sealed partial class DawnScene
     private IEnumerable<McpToolResult?> McpEditFile(JsonObject args)
     {
         string path = McpPath(args.String("path") ?? string.Empty);
+        if (LinkClaimGuard(args, [path]) is { } blocked) { yield return blocked; yield break; }
         string old = (args.String("old_string") ?? string.Empty).Replace("\r\n", "\n");
         string with = (args.String("new_string") ?? string.Empty).Replace("\r\n", "\n");
         bool all = args.Flag("replace_all");
@@ -131,6 +134,7 @@ internal sealed partial class DawnScene
     private IEnumerable<McpToolResult?> McpWriteFile(JsonObject args)
     {
         string path = McpPath(args.String("path") ?? string.Empty);
+        if (LinkClaimGuard(args, [path]) is { } blocked) { yield return blocked; yield break; }
         string content = args.String("content") ?? string.Empty;
         HexDocument? open = Context.Documents.Find(path);
         if (LinkLiveOf(open) is { } live)

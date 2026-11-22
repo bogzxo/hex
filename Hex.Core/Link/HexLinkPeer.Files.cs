@@ -182,7 +182,8 @@ internal sealed partial class HexLinkPeer
     /// commits of <paramref name="have"/> (HexLinkGit.Haves of a clone here), checked by git before it's handed back.
     /// Null when there's nothing this machine hasn't got. <paramref name="progress"/> hears bytes so far and in all.
     /// </summary>
-    public async Task<string?> Bundle(string repository, IReadOnlyList<string> have, Action<long, long>? progress = null, string? repo = null, CancellationToken cancel = default)
+    public async Task<string?> Bundle(string repository, IReadOnlyList<string> have, Action<long, long>? progress = null, string? repo = null, CancellationToken cancel = default,
+        string? followWire = null, string? followHead = null)
     {
         string id = Guid.NewGuid().ToString("N");
         string file = Path.Combine(Path.GetTempPath(), $"hexlink-{id}.bundle");
@@ -193,6 +194,8 @@ internal sealed partial class HexLinkPeer
         Task<JsonObject> request = AskObject("git/bundle", new JsonObject
         {
             ["repository"] = repository,
+            ["follow_wire"] = followWire,
+            ["follow_head"] = followHead,
             ["id"] = id,
             ["have"] = new JsonArray([.. have.Take(HexLinkGit.MOST_HAVE).Select(sha => (JsonNode)sha)])
         }, stop.Token, TimeSpan.FromMinutes(15));

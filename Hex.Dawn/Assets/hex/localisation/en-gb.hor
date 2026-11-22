@@ -4796,6 +4796,17 @@ let strings = {
         connect_failed: "Couldn't connect to {address}, {why}",
         forget_title: "Forget a device",
         forget_text: "The device picked can't link to this Hex again without pairing.",
+        merge: {
+            ready: "The overlapping changes in {name} are resolved.",
+            publish: "Publish Merge",
+            published: "Published the resolved merge of {path}.",
+            unresolved: "Resolve the remaining conflict markers before publishing."
+        },
+        git_follow: {
+            enable: "Link: Turn on Git state follows for {folder}",
+            disable: "Link: Turn off Git state follows for {folder}",
+            align: "Link: Align {folder} to {device}"
+        },
         provision: {
             get_title: "Link: Get Workspace from {device}",
             share_title: "Link: Share Workspace with {device}",

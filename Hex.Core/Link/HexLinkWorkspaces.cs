@@ -63,7 +63,7 @@ internal static class HexLinkWorkspaces
         {
             HexLinkFolder root = roots.First(root => PlatformPaths.IsUnder(real[folder.Name], real[root.Name]));
             string prefix = roots.Length == 1 ? string.Empty : root.Name;
-            folders.Add(new HexLinkProvisionFolder(folder.Name, Under(prefix, real[root.Name], real[folder.Name])));
+            folders.Add(new HexLinkProvisionFolder(folder.Name, Under(prefix, real[root.Name], real[folder.Name]), folder.Authority));
         }
 
         if (onlyRepository is not null && (only is null || onlyRepository.Length == 0))

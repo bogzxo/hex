@@ -136,7 +136,7 @@ internal static class GitProcess
 
     private static async Task WriteInput(Stream input, string content)
     {
-        // Git must see EOF without a byte-order mark in front of the caller's content.
+        // Signal EOF without a byte-order mark or a continuation queued on the waiting editor thread.
         var writer = new StreamWriter(input, new UTF8Encoding(false));
         await using (writer.ConfigureAwait(false))
             await writer.WriteAsync(content).ConfigureAwait(false);

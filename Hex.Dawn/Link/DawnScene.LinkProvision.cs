@@ -44,6 +44,7 @@ internal sealed partial class DawnScene
                     PostLink(() => Say(skipped));
             }
 
+            LinkBindProvisionedFolders(peer, folders);
             LinkKeepProvisionedFolders(deviceId, folders);
             await OnEditorForLink(() =>
             {
@@ -88,15 +89,16 @@ internal sealed partial class DawnScene
     {
         if (link?.PeerOf(deviceId) is not { } peer || peer.IsClosed)
             return Said("link.sync_not_linked", ("device", deviceId));
-        if (linkServices?.Workspace is not { Folders.Count: > 0 } workspace)
+        if (linkServices is not { } services || services.Workspace is not { Folders.Count: > 0 } workspace)
             return Said("link.provision.nothing_to_share");
         if (!HexLinkAllowed.Has(peer.Session.Connection.Rights, HexLinkRights.View))
             return Said("link.provision.grant_view", ("device", peer.Device.Name));
 
         try
         {
+            HexLinkWorkspace exporting = LinkProvisionExport(null);
             await LinkEnsureWorktreePublication();
-            await peer.ShareProvision(workspace.Name, cancel);
+            await peer.ShareProvision(exporting.Name, cancel);
             return null;
         }
         catch (HexLinkException e)

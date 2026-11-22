@@ -42,8 +42,10 @@ internal sealed partial class HexLinkPeer
 
     private void PokeWorkspaceRefresh()
     {
-        if (HexLinkAllowed.Has(Granted, HexLinkRights.View))
-            LazyInitializer.EnsureInitialized(ref workspaceRefresh, () => new HexLinkCoalesce(TimeSpan.FromSeconds(1),
-                () => RefreshWorkspace(session.Closing))).Poke();
+        if (!HexLinkAllowed.Has(Granted, HexLinkRights.View))
+            return;
+        GitFollowHint?.Invoke();
+        LazyInitializer.EnsureInitialized(ref workspaceRefresh, () => new HexLinkCoalesce(TimeSpan.FromSeconds(1),
+            () => RefreshWorkspace(session.Closing))).Poke();
     }
 }

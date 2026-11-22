@@ -433,6 +433,7 @@ internal sealed partial class HexLinkTree
         using var timing = HexLinkSyncTiming.Measure("tree.hash-miss");
         string hash;
         string? text = null, eol = null;
+        byte[]? mergeBase = null;
         if (length > HexLinkFiles.MOST_READ)
         {
             using FileStream file = HexLinkFileTransfer.Read(full);
@@ -451,12 +452,16 @@ internal sealed partial class HexLinkTree
             {
                 hash = HexLinkFiles.Hash(bytes);
                 (text, eol) = HexLinkSync.TextAndEol(bytes);
+                if (text is not null)
+                    mergeBase = bytes;
             }
         }
 
         info.Refresh();
         if (info.Length != length || info.LastWriteTimeUtc.Ticks != written || info.CreationTimeUtc.Ticks != created)
             throw new IOException($"{full} changed while Link read its manifest.");
+        if (mergeBase is not null)
+            HexLinkMerge.RememberBase(hash, mergeBase);
         hashes[full] = new HashStamp(length, written, created, hash, text, eol);
         Interlocked.Increment(ref computedHashes);
         return (hash, text, eol);

@@ -15,6 +15,8 @@ internal sealed record HexPlanItem(string Text, HexPlanState State = HexPlanStat
 
     /// <summary>When the step was marked done, Unix milliseconds, 0 for not done or not known (a plan from before it was kept).</summary>
     public long DoneAt { get; init; }
+
+    public long EtaAt { get; init; }
 }
 
 /// <summary>An earlier task's finished steps, put aside when the agent began a new plan or the person cleared what was done.</summary>
@@ -285,6 +287,7 @@ internal sealed record HexAgentPlan(string? Title, IReadOnlyList<HexPlanItem> It
             if (item.Agent is not null) row["agent"] = item.Agent;
             if (item.Files is { Count: > 0 } files) row["files"] = new JsonArray([.. files.Select(file => (JsonNode)file)]);
             if (stored && item.DoneAt > 0) row["done_at"] = item.DoneAt;
+            if (item.EtaAt > 0) row["eta_at"] = item.EtaAt;
             rows.Add((JsonNode)row);
         }
 
@@ -295,7 +298,7 @@ internal sealed record HexAgentPlan(string? Title, IReadOnlyList<HexPlanItem> It
         [.. (items as JsonArray ?? []).OfType<JsonObject>().Select(item => new HexPlanItem(
             item.String("text") ?? string.Empty, Enum.TryParse(item.String("state"), true, out HexPlanState state) ? state : HexPlanState.Pending,
             item.String("id"), item.String("note"), item.Integer("agent"), FilesOf(item["files"]))
-        { DoneAt = (long)(item.Number("done_at") ?? 0) })];
+        { DoneAt = (long)(item.Number("done_at") ?? 0), EtaAt = (long)(item.Number("eta_at") ?? 0) })];
 
     public static HexAgentPlan FromJson(JsonObject plan) => new(plan.String("title"), ItemsOf(plan["items"]))
     {

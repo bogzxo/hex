@@ -68,6 +68,7 @@ internal sealed partial class HexLinkHost : IDisposable
         "chat/get" => ChatGet(parameters),
         "chat/watch" => ChatWatch(parameters),
         "chat/unwatch" => Task.FromResult<JsonNode?>(ChatUnwatch(parameters)),
+        "claims/watch" => ClaimsWatch(parameters),
         "chat/answer" => ChatAnswer(parameters),
         "tools/list" => Task.FromResult<JsonNode?>(ToolsList()),
         "tools/call" => ToolsCall(parameters, cancel),
@@ -75,7 +76,7 @@ internal sealed partial class HexLinkHost : IDisposable
         "doc2/open" or "doc2/exchange" or "doc2/leave" or "doc2/save" or "doc2/agent" or "doc2/wait" => Document2Request(method, parameters, cancel),
         "doc2/relay" => Document2Relay(parameters, cancel),
         "fs/list" => Task.FromResult<JsonNode?>(FsList(parameters)),
-        "fs/read" => Task.FromResult<JsonNode?>(FsRead(parameters)),
+        "fs/read" => FsRead(parameters, cancel),
         "fs/write" => FsWrite(parameters, cancel),
         "fs/watch" => Task.FromResult<JsonNode?>(FsWatch(parameters)),
         "fs/unwatch" => Task.FromResult<JsonNode?>(FsUnwatch(parameters)),
@@ -92,6 +93,7 @@ internal sealed partial class HexLinkHost : IDisposable
         "sync/unwatch" => Task.FromResult<JsonNode?>(SyncUnwatch(parameters)),
         "sync/flush" => SyncFlush(parameters),
         "git/bundle" => GitBundle(parameters, cancel),
+        "provision/bulk" => ProvisionBulk(parameters, cancel),
         "patch/offer" => PatchOffer(parameters),
         "predict/start" => PredictStart(parameters),
         _ => throw new HexLinkException(HexLinkErrors.METHOD_NOT_FOUND, $"A link has no {(method.Length > 60 ? method[..60] : method)}.")
@@ -107,6 +109,8 @@ internal sealed partial class HexLinkHost : IDisposable
             GitBundleCancel(parameters);
             return true;
         }
+        if (method == "claims/delta")
+            return ClaimsNotice(parameters);
         if (method != "presence/set")
             return false;
 
@@ -322,6 +326,7 @@ internal sealed partial class HexLinkHost : IDisposable
         {
             fileRule.Value = CanReachToolFile;
             HexLinkAllowed.SetEditorFileRule(arguments, CanReachToolFile);
+            HexLinkClaimCaller.Bind(arguments, Device);
             if (name is "hex_edit" or "hex_write" or "hex_edit_symbol" or "hex_rename" or "hex_git_diff")
             {
                 string? path = HexLinkData.String(arguments, "path", HexLinkFiles.MOST_PATH + 1);

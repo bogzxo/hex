@@ -202,6 +202,7 @@ internal sealed partial class DawnScene
         // Each with the step it's doing and the files its open steps name, what chats in the same checkout coordinate on
         foreach (HexHubRow status in agentStatuses.Values.OrderBy(status => status.Id))
             said.Append(StatusLine(status)).Append(PlanLine(status.Chat)).Append('\n');
+        said.Append(LinkAgentClaimFiles(args));
         yield return McpToolResult.Text(said.ToString().TrimEnd());
     }
 

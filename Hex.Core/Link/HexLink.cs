@@ -13,6 +13,8 @@ internal sealed partial class HexLink(IHexLinkServices services) : IDisposable
     /// <summary>The most links at once.</summary>
     public const int MOST = 64;
 
+    internal HexLinkClaimExchange Claims { get; } = new(services);
+
     // A link up, its session and its two halves, and whether hello has been said both ways (Peers lists it from then)
     private sealed record Joined(HexLinkSession Session, HexLinkHost Host, HexLinkPeer Peer)
     {
@@ -58,8 +60,9 @@ internal sealed partial class HexLink(IHexLinkServices services) : IDisposable
     public async Task<HexLinkPeer> Add(HexLinkConnection connection, CancellationToken cancel = default)
     {
         var session = new HexLinkSession(connection) { PingEvery = PingEvery };
-        var host = new HexLinkHost(session, services) { WatchEvery = WatchEvery };
+        var host = new HexLinkHost(session, services) { WatchEvery = WatchEvery, ClaimExchange = Claims, ClaimChanged = () => Changed?.Invoke() };
         var peer = new HexLinkPeer(session, services.Device);
+        host.GitFollowPeer = peer;
         var joined = new Joined(session, host, peer);
         lock (links)
         {
@@ -99,6 +102,7 @@ internal sealed partial class HexLink(IHexLinkServices services) : IDisposable
 
         lock (links)
             joined.Hello = true;
+        Claims.Join(peer);
         Changed?.Invoke();
         return peer;
     }
@@ -122,6 +126,7 @@ internal sealed partial class HexLink(IHexLinkServices services) : IDisposable
     {
         lock (links)
             links.Remove(joined);
+        Claims.Left(joined.Peer);
         joined.Host.Dispose();
         joined.Peer.Dispose();
         Closed?.Invoke(joined.Session.Connection.Device, why);

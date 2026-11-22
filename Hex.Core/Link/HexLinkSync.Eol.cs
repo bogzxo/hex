@@ -159,7 +159,9 @@ internal sealed partial class HexLinkSync
     private static HexLinkSyncAgreed AgreedOf(byte[] local, byte[] remote)
     {
         TextInfo here = TextOf(local), there = TextOf(remote);
-        return new HexLinkSyncAgreed(HexLinkFiles.Hash(local), HexLinkFiles.Hash(remote), here.Norm, here.Eol, there.Eol);
+        string hash = HexLinkFiles.Hash(local);
+        if (here.Norm is not null) HexLinkMerge.RememberBase(hash, local);
+        return new HexLinkSyncAgreed(hash, HexLinkFiles.Hash(remote), here.Norm, here.Eol, there.Eol);
     }
 
     // Both sides have the same bytes, known by their hash alone (line ends not read)

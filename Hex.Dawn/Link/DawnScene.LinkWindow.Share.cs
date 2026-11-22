@@ -94,7 +94,10 @@ internal sealed partial class DawnScene
         if (sync is not null)
             DrawLinkSyncProgress(holder, sync);
 
-        string said = sync?.Why ?? string.Empty;
+        string? follow = LinkSyncOf(id, folder)?.GitFollowIssue;
+        if (follow is not null)
+            row.Add(LinkButton(Said("link.provision.align_button", ("device", peer.Device.Name)), "git-merge", () => LinkAlignWorkspaceCommand(id, folder)));
+        string said = follow ?? sync?.Why ?? string.Empty;
         if (said.Length > 0)
             holder.Add(new Label { Text = UIRichText.Literal(said), TextScale = LINK_SMALL, Dim = true, Wrap = true, Align = Origin.Left, Fill = UIFill.Horizontal, Padding = new UIEdges(18, 0, 0, 0) });
         LinkMissingRepositoryRow(holder, peer, folder, state);

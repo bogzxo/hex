@@ -23,6 +23,10 @@ internal sealed partial class HexLinkHost
         Need(HexLinkRights.View, "git/bundle");
         if (operation == "repository_ready")
             return RepositoryReady(parameters);
+        if (operation == "follow_tips")
+            return await GitFollowTips(parameters, cancel);
+        if (operation is "follow_adopt" or "follow_confirm" or "follow_stop")
+            return await GitFollowRequest(operation, parameters, cancel);
         string id = HexLinkData.Need(parameters, "id", 64);
         if (id.Length == 0 || !id.All(c => char.IsAsciiLetterOrDigit(c) || c == '-'))
             throw HexLinkException.Invalid("A bundle's id is letters, digits and dashes.");
@@ -34,7 +38,8 @@ internal sealed partial class HexLinkHost
             {
                 string? folder = HexLinkData.String(parameters, "folder", 200);
                 string? repositoryPath = HexLinkData.String(parameters, "repository_path", HexLinkFiles.MOST_PATH + 1);
-                HexLinkWorkspace workspace = services.Workspace;
+                HexLinkWorkspace workspace = services is IHexLinkProvisionOffers offers && folder is null
+                    ? offers.WorkspaceForProvision(folder) : services.Workspace;
                 bool defer = folder is null && HexLinkData.Bool(parameters, "defer_worktree") == true;
                 HexLinkHostedProvision hosted = await Task.Run(() => HexLinkWorkspaces.Provision(workspace, folder, transfer.Token, repositoryPath, defer), transfer.Token);
                 hostedProvision = hosted;
@@ -46,7 +51,16 @@ internal sealed partial class HexLinkHost
             string name = HexLinkData.Need(parameters, "repository", 200);
             string repository;
             HexLinkProvisionRepository? planned = null;
-            if (HexLinkProvisionPlan.IsBundleId(name))
+            string? followWire = HexLinkData.String(parameters, "follow_wire", HexLinkFiles.MOST_PATH);
+            string? followHead = null;
+            if (followWire is not null)
+            {
+                followHead = HexLinkData.Need(parameters, "follow_head", 65);
+                if (!HexLinkGit.IsCommitId(followHead))
+                    throw HexLinkException.Invalid("HEAD follow requires a full commit id.");
+                repository = ResolveGitFollowRepository(followWire);
+            }
+            else if (HexLinkProvisionPlan.IsBundleId(name))
             {
                 HexLinkHostedProvision hosted = hostedProvision ?? throw HexLinkException.NotFound("Ask for a workspace plan before its bundles.");
                 if (!hosted.WirePaths.TryGetValue(name, out string? wire))
@@ -61,12 +75,22 @@ internal sealed partial class HexLinkHost
             }
 
             List<string> have = HexLinkData.Strings(parameters, "have", HexLinkGit.MOST_HAVE, 64);
-            services.Audit("git", Device, $"git/bundle {planned?.Path ?? name}");
+            services.Audit("git", Device, $"git/bundle {followWire ?? planned?.Path ?? name}");
             HexLinkGit.Made? made = await Task.Run(() =>
             {
                 if (planned is not null && HexLinkProvision.ReadHead(repository, transfer.Token) != planned.Head)
                     throw new InvalidOperationException("A repository changed on the host. Get a new workspace plan.");
-                return HexLinkGit.Bundle(repository, have, transfer.Token, includeHead: planned is not null);
+                if (followHead is null)
+                    return HexLinkGit.Bundle(repository, have, transfer.Token, includeHead: planned is not null);
+                if (HexLinkGitFollow.ReadCheckout(repository, transfer.Token).Head != followHead)
+                    throw new HexLinkException(HexLinkErrors.CONFLICT, "The other device's Git tip changed. Try again.");
+                HexLinkGit.Made? bundle = HexLinkGit.Bundle(repository, have, transfer.Token, onlyHead: true);
+                if (bundle is not null && !bundle.Refs.Contains(("HEAD", followHead)))
+                {
+                    HexLinkGit.TryDelete(bundle.File);
+                    throw new HexLinkException(HexLinkErrors.CONFLICT, "The other device's Git tip changed while bundling. Try again.");
+                }
+                return bundle;
             }, transfer.Token);
             var answer = new JsonObject
             {
@@ -130,6 +154,7 @@ internal sealed partial class HexLinkHost
         if (HexLinkData.String(parameters, "id", 64) is not { Length: > 0 } id)
             return;
 
+        CancelPreparedProvisionBundle(id);
         lock (bundleGate)
         {
             if (outgoingBundles.TryGetValue(id, out CancellationTokenSource? transfer))

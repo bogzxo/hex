@@ -26,7 +26,8 @@ internal sealed partial class DawnScene
             "Tell another agent of your family something while you both keep working, your parent by default (the chat that started you), or a chat you started, or one your parent started. Another chat whose open plan step names a file yours does can be told too, to agree who goes first. Say what you found as soon as it matters to the others, ask what you need to know, say when you're blocked, give instructions. An agent that can be told more as it works takes it in at once, the rest find it in hex_agent_inbox, and an instruction starts a finished agent working on it.",
             McpSchema.Object([
                 ("text", McpSchema.String("What to tell it, complete in itself, path:line for code.")),
-                ("to", McpSchema.Integer("The chat, your parent's when left out.")),
+                ("to", new JsonObject { ["type"] = new JsonArray("integer", "string"), ["description"] = "Local chat ID, or device:chat for a linked holder." }),
+                ("device", McpSchema.String("Optional linked device when to is numeric.")),
                 ("kind", McpSchema.OneOf("What it is, finding by default.", MAIL_KINDS))], "text")), AgentMessage),
         new(new McpTool("hex_agent_inbox", "Read your messages",
             "The messages other agents sent you that you haven't read, who from and what kind, oldest first. Look between steps of a long task, an instruction from the agent that started you changes what you're to do.",
@@ -46,13 +47,19 @@ internal sealed partial class DawnScene
 
     private IEnumerable<McpToolResult?> AgentMessage(JsonObject args)
     {
+        if (args.String("device") is { Length: > 0 } || args.String("to")?.Contains(':') == true)
+        {
+            foreach (McpToolResult? step in LinkClaimAgentMessage(args)) yield return step;
+            yield break;
+        }
         HexAgentChat? from = CallerOf(args) is { } caller ? ChatById(caller) : null;
         string text = args.String("text") ?? string.Empty;
         string kind = args.String("kind") is { Length: > 0 } said ? said : "finding";
-        HexAgentChat? to = args.Integer("to") is { } id ? ChatById(id) : from?.Parent is { } parent ? ChatById(parent) : null;
+        int? target = args.Integer("to") ?? (int.TryParse(args.String("to"), out int read) ? read : null);
+        HexAgentChat? to = target is { } id ? ChatById(id) : from?.Parent is { } parent ? ChatById(parent) : null;
         if (to is null)
         {
-            yield return McpToolResult.Error(args.Integer("to") is null
+            yield return McpToolResult.Error(target is null
                 ? "You weren't started by another agent, say which chat with to. hex_agent_list has them."
                 : "There's no such chat, hex_agent_list says which there are.");
             yield break;
@@ -85,7 +92,7 @@ internal sealed partial class DawnScene
             yield break;
         }
 
-        yield return McpToolResult.Text(Deliver(to, from, kind, text, directive: kind == "instruction"));
+        yield return McpToolResult.Text(Deliver(to, from, kind, text, directive: kind == "instruction", fromName: HexLinkClaimCaller.Of(args)?.Name));
     }
 
     private IEnumerable<McpToolResult?> AgentInbox(JsonObject args)
