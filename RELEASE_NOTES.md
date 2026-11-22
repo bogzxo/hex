@@ -6,6 +6,13 @@
 - Share a workspace or get a copy from another device, including its Git history and nested repositories. Hex keeps saved files in sync and can follow the owner's branch and commits. Progress, skipped paths, and conflicts appear in Devices.
 - Open the same file to edit together, even before it is saved. See named carets and selections, follow someone through the file, and undo your own edits. Viewers can watch the shared buffer without changing it.
 - Run an agent on another machine and answer its approval requests from your own. File claims show who is working on a path. Use a private worktree to build and test a change before publishing it back to the shared workspace.
+- Hold changes to a shared file while you work. Compare incoming edits, resolve conflicts in the merge editor and submit the result when ready.
+- To connect over the internet, enable public connections in Devices. Hex asks before requesting a temporary port forward from your router. Public invites can use an IP address or a hostname.
+
+## Editor settings
+
+- AI autocomplete starts off. When enabled, choose a typing pause (100 ms by default) or a shortcut (`Ctrl+Alt+.` by default). When connected to Ollama, pick from its installed models.
+- Git support can be switched off. Settings that require Git explain the dependency and become available again when you turn Git back on.
 
 # Hex 3.3.0 Amphetamine
 
