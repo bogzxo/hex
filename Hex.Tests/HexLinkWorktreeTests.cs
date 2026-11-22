@@ -361,6 +361,68 @@ public sealed class HexLinkWorktreeTests : IDisposable
     }
 
     [Fact]
+    public async Task A_scoped_publish_ignores_unrelated_authority_changes_and_retries_moving_inputs()
+    {
+        if (HexLinkGit.Why() is not null)
+            return;
+
+        string replica = Folder("replica"), authority = Folder("authority");
+        foreach (string path in new[] { replica, authority })
+        {
+            Git(path, "init", "-q", "-b", "main");
+            Directory.CreateDirectory(Path.Combine(path, "src"));
+            File.WriteAllText(Path.Combine(path, ".gitignore"), "bin/\nobj/\n");
+            File.WriteAllText(Path.Combine(path, "src", "Fixture.csproj"),
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup></Project>");
+            File.WriteAllText(Path.Combine(path, "src", "LineEnds.cs"), "public class LineEnds {}" + (path == replica ? "\r\n" : "\n"));
+            File.WriteAllText(Path.Combine(path, "src", "Input.cs"), $"public class {(path == replica ? "Old" : "BeforeRetry")} {{}}\n");
+            Git(path, "add", ".");
+            Git(path, "-c", "user.name=Hex test", "-c", "user.email=test@example.invalid", "commit", "-qm", "Fixture");
+        }
+        Directory.CreateDirectory(Path.Combine(authority, "unrelated"));
+        File.WriteAllText(Path.Combine(authority, "unrelated", ".DS_Store"), "Finder data only on the authority");
+        var local = new HexLinkFolder("work", replica);
+        var remote = new HexLinkFolder("work", authority);
+        var draft = await HexLinkPrivateWorktree.Open(Folder("storage"), Guid.NewGuid(), local,
+            new HexLinkTree(local).Manifest(), null, CancellationToken.None);
+        File.WriteAllText(Path.Combine(draft.Root, "src", "Publication.cs"), "public class Publication {}\n");
+
+        var remoteTree = new HexLinkTree(remote);
+        string input = Path.Combine(authority, "src", "Input.cs");
+        int snapshots = 0, reads = 0;
+        var route = new HexLinkDraftRoute(_ =>
+        {
+            File.WriteAllText(Path.Combine(authority, "unrelated", "moving.txt"), (++snapshots).ToString());
+            return Task.FromResult(remoteTree.Manifest(verify: true));
+        }, (_, _) => Task.FromResult<HexLinkPublishReceipt?>(null),
+        (publication, edits, _, _) =>
+        {
+            var edit = Assert.Single(edits);
+            Assert.Equal("work/src/Publication.cs", edit.Path);
+            File.WriteAllBytes(HexLinkFiles.Resolve([remote], edit.Path), edit.Bytes!);
+            return Task.FromResult(new HexLinkPublishReceipt(publication, new string('a', 40), 1));
+        }, (wire, _) =>
+        {
+            Assert.Equal("work/src/Input.cs", wire);
+            if (++reads == 1)
+                File.WriteAllText(input, "public class AfterRetry {}\n");
+            return File.ReadAllBytesAsync(input);
+        });
+
+        var options = new HexLinkWorktreeGateOptions(
+            Build: "dotnet build Fixture.csproj -m:1 -v:q -p:ImportDirectoryBuildProps=false -p:ImportDirectoryBuildTargets=false",
+            WorkingFolder: "src");
+        var result = await draft.Publish(route, options, false, CancellationToken.None);
+        Assert.True(result.Gate!.Passed, result.Gate.Output);
+        Assert.NotNull(result.Receipt);
+        Assert.Equal(3, snapshots);
+        Assert.Equal(2, reads);
+        Assert.Equal("public class AfterRetry {}\n", File.ReadAllText(Path.Combine(draft.GateRoot, "src", "Input.cs")));
+        Assert.Equal("public class LineEnds {}\r\n", File.ReadAllText(Path.Combine(draft.GateRoot, "src", "LineEnds.cs")));
+        Assert.Equal("public class Publication {}\n", File.ReadAllText(Path.Combine(authority, "src", "Publication.cs")));
+    }
+
+    [Fact]
     public async Task Recovery_never_overwrites_a_newer_external_edit()
     {
         if (HexLinkGit.Why() is not null)

@@ -7,7 +7,8 @@ namespace Hex.Core;
 internal sealed record HexLinkDraftRoute(
     Func<CancellationToken, Task<HexLinkManifest>> Snapshot,
     Func<Guid, CancellationToken, Task<HexLinkPublishReceipt?>> Status,
-    Func<Guid, IReadOnlyList<HexLinkPublishEdit>, bool, CancellationToken, Task<HexLinkPublishReceipt>> Send);
+    Func<Guid, IReadOnlyList<HexLinkPublishEdit>, bool, CancellationToken, Task<HexLinkPublishReceipt>> Send,
+    Func<string, CancellationToken, Task<byte[]>>? ReadAuthority = null);
 
 internal sealed record HexLinkDraftPublication(HexLinkPublishReceipt? Receipt, HexLinkWorktreeGateResult? Gate,
     IReadOnlyList<HexLinkDraftConflict> Conflicts);
@@ -34,18 +35,30 @@ internal sealed partial class HexLinkPrivateWorktree
             HexLinkWorktreeGateResult? gate = null;
             if (pending is null)
             {
-                HexLinkManifest snapshot = await route.Snapshot(cancel);
-                HexLinkDraftPlan plan = await Prepare(snapshot, cancel);
-                if (plan.Conflicts.Count > 0 || plan.Edits.Count == 0)
-                    return new(null, null, plan.Conflicts);
-                if (!bypass)
+                const int attempts = 3;
+                for (int attempt = 1; ; attempt++)
                 {
-                    gate = await Gate(snapshot, plan, gateFor, cancel);
-                    if (!gate.Passed)
-                        return new(null, gate, []);
+                    try
+                    {
+                        HexLinkManifest snapshot = await route.Snapshot(cancel);
+                        HexLinkDraftPlan plan = await Prepare(snapshot, cancel, route.ReadAuthority);
+                        if (plan.Conflicts.Count > 0 || plan.Edits.Count == 0)
+                            return new(null, null, plan.Conflicts);
+                        if (!bypass)
+                        {
+                            gate = await Gate(route, snapshot, plan, gateFor, cancel);
+                            if (!gate.Passed)
+                                return new(null, gate, []);
+                        }
+                        pending = new PendingPublish(Guid.NewGuid(), plan, bypass);
+                        await KeepPending(pending, cancel);
+                        break;
+                    }
+                    catch (GateCandidateChanged) when (attempt < attempts)
+                    {
+                        // Rebuild from the latest authority snapshot after a transient input change.
+                    }
                 }
-                pending = new PendingPublish(Guid.NewGuid(), plan, bypass);
-                await KeepPending(pending, cancel);
             }
 
             HexLinkPublishReceipt? receipt = await route.Status(pending.Id, cancel);

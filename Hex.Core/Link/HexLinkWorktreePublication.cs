@@ -122,7 +122,7 @@ internal sealed class HexLinkWorktreePublication : IHexLinkPublicationService
         {
             await peer.SendPublication(Descriptor(folder, pin.Epoch, id, edits), edits, false, bypass, stop);
             return await Status(id, stop) ?? throw new IOException("The authority did not return the publication receipt.");
-        });
+        }, async (path, stop) => (await peer.Read(path, stop)).Bytes);
     }
 
     public IReadOnlyList<HexLinkCommittedSet> Pending(string peer) => receipts.Pending(peer);

@@ -13,7 +13,11 @@ internal sealed partial class HexLinkPrivateWorktree
 {
     private sealed record Repository(string Path, string Commit, HexLinkWorktreeGit Git);
     private sealed record Basis(string Hash, int Repository, string Commit);
-    private sealed record FileVersion(string Hash, long Size);
+    private sealed record FileVersion(string Hash, long Size, string? Text = null)
+    {
+        public bool SameContent(FileVersion? other) => other is not null &&
+            (other.Hash == Hash || Text is not null && Text == other.Text);
+    }
 
     private readonly HexLinkFolder shared;
     private readonly string data;
@@ -36,7 +40,7 @@ internal sealed partial class HexLinkPrivateWorktree
         this.basis = basis;
         this.excludes = excludes;
         Root = Path.Combine(data, "tree");
-        draftTree = new HexLinkTree(new HexLinkFolder(shared.Name, Root), excludes);
+        draftTree = new HexLinkTree(shared with { Path = Root }, excludes);
     }
 
     public string Root { get; }
@@ -200,17 +204,21 @@ internal sealed partial class HexLinkPrivateWorktree
         }
     }
 
-    public async Task<HexLinkDraftPlan> Prepare(HexLinkManifest snapshot, CancellationToken cancel)
+    public async Task<HexLinkDraftPlan> Prepare(HexLinkManifest snapshot, CancellationToken cancel,
+        Func<string, CancellationToken, Task<byte[]>>? readAuthority = null)
     {
         await operation.WaitAsync(cancel);
         try
         {
-            Dictionary<string, FileVersion> current = await Current(cancel), theirs = await Versions(shared, snapshot, cancel);
+            Dictionary<string, FileVersion> current = await Current(cancel);
+            string[] changed = [.. Changed(current)];
+            var changedPaths = new HashSet<string>(changed, StringComparer.Ordinal);
+            Dictionary<string, FileVersion> theirs = await Versions(shared, snapshot, cancel, changedPaths.Contains);
             var edits = new List<HexLinkPublishEdit>();
             var conflicts = new List<HexLinkDraftConflict>();
             var checkedHashes = new Dictionary<string, string?>(StringComparer.Ordinal);
-            var mine = new HexLinkFolder(shared.Name, Root);
-            foreach (string wire in Changed(current))
+            var mine = shared with { Path = Root };
+            foreach (string wire in changed)
             {
                 string? before = basis.GetValueOrDefault(wire)?.Hash;
                 string? now = theirs.GetValueOrDefault(wire)?.Hash, privateHash = current.GetValueOrDefault(wire)?.Hash;
@@ -220,7 +228,8 @@ internal sealed partial class HexLinkPrivateWorktree
                 if (now != before)
                 {
                     byte[]? baseline = await ReadBasis(wire, cancel);
-                    byte[]? incoming = await ReadVersion(shared, wire, theirs.GetValueOrDefault(wire), cancel);
+                    byte[]? incoming = theirs.TryGetValue(wire, out var version)
+                        ? await ReadGateAuthority(wire, version, readAuthority, cancel) : null;
                     var merged = await HexLinkWorktreeMerge.Merge(baseline, bytes, incoming, cancel);
                     if (merged.Conflict)
                     {
@@ -242,74 +251,6 @@ internal sealed partial class HexLinkPrivateWorktree
         {
             operation.Release();
         }
-    }
-
-    private async Task<HexLinkWorktreeGateResult> Gate(HexLinkManifest snapshot, HexLinkDraftPlan plan,
-        Func<IReadOnlyList<string>, CancellationToken, Task<IReadOnlyList<HexLinkWorktreeGateOptions>>> gateFor,
-        CancellationToken cancel)
-    {
-        await operation.WaitAsync(cancel);
-        try
-        {
-            if (plan.Conflicts.Count > 0)
-                throw new InvalidOperationException("Settle private worktree conflicts before building.");
-            var expectedRepos = new HashSet<string>(repositoryLayout.Skip(1), PlatformPaths.Comparer);
-            if (!expectedRepos.SetEquals(snapshot.NestedHeads?.Keys ?? []))
-                throw new IOException("The shared repository layout changed after this worktree was opened.");
-
-            foreach (Repository repo in repositories)
-            {
-                string path = Path.Combine(GateRoot, repo.Path);
-                if (!File.Exists(Path.Combine(path, ".git")))
-                    await repo.Git.Checkout(repo.Commit, path, cancel);
-            }
-
-            var gate = new HexLinkFolder(shared.Name, GateRoot);
-            var tree = new HexLinkTree(gate, excludes);
-            var current = await Versions(gate, await Task.Run(tree.Manifest, cancel), cancel);
-            var expected = await Versions(shared, snapshot, cancel, IsMaterialized);
-            var candidate = new Dictionary<string, HexLinkPublishEdit>(plan.Edits.Count, StringComparer.Ordinal);
-            foreach (HexLinkPublishEdit edit in plan.Edits)
-            {
-                candidate.Add(edit.Path, edit);
-                if (edit.Bytes is { } data)
-                    expected[edit.Path] = new FileVersion(HexLinkFiles.Hash(data), data.LongLength);
-                else
-                    expected.Remove(edit.Path);
-            }
-
-            foreach (string gone in current.Keys.Where(path => !expected.ContainsKey(path)))
-                File.Delete(HexLinkFiles.Resolve([gate], gone));
-            foreach (var (wire, version) in expected)
-            {
-                if (current.GetValueOrDefault(wire)?.Hash == version.Hash)
-                    continue;
-                string to = HexLinkFiles.Resolve([gate], wire);
-                Directory.CreateDirectory(Path.GetDirectoryName(to)!);
-                if (candidate.GetValueOrDefault(wire)?.Bytes is { } changed)
-                    await File.WriteAllBytesAsync(to, changed, cancel);
-                else
-                    File.Copy(HexLinkFiles.Resolve([shared], wire), to, overwrite: true);
-            }
-            await VerifyGate(gate, expected, cancel);
-            var options = await gateFor([.. plan.Edits.Select(edit => edit.Path)], cancel);
-            HexLinkWorktreeGateResult result = await HexLinkWorktreeGate.Run(GateRoot, Path.Combine(data, "gate.log"), options, cancel);
-            if (result.Passed)
-                await VerifyGate(gate, expected, cancel);
-            return result;
-        }
-        finally
-        {
-            operation.Release();
-        }
-    }
-
-    private async Task VerifyGate(HexLinkFolder gate, Dictionary<string, FileVersion> expected, CancellationToken cancel)
-    {
-        var tree = new HexLinkTree(gate, excludes);
-        var scanned = await Versions(gate, await Task.Run(tree.Manifest, cancel), cancel);
-        if (scanned.Count != expected.Count || expected.Any(pair => scanned.GetValueOrDefault(pair.Key)?.Hash != pair.Value.Hash))
-            throw new IOException("Files changed outside the exact gate candidate. Retry the publication.");
     }
 
     public async Task Follow(HexLinkManifest snapshot, CancellationToken cancel)
@@ -388,7 +329,7 @@ internal sealed partial class HexLinkPrivateWorktree
                     fileVersions[edit.Path] = new Basis(HexLinkFiles.Hash(edit.Bytes!), group.Key, commit);
             }
 
-            var draft = new HexLinkFolder(shared.Name, Root);
+            var draft = shared with { Path = Root };
             foreach (HexLinkPublishEdit edit in edits)
             {
                 string full = HexLinkFiles.Resolve([draft], edit.Path);
@@ -469,7 +410,7 @@ internal sealed partial class HexLinkPrivateWorktree
             byte[]? exact = await ReadBasis(wire, cancel);
             if (exact is null || HexLinkFiles.Hash(exact) != version.Hash)
                 throw new IOException($"{wire} changed during the shared snapshot. Try again.");
-            string other = HexLinkFiles.Resolve([new HexLinkFolder(shared.Name, Root)], wire);
+            string other = HexLinkFiles.Resolve([shared with { Path = Root }], wire);
             await File.WriteAllBytesAsync(other, exact, cancel);
         }
 
@@ -486,7 +427,7 @@ internal sealed partial class HexLinkPrivateWorktree
             include is null ? _ => true : path => include(shared.Name + "/" + path), cancel), cancel);
         if (include is null && snapshot.Files.FirstOrDefault(file => !IsMaterialized(file.Path)) is { } unopened)
             throw new IOException($"'{unopened.Path}' belongs to a private repository that has not been opened. Save the file outside the tree, open its repository and reapply the edit.");
-        return await Versions(new HexLinkFolder(shared.Name, Root), snapshot, cancel);
+        return await Versions(shared with { Path = Root }, snapshot, cancel);
     }
 
     private IEnumerable<string> Changed(Dictionary<string, FileVersion> current) =>
@@ -515,7 +456,7 @@ internal sealed partial class HexLinkPrivateWorktree
     }
 
     private static async Task<Dictionary<string, FileVersion>> Versions(HexLinkFolder folder, HexLinkManifest snapshot, CancellationToken cancel,
-        Func<string, bool>? include = null)
+        Func<string, bool>? include = null, bool skipUnavailable = false)
     {
         if (!snapshot.Certified || snapshot.Folder != folder.Name)
             throw new IOException("The working-tree snapshot is incomplete or belongs to a different folder.");
@@ -523,7 +464,7 @@ internal sealed partial class HexLinkPrivateWorktree
         foreach (HexLinkTreeFile file in snapshot.Files)
         {
             cancel.ThrowIfCancellationRequested();
-            if (include is not null && !include(file.Path))
+            if ((include is not null && !include(file.Path)) || (skipUnavailable && file.Unavailable))
                 continue;
             string? hash = file.Hash;
             if (hash is null)
@@ -532,7 +473,7 @@ internal sealed partial class HexLinkPrivateWorktree
                     FileShare.ReadWrite | FileShare.Delete, 4096, useAsync: true);
                 hash = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, cancel));
             }
-            result.Add(file.Path, new FileVersion(hash, file.Size));
+            result.Add(file.Path, new FileVersion(hash, file.Size, file.Text));
         }
 
         return result;

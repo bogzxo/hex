@@ -115,10 +115,10 @@ internal sealed partial class HexLinkTree
     }
 
     internal HexLinkManifest PrivateManifest(
-        Func<IReadOnlyDictionary<string, string?>?, Func<string, bool>> select, CancellationToken cancel)
+        Func<IReadOnlyDictionary<string, string?>?, Func<string, bool>> select, CancellationToken cancel, bool verify = false)
     {
         lock (scan)
-            return Scan(verify: false, provision: false, select, cancel);
+            return Scan(verify, provision: false, select, cancel);
     }
 
     private HexLinkManifest Scan(bool verify, bool provision,
