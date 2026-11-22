@@ -7,6 +7,7 @@ internal sealed record HexLinkFolder(string Name, string Path, HexLinkAuthority?
 {
     public string? FolderAuthorityId => Authority?.DeviceId;
     public long FolderAuthorityEpoch => Authority?.Epoch ?? 0;
+    public HexLinkWorktreeGatePolicy? WorktreeGate { get; init; }
 }
 
 /// <summary>A repository of the workspace, its name, the branch it's on and the commit at its head, and where it is here (never sent).</summary>
@@ -46,6 +47,7 @@ internal interface IHexLinkServices
 
     HexLinkAuthorityStore? FolderAuthorities => null;
     IHexLinkPublicationService? Publication => null;
+    HexLinkWorktreeGatePolicy? WorktreeGate(HexLinkFolder folder) => null;
 
     /// <summary>The workspace's current files.exclude patterns.</summary>
     HexExcludes Excludes => HexExcludes.Usual;

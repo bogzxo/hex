@@ -65,7 +65,8 @@ internal static class HexLinkAllowed
         ["hex_edit"] = HexLinkRights.Edit,
         ["hex_write"] = HexLinkRights.Edit,
         ["hex_edit_symbol"] = HexLinkRights.Edit,
-        ["hex_rename"] = HexLinkRights.Edit
+        ["hex_rename"] = HexLinkRights.Edit,
+        ["hex_link_worktree_gate"] = HexLinkRights.Edit
     }.ToFrozenDictionary(StringComparer.Ordinal);
 
     /// <summary>Every tool a link may ever reach, by name.</summary>

@@ -20,6 +20,7 @@ internal sealed partial class DawnScene
         LinkAuthorityTool(),
         LinkRouteTool(),
         LinkPublishTool(),
+        LinkWorktreeGateTool(),
         new(new McpTool("hex_link_devices", "Linked devices",
             "The other machines Hex Link joins this Hex to: those connected now, each with what it lets this machine do there (view, steer, edit), its workspace's folders and repositories and how many agents it has; and the paired ones that aren't connected. hex_link_call calls one's tools.",
             McpSchema.Empty(), ReadOnly: true),

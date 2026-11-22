@@ -185,6 +185,8 @@ internal sealed partial class LinkServices : IHexLinkServices, IDisposable
     public HexLinkWorkspace Workspace { get; set; }
     public HexLinkAuthorityStore? FolderAuthorities { get; set; }
     public IHexLinkPublicationService? Publication { get; set; }
+    public Func<HexLinkFolder, HexLinkWorktreeGatePolicy?>? GateFor { get; set; }
+    public HexLinkWorktreeGatePolicy? WorktreeGate(HexLinkFolder folder) => GateFor?.Invoke(folder);
 
     public HexLinkDocuments Documents { get; } = new();
     public bool LegacyDocumentFixture => true;

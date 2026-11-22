@@ -18,7 +18,12 @@ internal sealed partial class HexLinkPrivateWorktree
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> Publications = new(PlatformPaths.Comparer);
     private string PendingFile => Path.Combine(data, "pending.json");
 
-    public async Task<HexLinkDraftPublication> Publish(HexLinkDraftRoute route, HexLinkWorktreeGateOptions options,
+    public Task<HexLinkDraftPublication> Publish(HexLinkDraftRoute route, HexLinkWorktreeGateOptions options,
+        bool bypass, CancellationToken cancel) =>
+        Publish(route, (_, _) => Task.FromResult<IReadOnlyList<HexLinkWorktreeGateOptions>>([options]), bypass, cancel);
+
+    public async Task<HexLinkDraftPublication> Publish(HexLinkDraftRoute route,
+        Func<IReadOnlyList<string>, CancellationToken, Task<IReadOnlyList<HexLinkWorktreeGateOptions>>> gateFor,
         bool bypass, CancellationToken cancel)
     {
         SemaphoreSlim serial = Publications.GetOrAdd(data, static _ => new SemaphoreSlim(1));
@@ -35,7 +40,7 @@ internal sealed partial class HexLinkPrivateWorktree
                     return new(null, null, plan.Conflicts);
                 if (!bypass)
                 {
-                    gate = await Gate(snapshot, plan, options, cancel);
+                    gate = await Gate(snapshot, plan, gateFor, cancel);
                     if (!gate.Passed)
                         return new(null, gate, []);
                 }

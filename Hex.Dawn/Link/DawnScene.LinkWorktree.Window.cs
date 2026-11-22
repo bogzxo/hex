@@ -23,6 +23,12 @@ internal sealed partial class DawnScene
             holder.Add(LinkLine(LINK_PRIVATE_STORAGE_UNAVAILABLE));
             return;
         }
+        var pin = services.FolderAuthorities.Of(shared);
+        var gate = pin?.DeviceId == services.Device.Id
+            ? LinkReadOwnedWorktreeGate(services, shared with { Authority = pin })
+            : link?.PeerOf(pin?.DeviceId ?? "")?.Workspace.Folders.FirstOrDefault(
+                item => PlatformPaths.Comparer.Equals(item.Name, shared.Name) && item.Authority == pin)?.WorktreeGate;
+        holder.Add(LinkLine("Publish gate: " + (gate?.Options.Describe() ?? "Nearest task or project in each affected repository")));
         string path = Path.GetFullPath(shared.Path);
         if (PlatformPaths.Comparison != StringComparison.Ordinal)
             path = path.ToUpperInvariant();

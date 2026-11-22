@@ -65,7 +65,11 @@ internal sealed partial class DawnScene
         {
             if (PublicationPair(draft!.SharedFolder, device!) is { PublicationPairReady: true } sync)
                 await sync.Flush();
-            return await draft.Publish(LinkPrivatePublishRoute(draft.SharedFolder)!, new HexLinkWorktreeGateOptions(Build: command), false, cancel);
+            var pin = linkServices!.FolderAuthorities.Of(draft.SharedFolder)!;
+            HexLinkWorktreeGatePolicyFile.Save(Path.Combine(LinkPrivateStorage, "gates.json"), draft.SharedFolder, pin,
+                new HexLinkWorktreeGatePolicy(command, "src", null, null, 15));
+            return await draft.Publish(LinkPrivatePublishRoute(draft.SharedFolder)!,
+                (paths, stop) => LinkWorktreeGatesOf(draft, paths, null, preview: false, stop), false, cancel);
         }
 
         test.Run(() =>
@@ -109,6 +113,9 @@ internal sealed partial class DawnScene
                 return;
             File.WriteAllText(Path.Combine(draft.Root, "src", "shared.txt"), "private first\nsecond\nthird\nfourth\n");
             File.WriteAllText(Path.Combine(draft.Root, "only-draft.txt"), "private");
+            var pin = linkServices!.FolderAuthorities.Of(draft.SharedFolder)!;
+            HexLinkWorktreeGatePolicyFile.Save(Path.Combine(LinkPrivateStorage, "gates.json"), draft.SharedFolder, pin,
+                new HexLinkWorktreeGatePolicy("exit 7", "src", null, null, 15));
             draftStatus = LinkPublishAgentTool(new JsonObject { [HexMcpCaller.CALLER] = agent!.Id, ["action"] = "status" }, cancel);
             result = Publish("exit 7");
         });
@@ -116,7 +123,8 @@ internal sealed partial class DawnScene
         test.WaitFor(() => draft is null || draftStatus?.IsCompleted == true, 20.0f);
         test.Check("link-worktree: hex_link_publish status reports private files for this agent", () =>
             draftStatus is { IsCompletedSuccessfully: true, Result.IsError: false } &&
-            draftStatus.Result.AllText().Contains("2 unpublished files", StringComparison.Ordinal));
+            draftStatus.Result.AllText().Contains("2 unpublished files", StringComparison.Ordinal) &&
+            draftStatus.Result.AllText().Contains("src | exit 7 | 15s", StringComparison.Ordinal));
         test.Check("link-worktree: the failed gate leaves both editors at the shared version", () =>
             result is { IsCompletedSuccessfully: true, Result: { Gate.ExitCode: 7, Receipt: null } } &&
             ReadLinkTestFile(target) == Seed && ReadLinkTestFile(remote) == Seed &&

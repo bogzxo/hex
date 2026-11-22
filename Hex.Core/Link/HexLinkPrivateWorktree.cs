@@ -37,6 +37,7 @@ internal sealed partial class HexLinkPrivateWorktree
 
     public string Root { get; }
     public string GateRoot => Path.Combine(data, "gate");
+    public IReadOnlyList<string> RepositoryPaths => [.. repositories.Select(repo => repo.Path)];
     public HexLinkFolder SharedFolder => shared;
 
     public bool HoldIncoming
@@ -193,8 +194,9 @@ internal sealed partial class HexLinkPrivateWorktree
         }
     }
 
-    public async Task<HexLinkWorktreeGateResult> Gate(HexLinkManifest snapshot, HexLinkDraftPlan plan,
-        HexLinkWorktreeGateOptions options, CancellationToken cancel)
+    private async Task<HexLinkWorktreeGateResult> Gate(HexLinkManifest snapshot, HexLinkDraftPlan plan,
+        Func<IReadOnlyList<string>, CancellationToken, Task<IReadOnlyList<HexLinkWorktreeGateOptions>>> gateFor,
+        CancellationToken cancel)
     {
         await operation.WaitAsync(cancel);
         try
@@ -240,6 +242,7 @@ internal sealed partial class HexLinkPrivateWorktree
                     File.Copy(HexLinkFiles.Resolve([shared], wire), to, overwrite: true);
             }
             await VerifyGate(gate, expected, cancel);
+            var options = await gateFor([.. plan.Edits.Select(edit => edit.Path)], cancel);
             HexLinkWorktreeGateResult result = await HexLinkWorktreeGate.Run(GateRoot, Path.Combine(data, "gate.log"), options, cancel);
             if (result.Passed)
                 await VerifyGate(gate, expected, cancel);

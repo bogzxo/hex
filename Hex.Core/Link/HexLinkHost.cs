@@ -226,7 +226,7 @@ internal sealed partial class HexLinkHost : IDisposable
             ["workspace"] = new JsonObject
             {
                 ["name"] = workspace.Name,
-                ["folders"] = new JsonArray([.. workspace.Folders.Select(folder => (JsonNode)new JsonObject { ["name"] = folder.Name, ["authority"] = folder.Authority?.ToJson() })]),
+                ["folders"] = new JsonArray([.. workspace.Folders.Select(folder => (JsonNode)new JsonObject { ["name"] = folder.Name, ["authority"] = folder.Authority?.ToJson(), ["publish_gate"] = services.WorktreeGate(folder)?.Json() })]),
                 ["repositories"] = new JsonArray([.. workspace.Repositories.Select(repository => (JsonNode)new JsonObject
                 {
                     ["name"] = repository.Name,
