@@ -88,6 +88,7 @@ internal sealed partial class HexSettings
         Flag("visual_studio_keys_chosen", settings => settings.VisualStudioKeysChosen, (settings, value) => settings.VisualStudioKeysChosen = value),
         Text("welcome_done", settings => settings.WelcomeDone, (settings, value) => settings.WelcomeDone = value),
         Flag("welcome_checklist_hidden", settings => settings.WelcomeChecklistHidden, (settings, value) => settings.WelcomeChecklistHidden = value),
+        Text("agents_list_folds", settings => settings.AgentsListFolds, (settings, value) => settings.AgentsListFolds = value),
         Choice("csharp_colors", settings => settings.CSharpColors, (settings, value) => settings.CSharpColors = value, "resharper", "visual_studio", "skin"),
         Flag("mcp_server", settings => settings.McpServer, (settings, value) => settings.McpServer = value),
         Flag("no_ai", settings => settings.NoAi, (settings, value) => settings.NoAi = value),

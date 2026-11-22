@@ -40,6 +40,7 @@ visual_studio_keys = false
 visual_studio_keys_chosen = false
 welcome_done = ""
 welcome_checklist_hidden = false
+agents_list_folds = ""
 csharp_colors = "resharper"
 mcp_server = true
 no_ai = false

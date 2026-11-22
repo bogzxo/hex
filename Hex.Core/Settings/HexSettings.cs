@@ -237,6 +237,13 @@ internal sealed partial class HexSettings
     /// <summary>Whether Getting started was folded to its one line with Hide.</summary>
     public bool WelcomeChecklistHidden;
 
+    /// <summary>
+    /// The groups and sections of the chat lists the person folded or opened, a linked device's group and its Running and
+    /// Finished sections, as HexChatListFolds keeps them ("key=0;key=1"). Kept for the machine, not the workspace, a
+    /// device being the same whichever workspace is open.
+    /// </summary>
+    public string AgentsListFolds = string.Empty;
+
     /// <summary>The colours C# is shown in, resharper, visual_studio, or skin for whatever the skin has.</summary>
     public string CSharpColors = "resharper";
     /// <summary>
