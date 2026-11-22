@@ -43,6 +43,10 @@ public static class EditorSettingsCatalog
     /// <summary>The key of the folders Link's synced files leave out the operating system's own files for.</summary>
     public const string LINK_SYSTEM_FILE_FOLDERS = "link_system_file_folders";
 
+    public const string GIT_ENABLED = "git_enabled";
+
+    public static bool RequiresGit(string key) => key != GIT_ENABLED && key.StartsWith("git_", StringComparison.Ordinal);
+
     /// <summary>
     /// The sections in the order they're shown inside their parts, the editor's text first and the looks first of how
     /// Hex looks, they're the whole of the rest of it in one go.
@@ -237,6 +241,7 @@ public static class EditorSettingsCatalog
         new("edit_predictions_workspace", HexText.Get("settings_catalog.edit_predictions_workspace_title"), UIFormKind.Flag, HexText.Get("settings_catalog.edit_predictions_workspace_help"), AI),
         new("edit_predictions_share", HexText.Get("settings_catalog.edit_predictions_share_title"), UIFormKind.Flag, HexText.Get("settings_catalog.edit_predictions_share_help"), AI),
 
+        new(GIT_ENABLED, HexText.Get("settings_catalog.git_enabled_title"), UIFormKind.Flag, HexText.Get("settings_catalog.git_enabled_help"), GIT),
         new("git_blame", HexText.Get("settings_catalog.git_blame_title"), UIFormKind.Flag, HexText.Get("settings_catalog.git_blame_help"), GIT),
         new("git_autofetch", HexText.Get("settings_catalog.git_autofetch_title"), UIFormKind.Flag, HexText.Get("settings_catalog.git_autofetch_help"), GIT),
         new("git_autofetch_interval", HexText.Get("settings_catalog.git_autofetch_interval_title"), UIFormKind.Number, HexText.Get("settings_catalog.git_autofetch_interval_help"), GIT, Least: 1.0f, Most: 60.0f, Step: 1.0f, Slider: true, Unit: "min"),
@@ -389,6 +394,7 @@ public static class EditorSettingsCatalog
         ["code_zoom"] = new NumberValue(1.0f),
         ["code_font"] = new StringValue("hack"),
         ["wrap_code"] = Values.Bool(false),
+        [GIT_ENABLED] = Values.Bool(true),
         ["git_blame"] = Values.Bool(true),
         ["minimap"] = Values.Bool(true),
         ["spell_check"] = Values.Bool(false),

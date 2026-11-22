@@ -23,7 +23,7 @@ internal static class HexLinkGit
     private static readonly TimeSpan PATIENCE = TimeSpan.FromMinutes(10);
 
     /// <summary>Why git can't be run here, null when it can.</summary>
-    public static string? Why() => HexHost.NoProcesses("git") ??
+    public static string? Why() => !GitProcess.Enabled ? GitProcess.DisabledReason : HexHost.NoProcesses("git") ??
         (GitProcess.Installed ? null : "Hex could not run Git on this device. Install Git or make it available on Hex's PATH.");
 
     /// <summary>A bundle written, where, how big and the refs in it (name and commit).</summary>

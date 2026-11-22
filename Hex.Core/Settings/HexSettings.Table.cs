@@ -108,6 +108,7 @@ internal sealed partial class HexSettings
                     settings.LinkSystemFileFolders = [.. Patterns(roots).Where(Path.IsPathFullyQualified)];
             },
             (settings, written) => written.Add("link_system_file_folders", Horizon.HIDL.Library.Natives.List(settings.LinkSystemFileFolders))),
+        Flag("git_enabled", settings => settings.GitEnabled, (settings, value) => settings.GitEnabled = value),
         Flag("git_autofetch", settings => settings.GitAutoFetch, (settings, value) => settings.GitAutoFetch = value),
         Number("git_autofetch_interval", settings => settings.GitAutoFetchInterval, (settings, value) => settings.GitAutoFetchInterval = value, 1.0f, 60.0f),
         Choice("git_pull_mode", settings => settings.GitPullMode, (settings, value) => settings.GitPullMode = value, "default", "merge", "rebase", "ff_only"),

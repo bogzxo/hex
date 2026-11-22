@@ -371,6 +371,8 @@ internal sealed partial class DawnScene
             ApplyLink(restart: now.LinkPort != was.LinkPort);
         if (now.NoAi != was.NoAi)
             NoAiChanged();
+        if (now.GitEnabled != was.GitEnabled)
+            git.ApplyEnabled();
         if (now.GitSmartCommit != was.GitSmartCommit)
             ((IPanels)this).RefreshSide(HexSide.SourceControl);
 

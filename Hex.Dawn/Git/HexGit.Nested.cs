@@ -28,6 +28,19 @@ internal sealed partial class HexGit
 
     private string[] nestedFor = [];
     private bool lookingDown;
+    private CancellationTokenSource? repositoryScan;
+
+    private void StopLookingDown()
+    {
+        repositoryScan?.Cancel();
+        repositoryScan = null;
+        lookingDown = false;
+        lookDownIn = 0;
+        lookDownAll = deletedSince = false;
+        nestedFor = [];
+        madeSince.Clear();
+        newFolders.Clear();
+    }
     private float lookDownIn;
 
     // What was made since the last look and whether anything was deleted, nothing walked while both are empty. The whole
@@ -172,8 +185,14 @@ internal sealed partial class HexGit
     // changed, or when a repository came or went
     private void FindDownInBackground(string[] folders, string[]? made, bool moved)
     {
-        context.Work.InBackground("git repositories", () => made is null ? (FindDown(folders), new List<string>()) : FindDownFrom(folders, made), result =>
+        var scan = repositoryScan = new CancellationTokenSource();
+        CancellationToken cancel = scan.Token;
+        context.Work.InBackground("git repositories", () => made is null ? (FindDown(folders, cancel), new List<string>()) : FindDownFrom(folders, made, cancel), result =>
         {
+            scan.Dispose();
+            if (repositoryScan != scan)
+                return;
+            repositoryScan = null;
             lookingDown = false;
             var (found, newOnes) = result;
             bool changed = moved;
@@ -279,13 +298,13 @@ internal sealed partial class HexGit
     }
 
     // The folders under some folders with a .git in them, built and git's own folders left out
-    internal static List<string> FindDown(string[] roots)
+    internal static List<string> FindDown(string[] roots, CancellationToken cancel = default)
     {
         var found = new List<string>();
         var pending = new Stack<(string Folder, int Depth)>();
         foreach (string root in roots)
             pending.Push((root, 0));
-        FindDown(pending, found);
+        FindDown(pending, found, cancel);
         return found;
     }
 
@@ -294,7 +313,7 @@ internal sealed partial class HexGit
     /// out what it does: a folder made looked down from, a file made its folder looked at. With the folders made that have
     /// no .git, to be looked at a while for one turning up.
     /// </summary>
-    internal static (List<string> Found, List<string> Made) FindDownFrom(string[] roots, string[] made)
+    internal static (List<string> Found, List<string> Made) FindDownFrom(string[] roots, string[] made, CancellationToken cancel = default)
     {
         var found = new List<string>();
         var folders = new List<string>();
@@ -302,6 +321,8 @@ internal sealed partial class HexGit
         var looked = new HashSet<string>(PlatformPaths.Comparer);
         foreach (string path in made)
         {
+            if (cancel.IsCancellationRequested)
+                break;
             bool folder = Directory.Exists(path);
             string? at = folder ? path : Path.GetDirectoryName(path);
             if (at is null || !looked.Add(at) || DepthUnder(roots, at) is not { } depth || depth == 0 || depth > NESTED_DEPTH)
@@ -315,7 +336,7 @@ internal sealed partial class HexGit
                 pending.Push((at, depth));
         }
 
-        FindDown(pending, found);
+        FindDown(pending, found, cancel);
         return (found, folders);
     }
 
@@ -346,9 +367,9 @@ internal sealed partial class HexGit
     }
 
     // Helper method to look down from the folders waiting, every one with a .git in it found
-    private static void FindDown(Stack<(string Folder, int Depth)> pending, List<string> found)
+    private static void FindDown(Stack<(string Folder, int Depth)> pending, List<string> found, CancellationToken cancel)
     {
-        while (pending.Count > 0)
+        while (pending.Count > 0 && !cancel.IsCancellationRequested)
         {
             var (folder, depth) = pending.Pop();
             string[] inside;

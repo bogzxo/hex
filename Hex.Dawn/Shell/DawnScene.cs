@@ -211,9 +211,6 @@ internal sealed partial class DawnScene : Scene
         explorer = new HexExplorer(Context);
         git = new HexGit(Context);
 
-        // Whether git is there at all is asked by running it once, a good 25 ms the first tick waited for as the editor
-        // came up. Asked on another thread now, it's known long before then
-        _ = Hex.Core.Git.GitProcess.InstalledNow;
         BuildGit();
         explorer.FoldersChanged += codeEditing.ForgetVocabulary;
         running = new HexRunning(Context);
