@@ -64,7 +64,7 @@ internal sealed partial class DawnScene
             foreach (HexLinkFolder folder in folders)
             {
                 cancel.ThrowIfCancellationRequested();
-                if (await LinkStartProvisionedSync(peer, folder.Name).WaitAsync(cancel) is { } why)
+                if (await LinkStartProvisionedSync(peer, folder.Name, cancel) is { } why)
                     return why;
             }
 

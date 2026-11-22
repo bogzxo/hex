@@ -92,7 +92,7 @@ internal sealed partial class HexLinkSync : IDisposable
     private readonly string slug;
 
     // Everything below that more than one thread touches is kept under this
-    private readonly Lock gate = new();
+    private readonly Lock gate = new(), stopLifecycle = new();
 
     private HexLinkTreeSubscription? local;
     private CancellationTokenSource stopping = new();
@@ -101,6 +101,9 @@ internal sealed partial class HexLinkSync : IDisposable
     private List<HexLinkTreeChange>? early;
     private bool earlyOverflow, remoteCertified, insensitivePaths;
     private int sent, received;
+
+    internal bool BoundAuthorityEngine { get; init; }
+    internal bool BoundPullMirror { get; init; }
 
     public Func<HexExcludes> Excludes { get; init; } = () => HexExcludes.Usual;
 
@@ -149,7 +152,8 @@ internal sealed partial class HexLinkSync : IDisposable
         {
             await using var lease = await HexLinkPublicationFence.ForRoot(full).EnterLive(cancel);
             await EnsureLocalGitFollowFile(full, cancel);
-            return await value(full, wire, expected, bytes, cancel, executable);
+            using var allowed = ReceiveLease(cancel);
+            return await value(full, wire, expected, bytes, allowed?.Token ?? cancel, executable);
         };
     }
 
@@ -162,7 +166,8 @@ internal sealed partial class HexLinkSync : IDisposable
         {
             await using var lease = await HexLinkPublicationFence.ForRoot(Path.GetDirectoryName(from)!).EnterLive(cancel);
             await EnsureLocalGitFollowFile(from, cancel);
-            await value(from, to, expected, cancel);
+            using var allowed = ReceiveLease(cancel);
+            await value(from, to, expected, allowed?.Token ?? cancel);
         };
     }
 
@@ -316,12 +321,14 @@ internal sealed partial class HexLinkSync : IDisposable
             live = true;
             ready = false;
             peer.RightsChanged += UpdateRights;
-            pullOnly = !HexLinkAllowed.Has(peer.Granted, HexLinkRights.Edit);
+            pullOnly = BoundPullMirror || !HexLinkAllowed.Has(peer.Granted, HexLinkRights.Edit);
             early = [];
             earlyOverflow = false;
             stopping = new CancellationTokenSource();
         }
 
+        using var startStop = CancellationTokenSource.CreateLinkedTokenSource(cancel, stopping.Token);
+        cancel = startStop.Token;
         Set(HexLinkSyncState.Comparing, null);
         HexLinkTreeSubscription? watch = null;
         try
@@ -364,6 +371,12 @@ internal sealed partial class HexLinkSync : IDisposable
             LocalHead = mine.Head;
             RemoteHead = theirs.Head;
 
+            if ((BoundAuthorityEngine || BoundPullMirror) && theirs.Authority != folder.Authority)
+            {
+                await Unwatch();
+                Fail("The peer's pinned authority changed during sync startup.");
+                return;
+            }
             if (Mismatch(mine, theirs) is { } why)
             {
                 await Unwatch();
@@ -474,6 +487,8 @@ internal sealed partial class HexLinkSync : IDisposable
             return "The peer does not support checked working-tree writes.";
         if (keep == HexLinkSyncKeep.Mine && pullOnly)
             return $"{peer.Device.Name} doesn't let this device write there, only theirs can be kept.";
+        if (keep == HexLinkSyncKeep.Theirs && !CanReceive)
+            return "The replica currently has View only.";
 
         string full;
         try
@@ -591,6 +606,12 @@ internal sealed partial class HexLinkSync : IDisposable
     // Everything let go of and the state saved, said as it ended
     private void Halt(HexLinkSyncState state, string? why)
     {
+        lock (stopLifecycle)
+            HaltUnderGate(state, why);
+    }
+
+    private void HaltUnderGate(HexLinkSyncState state, string? why)
+    {
         HexLinkTreeSubscription? watch;
         TaskCompletionSource? waiting;
         bool was;
@@ -615,7 +636,8 @@ internal sealed partial class HexLinkSync : IDisposable
         try { stopping.Cancel(); } catch (ObjectDisposedException) { }
         peer.Session.Closed -= LinkClosed;
         watch?.Dispose();
-        stoppedWatching = Unwatch();
+        if (remoteWatched || stoppedWatching.IsCompleted)
+            stoppedWatching = Unwatch();
         waiting?.TrySetResult();
         if (was)
             Save();

@@ -92,6 +92,7 @@ internal sealed partial class HexLinkHost : IDisposable
         "sync/watch" => SyncWatch(parameters, cancel),
         "sync/unwatch" => Task.FromResult<JsonNode?>(SyncUnwatch(parameters)),
         "sync/flush" => SyncFlush(parameters),
+        "sync/activate" => SyncActivate(parameters, cancel),
         "git/bundle" => GitBundle(parameters, cancel),
         "provision/bulk" => ProvisionBulk(parameters, cancel),
         "patch/offer" => PatchOffer(parameters),

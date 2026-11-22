@@ -190,10 +190,17 @@ internal sealed partial class HexLinkSync
             fromRemote = common == here;
         else if (here.Head == there.Head)
             fromRemote = folder.FolderAuthorityId is null || folder.FolderAuthorityId == Device.Id;
+        else if (!CanReceive)
+        {
+            fromRemote = false;
+            if (!await Task.Run(() => HexLinkGitFollow.Ancestor(repo.Root, there.Head, here.Head, cancel), cancel))
+                return (observed, $"{display}: replica Git change {VIEW_ONLY_REPLICA}.");
+        }
         else
         {
             string wire = repo.Path.Length == 0 ? folder.Name : folder.Name + "/" + repo.Path;
-            await HexLinkGitFollow.Fetch(peer, wire, repo.Root, here, there, cancel);
+            using var allowed = ReceiveLease(cancel);
+            await HexLinkGitFollow.Fetch(peer, wire, repo.Root, here, there, allowed?.Token ?? cancel);
             fromRemote = await Task.Run(() => HexLinkGitFollow.Ancestor(repo.Root, here.Head, there.Head, cancel), cancel);
             if (!fromRemote && !await Task.Run(() => HexLinkGitFollow.Ancestor(repo.Root, there.Head, here.Head, cancel), cancel))
                 return (observed, $"{display}: {Device.Name} has commits this device lacks, and this device has commits {Device.Name} lacks. Align to host when ready.");
@@ -203,16 +210,19 @@ internal sealed partial class HexLinkSync
         HexLinkHeadTip target = fromRemote ? there : here;
         if (fromRemote)
         {
+            if (!CanReceive)
+                return (observed, $"{display}: replica Git change {VIEW_ONLY_REPLICA}.");
             string wire = repo.Path.Length == 0 ? folder.Name : folder.Name + "/" + repo.Path;
-            await HexLinkGitFollow.Fetch(peer, wire, repo.Root, here, there, cancel);
-            move = await HexLinkGitFollow.Move(repo.Root, here, there, fastForwardOnly ? null : common, cancel);
+            using var allowed = ReceiveLease(cancel);
+            await HexLinkGitFollow.Fetch(peer, wire, repo.Root, here, there, allowed?.Token ?? cancel);
+            move = await HexLinkGitFollow.Move(repo.Root, here, there, fastForwardOnly ? null : common, allowed?.Token ?? cancel);
             if (move.Backup is { } backup)
                 GitFollowAudited?.Invoke($"HEAD follow {display} from {here.Head} to {there.Head}; backup {backup}" + (move.Rewrite ? " (rewrite)" : ""));
         }
         else
         {
-            if (!HexLinkAllowed.Has(peer.Granted, HexLinkRights.Edit))
-                return (observed, $"{display}: {Device.Name} cannot follow Git from this device without Edit.");
+            if (BoundPullMirror || !HexLinkAllowed.Has(peer.Granted, HexLinkRights.Edit))
+                return (observed, $"{display}: local Git change not sent: view only.");
             try { move = await peer.AdoptGitFollow(folder.Name, repo.Path, there, here, cancel); }
             catch (HexLinkException error) when (error.Code == HexLinkErrors.NOT_ALLOWED)
             {

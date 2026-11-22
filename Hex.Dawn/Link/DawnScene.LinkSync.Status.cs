@@ -6,8 +6,12 @@ internal sealed partial class DawnScene
         [.. peer.RemoteSyncReport.Select(status => new LinkSyncShown(peer.Device.Id, peer.Device.Name, status.Folder, status.State,
             $"{status.Folder} managed by {peer.Device.Name}: {status.Received} sent, {status.Sent} received, " +
             $"{status.Conflicts} conflicts, {status.Skipped} skipped",
-            status.Why, status.Received, status.Sent, status.Conflicts, status.Skipped, status.PullOnly,
+            CanSendToAuthority(peer) ? status.Why : "Changes saved here are not sent: view only.",
+            status.Received, status.Sent, status.Conflicts, status.Skipped, !CanSendToAuthority(peer),
             status.FilesDone, status.FilesTotal, status.BytesDone, status.BytesTotal, status.Queued, status.Detail))];
+
+    private static bool CanSendToAuthority(HexLinkPeer peer) =>
+        HexLinkAllowed.Has(peer.Granted, HexLinkRights.Edit);
 
     private void LinkReportSync(string deviceId)
     {

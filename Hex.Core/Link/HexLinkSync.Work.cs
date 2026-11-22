@@ -154,13 +154,12 @@ internal sealed partial class HexLinkSync
             ready = true;
             State = pullOnly ? HexLinkSyncState.PullOnly : HexLinkSyncState.Syncing;
             Why = pullOnly ? $"{peer.Device.Name} doesn't let this device write there (Edit)" : null;
+            followPoll = followRepositories.Length != 0 ? Task.Run(() => PollGitFollow(stop)) : Task.CompletedTask;
         }
 
         watch.Seed(actual);
         Notify();
         _ = Task.Run(() => Work(stop));
-        if (followRepositories.Length != 0)
-            _ = Task.Run(() => PollGitFollow(stop));
         if (differ.Count > 0)
             wake.Release((differ.Count + MOST_BATCH - 1) / MOST_BATCH);
         CheckIdle();
@@ -400,6 +399,11 @@ internal sealed partial class HexLinkSync
         }
         else
         {
+            if (!CanReceive)
+            {
+                Skip(wire, VIEW_ONLY_REPLICA);
+                return true;
+            }
             await RenameLocal(from, to, expected, stop);
             tree.NoteCase(after[prefix.Length..]);
         }
@@ -760,6 +764,8 @@ internal sealed partial class HexLinkSync
         }
 
         Unskip(wire);
+        if (!CanReceive && await ReconcileWithoutReplicaEdits(wire, full, mine, theirs, agreed, localBytes, stop))
+            return;
         if (held?.HasUnsavedChanges != true && mine is not null && theirs is not null &&
             await ReconcileMode(wire, full, mine, theirs, agreed, localBytes, stop))
             return;
@@ -1112,7 +1118,8 @@ internal sealed partial class HexLinkSync
         if (bytes is not null)
         {
             (string copyFull, copy) = Beside(full, wire);
-            hash = await HexLinkFiles.CompareAndReplace(copyFull, copy, null, bytes, stop);
+            using var allowed = ReceiveLease(stop);
+            hash = await HexLinkFiles.CompareAndReplace(copyFull, copy, null, bytes, allowed?.Token ?? stop);
         }
         lock (gate)
         {
@@ -1157,7 +1164,8 @@ internal sealed partial class HexLinkSync
             }
 
             (string copyFull, copy) = Beside(full, wire);
-            copyHash = await HexLinkFiles.CompareAndReplace(copyFull, copy, null, file.Bytes, stop);
+            using var allowed = ReceiveLease(stop);
+            copyHash = await HexLinkFiles.CompareAndReplace(copyFull, copy, null, file.Bytes, allowed?.Token ?? stop);
         }
 
         lock (gate)
@@ -1221,10 +1229,16 @@ internal sealed partial class HexLinkSync
 
     private void UpdateRights()
     {
+        if ((BoundAuthorityEngine && !HexLinkAllowed.Has(peer.Granted, HexLinkRights.Edit)) ||
+            (BoundPullMirror && !HexLinkAllowed.Has(peer.Granted, HexLinkRights.View)))
+        {
+            Stop();
+            return;
+        }
         lock (gate)
         {
             rightsVersion++;
-            bool nowPullOnly = !HexLinkAllowed.Has(peer.Granted, HexLinkRights.Edit);
+            bool nowPullOnly = BoundPullMirror || !HexLinkAllowed.Has(peer.Granted, HexLinkRights.Edit);
             if (!live || pullOnly == nowPullOnly)
                 return;
             pullOnly = nowPullOnly;
@@ -1279,6 +1293,8 @@ internal sealed partial class HexLinkSync
                 return;
             waiting = drained;
             drained = null;
+            stoppingWork?.TrySetResult();
+            stoppingWork = null;
             ResetProgress();
             if (State == HexLinkSyncState.Syncing)
             {

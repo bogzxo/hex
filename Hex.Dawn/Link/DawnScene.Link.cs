@@ -476,6 +476,11 @@ internal sealed partial class DawnScene
         linkTrust?.Seen(peer.Device.Id, peer.Device, string.Empty);
         RememberLinkAddresses(peer);
         peer.AddressesMoved += () => PostLink(() => RememberLinkAddresses(peer));
+        peer.RightsChanged += () =>
+        {
+            if (LinkPeerOf(peer.Device.Id) == peer)
+                LinkSyncRightsChangedLocally(peer);
+        };
         peer.ViewRestored += () => PostLink(() =>
         {
             if (link?.PeerOf(peer.Device.Id) == peer && HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))

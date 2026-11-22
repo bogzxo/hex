@@ -107,6 +107,7 @@ internal sealed partial class DawnScene
         test.Run(() =>
         {
             if (source is not null && get is { IsCompletedSuccessfully: true, Result: null }
+                && LinkSyncOf(source.Device.Id, FOLLOW_TEST_FOLDER) is null
                 && linkServices?.FolderAuthorities.Of(new HexLinkFolder(FOLLOW_TEST_FOLDER, destination))?.DeviceId == source.Device.Id)
                 File.WriteAllText(Path.Combine(home, "git-follow-ready.txt"), "ready");
         });
@@ -120,7 +121,7 @@ internal sealed partial class DawnScene
             && ProvisionTestGit(destination, "rev-parse", "HEAD") == ReadProvisionTestFile(target)
             && ProvisionTestGit(destination, "branch", "--show-current") == "device-topic"
             && ProvisionTestGit(destination, "status", "--porcelain") == string.Empty);
-        Task? flushed = null;
+        Task<string?>? flushed = null;
         test.Run(() =>
         {
             ProvisionTestGit(destination, "config", "user.email", "link.test@example.com");
@@ -128,16 +129,18 @@ internal sealed partial class DawnScene
             File.WriteAllText(file, FOLLOW_TEST_REVERSE);
             ProvisionTestGit(destination, "commit", "-qam", "reverse");
             File.WriteAllText(Path.Combine(home, "git-follow-returned.txt"), ProvisionTestGit(destination, "rev-parse", "HEAD"));
-            if (source is not null && LinkSyncOf(source.Device.Id, FOLLOW_TEST_FOLDER) is { } sync)
-                flushed = sync.Flush();
+            if (source is not null)
+                flushed = LinkFlushSync(source, FOLLOW_TEST_FOLDER, CancellationToken.None, start: false);
         });
         test.WaitFor(() => flushed is { IsCompleted: true }, 85.0f);
         test.Check("link-git-follow: the authority accepted the joiner's commit and its working file", () =>
         {
             if (flushed?.Exception is { } error)
                 Console.WriteLine($"[Hex self-test] link-git-follow: {error.GetBaseException().Message}");
-            return flushed is { IsCompletedSuccessfully: true } && source is not null
-                && LinkSyncOf(source.Device.Id, FOLLOW_TEST_FOLDER)?.RemoteHead == ReadProvisionTestFile(Path.Combine(home, "git-follow-returned.txt"));
+            if (flushed is { IsCompletedSuccessfully: true, Result: { } failure })
+                Console.WriteLine($"[Hex self-test] link-git-follow: {failure}");
+            return flushed is { IsCompletedSuccessfully: true, Result: null } && source is not null
+                && LinkSyncOf(source.Device.Id, FOLLOW_TEST_FOLDER) is null;
         });
         test.Run(StopLink);
     }

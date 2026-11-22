@@ -175,6 +175,8 @@ internal sealed partial class DawnScene
             return false;
         linkAudit?.Write("rights", id, string.Join(' ', HexLinkTrust.RightsNames(rights)));
         link?.RightsMoved(id);
+        if (LinkPeerOf(id) is { } peer)
+            LinkSyncRightsChangedLocally(peer);
         linkDirty = true;
         return true;
     }

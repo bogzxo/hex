@@ -74,7 +74,8 @@ internal sealed partial class HexLinkSync
             return false;
         if (!PlatformPaths.Comparer.Equals(full, Jailed(wire)))
             throw new HexLinkException(HexLinkErrors.CONFLICT, "The streamed file path changed before it was written.");
-        await ApplyStream(full, wire, expected, content, length, hash, cancel, executable);
+        using var allowed = ReceiveLease(cancel);
+        await ApplyStream(full, wire, expected, content, length, hash, allowed?.Token ?? cancel, executable);
         if (content is not null)
             tree.RememberMode(full, executable);
         return true;

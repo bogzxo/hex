@@ -210,7 +210,9 @@ internal sealed partial class DawnScene
     {
         if (runsIn is null)
             return string.Empty;
-        LinkSyncShown? sync = LinkSyncs.FirstOrDefault(each => each.DeviceId == peer.Device.Id && PlatformPaths.Comparer.Equals(each.Folder, runsIn));
+        LinkSyncShown? sync = LinkSyncs.FirstOrDefault(each => each.DeviceId == peer.Device.Id && PlatformPaths.Comparer.Equals(each.Folder, runsIn)
+                && each.State != HexLinkSyncState.Off)
+            ?? LinkRemoteSyncs(peer).FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Folder, runsIn));
         if (sync is { State: HexLinkSyncState.Idle or HexLinkSyncState.Syncing })
             return $"{runsIn} is synced with this machine, call hex_link_sync flush before telling it to build what you changed here.";
         if (sync is { State: HexLinkSyncState.PullOnly })
@@ -224,26 +226,33 @@ internal sealed partial class DawnScene
     // A folder's sync started (or taken as it is when it's running) and flushed; null when everything here is there, why when it isn't
     private async Task<string?> LinkSyncStartAndFlush(HexLinkPeer peer, string folder, bool force, CancellationToken cancel)
     {
-        if (await LinkSyncStart(peer.Device.Id, folder, force) is { } why)
-            return why;
-        if (LinkSyncOf(peer.Device.Id, folder) is not { } sync)
-            return $"the sync of {folder} with {peer.Device.Name} went away as it started.";
-        if (sync.State is HexLinkSyncState.NeedsGit or HexLinkSyncState.Failed or HexLinkSyncState.Off)
-            return sync.Summary + (sync.State == HexLinkSyncState.NeedsGit ? " (start with force to sync anyway)" : string.Empty);
+        return await LinkFlushSync(peer, folder, cancel, start: true, force);
+    }
+
+    private async Task<string?> LinkFlushSync(HexLinkPeer peer, string folder, CancellationToken cancel, bool start, bool force = false)
+    {
         try
         {
             using var patience = CancellationTokenSource.CreateLinkedTokenSource(cancel);
             patience.CancelAfter(LINK_SYNC_PATIENCE);
+            if (start && await LinkSyncStart(peer.Device.Id, folder, force, cancel: patience.Token) is { } why)
+                return why;
+            if (await LinkFlushBoundReplica(peer, folder, patience.Token))
+                return null;
+            if (LinkSyncOf(peer.Device.Id, folder) is not { State: not HexLinkSyncState.Off } sync)
+                return $"{folder} isn't being synced with {peer.Device.Name}, hex_link_sync start turns it on.";
+            if (sync.State is HexLinkSyncState.NeedsGit or HexLinkSyncState.Failed)
+                return sync.Summary + (sync.State == HexLinkSyncState.NeedsGit ? " (start with force to sync anyway)" : string.Empty);
             await sync.Flush(patience.Token);
             return null;
         }
-        catch (InvalidOperationException e)
+        catch (Exception e) when (e is InvalidOperationException or HexLinkException)
         {
             return e.Message;
         }
         catch (OperationCanceledException) when (!cancel.IsCancellationRequested)
         {
-            return $"it didn't finish in {LINK_SYNC_PATIENCE.TotalMinutes} minutes, {sync.Summary}";
+            return $"Sync of {folder} didn't finish in {LINK_SYNC_PATIENCE.TotalMinutes} minutes.";
         }
     }
 
@@ -268,12 +277,12 @@ internal sealed partial class DawnScene
             case "flush":
             {
                 bool flushing = action == "flush";
-                if (flushing && LinkSyncOf(peer.Device.Id, folder!) is not { State: HexLinkSyncState.Idle or HexLinkSyncState.Syncing or HexLinkSyncState.PullOnly })
-                    return McpToolResult.Error($"{folder} isn't being synced with {peer.Device.Name}, hex_link_sync start turns it on.");
-                if (await LinkSyncStartAndFlush(peer, folder!, !flushing && args.Flag("force"), cancel) is { } why)
+                if (await LinkFlushSync(peer, folder!, cancel, start: !flushing, force: !flushing && args.Flag("force")) is { } why)
                     return McpToolResult.Error(flushing ? why : $"{folder} isn't synced with {peer.Device.Name}: {why}");
-                if (LinkSyncOf(peer.Device.Id, folder!) is not { } sync)
-                    return McpToolResult.Error($"The sync of {folder} with {peer.Device.Name} stopped.");
+                if (LinkSyncOf(peer.Device.Id, folder!) is not { State: not HexLinkSyncState.Off } sync)
+                    return McpToolResult.Text(CanSendToAuthority(peer)
+                        ? $"{folder} flushed on its authority {peer.Device.Name}. Use hex_link_sync status to review conflicts and skipped files."
+                        : $"{folder} flushed on its authority {peer.Device.Name}. Changes saved here are not sent: view only.");
 
                 if (sync.PullOnly)
                     return McpToolResult.Text($"{sync.Summary}. Pull-only: changes saved here stay here.");
@@ -354,6 +363,8 @@ internal sealed partial class DawnScene
                 .Append(" [").Append(report.State.ToString().ToLowerInvariant()).Append("]: ")
                 .Append(report.Received).Append(" sent, ").Append(report.Sent).Append(" received, ")
                 .Append(report.Conflicts).Append(" conflicts, ").Append(report.Skipped).AppendLine(" skipped");
+            if (!CanSendToAuthority(peer))
+                said.AppendLine("  Changes saved here are not sent: view only.");
             if (report.Why is { Length: > 0 } why)
                 said.Append("  ").AppendLine(why);
             foreach (HexLinkSyncSkipped conflict in report.ConflictSamples)

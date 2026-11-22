@@ -146,9 +146,9 @@ internal sealed partial class DawnScene
         }
     }
 
-    private async Task<string?> LinkStartProvisionedSync(HexLinkPeer peer, string folder)
+    private async Task<string?> LinkStartProvisionedSync(HexLinkPeer peer, string folder, CancellationToken cancel = default)
     {
-        string? why = await LinkSyncStart(peer.Device.Id, folder);
+        string? why = await LinkSyncStart(peer.Device.Id, folder, cancel: cancel);
         return why ?? (LinkSyncOf(peer.Device.Id, folder) is { State: HexLinkSyncState.Failed or HexLinkSyncState.NeedsGit } sync ? sync.Why : null);
     }
 

@@ -112,16 +112,41 @@ internal sealed partial class DawnScene
             File.Exists(Path.Combine(joiner, "outside-limit.tar"))
             && new FileInfo(Path.Combine(joiner, "outside-limit.tar")).Length == HexLinkFiles.MOST_READ + 20L);
 
+        string upgrade = Path.Combine(peerHome, "allow-owner.txt");
+        string viewCheck = Path.Combine(peerHome, "view-verified.txt");
+        string mirrorFile = Path.Combine(joiner, "mirror-edit.txt");
+        test.Check("link-provision: the owner has no engine when the replica grants no rights", () =>
+            peer is not null && !HexLinkAllowed.Has(peer.Granted, HexLinkRights.View)
+                && LinkSyncOf(peer.Device.Id, LINK_PROVISION_TEST_SOURCE) is null);
+        test.Run(() => File.WriteAllText(Path.Combine(root, "mirror-edit.txt"), "One-way mirror.\n"));
+        test.WaitFor(() => ReadProvisionTestFile(mirrorFile) == "One-way mirror.\n", 35.0f);
+        test.Check("link-provision: the one-way View mirror received a host edit", () =>
+            ReadProvisionTestFile(mirrorFile) == "One-way mirror.\n");
+        test.Run(() => File.WriteAllText(upgrade, "grant reverse Edit"));
+        test.WaitFor(() => peer is not null && LinkSyncOf(peer.Device.Id, LINK_PROVISION_TEST_SOURCE) is
+            { BoundAuthorityEngine: true, State: HexLinkSyncState.Idle }, 45.0f);
+        test.Check("link-provision: granting reverse Edit moved the engine to the pinned authority", () =>
+            peer is not null && LinkSyncOf(peer.Device.Id, LINK_PROVISION_TEST_SOURCE) is
+                { BoundAuthorityEngine: true, State: HexLinkSyncState.Idle });
+        test.WaitFor(() => File.Exists(viewCheck), 45.0f);
+        test.Check("link-provision: the owner never took the View-only replica's file or commit", () =>
+            File.Exists(viewCheck) && !File.Exists(Path.Combine(root, "view-only.txt"))
+                && ProvisionTestGit(root, "log", "-1", "--format=%s") == "Initial commit");
+        test.Run(() =>
+        {
+            if (peer is not null)
+                LinkSetRights(peer.Device.Id, PROVISION_TEST_EDIT);
+        });
+
         HexLinkPeer? replacement = null;
         test.Run(() =>
         {
-            if (peer is null)
-                return;
-            LinkSetRights(peer.Device.Id, PROVISION_TEST_EDIT);
-            link?.Remove(peer.Device.Id, "the provisioning self-test is checking reconnect");
+            int port = LinkPort;
+            StopLink();
+            linkByTest = StartLink(port: port, home: home, loopbackOnly: true);
         });
         test.WaitFor(() => (replacement = LinkPeers.FirstOrDefault()) is not null && replacement != peer, 50.0f);
-        test.Check("link-provision: dropped connection redialled", () => replacement is not null && replacement != peer);
+        test.Check("link-provision: authority Link restarted and the replica reconnected", () => replacement is not null && replacement != peer);
         test.Run(() => File.WriteAllText(Path.Combine(submodule, "committed.txt"), PROVISION_TEST_AFTER));
         test.WaitFor(() => ReadProvisionTestFile(Path.Combine(joinedModule, "committed.txt")) == PROVISION_TEST_AFTER, 35.0f);
         test.Check("link-provision: a host edit reached the joiner after automatic reconnect", () =>
@@ -129,6 +154,13 @@ internal sealed partial class DawnScene
         test.WaitFor(() => ReadProvisionTestFile(Path.Combine(nested, "joiner.txt")) == PROVISION_TEST_BACK, 35.0f);
         test.Check("link-provision: a later joiner edit reached the host", () =>
             ReadProvisionTestFile(Path.Combine(nested, "joiner.txt")) == PROVISION_TEST_BACK);
+        test.WaitFor(() => LinkPeers.FirstOrDefault() is { } rejoined && rejoined != replacement &&
+            LinkSyncOf(rejoined.Device.Id, LINK_PROVISION_TEST_SOURCE) is { BoundAuthorityEngine: true, State: HexLinkSyncState.Idle },
+            60.0f);
+        test.Check("link-provision: the authority resumed its engine after the replica restarted", () =>
+            LinkPeers.FirstOrDefault() is { } rejoined && rejoined != replacement &&
+            LinkSyncOf(rejoined.Device.Id, LINK_PROVISION_TEST_SOURCE) is { BoundAuthorityEngine: true, State: HexLinkSyncState.Idle });
+        test.Run(() => File.WriteAllText(Path.Combine(root, "replica-restart.txt"), "Resumed.\n"));
         test.WaitFor(() => linkTestPeer is { HasExited: true }, 50.0f);
         test.Check("link-provision: joiner completed its checks before the host closed the link", () =>
             linkTestPeer is { HasExited: true, ExitCode: 0 });
@@ -153,7 +185,7 @@ internal sealed partial class DawnScene
                 return;
             linkByTest = true;
             started = true;
-            _ = LinkPair(host, port, _ => Task.FromResult<HexLinkRights?>(PROVISION_TEST_EDIT));
+            _ = LinkPair(host, port, _ => Task.FromResult<HexLinkRights?>(HexLinkRights.None));
         });
         test.Check("link-provision: joiner started empty", () => started && !Directory.Exists(destination));
         test.WaitFor(() => LinkPeers.FirstOrDefault() is { } peer
@@ -184,25 +216,76 @@ internal sealed partial class DawnScene
             && getting.Result.AllText().Contains($"Skipped nested/module/{PROVISION_TEST_UNINITIALIZED}. Submodule is uninitialized", StringComparison.Ordinal)
             && !getting.Result.AllText().Contains("Skipped outside-limit.tar", StringComparison.Ordinal));
 
+        string upgrade = Path.Combine(home, "allow-owner.txt");
+        test.WaitFor(() => File.Exists(upgrade), 60.0f);
+        test.Run(() =>
+        {
+            if (hostId is not null)
+                LinkSetRights(hostId, PROVISION_TEST_EDIT);
+        });
+        test.WaitFor(() => LinkPeers.FirstOrDefault() is { } authority &&
+            LinkRemoteSyncs(authority).Any(sync => sync.Folder == LINK_PROVISION_TEST_SOURCE && sync.PullOnly)
+            && LinkSyncOf(authority.Device.Id, LINK_PROVISION_TEST_SOURCE) is { State: HexLinkSyncState.Off }, 65.0f);
+        test.Check("link-provision: the mirror stopped and the replica sees authority-owned pull-only sync", () =>
+            LinkPeers.FirstOrDefault() is { } authority &&
+            LinkRemoteSyncs(authority).Any(sync => sync.Folder == LINK_PROVISION_TEST_SOURCE && sync.PullOnly)
+            && LinkSyncOf(authority.Device.Id, LINK_PROVISION_TEST_SOURCE) is { State: HexLinkSyncState.Off });
+        Task<McpToolResult>? readOnlyFlush = null;
+        test.Run(() =>
+        {
+            if (LinkPeers.FirstOrDefault() is not { } authority)
+                return;
+            ProvisionTestGit(destination, "config", "user.email", "link-test@example.com");
+            ProvisionTestGit(destination, "config", "user.name", "Link Test");
+            File.WriteAllText(Path.Combine(destination, "view-only.txt"), "Local only.\n");
+            ProvisionTestGit(destination, "add", "view-only.txt");
+            ProvisionTestGit(destination, "commit", "-qm", "Replica View-only commit");
+            readOnlyFlush = LinkSyncTool(new JsonObject
+            {
+                ["device"] = authority.Device.Id, ["action"] = "flush", ["folder"] = LINK_PROVISION_TEST_SOURCE
+            }, CancellationToken.None);
+        });
+        test.WaitFor(() => readOnlyFlush is { IsCompleted: true }, 35.0f);
+        test.Check("link-provision: a View-only replica flush says its local edits are not sent", () =>
+            readOnlyFlush is { IsCompletedSuccessfully: true, Result.IsError: false }
+                && readOnlyFlush.Result.AllText().Contains("not sent: view only", StringComparison.Ordinal));
+        test.Run(() =>
+        {
+            ProvisionTestGit(destination, "reset", "--mixed", "HEAD^");
+            File.Delete(Path.Combine(destination, "view-only.txt"));
+            File.WriteAllText(Path.Combine(home, "view-verified.txt"), "checked");
+        });
+
         string changed = Path.Combine(destination, "nested", "module", "committed.txt");
-        test.WaitFor(() => ReadProvisionTestFile(changed) == PROVISION_TEST_AFTER
-            && hostId is not null && LinkSyncOf(hostId, LINK_PROVISION_TEST_SOURCE) is { PullOnly: false }, 95.0f);
+        test.WaitFor(() => ReadProvisionTestFile(changed) == PROVISION_TEST_AFTER && LinkPeers.FirstOrDefault() is { } source
+            && LinkRemoteSyncs(source).Any(sync => sync.Folder == LINK_PROVISION_TEST_SOURCE && !sync.PullOnly), 95.0f);
         test.Check("link-provision: joiner resumed the saved folder alias and received its host's edit", () =>
             ReadProvisionTestFile(changed) == PROVISION_TEST_AFTER);
         test.Run(() => File.WriteAllText(Path.Combine(destination, "nested", "joiner.txt"), PROVISION_TEST_BACK));
-        Task? flushed = null;
+        Task<string?>? flushed = null;
         test.Run(() =>
         {
-            if (hostId is not null && LinkSyncOf(hostId, LINK_PROVISION_TEST_SOURCE) is { } sync)
-                flushed = sync.Flush();
+            if (LinkPeers.FirstOrDefault() is { } source)
+                flushed = LinkFlushSync(source, LINK_PROVISION_TEST_SOURCE, CancellationToken.None, start: false);
         });
         test.WaitFor(() => flushed is { IsCompleted: true }, 35.0f);
         test.Check("link-provision: joiner flushed its edit to the host", () =>
         {
             if (flushed?.Exception is { } error)
                 Console.WriteLine($"[Hex self-test] link-provision: flush failed, {error.GetBaseException().Message}");
-            return flushed is { IsCompletedSuccessfully: true };
+            if (flushed is { IsCompletedSuccessfully: true, Result: { } failure })
+                Console.WriteLine($"[Hex self-test] link-provision: {failure}");
+            return flushed is { IsCompletedSuccessfully: true, Result: null };
         });
+        test.Run(() =>
+        {
+            StopLink();
+            linkByTest = StartLink(port: 0, home: Path.Combine(home, "provision-link"), loopbackOnly: true);
+        });
+        string resumed = Path.Combine(destination, "replica-restart.txt");
+        test.WaitFor(() => ReadProvisionTestFile(resumed) == "Resumed.\n", 75.0f);
+        test.Check("link-provision: the restarted replica kept its saved alias and received a host edit", () =>
+            ReadProvisionTestFile(resumed) == "Resumed.\n");
         test.Run(StopLink);
     }
 
