@@ -77,7 +77,8 @@ internal sealed partial class DawnScene
         editor.ArtPath = name => ArtFileOf(prepared, name);
         editor.ArtSkin = () => stage.Skin;
         editor.OnContextMenu = point => codeEditing.ShowCodeMenu(prepared, point, AddSpellingMenu);
-        PreparePrediction(prepared);
+        if (predictions is not null)
+            PreparePrediction(prepared);
     }
 
     /// <summary>

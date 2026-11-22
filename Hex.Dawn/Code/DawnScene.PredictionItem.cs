@@ -15,6 +15,8 @@ internal sealed partial class DawnScene
     private const string PREDICTION_MENU = "Edit/comment/prediction";
 
     private StatusItem predictionItem = null!;
+    private Menu predictionMenu = null!;
+    private bool activePredictionCommandsAdded;
 
     // What the item was last written from
     private PredictionItemState predictionItemState = PredictionItemState.Hidden;
@@ -57,21 +59,33 @@ internal sealed partial class DawnScene
     /// <summary>The commands, in a menu of their own under Edit and in the palette, their keys rebindable.</summary>
     private void AddPredictionCommands()
     {
-        commands.DeclareSubmenu("Edit/comment", "prediction", Said("prediction.menu"), "sparkle");
+        predictionMenu = commands.DeclareSubmenu("Edit/comment", "prediction", Said("prediction.menu"), "sparkle");
+        var toggle = commands.Add(PREDICTION_MENU, Said("prediction.toggle"), TogglePredictions, icon: "sparkle");
+        toggle.IsChecked = () => settings.EditPredictions;
+        commands.Add(PREDICTION_MENU, Said("prediction.settings"), () => OpenSettings(EditorSettingsCatalog.AI), icon: "settings-gear");
+    }
 
-        bool Usable() => !HexAi.Off;
-        bool InCode() => Usable() && !LayoutTools && IsPredictedCode(document);
+    private void AddActivePredictionCommands()
+    {
+        if (activePredictionCommandsAdded)
+            return;
+        activePredictionCommandsAdded = true;
+        bool InCode() => settings.EditPredictions && !LayoutTools && IsPredictedCode(document);
         bool Asking() => InCode() && PredictionSettings.On(settings) && PredictionSettings.Configured(settings);
 
-        MenuItem toggle = commands.Add(PREDICTION_MENU, Said("prediction.toggle"), TogglePredictions, icon: "sparkle");
-        toggle.IsVisible = Usable;
-        toggle.IsChecked = () => settings.EditPredictions;
-        commands.Add(PREDICTION_MENU, Said("prediction.toggle_language"), TogglePredictionsForLanguage, icon: "symbol-misc").IsEnabled = InCode;
-        commands.Add(PREDICTION_MENU, Said("prediction.predict_now"), PredictNow, "Alt+\\", "sparkle", UIKeyUse.BoundWhileTyping).IsEnabled = Asking;
-        commands.Add(PREDICTION_MENU, Said("prediction.accept"), () => code.AcceptPrediction(), "Alt+L", "check", UIKeyUse.BoundWhileTyping).IsEnabled = () => InCode() && code.HasPrediction;
-        commands.Add(PREDICTION_MENU, Said("prediction.accept_word"), () => code.AcceptPredictionWord(), icon: "arrow-right").IsEnabled = () => InCode() && code.PredictionIsGhost;
-        commands.Add(PREDICTION_MENU, Said("prediction.dismiss"), () => code.ClearPrediction(), icon: "close").IsEnabled = () => InCode() && code.HasPrediction;
-        commands.Add(PREDICTION_MENU, Said("prediction.settings"), () => OpenSettings(EditorSettingsCatalog.AI), icon: "settings-gear").IsVisible = Usable;
+        void Add(MenuItem item, Func<bool> enabled)
+        {
+            item.IsEnabled = enabled;
+            item.IsVisible = () => settings.EditPredictions;
+            predictionMenu.Add(item);
+        }
+
+        Add(commands.Add(PREDICTION_MENU, Said("prediction.toggle_language"), TogglePredictionsForLanguage, icon: "symbol-misc"), InCode);
+        Add(commands.Add(PREDICTION_MENU, Said("prediction.predict_now"), PredictNow, "Alt+\\", "sparkle", UIKeyUse.BoundWhileTyping), Asking);
+        Add(commands.Add(PREDICTION_MENU, Said("prediction.accept"), () => code.AcceptPrediction(), "Alt+L", "check", UIKeyUse.BoundWhileTyping), () => InCode() && code.HasPrediction);
+        Add(commands.Add(PREDICTION_MENU, Said("prediction.accept_word"), () => code.AcceptPredictionWord(), icon: "arrow-right"), () => InCode() && code.PredictionIsGhost);
+        Add(commands.Add(PREDICTION_MENU, Said("prediction.dismiss"), () => code.ClearPrediction(), icon: "close"), () => InCode() && code.HasPrediction);
+        ApplyKeyLayer(force: true);
     }
 
     /// <summary>Edit predictions switched on or off, in the user's settings.</summary>
@@ -80,11 +94,8 @@ internal sealed partial class DawnScene
         if (HexAi.Off)
             return;
         settings.EditPredictions = !settings.EditPredictions;
-        if (!settings.EditPredictions)
-        {
-            code.ClearPrediction();
-            predictions.Forget(document);
-        }
+        if (!settings.EditPredictions && predictions is not null)
+            StopPredictions();
         SaveSettings();
         SettingsPage?.Refresh("edit_predictions");
         Say(Said(settings.EditPredictions ? "prediction.on_now" : "prediction.off_now"));
@@ -104,7 +115,7 @@ internal sealed partial class DawnScene
         if (!off)
         {
             code.ClearPrediction();
-            predictions.Forget(document);
+            predictions?.Forget(document);
         }
         SaveSettings();
         SettingsPage?.Refresh("edit_predictions_disabled_languages");
@@ -115,8 +126,10 @@ internal sealed partial class DawnScene
     /// <summary>A prediction asked for now, whatever was dismissed or failed before.</summary>
     private void PredictNow()
     {
-        if (HexAi.Off || LayoutTools || !IsPredictedCode(document))
+        if (!PredictionSettings.On(settings) || LayoutTools || !IsPredictedCode(document))
             return;
+        if (predictions is null)
+            StartPredictions();
         predictions.Edited(document, code.Document.Version);
         predictions.PredictNow(document);
     }

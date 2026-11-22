@@ -5,7 +5,7 @@ namespace Hex.Dawn;
 
 internal sealed partial class DawnScene
 {
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> linkSyncActivation = new(StringComparer.OrdinalIgnoreCase);
+    private ConcurrentDictionary<string, SemaphoreSlim> linkSyncActivation { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.OrdinalIgnoreCase)); }
 
     private bool LinkSyncOptedOut(string device, string folder) =>
         LinkSyncChoices().Any(choice => HexLinkData.String(choice, "device", 200) == device &&

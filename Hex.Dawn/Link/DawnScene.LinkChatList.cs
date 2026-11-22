@@ -21,7 +21,7 @@ internal sealed partial class DawnScene
     private static readonly HexLinkChatSection[] linkChatSections = [HexLinkChatSection.Running, HexLinkChatSection.Finished];
 
     private HexChatListFolds? linkChatFolds;
-    private readonly Dictionary<string, bool> linkChatUsualSeen = new(StringComparer.Ordinal);
+    private Dictionary<string, bool> linkChatUsualSeen { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.Ordinal)); }
     private int linkChatFoldsVersion;
     private (UIComponent List, ChatListHeadButton Previous)? linkChatRefocus;
 
@@ -49,10 +49,10 @@ internal sealed partial class DawnScene
         Engine.WindowManager.RequestFrames();
     }
 
-    private readonly Dictionary<string, (LinkChatDevice Device, string Address, HexLinkEndpoint? Preferred)> linkChatsLast = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, DateTime> linkChatsSeenAt = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<(string Device, int Id), string> linkRowStates = [];
-    private readonly HashSet<(string Device, int Id)> linkFailedUnseen = [];
+    private Dictionary<string, (LinkChatDevice Device, string Address, HexLinkEndpoint? Preferred)> linkChatsLast { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.OrdinalIgnoreCase)); }
+    private Dictionary<string, DateTime> linkChatsSeenAt { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.OrdinalIgnoreCase)); }
+    private Dictionary<(string Device, int Id), string> linkRowStates { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
+    private HashSet<(string Device, int Id)> linkFailedUnseen { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
     private List<LinkChatDevice>? linkChatFakes = null;
 
     private static bool ShowsLinkChats(HexLinkPeer peer) =>
@@ -206,8 +206,8 @@ internal sealed partial class DawnScene
     private readonly record struct LinkChatGroupState(LinkChatDevice Device, HexLinkChatCounts Counts, bool Open,
         bool RunningOpen, bool FinishedOpen, int SelectedChat, UISkin? Skin);
     private sealed record LinkChatGroupView(LinkChatGroupState State, StackPanel Root, float Height, Action<float> Refresh);
-    private readonly Dictionary<string, LinkChatGroupView> agentsLinkChatGroups = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, LinkChatGroupView> noonLinkChatGroups = new(StringComparer.Ordinal);
+    private Dictionary<string, LinkChatGroupView> agentsLinkChatGroups { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.Ordinal)); }
+    private Dictionary<string, LinkChatGroupView> noonLinkChatGroups { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.Ordinal)); }
 
     /// <summary>Adds the linked devices after the local chats and returns the height they occupy.</summary>
     private float LinkFleetSections(StackPanel rows, List<Action<float>> refreshes, float inset = 10.0f)

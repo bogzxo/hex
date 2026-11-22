@@ -83,7 +83,7 @@ internal sealed partial class DawnScene
 
     private HexLinkPairingTerms LinkInvitationTerms()
     {
-        LinkInviteOptions chosen = Volatile.Read(ref linkInviteOptions);
+        LinkInviteOptions chosen = linkInviteOptions;
         return new HexLinkPairingTerms(chosen.Preset, chosen.Rights, LinkPresetRequest(chosen.Preset), linkAutoShareAvailable && chosen.Share);
     }
 

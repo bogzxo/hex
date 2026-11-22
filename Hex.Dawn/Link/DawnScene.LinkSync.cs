@@ -31,8 +31,8 @@ internal sealed partial class DawnScene
     private string linkKeys = string.Empty;
 
     // The syncs by device and folder, running or not, touched from the tools' threads as well as the editor's
-    private readonly Dictionary<string, LinkSyncEntry> linkSyncs = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Lock linkSyncGate = new();
+    private Dictionary<string, LinkSyncEntry> linkSyncs { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.OrdinalIgnoreCase)); }
+    private Lock linkSyncGate { get => LazyInitializer.EnsureInitialized(ref field, static () => new()); }
 
     /// <summary>One sync as this scene keeps it: the device and folder, the engine while there's a link for it, and what's been said of it.</summary>
     private sealed class LinkSyncEntry(string deviceId, string folder)

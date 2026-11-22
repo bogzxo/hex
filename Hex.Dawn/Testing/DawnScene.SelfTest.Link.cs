@@ -30,9 +30,9 @@ internal sealed partial class DawnScene
 
     // B, while it runs, what it printed, and the folders the part made
     private Process? linkTestPeer;
-    private readonly ConcurrentBag<Process> linkTestAdditionalPeers = new();
-    private readonly ConcurrentQueue<string> linkTestPeerSaid = new();
-    private readonly List<string> linkTestFolders = [];
+    private ConcurrentBag<Process> linkTestAdditionalPeers { get => LazyInitializer.EnsureInitialized(ref field, static () => new()); }
+    private ConcurrentQueue<string> linkTestPeerSaid { get => LazyInitializer.EnsureInitialized(ref field, static () => new()); }
+    private List<string> linkTestFolders { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
 
     private bool LinkTestBoundOnlyToLoopback =>
         System.Net.IPAddress.Loopback.Equals(linkTransport?.ListeningAddress) && linkDiscovery is null;

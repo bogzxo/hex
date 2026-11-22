@@ -114,7 +114,7 @@ internal sealed partial class DawnScene
     // The repositories of the workspace, by their top folders here
     private IReadOnlyList<HexLinkRepository> LinkLocalRepositories => linkServices?.Workspace.Repositories ?? [];
 
-    private readonly SemaphoreSlim linkProvisioning = new(1, 1);
+    private SemaphoreSlim linkProvisioning { get => LazyInitializer.EnsureInitialized(ref field, static () => new(1, 1)); }
 
     internal async Task<string?> LinkAlignWorkspace(string deviceId, string folder, IProgress<HexLinkProvisionProgress>? progress = null,
         CancellationToken cancel = default)
@@ -310,7 +310,7 @@ internal sealed partial class DawnScene
         }
     }
 
-    private readonly List<LinkPatchOffer> linkPatches = [];
+    private List<LinkPatchOffer> linkPatches { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
 
     /// <summary>
     /// A patch a device offered, put to the person as a card: Apply (git apply --check first, into the repository here it

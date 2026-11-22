@@ -9,7 +9,7 @@ namespace Hex.Dawn;
 
 internal sealed partial class DawnScene
 {
-    private readonly HashSet<HexLinkSync> linkRepositoryRefreshes = [];
+    private HashSet<HexLinkSync> linkRepositoryRefreshes { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
 
     private HexLinkFolder? LinkMissingRepositoryFolder(string deviceId, string folder) =>
         LinkProvisionedLocal(deviceId, folder) ?? linkServices?.Workspace.Folders.FirstOrDefault(each => each.Name == folder);

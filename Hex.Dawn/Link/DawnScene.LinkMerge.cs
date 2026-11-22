@@ -3,7 +3,7 @@ namespace Hex.Dawn;
 internal sealed partial class DawnScene
 {
     private sealed record LinkMergeDraft(HexLinkSync Sync, string Wire, HexLinkMergePreview Preview);
-    private readonly Dictionary<HexDocument, LinkMergeDraft> linkMergeDrafts = [];
+    private Dictionary<HexDocument, LinkMergeDraft> linkMergeDrafts { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
 
     private void LinkOpenConflictMerge(string deviceId, string path)
     {

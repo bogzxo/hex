@@ -22,7 +22,7 @@ internal sealed partial class DawnScene
     private const string LINK_REMOTE_FOLDER = "remote";
 
     // The open remote tabs by the full path of their copy
-    private readonly Dictionary<string, LinkRemoteTab> linkRemote = new(PlatformPaths.Comparer);
+    private Dictionary<string, LinkRemoteTab> linkRemote { get => LazyInitializer.EnsureInitialized(ref field, static () => new(PlatformPaths.Comparer)); }
     private bool linkRemoteHooked;
 
     /// <summary>A tab of another machine's file: whose, its wire path, the hash it had there when it was last read or written, and whether it may be saved back.</summary>

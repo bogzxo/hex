@@ -14,7 +14,11 @@ internal sealed partial class DawnScene
     private enum LinkDevicePage { Overview, Invite, Join }
 
     private sealed record LinkInviteOptions(HexLinkPreset Preset, HexLinkRights Rights, bool Share);
-    private LinkInviteOptions linkInviteOptions = new(HexLinkPreset.Collaborator, LinkPresetRights(HexLinkPreset.Collaborator), true);
+    private LinkInviteOptions linkInviteOptions
+    {
+        get => LazyInitializer.EnsureInitialized(ref field, static () => new(HexLinkPreset.Collaborator, LinkPresetRights(HexLinkPreset.Collaborator), true));
+        set => Volatile.Write(ref field, value);
+    }
     private HexLinkPreset linkInvitePreset => linkInviteOptions.Preset;
     private HexLinkRights linkInviteRights => linkInviteOptions.Rights;
 
@@ -86,7 +90,7 @@ internal sealed partial class DawnScene
             LinkCanAutoShare(ref linkAutoShareAvailable);
             if (LinkOn && LinkPort != 0 && LinkPairingUntil is null)
             {
-                Volatile.Write(ref linkInviteOptions, new LinkInviteOptions(HexLinkPreset.Collaborator, LinkPresetRights(HexLinkPreset.Collaborator), true));
+                linkInviteOptions = new(HexLinkPreset.Collaborator, LinkPresetRights(HexLinkPreset.Collaborator), true);
                 LinkCreateInvite();
             }
         }
@@ -165,10 +169,10 @@ internal sealed partial class DawnScene
 
             LinkGrantControls(body, linkInvitePreset, linkInviteRights, (preset, rights) =>
             {
-                Volatile.Write(ref linkInviteOptions, linkInviteOptions with
+                linkInviteOptions = linkInviteOptions with
                 {
                     Preset = preset, Rights = rights, Share = preset == HexLinkPreset.Worker || linkInviteOptions.Share
-                });
+                };
                 if (linkInviteShare is not null)
                     linkInviteShare.State = linkAutoShareAvailable && linkInviteOptions.Share;
             }, showBoth: true);
@@ -177,7 +181,7 @@ internal sealed partial class DawnScene
                 Enabled = linkAutoShareAvailable, Anchor = Origin.Left, Pivot = Origin.Left, LabelScale = LINK_TEXT,
                 Tooltip = Said(linkAutoShareAvailable ? "link.devices_auto_share_tip" : "link.devices_provision_pending")
             });
-            share.OnPressed = () => Volatile.Write(ref linkInviteOptions, linkInviteOptions with { Share = share.State });
+            share.OnPressed = () => linkInviteOptions = linkInviteOptions with { Share = share.State };
             if (!linkAutoShareAvailable)
                 body.Add(LinkLine(Said("link.devices_auto_share_unavailable")));
         }

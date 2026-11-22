@@ -13,6 +13,7 @@ internal sealed partial class DawnScene
     /// <summary>Link and the prediction relay bound to each other, once, as Link's status item is made.</summary>
     private void BindLinkPredictions()
     {
+        HexPredictionRelay.Configure(() => MakePredictionOptions(settings), () => !HexAi.Off && PredictionSettings.Share(settings));
         LinkPredictServing = () => HexPredictionRelay.Serving;
         LinkPredictServe = LinkPredictionGlue.Serve;
         LinkPredictSourceChanged -= LinkPredictTakeSource;
@@ -27,7 +28,7 @@ internal sealed partial class DawnScene
         if (settings.EditPredictionsProvider != PredictionProviders.LINK)
             return;
 
-        predictions.LinkSourceChanged();
+        predictions?.LinkSourceChanged();
         predictionItemWritten = false;
         if (predictionShownIn is { } shown)
         {

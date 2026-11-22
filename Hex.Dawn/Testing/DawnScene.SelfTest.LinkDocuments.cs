@@ -13,8 +13,10 @@ internal sealed partial class DawnScene
     private const int LINK_DOC_SAMPLES = 24;
     private int linkDocTestStage, linkDocLatencySample;
     private bool linkDocAuthorityReady;
-    private readonly long[] linkDocWire = new long[LINK_DOC_SAMPLES], linkDocGuestWorker = new long[LINK_DOC_SAMPLES],
-        linkDocReceived = new long[LINK_DOC_SAMPLES], linkDocApplied = new long[LINK_DOC_SAMPLES];
+    private long[] linkDocWire { get => LazyInitializer.EnsureInitialized(ref field, static () => new long[LINK_DOC_SAMPLES]); }
+    private long[] linkDocGuestWorker { get => LazyInitializer.EnsureInitialized(ref field, static () => new long[LINK_DOC_SAMPLES]); }
+    private long[] linkDocReceived { get => LazyInitializer.EnsureInitialized(ref field, static () => new long[LINK_DOC_SAMPLES]); }
+    private long[] linkDocApplied { get => LazyInitializer.EnsureInitialized(ref field, static () => new long[LINK_DOC_SAMPLES]); }
 
     private static string LinkDocSample(int sample) => $"seed{(char)('a' + sample - 1)}";
 

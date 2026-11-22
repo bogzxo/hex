@@ -4,13 +4,13 @@ internal sealed partial class DawnScene
 {
     private sealed record LinkPublicationRuntime(LinkServices Services, string Storage, HexLinkWorktreePublication Publication, HexLinkCoalesce Pump);
     private LinkPublicationRuntime? linkPublicationRuntime;
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, HexLinkCoalesce> privateFollow = new(PlatformPaths.Comparer);
+    private System.Collections.Concurrent.ConcurrentDictionary<string, HexLinkCoalesce> privateFollow { get => LazyInitializer.EnsureInitialized(ref field, static () => new(PlatformPaths.Comparer)); }
 
     private LinkPublicationRuntime? CurrentLinkPublication =>
         Volatile.Read(ref linkPublicationRuntime) is { } active && ReferenceEquals(active.Services, linkServices) &&
         LinkPrivateStoragePath is { } storage && PlatformPaths.Same(active.Storage, storage) ? active : null;
 
-    private readonly SemaphoreSlim publicationStarting = new(1, 1);
+    private SemaphoreSlim publicationStarting { get => LazyInitializer.EnsureInitialized(ref field, static () => new(1, 1)); }
 
     internal async Task LinkEnsureWorktreePublication()
     {
@@ -159,7 +159,7 @@ internal sealed partial class DawnScene
 
     internal void LinkPublicationPairReady() => CurrentLinkPublication?.Pump.Poke();
 
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, SemaphoreSlim> privateDraftStarts = new();
+    private System.Collections.Concurrent.ConcurrentDictionary<Guid, SemaphoreSlim> privateDraftStarts { get => LazyInitializer.EnsureInitialized(ref field, static () => new()); }
 
     private async Task<HexLinkPrivateWorktree> LinkStartPrivateWorktree(LinkServices services, HexLinkFolder folder, Guid id,
         CancellationToken cancel, IReadOnlyList<string>? additional = null, Action<HexLinkWorktreeProgress>? progress = null)
@@ -237,7 +237,6 @@ internal sealed partial class DawnScene
         }, live.Stop), live.Stop);
         await draft.EnsureRepositories(desired, snapshot, null, live.Stop);
     }
-
     internal async Task LinkFollowPrivateWorkingChanges(HexLinkFolder folder, CancellationToken cancel)
     {
         HexLinkPrivateWorktree[] drafts = [.. linkPrivateDrafts.Values.Where(draft => !draft.HoldIncoming &&

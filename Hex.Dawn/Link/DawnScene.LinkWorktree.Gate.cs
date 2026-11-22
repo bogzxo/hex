@@ -5,7 +5,7 @@ namespace Hex.Dawn;
 
 internal sealed partial class DawnScene
 {
-    private readonly Lock worktreeGateSettings = new();
+    private Lock worktreeGateSettings { get => LazyInitializer.EnsureInitialized(ref field, static () => new()); }
 
     private HexMcpTool LinkWorktreeGateTool() => new(new McpTool("hex_link_worktree_gate", "Set a folder's publish gate",
         "Show, set or clear the shared folder's publish gate on its authority. Changes require the authority's person's confirmation. Linked callers need Edit.",

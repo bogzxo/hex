@@ -402,13 +402,14 @@ internal sealed class HexMcpCaller(HexMcpTools tools, int chat) : IMcpTools
 internal sealed class HexMcpTools : IMcpTools
 {
     private readonly DawnScene hex;
-    private readonly Dictionary<string, HexMcpTool> byName;
+    private sealed record Catalog(Dictionary<string, HexMcpTool> ByName, IReadOnlyList<McpTool> Chat, IReadOnlyList<McpTool> Public);
+    private volatile Catalog catalog;
 
     /// <summary>The tools as a client that isn't a chat's sees them, without those that only write a chat's own (hex_plan_update).</summary>
-    public IReadOnlyList<McpTool> Tools { get; }
+    public IReadOnlyList<McpTool> Tools => catalog.Public;
 
     /// <summary>Every tool, as a chat's own connection sees them.</summary>
-    public IReadOnlyList<McpTool> ChatTools { get; }
+    public IReadOnlyList<McpTool> ChatTools => catalog.Chat;
 
     // What only a chat's agent can do, there being no chat to do it to on another connection
     private static readonly HashSet<string> CHAT_ONLY = ["hex_plan_update"];
@@ -416,10 +417,17 @@ internal sealed class HexMcpTools : IMcpTools
     public HexMcpTools(DawnScene hex)
     {
         this.hex = hex;
-        List<HexMcpTool> all = hex.McpToolList();
-        byName = all.ToDictionary(tool => tool.Meta.Name, StringComparer.Ordinal);
-        ChatTools = [.. all.Select(tool => tool.Meta)];
-        Tools = [.. ChatTools.Where(tool => !CHAT_ONLY.Contains(tool.Name))];
+        catalog = BuildCatalog();
+    }
+
+    public void Refresh() => catalog = BuildCatalog();
+
+    private Catalog BuildCatalog()
+    {
+        var all = hex.McpToolList();
+        McpTool[] chat = [.. all.Select(tool => tool.Meta)];
+        return new(all.ToDictionary(tool => tool.Meta.Name, StringComparer.Ordinal), chat,
+            [.. chat.Where(tool => !CHAT_ONLY.Contains(tool.Name))]);
     }
 
     public Task<McpToolResult> Call(string name, JsonObject arguments, CancellationToken cancel) => CallAs(name, arguments, cancel, null);
@@ -431,7 +439,7 @@ internal sealed class HexMcpTools : IMcpTools
 
         // Set for every call, null included, so one client's chat never stays behind for the next call on the same flow
         McpServer.CallingChat.Value = caller;
-        if (!byName.TryGetValue(name, out HexMcpTool? tool))
+        if (!catalog.ByName.TryGetValue(name, out HexMcpTool? tool))
             return Task.FromResult(McpToolResult.Error($"There's no tool called {name}."));
 
         if (caller is { } scoped && hex.LinkScopePrivateAgentCall(scoped, name, arguments) is { } rejected)

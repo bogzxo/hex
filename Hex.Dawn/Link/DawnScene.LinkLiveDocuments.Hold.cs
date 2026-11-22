@@ -3,9 +3,9 @@ namespace Hex.Dawn;
 internal sealed partial class DawnScene
 {
     // The editor thread owns both sets. Keep a join that predates a hold from attaching its old snapshot.
-    private readonly HashSet<string> linkDocumentsTakingHold = new(PlatformPaths.Comparer);
-    private readonly HashSet<string> linkDocumentStaleJoins = new(PlatformPaths.Comparer);
-    private readonly HashSet<string> linkDocumentRejoinAfterHold = new(PlatformPaths.Comparer);
+    private HashSet<string> linkDocumentsTakingHold { get => LazyInitializer.EnsureInitialized(ref field, static () => new(PlatformPaths.Comparer)); }
+    private HashSet<string> linkDocumentStaleJoins { get => LazyInitializer.EnsureInitialized(ref field, static () => new(PlatformPaths.Comparer)); }
+    private HashSet<string> linkDocumentRejoinAfterHold { get => LazyInitializer.EnsureInitialized(ref field, static () => new(PlatformPaths.Comparer)); }
 
     private bool LinkHoldBlocksDocument(string wire, string? full)
     {

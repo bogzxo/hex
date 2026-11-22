@@ -5,7 +5,7 @@ namespace Hex.Dawn;
 
 internal sealed partial class DawnScene
 {
-    private readonly Lock linkGitFollowGate = new();
+    private Lock linkGitFollowGate { get => LazyInitializer.EnsureInitialized(ref field, static () => new()); }
     private volatile IReadOnlyDictionary<string, bool>? linkGitFollowChoices;
 
     private bool LinkGitFollowPolicy(HexLinkFolder folder, HexLinkDevice device) =>

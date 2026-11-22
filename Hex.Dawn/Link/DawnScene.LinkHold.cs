@@ -5,8 +5,8 @@ namespace Hex.Dawn;
 
 internal sealed partial class DawnScene
 {
-    private readonly Lock linkHoldServicesGate = new();
-    private readonly Dictionary<HexLinkHoldStore, HexLinkHoldService> linkHoldServices = new();
+    private Lock linkHoldServicesGate { get => LazyInitializer.EnsureInitialized(ref field, static () => new()); }
+    private Dictionary<HexLinkHoldStore, HexLinkHoldService> linkHoldServices { get => LazyInitializer.EnsureInitialized(ref field, static () => new()); }
     private DateTimeOffset linkHoldCheckAt;
 
     private void LinkHoldPaletteCommands(List<(string Text, Action Picked)> entries)

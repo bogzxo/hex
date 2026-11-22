@@ -21,7 +21,7 @@ internal sealed partial class DawnScene
     private string linkPresenceDrawnKey = string.Empty;
 
     // The marks drawn into each tab, so they're taken out again without touching anybody else's
-    private readonly HashSet<HexDocument> linkPresenceDrawn = [];
+    private HashSet<HexDocument> linkPresenceDrawn { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
 
     // The device followed, where the caret was put for it and the version of the text then, to tell the person moving off
     private string? linkFollowing;
