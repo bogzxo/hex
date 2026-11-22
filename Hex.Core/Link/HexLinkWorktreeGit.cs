@@ -15,6 +15,8 @@ internal sealed class HexLinkWorktreeGit
 
     private HexLinkWorktreeGit(string repository) => this.repository = repository;
 
+    internal string DirectoryPath => repository;
+
     public static async Task<HexLinkWorktreeGit> Open(string path, CancellationToken cancel)
     {
         if (!GitProcess.Enabled)
@@ -56,7 +58,7 @@ internal sealed class HexLinkWorktreeGit
             throw new IOException($"Git fast-import failed: {imported.Error}");
 
         string commit = CheckedObject(await Need(["rev-parse", "--verify", capture + "^{commit}"], cancel));
-        await Need(["update-ref", "--stdin"], cancel, $"start\ncreate refs/hexlink/snapshots/{commit} {commit}\ndelete {capture} {commit}\nprepare\ncommit\n");
+        await Need(["update-ref", "--stdin"], cancel, $"start\nupdate refs/hexlink/snapshots/{commit} {commit}\ndelete {capture} {commit}\nprepare\ncommit\n");
         return commit;
     }
 
@@ -86,6 +88,36 @@ internal sealed class HexLinkWorktreeGit
 
     /// <summary>A path as fast-import reads a quoted one, the backslash and the quote escaped (control characters are refused before).</summary>
     private static string Quoted(string path) => "\"" + path.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+
+    internal bool NeedsSnapshotMaintenance()
+    {
+        string refs = Path.Combine(repository, "refs", "hexlink", "snapshots");
+        if (Directory.Exists(refs) && Directory.EnumerateFiles(refs).Take(32).Count() == 32)
+            return true;
+        var packs = new DirectoryInfo(Path.Combine(repository, "objects", "pack"));
+        if (!packs.Exists)
+            return false;
+        FileInfo[] files = [.. packs.EnumerateFiles("*.pack")];
+        return files.Length >= 16 || (files.Length > 1 && files.Sum(file => file.Length) >= 64L * 1024 * 1024);
+    }
+
+    internal async Task PruneSnapshots(IReadOnlySet<string> keep, CancellationToken cancel)
+    {
+        string refs = await Need(["for-each-ref", "--format=%(refname) %(objectname)",
+            "refs/hexlink/snapshots/", "refs/hexlink/capture/"], cancel);
+        var commands = new StringBuilder();
+        foreach (string row in refs.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            string[] pair = row.Trim().Split(' ');
+            if (pair.Length != 2)
+                throw new IOException("Git returned an invalid private snapshot reference.");
+            if (!keep.Contains(CheckedObject(pair[1])))
+                commands.Append("delete ").Append(pair[0]).Append(' ').Append(pair[1]).Append('\n');
+        }
+        if (commands.Length != 0)
+            await Need(["update-ref", "--stdin"], cancel, commands.ToString());
+        await Need(["gc", "--quiet", "--prune=now"], cancel);
+    }
 
     public Task<string> Checkout(string commit, string path, CancellationToken cancel) =>
         Need(["worktree", "add", "--detach", "--quiet", Path.GetFullPath(path), CheckedObject(commit)], cancel);
@@ -175,6 +207,8 @@ internal sealed class HexLinkWorktreeGit
         start.ArgumentList.Add("core.autocrlf=false");
         start.ArgumentList.Add("-c");
         start.ArgumentList.Add("core.longpaths=true");
+        start.ArgumentList.Add("-c");
+        start.ArgumentList.Add("gc.auto=0");
         foreach (string argument in args)
             start.ArgumentList.Add(argument);
 

@@ -6,7 +6,8 @@ namespace Hex.Core;
 
 internal sealed record HexLinkDraftStatus(int Files, long Bytes, IReadOnlyList<string> Paths);
 internal sealed record HexLinkDraftConflict(string Path, byte[]? Merged);
-internal sealed record HexLinkDraftPlan(IReadOnlyList<HexLinkPublishEdit> Edits, IReadOnlyList<HexLinkDraftConflict> Conflicts, IReadOnlyDictionary<string, string?> DraftHashes);
+internal sealed record HexLinkDraftPlan(IReadOnlyList<HexLinkPublishEdit> Edits, IReadOnlyList<HexLinkDraftConflict> Conflicts,
+    IReadOnlyDictionary<string, string?> DraftHashes, IReadOnlyDictionary<string, byte[]>? MergeInputs = null);
 
 /// <summary>A Link-owned checkout of a shared tree and its nested repositories. The shared index is never used.</summary>
 internal sealed partial class HexLinkPrivateWorktree
@@ -84,6 +85,7 @@ internal sealed partial class HexLinkPrivateWorktree
         string home = Path.GetFullPath(storage), source = Path.GetFullPath(shared.Path);
         if (PlatformPaths.IsUnder(home, source) || PlatformPaths.IsUnder(source, home))
             throw new IOException("Private worktree storage must be outside the shared workspace.");
+        using var maintenance = await LockStorage(home, cancel);
         string data = Path.Combine(home, "drafts", id.ToString("N"));
         string state = Path.Combine(data, "state.json");
         if (File.Exists(state))
@@ -168,6 +170,7 @@ internal sealed partial class HexLinkPrivateWorktree
             throw;
         }
         File.Delete(SetupFile(data));
+        await CompactStorage(force: false, cancel);
     }
 
     /// <summary>How deep a repository is in the worktree, the top one 0, one a folder of it in 1 and so on.</summary>
@@ -185,8 +188,9 @@ internal sealed partial class HexLinkPrivateWorktree
             string[] missing = [.. repositoryLayout.Where(repo => desired.Contains(repo) && !materialized.Contains(repo, PlatformPaths.Comparer))];
             if (missing.Length > 0)
             {
+                using var maintenance = await LockStorage(Storage, cancel);
                 using var setup = SetupLock(data);
-                await RecoverSetup(data, Path.GetDirectoryName(Path.GetDirectoryName(data)!)!, cancel);
+                await RecoverSetup(data, Storage, cancel);
                 foreach (string repo in missing)
                 {
                     string path = Path.Combine(Root, repo);
@@ -224,12 +228,14 @@ internal sealed partial class HexLinkPrivateWorktree
         try
         {
             Dictionary<string, FileVersion> current = await Current(cancel);
-            string[] changed = [.. Changed(current)];
+            HexIgnoreFile? authorityRules = await ReadAuthorityRules(snapshot, readAuthority, cancel);
+            string[] changed = [.. Changed(current).Where(wire => !IsIgnored(authorityRules, wire))];
             var changedPaths = new HashSet<string>(changed, StringComparer.Ordinal);
             Dictionary<string, FileVersion> theirs = await Versions(shared, snapshot, cancel, changedPaths.Contains);
             var edits = new List<HexLinkPublishEdit>();
             var conflicts = new List<HexLinkDraftConflict>();
             var checkedHashes = new Dictionary<string, string?>(StringComparer.Ordinal);
+            var mergeInputs = new Dictionary<string, byte[]>(StringComparer.Ordinal);
             var mine = shared with { Path = Root };
             foreach (string wire in changed)
             {
@@ -237,10 +243,13 @@ internal sealed partial class HexLinkPrivateWorktree
                 string? now = theirs.GetValueOrDefault(wire)?.Hash, privateHash = current.GetValueOrDefault(wire)?.Hash;
                 if (now == privateHash)
                     continue;
-                byte[]? bytes = await ReadVersion(mine, wire, current.GetValueOrDefault(wire), cancel);
-                if (now != before)
+                byte[]? input = await ReadVersion(mine, wire, current.GetValueOrDefault(wire), cancel);
+                byte[]? bytes = input;
+                string? draftBase = draftMergeBases.GetValueOrDefault(wire);
+                if (now != before || draftBase is not null)
                 {
-                    byte[]? baseline = await ReadBasis(wire, cancel);
+                    byte[]? baseline = draftBase is null ? await ReadBasis(wire, cancel)
+                        : await ReadDraftMergeBase(wire, draftBase, cancel);
                     byte[]? incoming = theirs.TryGetValue(wire, out var version)
                         ? await ReadGateAuthority(wire, version, readAuthority, cancel) : null;
                     var merged = await HexLinkWorktreeMerge.Merge(baseline, bytes, incoming, cancel);
@@ -251,14 +260,17 @@ internal sealed partial class HexLinkPrivateWorktree
                     }
                     bytes = merged.Bytes;
                 }
-                if ((bytes is null ? null : HexLinkFiles.Hash(bytes)) != now)
+                string? hash = bytes is null ? null : HexLinkFiles.Hash(bytes);
+                if (hash != now)
                 {
                     edits.Add(new HexLinkPublishEdit(wire, now, bytes));
                     checkedHashes.Add(wire, privateHash);
+                    if (input is not null && hash != privateHash)
+                        mergeInputs.Add(wire, input);
                 }
             }
 
-            return new HexLinkDraftPlan(edits, conflicts, checkedHashes);
+            return new HexLinkDraftPlan(edits, conflicts, checkedHashes, mergeInputs.Count == 0 ? null : mergeInputs);
         }
         finally
         {
@@ -277,14 +289,19 @@ internal sealed partial class HexLinkPrivateWorktree
                 throw new IOException("The shared repository layout changed after this worktree was opened.");
 
             var current = await Current(cancel);
+            HexIgnoreFile? draftRules = draftTree.LinkIgnore.Read();
+            HexIgnoreFile? authorityRules = await ReadAuthorityRules(snapshot, null, cancel);
             var incoming = await Versions(shared, snapshot, cancel, IsMaterialized);
+            var sharedTree = new HexLinkTree(shared, excludes);
             var clean = new List<HexLinkPublishEdit>();
             foreach (string wire in incoming.Keys.Union(basis.Keys, StringComparer.Ordinal))
             {
                 string? before = basis.GetValueOrDefault(wire)?.Hash;
                 string? now = current.GetValueOrDefault(wire)?.Hash;
                 FileVersion? next = incoming.GetValueOrDefault(wire);
-                if (next?.Hash == before || (now != before && now != next?.Hash))
+                if (IsIgnored(draftRules, wire) || IsIgnored(authorityRules, wire) ||
+                    (next is null && !sharedTree.Gone(Relative(shared, wire))) ||
+                    next?.Hash == before || (now != before && now != next?.Hash))
                     continue;
                 byte[]? bytes = await ReadVersion(shared, wire, next, cancel);
                 clean.Add(new HexLinkPublishEdit(wire, now, bytes));
@@ -302,7 +319,7 @@ internal sealed partial class HexLinkPrivateWorktree
         await operation.WaitAsync(cancel);
         try
         {
-            await Adopt(published.Edits, published.DraftHashes, cancel);
+            await Adopt(published.Edits, published.DraftHashes, cancel, published: true, mergeInputs: published.MergeInputs);
         }
         finally
         {
@@ -310,10 +327,12 @@ internal sealed partial class HexLinkPrivateWorktree
         }
     }
 
-    private async Task Adopt(IReadOnlyList<HexLinkPublishEdit> edits, IReadOnlyDictionary<string, string?> expectedDrafts, CancellationToken cancel)
+    private async Task Adopt(IReadOnlyList<HexLinkPublishEdit> edits, IReadOnlyDictionary<string, string?> expectedDrafts,
+        CancellationToken cancel, bool published = false, IReadOnlyDictionary<string, byte[]>? mergeInputs = null)
     {
         if (edits.Count == 0)
             return;
+        using var maintenance = await LockStorage(Storage, cancel);
         string stage = Path.Combine(data, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(stage);
         var staged = new List<string>();
@@ -343,20 +362,31 @@ internal sealed partial class HexLinkPrivateWorktree
             }
 
             var draft = shared with { Path = Root };
+            HexIgnoreFile? rules = draftTree.LinkIgnore.Read();
             foreach (HexLinkPublishEdit edit in edits)
             {
                 string full = HexLinkFiles.Resolve([draft], edit.Path);
                 string? expected = expectedDrafts.GetValueOrDefault(edit.Path);
                 string? hash = fileVersions.GetValueOrDefault(edit.Path)?.Hash;
-                if (expected != hash)
+                bool retained = expected != hash && IsIgnored(rules, edit.Path);
+                if (expected != hash && !retained)
                 {
                     try { await HexLinkFiles.CompareAndReplace(full, edit.Path, expected, edit.Bytes, cancel); }
                     catch (HexLinkException error) when (error.Code == HexLinkErrors.CONFLICT)
                     {
-                        // A new edit keeps the base it was made against.
-                        continue;
+                        retained = true;
                     }
                 }
+                if (retained && !published)
+                    continue;
+
+                // Keep the input that was merged into this receipt if the editor has since changed that input.
+                // The next publish can apply only the later draft edits to the published version.
+                if (retained && expected is not null && mergeInputs?.TryGetValue(edit.Path, out byte[]? input) == true)
+                    RetainDraftMergeBase(edit.Path, expected, input);
+                else
+                    draftMergeBases.Remove(edit.Path);
+
                 if (fileVersions.TryGetValue(edit.Path, out Basis? version))
                     basis[edit.Path] = version;
                 else
@@ -372,6 +402,8 @@ internal sealed partial class HexLinkPrivateWorktree
                 Directory.Delete(directory);
             Directory.Delete(stage);
         }
+        PruneDraftMergeBases();
+        await CompactStorage(force: false, cancel);
     }
 
     public async Task Discard(CancellationToken cancel)
@@ -390,21 +422,25 @@ internal sealed partial class HexLinkPrivateWorktree
 
     private async Task DiscardHeld(CancellationToken cancel)
     {
-        if (await Pending(cancel) is not null)
-            throw new IOException("Recover the pending publication before discarding this private worktree.");
         await operation.WaitAsync(cancel);
         try
         {
+            using var maintenance = await LockStorage(Storage, cancel);
+            if (!Directory.Exists(data))
+                return;
+            if ((File.GetAttributes(data) & FileAttributes.ReparsePoint) != 0)
+                throw new IOException("The private worktree folder was moved.");
             foreach (Repository repo in repositories.AsEnumerable().Reverse())
             {
                 string gate = Path.Combine(GateRoot, repo.Path);
                 if (File.Exists(Path.Combine(gate, ".git")))
                     await repo.Git.Remove(gate, cancel);
-                await repo.Git.Remove(Path.Combine(Root, repo.Path), cancel);
+                string checkout = Path.Combine(Root, repo.Path);
+                if (File.Exists(Path.Combine(checkout, ".git")))
+                    await repo.Git.Remove(checkout, cancel);
             }
-            File.Delete(Path.Combine(data, "gate.log"));
-            File.Delete(HoldFile);
-            File.Delete(State);
+            Directory.Delete(data, recursive: true);
+            await CompactStorage(force: true, cancel);
         }
         finally
         {
@@ -434,19 +470,49 @@ internal sealed partial class HexLinkPrivateWorktree
     private bool IsMaterialized(string wire) =>
         materialized.Contains(HexLinkWorktreeScope.Nearest(repositoryLayout, Relative(shared, wire)), PlatformPaths.Comparer);
 
-    private async Task<Dictionary<string, FileVersion>> Current(CancellationToken cancel, Func<string, bool>? include = null)
+    private async Task<Dictionary<string, FileVersion>> Current(CancellationToken cancel, Func<string, bool>? include = null, bool verify = false)
     {
         HexLinkManifest snapshot = await Task.Run(() => draftTree.PrivateManifest(_ =>
-            include is null ? _ => true : path => include(shared.Name + "/" + path), cancel), cancel);
+            include is null ? _ => true : path => include(shared.Name + "/" + path), cancel, verify), cancel);
         if (include is null && snapshot.Files.FirstOrDefault(file => !IsMaterialized(file.Path)) is { } unopened)
             throw new IOException($"'{unopened.Path}' belongs to a private repository that has not been opened. Save the file outside the tree, open its repository and reapply the edit.");
         return await Versions(shared with { Path = Root }, snapshot, cancel);
     }
 
-    private IEnumerable<string> Changed(Dictionary<string, FileVersion> current) =>
-        current.Keys.Union(basis.Keys, StringComparer.Ordinal)
+    private IEnumerable<string> Changed(Dictionary<string, FileVersion> current)
+    {
+        HexIgnoreFile? rules = draftTree.LinkIgnore.Read();
+        return current.Keys.Union(basis.Keys, StringComparer.Ordinal)
             .Where(path => current.GetValueOrDefault(path)?.Hash != basis.GetValueOrDefault(path)?.Hash)
+            .Where(path => !IsIgnored(rules, path) && (current.ContainsKey(path) || draftTree.Gone(Relative(shared, path))))
             .Order(StringComparer.Ordinal);
+    }
+
+    private bool IsIgnored(HexIgnoreFile? rules, string wire) =>
+        HexLinkIgnore.Matches(rules, Relative(shared, wire));
+
+    private async Task<HexIgnoreFile?> ReadAuthorityRules(HexLinkManifest snapshot,
+        Func<string, CancellationToken, Task<byte[]>>? readAuthority, CancellationToken cancel)
+    {
+        if (!snapshot.Certified || snapshot.Folder != shared.Name)
+            throw new IOException("The working-tree snapshot is incomplete or belongs to a different folder.");
+        string wire = shared.Name + "/" + HexLinkIgnore.FileName;
+        if (snapshot.Files.FirstOrDefault(file => PlatformPaths.Comparer.Equals(file.Path, wire)) is not { } file)
+            return null;
+        RequirePublishSize(file.Path, file.Size);
+        if (file.Hash is not { } hash || file.Unavailable)
+            throw new GateCandidateChanged([file.Path]);
+
+        byte[] bytes = await ReadGateAuthority(file.Path, new FileVersion(hash, file.Size), readAuthority, cancel);
+        using var reader = new StreamReader(new MemoryStream(bytes, writable: false));
+        return HexLinkIgnore.Parse(Lines());
+
+        IEnumerable<string> Lines()
+        {
+            while (reader.ReadLine() is { } line)
+                yield return line;
+        }
+    }
 
     private async Task<byte[]?> ReadBasis(string wire, CancellationToken cancel)
     {
@@ -460,12 +526,17 @@ internal sealed partial class HexLinkPrivateWorktree
     {
         if (version is null)
             return null;
-        if (version.Size > HexLinkFiles.MOST_READ)
-            throw new HexLinkException(HexLinkErrors.TOO_BIG, $"{wire} exceeds the supported publication file size.");
+        RequirePublishSize(wire, version.Size);
         byte[] data = await HexLinkFiles.ReadSharedAsync(HexLinkFiles.Resolve([folder], wire), cancel);
         if (HexLinkFiles.Hash(data) != version.Hash)
             throw new IOException($"{wire} changed during comparison. Try again.");
         return data;
+    }
+
+    private static void RequirePublishSize(string wire, long size)
+    {
+        if (size > HexLinkFiles.MOST_READ)
+            throw new HexLinkException(HexLinkErrors.TOO_BIG, $"{wire} exceeds the supported publication file size.");
     }
 
     private static async Task<Dictionary<string, FileVersion>> Versions(HexLinkFolder folder, HexLinkManifest snapshot, CancellationToken cancel,
@@ -506,6 +577,9 @@ internal sealed partial class HexLinkPrivateWorktree
             ["repositories"] = repos, ["layout"] = new JsonArray([.. repositoryLayout.Select(path => (JsonNode)JsonValue.Create(path)!)]),
             ["bases"] = files
         };
+        if (draftMergeBases.Count != 0)
+            state["draft_merge_bases"] = new JsonObject(draftMergeBases.Select(item =>
+                new KeyValuePair<string, JsonNode?>(item.Key, JsonValue.Create(item.Value))));
         HexLinkFiles.WriteAtomic(State, Encoding.UTF8.GetBytes(state.ToJsonString()));
     }
 
@@ -548,7 +622,9 @@ internal sealed partial class HexLinkPrivateWorktree
             : [.. repositories.Select(repo => repo.Path)];
         if (layout.Length == 0 || layout[0] != "" || repositories.Any(repo => !layout.Contains(repo.Path, PlatformPaths.Comparer)))
             throw new IOException("Invalid private repository layout.");
-        return new HexLinkPrivateWorktree(shared, data, repositories, layout, basis, excludes);
+        var draft = new HexLinkPrivateWorktree(shared, data, repositories, layout, basis, excludes);
+        draft.LoadDraftMergeBases(document);
+        return draft;
     }
 
     // Keep object stores shallow enough for Git for Windows, including its internal worktree paths.

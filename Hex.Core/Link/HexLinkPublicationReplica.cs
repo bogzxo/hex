@@ -29,6 +29,8 @@ internal sealed class HexLinkPublicationReplica(HexLinkCommittedSets receipts,
             return complete;
         }
 
+        string root = HexLinkFiles.Resolve([folder], folder.Name);
+        HexIgnoreFile? rules = HexLinkIgnore.ForRoot(root).Read();
         var changes = new List<(HexLinkCommittedFile Entry, string Full, byte[]? Bytes, bool Apply)>(edits.Count);
         for (int i = 0; i < edits.Count; i++)
         {
@@ -39,6 +41,10 @@ internal sealed class HexLinkPublicationReplica(HexLinkCommittedSets receipts,
                 throw HexLinkException.Invalid("The incoming bytes do not match the publication.");
 
             string full = HexLinkFiles.Resolve([folder], entry.Path, excludes(folder));
+            int slash = entry.Path.IndexOf('/');
+            if (rules is not null && ((slash >= 0 && HexLinkIgnore.Matches(rules, entry.Path[(slash + 1)..])) ||
+                HexLinkIgnore.Matches(rules, HexExcludes.Relative(root, full))))
+                continue;
             string? current = await CurrentHash(full, stop);
             if (current != entry.Base && !(prepared && current == entry.Hash))
                 throw new HexLinkException(HexLinkErrors.CONFLICT, $"{entry.Path} changed before the committed set could land.");

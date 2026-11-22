@@ -30,7 +30,7 @@ internal sealed partial class DawnScene
     {
         if (link?.Claims is not { } exchange)
             return;
-        paths = [.. exchange.Board.List(System.Environment.TickCount64)
+        paths = [.. exchange.List(System.Environment.TickCount64)
             .Where(claim => claim.DeviceId.Equals(deviceId, StringComparison.OrdinalIgnoreCase))
             .Select(claim => claim.Wire + (claim.Prefix ? "/" : string.Empty))
             .Distinct(PlatformPaths.Comparer)];

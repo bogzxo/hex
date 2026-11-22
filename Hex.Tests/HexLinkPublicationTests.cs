@@ -177,6 +177,30 @@ public sealed class HexLinkPublicationTests
     }
 
     [Fact]
+    public async Task Worktree_safety_replica_keeps_a_file_ignored_before_a_committed_delete_arrives()
+    {
+        using var services = new LinkServices(DeviceB);
+        var folder = services.Workspace.Folders[0] with { Authority = new HexLinkAuthority(DeviceA.Id, 1) };
+        services.Workspace = services.Workspace with { Folders = [folder] };
+        const string wire = "work/kept.txt";
+        string path = Path.Combine(services.Work, "kept.txt");
+        File.WriteAllText(path, "kept on this device");
+        File.WriteAllText(Path.Combine(services.Work, HexLinkIgnore.FileName), "kept.txt\n");
+        var replica = new HexLinkWorktreePublication(services, Path.Combine(services.Root, "pub"), _ => [],
+            (_, _, _, _) => Task.CompletedTask, (_, _, _, _) => Task.CompletedTask, (_, _, _) => Task.CompletedTask);
+        string hash = HexLinkFiles.HashOf(path)!;
+        var set = new HexLinkCommittedSet(Guid.NewGuid(), "work", "", 1, HexLinkFenceKind.Publication,
+            [new HexLinkCommittedFile(wire, hash, null)]);
+        var request = new HexLinkPublicationRequest(set.Id, folder.Name, set.Epoch, true, false);
+
+        await replica.ReceivePublication(DeviceA, request, set, [new(wire, hash, null)], CancellationToken.None);
+
+        Assert.True(File.Exists(path));
+        Assert.Equal("kept on this device", File.ReadAllText(path));
+        Assert.NotNull(await replica.PublicationReceipt(DeviceA, request, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task Manifest_hash_rejects_a_different_blob_even_inside_an_intact_stream()
     {
         byte[] bytes = [1, 2, 3];

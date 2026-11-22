@@ -64,6 +64,39 @@ public sealed partial class HexLinkSyncTests
         Assert.Equal("A", Get(pair.B, "only-a.generated"));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Worktree_safety_a_new_remote_ignore_rule_never_turns_a_missing_file_into_a_delete(bool restart)
+    {
+        using var pair = await LinkedPair.Up(EDIT, EDIT);
+        const string path = "tracked.txt";
+        Put(pair.A, path, "agreed");
+        Put(pair.B, path, "agreed");
+        using var sync = SyncOf(pair);
+        await sync.Start();
+        await Settled(sync);
+
+        if (restart)
+            sync.Stop();
+        Put(pair.B, HexLinkIgnore.FileName, path + "\n");
+        File.Delete(Path.Combine(pair.B.Work, path));
+        if (restart)
+        {
+            using var resumed = SyncOf(pair);
+            await resumed.Start();
+            await Settled(resumed);
+            Assert.Empty(resumed.Conflicts);
+        }
+        else
+        {
+            await Settled(sync);
+            Assert.Empty(sync.Conflicts);
+        }
+        Assert.Equal("agreed", Get(pair.A, path));
+        Assert.False(Has(pair.B, path));
+    }
+
     [Fact]
     public async Task Link_ignore_rules_apply_to_tracked_files_and_the_rules_file_always_travels()
     {

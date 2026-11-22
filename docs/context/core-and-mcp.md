@@ -96,7 +96,7 @@ HIDL (`.hor`) analysis behind the editor and `Hex --lsp`: `HidlAnalysis`, `HidlS
 ### 4.8 Search/
 `HexSearch` (`HexSearch.cs:18`, partial `.Find` :14, `.Replace` :16; `HexResult` :11; `TextFilesUnder(roots)`, `RelativeTo`, `ReadLines`), `HexGlob` (:10), `HexScope` (:8; include/exclude boxes), `HexExcludes` (:9; `files_exclude`, `search_exclude`), `HexIgnoreFile` (:9; .gitignore when `search_use_ignore_files`). Consumers: Dawn Find in Files/Search side view, quick open, the harness index (`TextFilesUnder`), MCP `hex_find_in_files` (editor group, uses Dawn's search) and harness tools.
 
-`HexIgnoreFile` and `HexGlob` also parse the root `.hex-link-ignore` for Link. `HexLinkIgnore` refreshes the rules from disk. `HexLinkTree` applies them to manifests and watcher events, and `HexLinkFiles.Resolve` checks them for sync reads and writes.
+`HexIgnoreFile` and `HexGlob` also parse the root `.hex-link-ignore` for Link. `HexLinkIgnore` refreshes the rules from disk. `HexLinkTree` applies them to manifests and watcher events, and `HexLinkFiles.Resolve` checks them for sync reads and writes. Private Publish checks both draft and authority rules. Replica projection and claim exchange apply local rules.
 
 ### 4.9 Workspace/ (6 files)
 `HexWorkspace` (`HexWorkspace.cs:18`; `.hex-workspace` multi-root file), `WorkspacePaths` (:4), `HexRunTarget` (:11; what F5/Run uses: project, file, task), `HexLocalHistory` (:16; kept versions, `HexKeptVersion`), `HexTrash` (recycle-bin moves), `HexFileFacts` (:17; encoding/EOL/indent sniffing `HexTextFacts`, image `HexImageFacts`). Consumers: `Hex.Dawn/Workspace/` (explorer, places), status bar, local history view.

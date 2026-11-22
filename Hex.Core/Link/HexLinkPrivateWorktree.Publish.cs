@@ -32,6 +32,18 @@ internal sealed partial class HexLinkPrivateWorktree
         try
         {
             PendingPublish? pending = await Pending(cancel);
+            HexLinkPublishReceipt? receipt = pending is null ? null : await route.Status(pending.Id, cancel);
+            if (pending is not null && receipt is null)
+            {
+                var authorityRules = await ReadAuthorityRules(await route.Snapshot(cancel), route.ReadAuthority, cancel);
+                if (pending.Plan.Edits.Any(edit => IsIgnored(authorityRules, edit.Path)) ||
+                    (await PendingDraftChanges(pending.Plan, cancel)).Length != 0)
+                {
+                    ClearPending(pending);
+                    pending = null;
+                }
+            }
+
             HexLinkWorktreeGateResult? gate = null;
             if (pending is null)
             {
@@ -59,11 +71,17 @@ internal sealed partial class HexLinkPrivateWorktree
                         // Rebuild from the latest authority snapshot after a transient input change.
                     }
                 }
+                receipt = await route.Status(pending.Id, cancel);
             }
 
-            HexLinkPublishReceipt? receipt = await route.Status(pending.Id, cancel);
             if (receipt is null)
             {
+                string[] changed = await PendingDraftChanges(pending.Plan, cancel);
+                if (changed.Length != 0)
+                {
+                    ClearPending(pending);
+                    throw new GateCandidateChanged(changed);
+                }
                 try
                 {
                     receipt = await route.Send(pending.Id, pending.Plan.Edits, pending.Bypass, cancel);
@@ -91,6 +109,27 @@ internal sealed partial class HexLinkPrivateWorktree
         }
     }
 
+    private async Task<string[]> PendingDraftChanges(HexLinkDraftPlan plan, CancellationToken cancel)
+    {
+        await operation.WaitAsync(cancel);
+        try
+        {
+            HexIgnoreFile? rules = draftTree.LinkIgnore.Read();
+            Dictionary<string, FileVersion> current = await Current(cancel, plan.DraftHashes.ContainsKey, verify: true);
+            return [.. plan.DraftHashes.Where(item =>
+            {
+                string relative = Relative(shared, item.Key);
+                return HexLinkIgnore.Matches(rules, relative) ||
+                    (current.TryGetValue(item.Key, out var version) ? version.Hash != item.Value
+                        : item.Value is not null || !draftTree.Gone(relative));
+            }).Select(item => item.Key)];
+        }
+        finally
+        {
+            operation.Release();
+        }
+    }
+
     private async Task KeepPending(PendingPublish pending, CancellationToken cancel)
     {
         string stage = PendingDirectory(pending.Id);
@@ -105,8 +144,12 @@ internal sealed partial class HexLinkPrivateWorktree
                 hash = HexLinkFiles.Hash(bytes);
                 await File.WriteAllBytesAsync(PendingBlob(pending.Id, at), bytes, cancel);
             }
+            byte[]? mergeInput = pending.Plan.MergeInputs?.GetValueOrDefault(edit.Path);
+            if (mergeInput is not null)
+                await File.WriteAllBytesAsync(PendingDraftBlob(pending.Id, at), mergeInput, cancel);
             files.Add((JsonNode)new JsonObject
             {
+                ["merge_input"] = mergeInput is not null,
                 ["path"] = edit.Path,
                 ["base"] = edit.Base,
                 ["draft"] = pending.Plan.DraftHashes.GetValueOrDefault(edit.Path),
@@ -128,6 +171,7 @@ internal sealed partial class HexLinkPrivateWorktree
 
         var edits = new HexLinkPublishEdit[rows.Count];
         var hashes = new Dictionary<string, string?>(StringComparer.Ordinal);
+        var mergeInputs = new Dictionary<string, byte[]>(StringComparer.Ordinal);
         for (int at = 0; at < rows.Count; at++)
         {
             if (rows[at] is not JsonObject row || HexLinkData.String(row, "path", HexLinkFiles.MOST_PATH) is not { } wire)
@@ -137,19 +181,31 @@ internal sealed partial class HexLinkPrivateWorktree
             if (content is not null && HexLinkFiles.Hash(content) != hash)
                 throw new IOException($"The pending publication was changed on disk for {wire}.");
             edits[at] = new HexLinkPublishEdit(wire, HexLinkData.String(row, "base", 64), content);
-            hashes.Add(wire, HexLinkData.String(row, "draft", 64));
+            string? draftHash = HexLinkData.String(row, "draft", 64);
+            hashes.Add(wire, draftHash);
+            if (HexLinkData.Bool(row, "merge_input") == true)
+            {
+                byte[] input = await HexLinkFiles.ReadSharedAsync(PendingDraftBlob(id, at), cancel);
+                if (draftHash != HexLinkFiles.Hash(input))
+                    throw new IOException($"The pending merge input was changed on disk for {wire}.");
+                mergeInputs.Add(wire, input);
+            }
         }
-        return new PendingPublish(id, new HexLinkDraftPlan(edits, [], hashes), HexLinkData.Bool(data, "bypass") == true);
+        return new PendingPublish(id, new HexLinkDraftPlan(edits, [], hashes, mergeInputs), HexLinkData.Bool(data, "bypass") == true);
     }
 
     private void ClearPending(PendingPublish pending)
     {
         File.Delete(PendingFile);
         for (int i = 0; i < pending.Plan.Edits.Count; i++)
+        {
             File.Delete(PendingBlob(pending.Id, i));
+            File.Delete(PendingDraftBlob(pending.Id, i));
+        }
         Directory.Delete(PendingDirectory(pending.Id));
     }
 
     private string PendingDirectory(Guid id) => Path.Combine(data, "pending-" + id.ToString("N"));
     private string PendingBlob(Guid id, int index) => Path.Combine(PendingDirectory(id), $"blob-{index}");
+    private string PendingDraftBlob(Guid id, int index) => Path.Combine(PendingDirectory(id), $"draft-{index}");
 }

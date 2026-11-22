@@ -175,9 +175,12 @@ internal sealed partial class DawnScene
 
             string relative = HexExcludes.Relative(owner.Folder.Path, full);
             bool folderPrefix = prefix || relative.Length == 0;
-            return HexLinkClaims.ValidPath(relative, folderPrefix) ? (owner.Scope, relative, folderPrefix) : null;
+            if (!HexLinkClaims.ValidPath(relative, folderPrefix) ||
+                HexLinkIgnore.Matches(HexLinkIgnore.ForRoot(owner.Folder.Path).Read(), relative, folderPrefix))
+                return null;
+            return (owner.Scope, relative, folderPrefix);
         }
-        catch (Exception e) when (e is ArgumentException or NotSupportedException or IOException)
+        catch (Exception e) when (e is ArgumentException or NotSupportedException or IOException or UnauthorizedAccessException)
         {
             return null;
         }
@@ -188,10 +191,10 @@ internal sealed partial class DawnScene
         if (link?.Claims is not { } exchange)
             return [];
         long now = System.Environment.TickCount64;
-        return ClaimPathOf(exchange.Folders, absolutePath, false) is { } path ? exchange.Board.At(path.Scope, path.Relative, false, now) : [];
+        return ClaimPathOf(exchange.Folders, absolutePath, false) is { } path ? exchange.At(path.Scope, path.Relative, false, now) : [];
     }
 
-    internal int LinkClaimCount(string deviceId) => link?.Claims.Board.List(System.Environment.TickCount64).Count(claim => claim.DeviceId == deviceId) ?? 0;
+    internal int LinkClaimCount(string deviceId) => link?.Claims.List(System.Environment.TickCount64).Count(claim => claim.DeviceId == deviceId) ?? 0;
 
     internal bool LinkOpenClaimDocument(HexLinkClaim claim)
     {
@@ -287,7 +290,7 @@ internal sealed partial class DawnScene
         var overlap = new Dictionary<(string Device, int? Chat, string? Step), (HexLinkClaim Claim, HashSet<string> Files)>();
         foreach (ClaimInput entry in PlanClaims(chat, plan, exchange.Folders))
         {
-            foreach (HexLinkClaim claim in exchange.Board.At(entry.Scope, entry.Draft.Key.Path, entry.Draft.Key.Prefix, now))
+            foreach (HexLinkClaim claim in exchange.At(entry.Scope, entry.Draft.Key.Path, entry.Draft.Key.Prefix, now))
             {
                 if (claim.DeviceId == localId)
                     continue;
@@ -309,7 +312,7 @@ internal sealed partial class DawnScene
             return string.Empty;
         HexLinkDevice? inbound = HexLinkClaimCaller.Of(args);
         string? local = linkServices?.Device.Id;
-        IReadOnlyList<HexLinkClaim> claims = exchange.Board.List(System.Environment.TickCount64);
+        IReadOnlyList<HexLinkClaim> claims = exchange.List(System.Environment.TickCount64);
         var groups = claims.Where(claim => claim.ChatId is not null && claim.DeviceId != local
             && (inbound is null || exchange.Subscribed(inbound.Id, claim.Scope))).GroupBy(claim => (claim.DeviceId, claim.ChatId));
         var text = new StringBuilder();
@@ -352,7 +355,7 @@ internal sealed partial class DawnScene
                 yield break;
             }
             long now = System.Environment.TickCount64;
-            var claims = target is { } want ? exchange.Board.At(want.Scope, want.Relative, want.Prefix, now) : exchange.Board.List(now);
+            var claims = target is { } want ? exchange.At(want.Scope, want.Relative, want.Prefix, now) : exchange.List(now);
             yield return McpToolResult.Text(claims.Count == 0 ? "No current claims."
                 : string.Join('\n', claims.Take(500).Select(claim => $"{claim.Wire}{(claim.Prefix ? "/" : string.Empty)}: {ClaimHolder(claim)}, {claim.Kind.ToString().ToLowerInvariant()}, {ClaimAge(claim)}. {ClaimPlan(claim)}"))
                     + (claims.Count > 500 ? $"\n{claims.Count - 500} more claims. Use path to narrow." : string.Empty)
@@ -418,7 +421,7 @@ internal sealed partial class DawnScene
         string tool = "hex_agent_message";
         if (peer is null)
         {
-            HexLinkClaim? claim = links.Claims.Board.List(System.Environment.TickCount64).FirstOrDefault(claim =>
+            HexLinkClaim? claim = links.Claims.List(System.Environment.TickCount64).FirstOrDefault(claim =>
                 claim.ChatId == chat && (claim.DeviceId.Equals(device, StringComparison.OrdinalIgnoreCase)
                     || claim.DeviceName.Equals(device, StringComparison.OrdinalIgnoreCase)));
             if (claim is not null && links.PeerOf(claim.Via) is { } authority)

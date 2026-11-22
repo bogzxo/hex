@@ -35,6 +35,9 @@ internal sealed class HexLinkIgnore(string root)
     internal static bool Matches(HexIgnoreFile? rules, string relative, bool folder = false) =>
         rules is not null && (folder || !IsRulesFile(relative)) && rules.Excludes(relative, folder);
 
+    internal static HexIgnoreFile? Parse(IEnumerable<string> lines) =>
+        HexIgnoreFile.Of(lines, ignoreCase: PlatformPaths.Comparison == StringComparison.OrdinalIgnoreCase);
+
     internal void Invalidate()
     {
         lock (gate)
@@ -56,7 +59,7 @@ internal sealed class HexLinkIgnore(string root)
             var current = (info.Length, info.LastWriteTimeUtc, info.CreationTimeUtc);
             if (stamp != current)
             {
-                rules = HexIgnoreFile.Of(File.ReadLines(path), ignoreCase: PlatformPaths.Comparison == StringComparison.OrdinalIgnoreCase);
+                rules = Parse(File.ReadLines(path));
                 stamp = current;
             }
             return rules;

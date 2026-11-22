@@ -228,7 +228,7 @@ internal sealed class HexLinkWorktreePublication : IHexLinkPublicationService
                     fence.HoldRecovery(id, HexLinkFenceKind.Publication);
                 else
                     fence.ReleaseRecovery(id);
-            });
+            }, wire => HexLinkFiles.Resolve([folder], wire, services.Excludes, respectLinkIgnore: true));
         return new HexLinkPublishJournal(data, objects, target);
     }
 

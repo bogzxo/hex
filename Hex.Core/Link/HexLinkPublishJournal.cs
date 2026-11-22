@@ -13,7 +13,8 @@ internal sealed record HexLinkPublishTarget(
     Func<HexLinkPublishEdit, CancellationToken, Task> Apply,
     // Persist the complete notice for replay, deduplicating by receipt ID.
     Func<HexLinkPublishReceipt, IReadOnlyList<HexLinkPublishEdit>, CancellationToken, Task> Announce,
-    Action<Guid, bool>? BlockLiveForRecovery = null);
+    Action<Guid, bool>? BlockLiveForRecovery = null,
+    Action<string>? ValidateNewEdit = null);
 
 /// <summary>
 /// The owner stages a complete set in Link's object store. One ref transaction records the commit decision
@@ -54,7 +55,10 @@ internal sealed class HexLinkPublishJournal(string directory, HexLinkWorktreeGit
             if (await git.Tip(stop) != tip)
                 throw new HexLinkException(HexLinkErrors.CONFLICT, "A publication advanced while this set was being prepared.");
             foreach (HexLinkPublishEdit edit in ordered)
+            {
+                target.ValidateNewEdit?.Invoke(edit.Path);
                 await CheckBase(edit, stop);
+            }
 
             target.BlockLiveForRecovery?.Invoke(id, true);
             try

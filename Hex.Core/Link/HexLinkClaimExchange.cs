@@ -46,6 +46,12 @@ internal sealed class HexLinkClaimExchange(IHexLinkServices services)
     public HexLinkClaims Board { get; } = new();
     public IReadOnlyList<HexLinkClaimFolder> Folders => folders;
 
+    public IReadOnlyList<HexLinkClaim> List(long now) =>
+        [.. Board.List(now).Where(claim => !Hidden(claim.Scope, claim.Draft.Key))];
+
+    public IReadOnlyList<HexLinkClaim> At(HexLinkClaimScope scope, string path, bool prefix, long now) =>
+        Hidden(scope, path, prefix) ? [] : [.. Board.At(scope, path, prefix, now).Where(claim => !Hidden(scope, claim.Draft.Key))];
+
     public void Join(HexLinkPeer peer)
     {
         lock (gate)
@@ -133,12 +139,7 @@ internal sealed class HexLinkClaimExchange(IHexLinkServices services)
                     || !route.Outgoing.Contains(frame.Scope) || !MayExchange(frame.Scope, route) || frame.Origin.Id == services.Device.Id
                     || frame.Origin.Id != route.Peer.Device.Id && Owner(frame.Scope) != route.Peer.Device.Id)
                     continue;
-                if (frame.Add.Any(row => Hidden(frame.Scope, row.Draft.Key)) || frame.Drop.Any(key => Hidden(frame.Scope, key)))
-                {
-                    // A receiver with stricter excludes must not show, block on, or relay excluded paths.
-                    frame = frame with { Add = [.. frame.Add.Where(row => !Hidden(frame.Scope, row.Draft.Key))],
-                        Drop = [.. frame.Drop.Where(key => !Hidden(frame.Scope, key))] };
-                }
+                frame = Filter(frame);
                 HexLinkClaimReceipt receipt = Board.Receive(frame, route.Peer.Device.Id, now);
                 if (receipt == HexLinkClaimReceipt.Gap)
                 {
@@ -318,8 +319,9 @@ internal sealed class HexLinkClaimExchange(IHexLinkServices services)
         // Heartbeats fit in one small notification. Larger snapshots page by feed and never exceed the wire frame limit.
         var batch = new JsonArray();
         int rows = 0;
-        foreach (HexLinkClaimFrame frame in frames)
+        foreach (HexLinkClaimFrame outgoing in frames)
         {
+            HexLinkClaimFrame frame = Filter(outgoing);
             int needed = frame.Add.Count + frame.Drop.Count;
             if (batch.Count == 128 || rows > 0 && rows + needed > 512)
             {
@@ -374,16 +376,38 @@ internal sealed class HexLinkClaimExchange(IHexLinkServices services)
     private bool MayExchange(HexLinkClaimScope scope, Route route) => Owner(scope) is { } owner
         && (owner == services.Device.Id || owner == route.Peer.Device.Id);
 
-    private bool Hidden(HexLinkClaimScope scope, HexLinkClaimKey key)
+    // Drop notices must still reach the board when a path becomes hidden after its claim was accepted.
+    private HexLinkClaimFrame Filter(HexLinkClaimFrame frame)
     {
-        if (key.Path.Length == 0)
+        if (frame.Add.Count == 0)
+            return frame;
+        var visible = frame.Add.Where(row => !Hidden(frame.Scope, row.Draft.Key)).ToArray();
+        return visible.Length == frame.Add.Count ? frame : frame with { Add = visible };
+    }
+
+    private bool Hidden(HexLinkClaimScope scope, HexLinkClaimKey key) => Hidden(scope, key.Path, key.Prefix);
+
+    private bool Hidden(HexLinkClaimScope scope, string path, bool prefix)
+    {
+        if (path.Length == 0)
             return false;
-        HexExcludes excludes = services.Excludes;
-        string path = key.Path;
-        if (folders.FirstOrDefault(folder => folder.Scope == scope)?.Folder.IncludeSystemFiles != true &&
-            HexLinkSystemFiles.Matches(path))
+        HexLinkFolder? folder = folders.FirstOrDefault(item => item.Scope == scope)?.Folder;
+        if (folder?.IncludeSystemFiles != true && HexLinkSystemFiles.Matches(path))
             return true;
-        if (excludes.Hidden(path, key.Prefix))
+        if (folder is not null)
+        {
+            try
+            {
+                if (HexLinkIgnore.Matches(HexLinkIgnore.ForRoot(folder.Path).Read(), path, prefix))
+                    return true;
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                return true;
+            }
+        }
+        HexExcludes excludes = services.Excludes;
+        if (excludes.Hidden(path, prefix))
             return true;
         for (int slash = path.LastIndexOf('/'); slash >= 0; slash = path.LastIndexOf('/', slash - 1))
         {

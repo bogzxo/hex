@@ -100,6 +100,32 @@ public sealed class HexLinkClaimsTests
     }
 
     [Fact]
+    public void Worktree_safety_claims_exclude_ignored_files_and_directory_prefixes()
+    {
+        using var services = Services(DeviceA);
+        using var link = new HexLink(services);
+        link.Claims.RefreshFolders();
+        var scope = Assert.Single(link.Claims.Folders).Scope;
+        var generated = new HexLinkClaimKey("generated/out.txt", false, 42, HexLinkClaimKind.Planned);
+        var prefix = new HexLinkClaimKey("generated", true, 42, HexLinkClaimKind.Planned);
+        var source = new HexLinkClaimKey("src/main.cs", false, 42, HexLinkClaimKind.Planned);
+        var claims = new Dictionary<HexLinkClaimScope, Dictionary<HexLinkClaimKey, HexLinkClaimDraft>>
+        {
+            [scope] = new() { [generated] = new(generated, "Builder"), [prefix] = new(prefix, "Builder"),
+                [source] = new(source, "Builder") }
+        };
+
+        link.Claims.Update(claims);
+        Assert.NotEmpty(link.Claims.Board.At(scope, generated.Path, false, Environment.TickCount64));
+        File.WriteAllText(Path.Combine(services.Work, HexLinkIgnore.FileName), "generated/\n");
+        link.Claims.Update(claims);
+
+        Assert.Empty(link.Claims.Board.At(scope, generated.Path, false, Environment.TickCount64));
+        Assert.Empty(link.Claims.Board.At(scope, prefix.Path, true, Environment.TickCount64));
+        Assert.Single(link.Claims.Board.At(scope, source.Path, false, Environment.TickCount64));
+    }
+
+    [Fact]
     public async Task Sixty_four_in_memory_links_hold_and_the_sixty_fifth_is_refused()
     {
         using var hostServices = new LinkServices(DeviceA);

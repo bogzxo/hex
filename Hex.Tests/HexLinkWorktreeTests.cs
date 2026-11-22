@@ -5,7 +5,7 @@ using Hex.Core.Git;
 
 namespace Hex.Tests;
 
-public sealed class HexLinkWorktreeTests : IDisposable
+public sealed partial class HexLinkWorktreeTests : IDisposable
 {
     private readonly string scratch = Path.Combine(Path.GetTempPath(), "hwt-" + Guid.NewGuid().ToString("N")[..12]);
 

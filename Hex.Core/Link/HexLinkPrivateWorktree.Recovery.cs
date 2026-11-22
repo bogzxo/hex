@@ -26,6 +26,7 @@ internal sealed partial class HexLinkPrivateWorktree
         string drafts = Path.Combine(home, "drafts");
         if (!Directory.Exists(drafts))
             return;
+        using var maintenance = await LockStorage(home, cancel);
         foreach (string data in Directory.EnumerateDirectories(drafts))
         {
             cancel.ThrowIfCancellationRequested();
