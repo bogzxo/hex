@@ -20,6 +20,7 @@ internal sealed partial class HexLinkSync
     private int eolOnly;
     private readonly CaseNames hereNames = new(), thereNames = new();
     private readonly Dictionary<string, HexLinkTreeFile> remote = new(StringComparer.Ordinal);
+    private readonly HashSet<string> remoteObservedWhileWorking = new(StringComparer.Ordinal);
     private readonly Dictionary<string, HexLinkSyncConflict> conflicts = new(StringComparer.Ordinal);
     private readonly Dictionary<string, HexLinkSyncSkipped> skipped = new(StringComparer.Ordinal);
 
@@ -30,6 +31,8 @@ internal sealed partial class HexLinkSync
     private readonly HashSet<string> queued = new(StringComparer.Ordinal), running = new(StringComparer.Ordinal), again = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> tries = new(StringComparer.Ordinal);
     private readonly HashSet<string> deferredPushes = new(StringComparer.Ordinal);
+    private readonly HashSet<string> ignoredByLink = new(StringComparer.Ordinal);
+    private readonly string linkIgnoreWire;
     private int rightsVersion;
     private readonly SemaphoreSlim wake = new(0), slots;
     private readonly HashSet<string> retrying = new(StringComparer.Ordinal);
@@ -59,6 +62,8 @@ internal sealed partial class HexLinkSync
                 throw new HexLinkException(HexLinkErrors.TOO_BIG, "Too many paths changed during the manifest read. Retry the sync.");
             stop = stopping.Token;
             remote.Clear();
+            remoteObservedWhileWorking.Clear();
+            ignoredByLink.Clear();
             remoteHeld.Clear();
             remoteHeld.UnionWith(theirs.HeldPaths ?? []);
             offeredWhileHeld.Clear();
@@ -96,7 +101,7 @@ internal sealed partial class HexLinkSync
             paths.UnionWith(remoteHeld);
             foreach (string path in paths)
             {
-                if (BlockedRepository(path) || conflicts.GetValueOrDefault(path)?.HasUnsavedChanges == true)
+                if (BlockedRepository(path))
                     continue;
                 if (holdPaths.Contains(path) || remoteHeld.Contains(path) || CaseDiffers(path))
                 {
@@ -113,9 +118,12 @@ internal sealed partial class HexLinkSync
                 }
                 else if (m is not null && bases.TryGetValue(path, out HexLinkSyncAgreed? agreed) && agreed.Local == m && agreed.Remote == t)
                 {
-                    // Where both were left, line ends and all. Older state did not record executable mode.
-                    if (agreed.Executable is null && mineFile!.Executable is { } mode && mode == theirsFile?.Executable)
-                        SetBase(path, agreed with { Executable = mode });
+                    // Keep agreement metadata current across upgrades, including the text hash and executable mode.
+                    string? text = mineFile!.Text == theirsFile?.Text ? mineFile.Text : agreed.Text;
+                    bool? mode = mineFile.Executable == theirsFile?.Executable ? mineFile.Executable : agreed.Executable;
+                    if (text != agreed.Text || mode != agreed.Executable)
+                        SetBase(path, agreed with { Text = text, Executable = mode });
+                    conflicts.Remove(path);
                 }
                 else if (m is not null && m == t)
                 {
@@ -130,7 +138,8 @@ internal sealed partial class HexLinkSync
                 {
                     // The same text with other line ends, a CRLF checkout against an LF one, told by the two manifests
                     // alone: agreed as each side has it, nothing read
-                    SetBase(path, new HexLinkSyncAgreed(m, t, text, EolIn(mineFile.Eol), EolIn(theirsFile.Eol)));
+                    SetBase(path, new HexLinkSyncAgreed(m, t, text, EolIn(mineFile.Eol), EolIn(theirsFile.Eol),
+                        mineFile.Executable == theirsFile.Executable ? mineFile.Executable : null));
                     conflicts.Remove(path);
                     eolOnly++;
                 }
@@ -189,6 +198,11 @@ internal sealed partial class HexLinkSync
             {
                 if (Ours(change.Path))
                     continue;
+                if (change.Path == linkIgnoreWire)
+                {
+                    dirty.AddRange(ignoredByLink);
+                    ignoredByLink.Clear();
+                }
                 if (change.PreviousPath is { } previous)
                     hereNames.Remove(previous);
                 if (change.Deleted)
@@ -209,6 +223,8 @@ internal sealed partial class HexLinkSync
             }
         }
 
+        if (dirty.Remove(linkIgnoreWire))
+            Dirty(linkIgnoreWire);
         foreach (string path in dirty)
             Dirty(path);
     }
@@ -254,13 +270,15 @@ internal sealed partial class HexLinkSync
                 bases.TryGetValue(change.Path, out HexLinkSyncAgreed? agreed);
                 bool settled = change.Deleted ? agreed is null : change.Hash is not null && change.Hash == agreed?.Remote &&
                     (change.Executable is null || change.Executable == agreed.Executable);
-                if (!settled || holdPaths.Contains(change.Path) || remoteHeld.Contains(change.Path))
+                if (!settled || running.Contains(change.Path) || holdPaths.Contains(change.Path) || remoteHeld.Contains(change.Path))
                     dirty.Add(change.Path);
-                if (change.PreviousPath is { } previous && holdPaths.Contains(previous))
+                if (change.PreviousPath is { } previous && (running.Contains(previous) || holdPaths.Contains(previous)))
                     dirty.Add(previous);
             }
         }
 
+        if (dirty.Remove(linkIgnoreWire))
+            Dirty(linkIgnoreWire);
         foreach (string path in dirty)
             Dirty(path);
     }
@@ -273,9 +291,13 @@ internal sealed partial class HexLinkSync
             NoteRemoteHold(change.Path, held, fromNotice: true);
             return;
         }
+        if (running.Contains(change.Path))
+            remoteObservedWhileWorking.Add(change.Path);
         ObserveDuringPublication(change.Path);
         if (change.PreviousPath is { } previous && remoteCertified)
         {
+            if (running.Contains(previous))
+                remoteObservedWhileWorking.Add(previous);
             ObserveDuringPublication(previous);
             RemoveRemote(previous);
         }
@@ -558,9 +580,16 @@ internal sealed partial class HexLinkSync
                 lock (gate)
                 {
                     taking++;
+                    // Ship the rules before any newly visible paths from the same tree change.
+                    if (queued.Remove(linkIgnoreWire))
+                    {
+                        running.Add(linkIgnoreWire);
+                        batch.Add(linkIgnoreWire);
+                    }
                     while (batch.Count < (peer.Session.SupportsBulk ? 2 * HexLinkFilePack.MaximumFiles : MOST_BATCH) && queue.TryDequeue(out string? wire))
                     {
-                        queued.Remove(wire);
+                        if (!queued.Remove(wire))
+                            continue;
                         running.Add(wire);
                         batch.Add(wire);
                     }
@@ -568,6 +597,12 @@ internal sealed partial class HexLinkSync
 
                 try
                 {
+                    if (batch.Count > 0 && batch[0] == linkIgnoreWire)
+                    {
+                        await slots.WaitAsync(stop);
+                        batch.RemoveAt(0);
+                        await Run(linkIgnoreWire, ignored: false, stop);
+                    }
                     if (batch.Count == 0)
                         continue;
                     HashSet<string> ignored;
@@ -679,6 +714,7 @@ internal sealed partial class HexLinkSync
             lock (gate)
             {
                 running.Remove(wire);
+                remoteObservedWhileWorking.Remove(wire);
                 requeue = again.Remove(wire) && live && queued.Add(wire);
                 if (requeue)
                     queue.Enqueue(wire);
@@ -705,6 +741,17 @@ internal sealed partial class HexLinkSync
     {
         if (BlockedRepository(wire))
             return;
+        // Keep the path eligible for another comparison if the local rules are later relaxed.
+        if (ignored)
+        {
+            if (HexLinkIgnore.Matches(tree.LinkIgnore.Read(), wire[(folder.Name.Length + 1)..]))
+            {
+                lock (gate)
+                    ignoredByLink.Add(wire);
+            }
+            return;
+        }
+
         string full;
         try
         {
@@ -715,10 +762,6 @@ internal sealed partial class HexLinkSync
             Skip(wire, e.Message);
             return;
         }
-
-        // What git ignores here never travels, either way: the other side sending one is never written over this side's
-        if (ignored)
-            return;
 
         bool unavailable;
         lock (gate)
@@ -766,6 +809,7 @@ internal sealed partial class HexLinkSync
             lock (gate)
             {
                 remote.TryGetValue(wire, out theirs);
+                remoteObservedWhileWorking.Remove(wire);
                 bases.TryGetValue(wire, out agreed);
                 conflicts.TryGetValue(wire, out held);
                 firstComparison = passSizes?.ContainsKey(wire) == true;
@@ -804,11 +848,9 @@ internal sealed partial class HexLinkSync
             await ReconcileStreamed(wire, full, mine, theirs, agreed, held, stop);
             return;
         }
-        if (held?.HasUnsavedChanges == true)
-            return;
         string? m = mine?.Hash, t = theirs?.Hash;
-        // Each side still at what it agreed, which may be the same file with different line ends
-        if (agreed is not null && m == agreed.Local && t == agreed.Remote)
+        // Each side is still at its previously agreed version.
+        if (held is null && agreed is not null && m == agreed.Local && t == agreed.Remote)
             return;
 
         if (m == t)
@@ -816,7 +858,10 @@ internal sealed partial class HexLinkSync
             bool settled;
             lock (gate)
             {
-                Agree(wire, m);
+                if (m is not null && mine!.Text is { } text)
+                    SetBase(wire, new HexLinkSyncAgreed(m, m, text, EolIn(mine.Eol), EolIn(mine.Eol), mine.Executable ?? theirs?.Executable));
+                else
+                    Agree(wire, m);
                 settled = conflicts.Remove(wire);
             }
 
@@ -836,7 +881,8 @@ internal sealed partial class HexLinkSync
             bool settled;
             lock (gate)
             {
-                SetBase(wire, new HexLinkSyncAgreed(m, t, same, EolIn(mine.Eol), EolIn(theirs.Eol)));
+                SetBase(wire, new HexLinkSyncAgreed(m, t, same, EolIn(mine.Eol), EolIn(theirs.Eol),
+                    mine.Executable == theirs.Executable ? mine.Executable : null));
                 settled = conflicts.Remove(wire);
             }
 
@@ -851,16 +897,16 @@ internal sealed partial class HexLinkSync
         if (held is not null)
             return;
 
-        // Each side is looked at against its own agreed hash: only one moved, that one goes to the other
+        // A formatting-only rewrite is also unchanged against the base. The other side's content wins.
         if (agreed is not null)
         {
-            if (m == agreed.Local)
+            if (m == agreed.Local || (agreed.Text is { } text && mine?.Text == text))
             {
                 await Pull(wire, full, m, theirs, stop);
                 return;
             }
 
-            if (t == agreed.Remote)
+            if (t == agreed.Remote || (agreed.Text is { } remoteText && theirs?.Text == remoteText))
             {
                 await Push(wire, full, agreed, localBytes, m, t, stop);
                 return;
@@ -1032,7 +1078,7 @@ internal sealed partial class HexLinkSync
 
                 lock (gate)
                 {
-                    if (remote.GetValueOrDefault(wire)?.Hash == theirs)
+                    if (!remoteObservedWhileWorking.Contains(wire) && remote.GetValueOrDefault(wire)?.Hash == theirs)
                         RemoveRemote(wire);
                     Agree(wire, null);
                 }

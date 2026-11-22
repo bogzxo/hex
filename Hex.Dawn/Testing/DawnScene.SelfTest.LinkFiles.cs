@@ -96,6 +96,9 @@ internal sealed partial class DawnScene
             Read(Path.Combine(theirs, "only-a.txt")) == "Only on A.\n" && Read(Path.Combine(mine, "only-b.txt")) == "Only on B.\n");
         test.Check("link-files: a file git ignores (bin/) didn't travel", () =>
             File.Exists(Path.Combine(mine, "bin", "built.txt")) && !File.Exists(Path.Combine(theirs, "bin", "built.txt")));
+        test.Check("link-files: the Link ignore file travels but its matches stay here", () =>
+            Read(Path.Combine(theirs, HexLinkIgnore.FileName)) == "*.generated\n" &&
+            File.Exists(Path.Combine(mine, "local.generated")) && !File.Exists(Path.Combine(theirs, "local.generated")));
         test.Check("link-files: the choice is kept for when B links again", () =>
             LinkSyncChosen(peerId ?? string.Empty).Contains(LINK_SYNC_FOLDER));
 
@@ -432,6 +435,8 @@ internal sealed partial class DawnScene
         if (GitProcess.Run(Path.GetDirectoryName(theirs)!, ["clone", "-q", "-c", "core.autocrlf=false", mine, theirs]) is { Ok: false } notCloned)
             return $"git clone failed, {notCloned.Why}";
 
+        File.WriteAllText(Path.Combine(mine, HexLinkIgnore.FileName), "*.generated\n");
+        File.WriteAllText(Path.Combine(mine, "local.generated"), "Built here.\n");
         File.WriteAllText(Path.Combine(mine, "only-a.txt"), "Only on A.\n");
         File.WriteAllText(Path.Combine(theirs, "only-b.txt"), "Only on B.\n");
         Directory.CreateDirectory(Path.Combine(mine, "bin"));

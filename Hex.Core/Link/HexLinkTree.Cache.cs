@@ -6,7 +6,7 @@ internal sealed partial class HexLinkTree
 {
     private readonly record struct HashStamp(long Length, long Written, long Created, string Hash, string? Text, string? Eol);
 
-    private const int CacheVersion = 2;
+    private const int CacheVersion = 3;
     private const int MaximumCacheBytes = 256 * 1024 * 1024;
     private readonly string? cacheFile;
     private readonly Lock scan = new();
@@ -46,7 +46,7 @@ internal sealed partial class HexLinkTree
                 return;
             using var reader = new BinaryReader(stream);
             int version = reader.ReadInt32();
-            if (version is not (1 or CacheVersion))
+            if (version is not (1 or 2 or CacheVersion))
                 return;
             int count = reader.ReadInt32();
             if (count is < 0 or > MOST_FILES)
@@ -63,7 +63,9 @@ internal sealed partial class HexLinkTree
                     (eol is not null && eol is not ("lf" or "crlf" or "none")))
                     return;
                 string full = Path.Combine(Root, relative.Replace('/', Path.DirectorySeparatorChar));
-                entries.Add(full, new HashStamp(length, written, created, hash, text, eol));
+                // Older text hashes include the UTF-8 BOM. Re-read text while retaining cached executable modes.
+                if (version == CacheVersion || text is null)
+                    entries.Add(full, new HashStamp(length, written, created, hash, text, eol));
                 if (version >= 2 && reader.ReadByte() is byte mode && mode != 0)
                     modes[full] = mode == 2;
             }

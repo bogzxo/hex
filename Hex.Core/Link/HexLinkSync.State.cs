@@ -61,7 +61,7 @@ internal sealed partial class HexLinkSync
     /// </summary>
     private string Jailed(string wire)
     {
-        string full = HexLinkFiles.Resolve([folder], wire);
+        string full = HexLinkFiles.Resolve([folder], wire, respectLinkIgnore: true);
         if (BlockedRepository(wire))
             throw new HexLinkException(HexLinkErrors.NOT_ALLOWED, $"{wire} is in a repository missing on one device.");
         if (PlatformPaths.Same(full, StateFile) || Ours(wire, includeMissing: false))

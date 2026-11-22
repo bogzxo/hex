@@ -4430,6 +4430,18 @@ let strings = {
         sync_count_conflicts: "{n} conflicts",
         sync_count_skipped: "{n} ignored",
         sync_skipped_tip: "These files are ignored by sync (excluded by .gitignore or Hex's exclude rules, too large, or not allowed). Each is listed with its reason:",
+        ignore: {
+            title: "Create a Link ignore file?",
+            body: "Add a .hex-link-ignore file to {folder} to keep build output and other local files from travelling between devices. You can edit its rules any time.",
+            create: "Create",
+            later: "Not now",
+            create_failed: "Couldn't create .hex-link-ignore. {why}",
+            remember_failed: "Couldn't remember the Link ignore choice. {why}",
+            file_about: "# Hex Link leaves out files and folders that match these rules.",
+            file_patterns: "# Use .gitignore syntax. A leading slash starts at this folder, a trailing slash matches a folder, and ** spans folders.",
+            file_exceptions: "# Start a line with ! to take a match back. Blank lines and lines starting with # are comments.",
+            file_defaults: "# Common build outputs and local settings"
+        },
         sync_start: "Start syncing",
         sync_stop: "Pause sync",
         sync_anyway: "Sync Anyway",

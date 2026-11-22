@@ -39,7 +39,8 @@ internal static partial class HexLinkFiles
     /// A wire path made a full path inside one of the workspace's folders, or refused (not allowed) with why. The full
     /// path is the real one, every link along it followed, which is what's then read or written.
     /// </summary>
-    public static string Resolve(IReadOnlyList<HexLinkFolder> folders, string wire, HexExcludes? excludes = null)
+    public static string Resolve(IReadOnlyList<HexLinkFolder> folders, string wire, HexExcludes? excludes = null,
+        bool respectLinkIgnore = false)
     {
         if (string.IsNullOrEmpty(wire) || wire.Length > MOST_PATH)
             throw Refused(wire, "it's empty or too long");
@@ -89,7 +90,18 @@ internal static partial class HexLinkFiles
             string real = inside.Replace('\\', '/');
             if (!folder.IncludeSystemFiles && (HexLinkSystemFiles.Matches(requested) || HexLinkSystemFiles.Matches(real)))
                 throw Refused(wire, "Link excludes operating system metadata in this folder");
-            if (excludes is not null)
+            if (respectLinkIgnore)
+            {
+                HexIgnoreFile? rules = HexLinkIgnore.ForRoot(root).Read();
+                if (rules is not null)
+                {
+                    bool directory = Directory.Exists(at);
+                    if (HexLinkIgnore.Matches(rules, requested, directory) || HexLinkIgnore.Matches(rules, real, directory))
+                        throw Refused(wire, "the folder's .hex-link-ignore excludes it");
+                }
+            }
+            bool rulesFile = respectLinkIgnore && HexLinkIgnore.IsRulesFile(requested) && HexLinkIgnore.IsRulesFile(real);
+            if (excludes is not null && !rulesFile)
             {
                 bool directory = Directory.Exists(at);
                 if (Excluded(excludes, requested, directory) || Excluded(excludes, real, directory))

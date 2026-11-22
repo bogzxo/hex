@@ -106,7 +106,10 @@ internal sealed partial class DawnScene
         }
 
         if (LinkWanted && linkTransport is null)
-            StartLink();
+        {
+            if (StartLink())
+                OfferLinkIgnoreFiles(explorer.workspace.Folders);
+        }
         else if (!LinkWanted && linkTransport is not null)
         {
             StopLink();

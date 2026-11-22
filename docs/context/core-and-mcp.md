@@ -93,8 +93,10 @@ Comment-preserving edits of HIDL/layout text by value path. `HexSourceTree` (:19
 ### 4.7 Hidl/ (8 files)
 HIDL (`.hor`) analysis behind the editor and `Hex --lsp`: `HidlAnalysis`, `HidlSemantics`, `HidlReferences`, `HidlInlays`, `HidlLocals`, `HidlFunctions`, `HidlComponents` (what components a layout knows), and `HidlServer` (`HidlServer.cs:20`; `Serve()` :66 reads LSP on stdin/stdout; handles `shutdown`). HIDL has no entry in `language_servers.hor`: Hex is its own server. Consumers: Dawn code editor (diagnostics, completion, hover, go to definition for `.hor`), harness (`.hor` outline uses the real lexer).
 
-### 4.8 Search/ (7 files)
+### 4.8 Search/
 `HexSearch` (`HexSearch.cs:18`, partial `.Find` :14, `.Replace` :16; `HexResult` :11; `TextFilesUnder(roots)`, `RelativeTo`, `ReadLines`), `HexGlob` (:10), `HexScope` (:8; include/exclude boxes), `HexExcludes` (:9; `files_exclude`, `search_exclude`), `HexIgnoreFile` (:9; .gitignore when `search_use_ignore_files`). Consumers: Dawn Find in Files/Search side view, quick open, the harness index (`TextFilesUnder`), MCP `hex_find_in_files` (editor group, uses Dawn's search) and harness tools.
+
+`HexIgnoreFile` and `HexGlob` also parse the root `.hex-link-ignore` for Link. `HexLinkIgnore` refreshes the rules from disk. `HexLinkTree` applies them to manifests and watcher events, and `HexLinkFiles.Resolve` checks them for sync reads and writes.
 
 ### 4.9 Workspace/ (6 files)
 `HexWorkspace` (`HexWorkspace.cs:18`; `.hex-workspace` multi-root file), `WorkspacePaths` (:4), `HexRunTarget` (:11; what F5/Run uses: project, file, task), `HexLocalHistory` (:16; kept versions, `HexKeptVersion`), `HexTrash` (recycle-bin moves), `HexFileFacts` (:17; encoding/EOL/indent sniffing `HexTextFacts`, image `HexImageFacts`). Consumers: `Hex.Dawn/Workspace/` (explorer, places), status bar, local history view.

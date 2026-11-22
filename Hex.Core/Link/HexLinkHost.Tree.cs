@@ -116,7 +116,7 @@ internal sealed partial class HexLinkHost
 
     private string ResolveUsableTreeFile(string wire)
     {
-        string full = HexLinkFiles.Resolve(Folders, wire, services.Excludes);
+        string full = HexLinkFiles.Resolve(Folders, wire, services.Excludes, respectLinkIgnore: true);
         int slash = wire.IndexOf('/');
         if (slash > 0)
         {

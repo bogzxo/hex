@@ -38,7 +38,7 @@ internal sealed partial class HexLinkSync
         HexLinkSyncAgreed? agreed, HexLinkSyncConflict? held, CancellationToken cancel)
     {
         string? m = mine?.Hash, t = theirs?.Hash;
-        if (held?.HasUnsavedChanges == true || (agreed is not null && m == agreed.Local && t == agreed.Remote))
+        if (held is null && agreed is not null && m == agreed.Local && t == agreed.Remote)
             return;
         if (m == t)
         {

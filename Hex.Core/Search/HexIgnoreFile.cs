@@ -29,7 +29,7 @@ internal sealed class HexIgnoreFile
 
         try
         {
-            return Of(File.ReadAllLines(path), under);
+            return Of(File.ReadLines(path), under);
         }
         catch (Exception)
         {
@@ -39,24 +39,16 @@ internal sealed class HexIgnoreFile
     }
 
     /// <summary>The lines of a .gitignore read as one, null for nothing in them.</summary>
-    public static HexIgnoreFile? Of(IEnumerable<string> lines, string under = "")
+    public static HexIgnoreFile? Of(IEnumerable<string> lines, string under = "", bool ignoreCase = true)
     {
         var rules = new List<(HexGlob, bool)>();
         foreach (string raw in lines)
         {
-            string line = raw.TrimEnd();
-            if (line.Length == 0 || line[0] == '#')
+            if (raw.Length == 0 || raw[0] == '#')
                 continue;
 
-            bool back = line[0] == '!';
-            if (back)
-                line = line[1..];
-
-            // \# and \! are a name that starts with one
-            if (line.StartsWith('\\'))
-                line = line[1..];
-
-            foreach (HexGlob glob in HexGlob.Parse(line))
+            bool back = raw[0] == '!';
+            if (HexGlob.ParseIgnore(back ? raw[1..] : raw, ignoreCase) is { } glob)
                 rules.Add((glob, back));
         }
 
@@ -86,6 +78,17 @@ internal sealed class HexIgnoreFile
         }
 
         return ignored;
+    }
+
+    /// <summary>Whether this file excludes a path or any of its parent directories.</summary>
+    public bool Excludes(string relative, bool folder)
+    {
+        for (int slash = relative.IndexOf('/'); slash >= 0; slash = relative.IndexOf('/', slash + 1))
+        {
+            if (Says(relative[..slash], folder: true, otherwise: false))
+                return true;
+        }
+        return Says(relative, folder, otherwise: false);
     }
 
     /// <summary>Whether the files from the top of what's walked down to a path leave it out, the top one first.</summary>

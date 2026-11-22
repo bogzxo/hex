@@ -233,6 +233,15 @@ contents. Existing copies are left on disk and appear under ?doesn't travel? aft
 continues to apply the ordinary workspace and Git exclusions. Editor suffixes like `*.swp` and `*~` can be added to
 those rules when appropriate for a project.
 
+Add a `.hex-link-ignore` file to a shared folder's root to leave local files and directories out of
+working-tree sync in either direction. It works in plain folders and Git repositories, including for tracked
+files. Use `.gitignore` patterns such as `*.pdb`, `/build/`, `cache/**/trace` and `!keep.pdb`. To re-include a
+file, its parent directories must remain visible. The rules file itself travels and Link reloads changes while
+sync keeps running. Existing files stay on disk when a rule starts ignoring them.
+
+Hex offers to create the file when you enable Link or share a folder in Devices. **Create** opens a starter
+file with common build-output rules. **Not now** remembers your choice for that folder.
+
 To opt a folder out of Link's operating-system defaults, add its absolute local path to `link_system_file_folders`
 under `editor` in your user settings, for example `link_system_file_folders = ["C:/source/special-workspace"]`.
 Restart Link on each device after changing the setting. Both ends must opt in before working-tree sync carries

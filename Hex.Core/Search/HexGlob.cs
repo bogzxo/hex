@@ -1,16 +1,18 @@
+using System.Text.RegularExpressions;
+
 namespace Hex.Core;
 
 /// <summary>
 /// A glob of VS Code's files.exclude and search.exclude, or a line of a .gitignore, matched against a path inside the
 /// folder it's for written with forward slashes. ** is any number of folders, * anything but a slash, ? one character,
-/// {a,b} either, and a trailing slash only matches folders. One with no slash in it but at its end matches a name at
-/// any depth (bin/ is every bin), one with a slash in it goes from the top of the folder (src/gen, or /out). Case is
-/// ignored, the way Windows names files.
+/// and a trailing slash only matches folders. A pattern without an internal or leading slash matches a name at
+/// any depth. VS Code exclude patterns also support braces and match without regard to case.
 /// </summary>
-internal sealed class HexGlob
+internal sealed partial class HexGlob
 {
     // The pattern's parts between its slashes, matched part by part against the path's
     private readonly string[] parts;
+    private readonly Regex?[]? ignoreParts;
 
     /// <summary>Whether it only matches folders, it was written with a slash at its end.</summary>
     public bool FolderOnly { get; }
@@ -18,9 +20,10 @@ internal sealed class HexGlob
     /// <summary>Whether it goes from the top of the folder rather than matching a name anywhere.</summary>
     public bool Anchored { get; }
 
-    private HexGlob(string[] parts, bool folderOnly, bool anchored)
+    private HexGlob(string[] parts, bool folderOnly, bool anchored, Regex?[]? ignoreParts = null)
     {
         this.parts = parts;
+        this.ignoreParts = ignoreParts;
         FolderOnly = folderOnly;
         Anchored = anchored;
     }
@@ -68,40 +71,46 @@ internal sealed class HexGlob
         if (!Anchored)
         {
             int slash = relative.LastIndexOf('/');
-            return Wild(parts[0], relative.AsSpan(slash + 1));
+            return PartMatches(0, relative.AsSpan(slash + 1));
         }
 
-        return Along(parts, 0, split ??= relative.Split('/', StringSplitOptions.RemoveEmptyEntries), 0);
+        return Along(split ??= relative.Split('/', StringSplitOptions.RemoveEmptyEntries));
     }
 
-    // The pattern's parts from one place against the path's from another, ** taking none of them or as many as it likes
-    private static bool Along(string[] pattern, int at, string[] path, int on)
+    // A globstar first matches no directories, then takes more when the next part does not match.
+    private bool Along(string[] path)
     {
-        while (at < pattern.Length)
+        int at = 0, on = 0, star = -1, consumed = 0;
+        while (at < parts.Length || on < path.Length)
         {
-            if (pattern[at] == "**")
+            if (at < parts.Length && parts[at] == "**")
             {
-                // A ** at the end is everything under where it got to
-                if (at == pattern.Length - 1)
-                    return true;
-
-                for (int skip = on; skip <= path.Length; skip++)
-                {
-                    if (Along(pattern, at + 1, path, skip))
-                        return true;
-                }
-
+                if (at == parts.Length - 1)
+                    return ignoreParts is null || on < path.Length;
+                star = at++;
+                consumed = on;
+            }
+            else if (at < parts.Length && on < path.Length && PartMatches(at, path[on]))
+            {
+                at++;
+                on++;
+            }
+            else if (star >= 0 && consumed < path.Length)
+            {
+                at = star + 1;
+                on = ++consumed;
+            }
+            else
+            {
                 return false;
             }
-
-            if (on >= path.Length || !Wild(pattern[at], path[on]))
-                return false;
-            at++;
-            on++;
         }
 
-        return on == path.Length;
+        return true;
     }
+
+    private bool PartMatches(int at, ReadOnlySpan<char> part) => ignoreParts is null
+        ? Wild(parts[at], part) : ignoreParts[at]?.IsMatch(part) ?? true;
 
     // One part against a name, * any run of it and ? any one character
     private static bool Wild(ReadOnlySpan<char> pattern, ReadOnlySpan<char> name)

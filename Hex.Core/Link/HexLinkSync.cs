@@ -116,6 +116,7 @@ internal sealed partial class HexLinkSync : IDisposable
     {
         this.peer = peer;
         this.folder = folder;
+        linkIgnoreWire = folder.Name + "/" + HexLinkIgnore.FileName;
         TreeCacheDirectory = stateFolder;
         if (peer.Session.SupportsBulk)
             Quiet = TimeSpan.FromMilliseconds(120);
