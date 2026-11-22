@@ -400,6 +400,8 @@ internal sealed partial class HexLinkSync : IDisposable
             remote.TryGetValue(path, out theirs);
         }
 
+        if (theirs?.Unavailable == true)
+            return "The other device cannot read this file yet.";
         if (conflict is null)
             return $"{path} isn't in conflict.";
         if (keep == HexLinkSyncKeep.Mine && !remoteCertified)

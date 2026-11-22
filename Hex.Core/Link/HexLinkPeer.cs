@@ -244,7 +244,7 @@ internal sealed partial class HexLinkPeer : IDisposable
     }
 
     private static HexLinkTreeChange TreeChange(HexLinkTreeFile file) =>
-        new(file.Path, file.Hash, Text: file.Text, Eol: file.Eol);
+        new(file.Path, file.Hash, Text: file.Text, Eol: file.Eol, Unavailable: file.Unavailable);
 
     private void RememberTreeChanges(string folder, IReadOnlyList<HexLinkTreeChange> changes)
     {

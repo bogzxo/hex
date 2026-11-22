@@ -60,6 +60,7 @@ internal sealed partial class HexLinkSync
             stop = stopping.Token;
             remote.Clear();
             remoteCertified = theirs.Certified;
+            CompareHeads(mine, theirs);
             insensitivePaths = mine.CaseSensitive != true || theirs.CaseSensitive != true;
             hereNames.Clear();
             thereNames.Clear();
@@ -248,7 +249,7 @@ internal sealed partial class HexLinkSync
             RemoveRemote(change.Path);
         else
         {
-            remote[change.Path] = new HexLinkTreeFile(change.Path, change.Hash, 0, change.Text, change.Eol);
+            remote[change.Path] = new HexLinkTreeFile(change.Path, change.Hash, 0, change.Text, change.Eol, change.Unavailable);
             thereNames.Add(change.Path);
         }
     }
@@ -663,6 +664,15 @@ internal sealed partial class HexLinkSync
         if (ignored)
             return;
 
+        bool unavailable;
+        lock (gate)
+            unavailable = remote.GetValueOrDefault(wire)?.Unavailable == true;
+        if (unavailable)
+        {
+            Again(wire, "The other device cannot read this file. Link will retry.");
+            return;
+        }
+
         if (await ReconcileCase(wire, stop))
             return;
 
@@ -684,11 +694,19 @@ internal sealed partial class HexLinkSync
         HexLinkTreeFile? theirs;
         HexLinkSyncAgreed? agreed;
         HexLinkSyncConflict? held;
+        bool firstComparison;
         lock (gate)
         {
             remote.TryGetValue(wire, out theirs);
             bases.TryGetValue(wire, out agreed);
             conflicts.TryGetValue(wire, out held);
+            firstComparison = passSizes?.ContainsKey(wire) == true;
+        }
+
+        if (theirs?.Unavailable == true)
+        {
+            Again(wire, "The other device cannot read this file. Link will retry.");
+            return;
         }
 
         if (mine is { Big: true } || theirs is { Big: true })
@@ -759,6 +777,10 @@ internal sealed partial class HexLinkSync
                 await Push(wire, full, agreed, localBytes, m, t, stop);
                 return;
             }
+        }
+        else if (firstComparison && await ReconcileFromHead(wire, full, mine, theirs, localBytes, stop))
+        {
+            return;
         }
         else if (m is null)
         {
