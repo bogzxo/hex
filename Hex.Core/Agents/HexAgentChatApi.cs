@@ -75,6 +75,7 @@ internal static class HexAgentChatApi
             return new BooleanValue(line.Length > 0 && write(line.ReplaceLineEndings(" ")));
         })),
         ("folder", new StringValue(folder)),
+        ("private_worktree", chat.LinkDraft is not null ? Values.True : Values.False),
         ("session", Natives.Function("session", args =>
         {
             if (args.Has(0) && args[0] is StringValue said && said.Value.Length > 0)

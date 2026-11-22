@@ -46,7 +46,8 @@ Dependency direction: Hex -> {Dawn, Dusk, Shell} -> Core. Core has the model and
 | `Hex --mcp` (stdio client started it) | Bridge: finds the Hex that has the folder open (`--folder`, a bare folder arg, or cwd), else starts `Hex --window --folder X --mcp` under a global mutex, then pumps bytes. No window of its own. |
 | `Hex --mcp-connect` | Attach-only bridge. Never launches; exit 1 + stderr message if no server matches. For hosts (Codex) that start one connection per chat. |
 | `Hex --window --mcp` | The editor GUI with the server on for this run. |
-| `Hex --mcp-connect --folder F --agent-chat ID` | A per-chat bridge: `ID` becomes the tag in the handshake, so the server knows which Agents-panel chat is calling (`McpBridge.cs:56`). Built by `hex.mcp_server(chat)`. |
+| `Hex --mcp-connect --folder F --agent-chat ID` | A per-chat bridge. The handshake tag identifies the calling chat. Private chats resolve file paths and terminal working directories against their draft. Built by `hex.mcp_server(chat)`. |
+| `Hex --harness-hook --agent-chat ID --private-root R --folder F` | Claude's file hook asks the same editor to open a sparse private repository before a native operation on a missing file in the draft. |
 | `Hex --selftest mcp --exit` | Runs the in-editor MCP suite (`Hex.Dawn/Testing/DawnScene.SelfTest.Mcp.cs`). `--selftest` disables bridge mode even with `--mcp`. |
 | `Hex --lsp` | HIDL language server, not MCP. |
 

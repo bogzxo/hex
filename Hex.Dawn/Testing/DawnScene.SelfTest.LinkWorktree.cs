@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json.Nodes;
 
 namespace Hex.Dawn;
@@ -29,6 +30,60 @@ internal sealed partial class DawnScene
         string? why = null;
         string? device = null;
         CancellationToken cancel = CancellationToken.None;
+        string other = LinkTestFolder("worktree-engine-", test);
+        string otherFile = Path.Combine(other, "EngineFixture.cs");
+        string sparseFile = "extra/src/Fixture.cs";
+        string nativeFile = "native/src/HookFixture.cs";
+        bool nativeReadReady = false;
+        string? fullPathError = null, unmatchedError = null;
+        Task<McpToolResult[]>? toolChecks = null;
+
+        async Task<McpToolResult[]> CheckAgentTools(HexAgentChat chat)
+        {
+            Task<McpToolResult> Call(string tool, JsonObject args) => McpTools.CallAs(tool, args, cancel, chat.Id);
+            var found = await Call("hex_files", new JsonObject { ["query"] = LINK_SYNC_FOLDER + "/" + sparseFile });
+            if (File.Exists(Path.Combine(draft!.Root, sparseFile)))
+                throw new IOException("The test repository was already materialized.");
+            var edited = await Call("hex_edit", new JsonObject
+            {
+                ["path"] = LINK_SYNC_FOLDER + "/" + sparseFile, ["old_string"] = "class Fixture",
+                ["new_string"] = "class PrivateFixture", ["check"] = false
+            });
+            var read = await Call("hex_read", new JsonObject { ["path"] = sparseFile, ["symbol"] = "PrivateFixture" });
+            var outside = await Call("hex_read", new JsonObject { ["path"] = otherFile, ["symbol"] = "EngineFixture" });
+            var search = await Call("hex_search", new JsonObject { ["query"] = "EngineFixture" });
+            var symbols = await Call("hex_symbols", new JsonObject { ["query"] = "EngineFixture" });
+            var outsideEdit = await Call("hex_edit", new JsonObject
+            {
+                ["path"] = otherFile, ["old_string"] = "EngineFixture", ["new_string"] = "Wrong", ["check"] = false
+            });
+            var terminal = await Call("hex_terminal_run", new JsonObject { ["command"] = "git rev-parse --show-toplevel", ["timeout"] = 15 });
+            string nativePath = Path.Combine(draft.Root, nativeFile);
+            if (!File.Exists(nativePath))
+            {
+                var start = new ProcessStartInfo(Environment.ProcessPath!)
+                {
+                    WorkingDirectory = draft.Root, UseShellExecute = false, CreateNoWindow = true,
+                    RedirectStandardInput = true, RedirectStandardOutput = true
+                };
+                if (LinkTestRunByHost() is { } program)
+                    start.ArgumentList.Add(program);
+                foreach (string arg in (string[])["--harness-hook", "--guard", "off", "--agent-chat", chat.Id.ToString(),
+                    "--private-root", draft.Root, "--folder", mine])
+                    start.ArgumentList.Add(arg);
+                using var hook = Process.Start(start)!;
+                await hook.StandardInput.WriteLineAsync(new JsonObject
+                {
+                    ["tool_name"] = "Read", ["tool_input"] = new JsonObject { ["file_path"] = nativePath }
+                }.ToJsonString());
+                hook.StandardInput.Close();
+                string response = await hook.StandardOutput.ReadToEndAsync(cancel);
+                await hook.WaitForExitAsync(cancel);
+                nativeReadReady = hook.ExitCode == 0 && response.Length == 0 &&
+                    ReadLinkTestFile(nativePath) == "class HookFixture { }\n";
+            }
+            return [found, edited, read, outside, search, symbols, outsideEdit, terminal];
+        }
 
         async Task OpenDraft(HexAgentChat chat)
         {
@@ -55,6 +110,8 @@ internal sealed partial class DawnScene
             if (PublicationPair(folder, device!) is not { PublicationPairReady: true } sync)
                 throw new IOException("The authority did not start its live sync pair.");
             await sync.Flush();
+            HexLinkWorktreeGatePolicyFile.Save(Path.Combine(LinkPrivateStorage, "gates.json"), folder,
+                new HexLinkAuthority(owner, 1), new HexLinkWorktreeGatePolicy("exit 0", "src", null, null, 15));
             var launched = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var request = new LinkPrivateAgentStart(folder.Name, null, "test-family", []);
             await OnEditorForLink(() =>
@@ -79,6 +136,9 @@ internal sealed partial class DawnScene
             if (await LinkCreateAgentDraft(child, folder.Name, cancel, request) is not null || child.LinkDraft != id)
                 throw new IOException("The same agent family did not reopen the existing private tree.");
             privateAgentRoots.TryRemove(child.Id, out _);
+            fullPathError = await LinkCreateAgentDraft(child, folder.Path, cancel, request);
+            unmatchedError = await LinkCreateAgentDraft(child, "missing-private-folder", cancel, request);
+            privateAgentRoots.TryRemove(child.Id, out _);
         }
 
         async Task<HexLinkDraftPublication> Publish(string command)
@@ -99,11 +159,25 @@ internal sealed partial class DawnScene
                 return;
             File.WriteAllText(target, Seed);
             File.WriteAllText(remote, Seed);
+            why = LinkTestRepository(Path.Combine(mine, "extra"), Path.Combine(theirs, "extra"));
+            if (why is not null)
+                return;
+            File.WriteAllText(Path.Combine(mine, sparseFile), "class Fixture { }\n");
+            File.WriteAllText(Path.Combine(theirs, sparseFile), "class Fixture { }\n");
+            why = LinkTestRepository(Path.Combine(mine, "native"), Path.Combine(theirs, "native"));
+            if (why is not null)
+                return;
+            File.WriteAllText(Path.Combine(mine, nativeFile), "class HookFixture { }\n");
+            File.WriteAllText(Path.Combine(theirs, nativeFile), "class HookFixture { }\n");
+            File.WriteAllText(otherFile, "class EngineFixture { }\n");
             StopLink();
-            linkTestExtraFolders = [mine];
+            explorer.OpenFolder(mine);
+            explorer.AddFolder(other);
             if (!StartLink(port: 0, home: home, loopbackOnly: true))
                 return;
             linkByTest = true;
+            var folder = new HexLinkFolder(LINK_SYNC_FOLDER, mine);
+            linkServices!.FolderAuthorities.Bind(folder, new HexLinkAuthority(linkServices.Device.Id, 1));
             LinkOpenPairing(TimeSpan.FromMinutes(3));
             LinkStartPeer(peerHome, $"127.0.0.1:{LinkPort}", new Dictionary<string, string>
             {
@@ -113,7 +187,9 @@ internal sealed partial class DawnScene
         test.Check("link-worktree: both repositories and the replica app started", () => why is null && linkTestPeer is not null);
         test.WaitFor(() => LinkPairingPending is not null || linkTestPeer is { HasExited: true }, 90.0f);
         test.Run(() => LinkPairingPending?.Decide(HexLinkRights.View | HexLinkRights.Steer | HexLinkRights.Edit));
-        test.WaitFor(() => LinkPeers.Count == 1 && linkTestPeerSaid.Any(line => line.Contains("link-worktree: replica ready", StringComparison.Ordinal)), 60.0f);
+        test.WaitFor(() => LinkPeers.Count == 1 && LinkTestPeerSaid("link-worktree: replica ready"), 60.0f);
+        test.Check("link-worktree: the existing replica can publish through its sync source", () =>
+            LinkTestPeerSaid("pass: link-worktree: syncing an existing replica pins the source and enables checked publication"));
         test.Run(() =>
         {
             peer = LinkPeers.FirstOrDefault();
@@ -128,10 +204,46 @@ internal sealed partial class DawnScene
         test.Run(() => { if (step?.Exception is { } error) Console.WriteLine("[Hex self-test] link-worktree: " + error.GetBaseException().Message); });
         test.Check("link-worktree: a chat became visible before its detached private draft was ready", () =>
             acceptedWhilePreparing && step is { IsCompletedSuccessfully: true } && draft is not null && agent is not null && LinkAgentFolder(agent) == draft.Root);
+        test.Check("link-worktree: spawn accepts a full folder path and lists folders on a mismatch", () =>
+            draft is not null && fullPathError is null && unmatchedError?.Contains(mine, StringComparison.Ordinal) == true);
+        test.Run(() =>
+        {
+            if (agent is not null && draft is not null)
+            {
+                if (mcpHost is null)
+                    StartMcp();
+                toolChecks = CheckAgentTools(agent);
+            }
+        });
+        test.WaitFor(() => draft is null || toolChecks?.IsCompleted == true, 60.0f);
+        test.Run(() =>
+        {
+            if (toolChecks is { IsFaulted: true })
+                Console.WriteLine("[Hex self-test] link-worktree tool checks: " + toolChecks.Exception!.GetBaseException().Message);
+            else if (toolChecks is { IsCompletedSuccessfully: true })
+                foreach (var (answer, index) in toolChecks.Result.Select((answer, index) => (answer, index)))
+                    if (answer.IsError && index != 6)
+                        Console.WriteLine($"[Hex self-test] link-worktree tool {index}: {answer.AllText()}");
+        });
+        bool ToolSaid(int index, string text, bool error = false) => toolChecks is { IsCompletedSuccessfully: true } &&
+            toolChecks.Result[index].IsError == error && toolChecks.Result[index].AllText().Contains(text, StringComparison.Ordinal);
+        test.Check("link-worktree: file results are relative to the private root", () =>
+            ToolSaid(0, sparseFile) && !ToolSaid(0, LINK_SYNC_FOLDER + "/" + sparseFile));
+        test.Check("link-worktree: a prefixed edit materializes the sparse repository and a symbol read sees the edit", () =>
+            ToolSaid(1, "Edited") && ToolSaid(2, "class PrivateFixture") &&
+            ReadLinkTestFile(Path.Combine(mine, sparseFile)) == "class Fixture { }\n");
+        test.Check("link-worktree: reads, search and symbols include the other workspace root, which stays read-only", () =>
+            ToolSaid(3, "class EngineFixture") && ToolSaid(4, "EngineFixture.cs") && ToolSaid(5, "EngineFixture.cs") &&
+            ToolSaid(6, "private worktree", error: true) && ReadLinkTestFile(otherFile) == "class EngineFixture { }\n");
+        test.Check("link-worktree: the Claude Code Read hook opens a sparse private repository", () => nativeReadReady);
+        test.Check("link-worktree: terminal commands start in the private root", () =>
+            draft is not null && ToolSaid(7, "Exit 0") && ToolSaid(7, draft.Root.Replace('\\', '/')));
         test.Run(() =>
         {
             if (draft is null)
                 return;
+            if (File.Exists(Path.Combine(draft.Root, sparseFile)))
+                File.WriteAllText(Path.Combine(draft.Root, sparseFile), "class Fixture { }\n");
             File.WriteAllText(Path.Combine(draft.Root, "src", "shared.txt"), "private first\nsecond\nthird\nfourth\n");
             File.WriteAllText(Path.Combine(draft.Root, "only-draft.txt"), "private");
             var pin = linkServices!.FolderAuthorities.Of(draft.SharedFolder)!;
@@ -146,6 +258,8 @@ internal sealed partial class DawnScene
             draftStatus is { IsCompletedSuccessfully: true, Result.IsError: false } &&
             draftStatus.Result.AllText().Contains("2 unpublished files", StringComparison.Ordinal) &&
             draftStatus.Result.AllText().Contains("src | exit 7 | 15s", StringComparison.Ordinal) &&
+            draftStatus.Result.AllText().Contains("\nsrc/shared.txt", StringComparison.Ordinal) &&
+            !draftStatus.Result.AllText().Contains("\n" + LINK_SYNC_FOLDER + "/src/shared.txt", StringComparison.Ordinal) &&
             LinkScopePrivateAgentCall(agent!.Id, "hex_link_worktree_gate", []) is not null &&
             LinkScopePrivateAgentCall(agent.Id, "hex_link_authority", []) is not null);
         test.Check("link-worktree: the failed gate leaves both editors at the shared version", () =>
@@ -215,9 +329,11 @@ internal sealed partial class DawnScene
         test.Run(() =>
         {
             if (agent is not null)
-                agentChats.Remove(agent);
+                CloseAgentChat(agent);
+            StopMcp();
+            explorer.RemoveFolder(mine);
+            explorer.RemoveFolder(other);
             TidyLinkTest();
-            linkTestExtraFolders = [];
         });
     }
 
@@ -227,18 +343,30 @@ internal sealed partial class DawnScene
             !owner.All(char.IsAsciiHexDigit))
             return;
         Task? restoring = null;
+        bool checkedRoute = false;
         test.Run(() =>
         {
             if (linkServices is not { } services || LinkPeers.FirstOrDefault() is not { } peer || peer.Device.Id != owner)
                 return;
-            var folder = services.Workspace.Folders.Single(each => each.Name == Path.GetFileName(workspace));
-            services.FolderAuthorities.Bind(folder, new HexLinkAuthority(owner, 1));
-            restoring = LinkActivateWorktreePublication(_ => [],
-                (_, _, _, _) => Task.CompletedTask, (_, _, _, _) => Task.CompletedTask,
-                (_, _, _) => Task.CompletedTask, (_, _, _) => { }, linkCancel?.Token ?? CancellationToken.None);
+            restoring = StartReplica(services, peer);
         });
+
+        async Task StartReplica(LinkServices services, HexLinkPeer peer)
+        {
+            var folder = services.Workspace.Folders.Single(each => each.Name == Path.GetFileName(workspace));
+            var cancel = linkCancel?.Token ?? CancellationToken.None;
+            await LinkActivateWorktreePublication(_ => [],
+                (_, _, _, _) => Task.CompletedTask, (_, _, _, _) => Task.CompletedTask,
+                (_, _, _) => Task.CompletedTask, (_, _, _) => { }, cancel);
+            string? why = await LinkSyncStart(peer.Device.Id, folder.Name, cancel: cancel);
+            checkedRoute = why is null && services.FolderAuthorities.Of(folder)?.DeviceId == owner &&
+                LinkPrivatePublishRoute(folder) is not null;
+            if (!checkedRoute)
+                Console.WriteLine($"[Hex self-test] link-worktree: the existing replica has no checked route, {why ?? "sync started"}");
+        }
         test.WaitFor(() => restoring?.IsCompleted == true, 30.0f);
         test.Check("link-worktree: publication receiver is active", () => restoring?.IsCompletedSuccessfully == true);
+        test.Check("link-worktree: syncing an existing replica pins the source and enables checked publication", () => checkedRoute);
         test.Run(() =>
         {
             if (restoring?.IsCompletedSuccessfully == true)

@@ -324,8 +324,13 @@ time went.
 ### 5.8 Private worktrees and Publish
 
 The normal mode writes to the live workspace. People and agents can choose an isolated Git worktree, including
-eligible nested repositories. `hex_agent_spawn` and `hex_link_spawn` accept `worktree: private`. A private
-draft can follow incoming changes to untouched paths or hold them. Peers see names of unpublished paths without
+eligible nested repositories. `hex_agent_spawn` and `hex_link_spawn` accept `worktree: private` and a shared
+folder name or absolute path. The agent's file tools and publish status use paths relative to the private root.
+File tools also accept the shared folder name as a prefix. Reading or editing a file opens its repository when
+needed. Searches and declaration reads can include the workspace's other folders. The agent's Hex file edits
+stay inside its private tree, and `hex_terminal_run` starts a fresh shell there.
+
+A private draft can follow incoming changes to untouched paths or hold them. Peers see names of unpublished paths without
 receiving draft contents. If profile storage overlaps an export, Hex keeps drafts in a stable per-profile
 directory outside the share, using the platform's user data location.
 
@@ -339,14 +344,16 @@ A path covered by `.hex-link-ignore` in the private draft or at the authority st
 rule does not delete the file. A replica also keeps files covered by its local rules when a checked set arrives.
 Claims follow the local rules. Publish refuses a file over its size limit and names the path.
 
-Publication to another device uses direct pinned TLS and bulk transport. The authority validates the
+Publication to another device uses direct pinned TLS and bulk transport. When syncing an existing checkout
+from a paired device that advertises itself as the folder authority, Hex pins that authenticated authority for
+the local folder. The authority validates the
 epoch and exact bases, fences the affected paths from live sync, journals and projects the checked set, and
 returns a durable receipt. Retrying a completed request returns the receipt. A receipt advances the draft's
 publication base and preserves edits made while the request was in flight. If the authority has no receipt and
 the draft has changed, Publish prepares a fresh set. A failed or interrupted authority projection is recovered
 before ordinary sync proceeds.
 
-`hex_link_publish` offers `status`, `publish` and `discard` for the calling agent's draft. Discard removes the local
+`hex_link_publish` offers `status`, `materialize`, `publish` and `discard` for the calling agent's draft. Discard removes the local
 draft and its pending retry, including when the authority is offline. Snapshot cleanup retains bases used by other
 drafts and reclaims obsolete objects as the store grows.
 

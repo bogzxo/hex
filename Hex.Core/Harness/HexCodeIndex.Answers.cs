@@ -12,6 +12,8 @@ internal sealed partial class HexCodeIndex
     private readonly Queue<string> keptOrder = new();
     private readonly Lock keeping = new();
 
+    internal Func<HexIndexSnapshot, HexIndexSnapshot>? Scope { get; init; }
+
     /// <summary>
     /// An answer to a query, the kept one when the same was asked of the same generation, made fresh otherwise, and
     /// counted in the stats either way. <paramref name="asked"/> is everything that makes it different from another.
@@ -19,10 +21,9 @@ internal sealed partial class HexCodeIndex
     public HexAnswer Ask(string tool, string asked, Func<HexIndexSnapshot, HexAnswer> make)
     {
         HexIndexSnapshot now = Current();
-        if (HexLinkAllowed.RemoteFileAllowed.Value is { } allowed)
+        if (Scope is not null || HexLinkAllowed.RemoteFileAllowed.Value is not null)
         {
-            HexIndexSnapshot visible = Restrict(now, allowed);
-            HexAnswer restricted = make(visible);
+            HexAnswer restricted = make(VisibleSnapshot(now));
             return restricted.Failed ? restricted : restricted with { Text = restricted.Text + $"(index generation {now.Generation})\n" };
         }
         string key = $"{tool}\n{asked}";
@@ -52,10 +53,12 @@ internal sealed partial class HexCodeIndex
         return made;
     }
 
-    internal HexIndexSnapshot VisibleSnapshot()
+    internal HexIndexSnapshot VisibleSnapshot() => VisibleSnapshot(Current());
+
+    private HexIndexSnapshot VisibleSnapshot(HexIndexSnapshot now)
     {
-        HexIndexSnapshot now = Current();
-        return HexLinkAllowed.RemoteFileAllowed.Value is { } allowed ? Restrict(now, allowed) : now;
+        HexIndexSnapshot scope = Scope?.Invoke(now) ?? now;
+        return HexLinkAllowed.RemoteFileAllowed.Value is { } allowed ? Restrict(scope, allowed) : scope;
     }
 
     private static HexIndexSnapshot Restrict(HexIndexSnapshot now, Func<string, bool> allowed) =>

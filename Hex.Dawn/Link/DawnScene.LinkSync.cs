@@ -128,11 +128,32 @@ internal sealed partial class DawnScene
             return Said("link.sync_no_folder_here", ("folder", folder));
         HexLinkAuthority? authority = services.FolderAuthorities.Of(local);
         HexLinkFolder? remote = peer.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(local.Name, each.Name));
-        if (resume || authority is not null || remote?.Authority is not null)
+        if (resume || remember || authority is not null || remote?.Authority is not null)
         {
             if (!await TryRefreshLinkWorkspace(peer).WaitAsync(cancel).ConfigureAwait(false))
                 return Said("link.sync_authority_required", ("folder", local.Name));
             remote = peer.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(local.Name, each.Name));
+        }
+        // An existing checkout can opt into the same authenticated source as a workspace obtained through Get.
+        // The source must advertise its own pin, the link must still permit View and a saved sync cannot replace a pin.
+        if (authority is null && !boundEngine && (remember || LinkSyncChosen(deviceId).Contains(local.Name, PlatformPaths.Comparer)) &&
+            remote?.Authority is { } advertised && advertised.DeviceId == peer.Device.Id &&
+            services == linkServices && !peer.IsClosed && HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))
+        {
+            await LinkDrainBoundEngine(deviceId, local.Name, cancel).ConfigureAwait(false);
+            cancel.ThrowIfCancellationRequested();
+            if (services != linkServices || peer.IsClosed || !HexLinkAllowed.Has(peer.Granted, HexLinkRights.View) ||
+                !peer.Workspace.Folders.Any(each => PlatformPaths.Comparer.Equals(each.Name, local.Name) && each.Authority == advertised))
+                return Said("link.sync_authority_required", ("folder", local.Name));
+            try
+            {
+                authority = services.FolderAuthorities.Bind(local, advertised, HexLinkAuthorityProvenance.Provisioned);
+                links.WorkspaceMoved();
+            }
+            catch (HexLinkException error)
+            {
+                return error.Message;
+            }
         }
         bool pairedAuthority = authority is not null && remote?.Authority is not null;
         if (LinkSyncPaused(deviceId).FirstOrDefault(pause => PlatformPaths.Comparer.Equals(pause.Folder, local.Name)) is { } localPause)

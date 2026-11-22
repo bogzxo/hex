@@ -38,7 +38,8 @@ internal sealed partial class DawnScene
             if (string.IsNullOrWhiteSpace(path))
                 return McpToolResult.Error("Supply a private worktree-relative repository or file path.");
             var draft = await LinkOpenStoredDraft(id, cancel);
-            string full = HexLinkFiles.Resolve([new HexLinkFolder("work", draft.Root)], "work/" + path);
+            string relative = LinkPrivateRelativePath(path, draft.SharedFolder);
+            string full = HexLinkFiles.Resolve([new HexLinkFolder("work", draft.Root)], "work/" + relative);
             await LinkMaterializePrivatePath(draft, Path.GetRelativePath(draft.Root, full).Replace('\\', '/'), cancel);
             return McpToolResult.Text($"Private repository ready for {path}.");
         }
@@ -57,6 +58,7 @@ internal sealed partial class DawnScene
             {
                 case "status":
                     HexLinkDraftStatus status = await draft.Status(cancel);
+                    var paths = status.Paths.Select(path => LinkPrivateRelativePath(path, draft.SharedFolder));
                     string plannedGate;
                     try
                     {
@@ -69,7 +71,7 @@ internal sealed partial class DawnScene
                     }
                     string repos = string.Join(", ", draft.MaterializedRepositories.Select(path => path.Length == 0 ? "root" : path));
                     string first = draft.FirstGate ? "\nThe first gate runs a full build in this private tree." : "";
-                    return McpToolResult.Text($"{status.Files} unpublished files ({status.Bytes} bytes) in {draft.Root}.\n{string.Join('\n', status.Paths)}" +
+                    return McpToolResult.Text($"{status.Files} unpublished files ({status.Bytes} bytes) in {draft.Root}.\n{string.Join('\n', paths)}" +
                         $"\nPrivate repositories: {repos}\nGate: {plannedGate}{first}");
                 case "discard":
                     bool inUse = await OnEditorForLink(() => agentChats.Count(chat => chat.LinkDraft == id && chat.Running) > 1).WaitAsync(cancel);
