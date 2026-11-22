@@ -253,9 +253,10 @@ internal sealed partial class DawnScene
             if (HostClaim(HexLinkClaimKind.Editing) is { } typing)
                 LinkOpenClaimDocument(typing);
         });
-        test.WaitFor(() => linkDocument?.Peer?.Device.Id == owner, 25.0f);
-        test.Check("link-claims: the claim's Open Shared action joined the published buffer", () =>
-            linkDocument?.Peer?.Device.Id == owner && document.Editor.Text.Contains("Typing after releasing", StringComparison.Ordinal));
+        bool JoinedSharedDocument() => LinkLiveOf(document) is { Connection.Device.Id: var linked, Draft: null }
+            && linked == owner && document.Editor.Text.Contains("Typing after releasing", StringComparison.Ordinal);
+        test.WaitFor(JoinedSharedDocument, 25.0f);
+        test.Check("link-claims: the claim's Open Shared action joined the published buffer", JoinedSharedDocument);
         test.Run(() => File.WriteAllText(Path.Combine(home, "claim-joined-document"), "joined"));
         test.WaitFor(() => File.Exists(Path.Combine(home, "claim-finished")), 120.0f);
         test.Check("link-claims: host completed its merge checks", () => File.Exists(Path.Combine(home, "claim-finished")));
