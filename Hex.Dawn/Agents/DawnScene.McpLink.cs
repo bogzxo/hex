@@ -312,9 +312,9 @@ internal sealed partial class DawnScene
         var local = LinkSyncs.Where(each => deviceId is null || each.DeviceId == deviceId).ToList();
         var remote = LinkPeers.Where(peer => deviceId is null || peer.Device.Id == deviceId)
             .SelectMany(peer => peer.RemoteSyncReport.Select(report => (Peer: peer, Report: report)))
-            .Where(row => !local.Any(sync => sync.DeviceId == row.Peer.Device.Id && sync.State != HexLinkSyncState.Off &&
+            .Where(row => !local.Any(sync => sync.DeviceId == row.Peer.Device.Id && sync.State is not (HexLinkSyncState.Off or HexLinkSyncState.Failed) &&
                 PlatformPaths.Comparer.Equals(sync.Folder, row.Report.Folder))).ToList();
-        local.RemoveAll(sync => sync.State == HexLinkSyncState.Off && remote.Any(row => row.Peer.Device.Id == sync.DeviceId &&
+        local.RemoveAll(sync => sync.State is (HexLinkSyncState.Off or HexLinkSyncState.Failed) && remote.Any(row => row.Peer.Device.Id == sync.DeviceId &&
             PlatformPaths.Comparer.Equals(sync.Folder, row.Report.Folder)));
         if (local.Count == 0 && remote.Count == 0)
             return "No folder is synced" + (deviceId is null ? "." : " with that device.") + " hex_link_sync start turns it on for one.";
