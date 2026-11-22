@@ -282,12 +282,13 @@ internal sealed class LinkedPair : IDisposable
         LinkB = new HexLink(B) { WatchEvery = watchEvery ?? TimeSpan.FromMilliseconds(100) };
     }
 
-    public static async Task<LinkedPair> Up(HexLinkRights bOnA, HexLinkRights aOnB = HexLinkRights.View)
+    public static async Task<LinkedPair> Up(HexLinkRights bOnA, HexLinkRights aOnB = HexLinkRights.View,
+        HexLinkBulkSupport bulk = HexLinkBulkSupport.None)
     {
         var pair = new LinkedPair(bOnA, aOnB);
         var (a, b) = HexLinkTestKit.Pair();
-        Task<HexLinkPeer> peerB = pair.LinkA.Add(new HexLinkConnection(a, HexLinkTestKit.DeviceB, "memory", true, () => pair.BOnA));
-        Task<HexLinkPeer> peerA = pair.LinkB.Add(new HexLinkConnection(b, HexLinkTestKit.DeviceA, "memory", false, () => pair.AOnB));
+        Task<HexLinkPeer> peerB = pair.LinkA.Add(new HexLinkConnection(a, HexLinkTestKit.DeviceB, "memory", true, () => pair.BOnA, bulk: bulk));
+        Task<HexLinkPeer> peerA = pair.LinkB.Add(new HexLinkConnection(b, HexLinkTestKit.DeviceA, "memory", false, () => pair.AOnB, bulk: bulk));
         pair.PeerB = await peerB.WaitAsync(TimeSpan.FromMilliseconds(HexLinkTestKit.WAIT_MS));
         pair.PeerA = await peerA.WaitAsync(TimeSpan.FromMilliseconds(HexLinkTestKit.WAIT_MS));
         return pair;

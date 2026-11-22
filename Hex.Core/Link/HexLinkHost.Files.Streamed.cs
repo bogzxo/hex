@@ -56,7 +56,10 @@ internal sealed partial class HexLinkHost
                 if (!PlatformPaths.Comparer.Equals(full, ResolveStreamedFile(transfer.Path, out HexLinkTree current)))
                     throw new HexLinkException(HexLinkErrors.CONFLICT, "The streamed file path changed before it was written.");
                 services.Audit("edit", Device, $"sync/file/write {transfer.Path}, {transfer.Length} bytes");
-                await using FileStream file = HexLinkFileTransfer.Read(partial);
+                if (HoldOf(transfer.Path, full) is { } held &&
+                      held.Store.SetIncomingStreamed(held.Entry.Path, partial, transfer.Hash, Device.Name))
+                      return HeldWriteReply(transfer.Path, transfer.Hash, metadata);
+                  await using FileStream file = HexLinkFileTransfer.Read(partial);
                 string? hash = await services.CompareAndReplace(full, transfer.Path, transfer.Base, file, transfer.Length,
                     transfer.Hash, stop, transfer.Executable);
                 current.RememberMode(full, transfer.Executable);
@@ -80,7 +83,7 @@ internal sealed partial class HexLinkHost
             Need(HexLinkRights.View, "sync/file/read");
             if (!PlatformPaths.Comparer.Equals(full, ResolveStreamedFile(transfer.Path, out _)))
                 throw new HexLinkException(HexLinkErrors.CONFLICT, "The streamed file path changed before it was read.");
-            opened = HexLinkFileTransfer.Read(full);
+            opened = HexLinkFileTransfer.Read(PublishedFile(transfer.Path, full));
         }
         await using FileStream file = opened;
         await transfer.Send(session, "sync/file/read", new JsonObject { ["id"] = id }, file, checkpoint, cancel);
@@ -101,6 +104,8 @@ internal sealed partial class HexLinkHost
         if (!PlatformPaths.Comparer.Equals(full, ResolveStreamedFile(path, out _)))
             throw new HexLinkException(HexLinkErrors.CONFLICT, "The streamed file path changed before it was deleted.");
         services.Audit("edit", Device, $"sync/file/delete {path}");
+        if (TakeHeldWrite(path, full, null))
+            return HeldWriteReply(path, null, parameters);
         await services.CompareAndReplace(full, path, expected, null, 0, null, cancel, null);
         return new JsonObject { ["path"] = path };
     }

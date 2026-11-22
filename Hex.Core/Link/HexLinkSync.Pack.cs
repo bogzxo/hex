@@ -18,7 +18,7 @@ internal static class HexLinkFilePack
 
     internal sealed record Entry(string Path, byte[] Bytes, string? Base = null, bool? Executable = null);
 
-    internal sealed record Outcome(string Path, string? Hash, HexLinkException? Error = null)
+    internal sealed record Outcome(string Path, string? Hash, HexLinkException? Error = null, bool Held = false)
     {
         public JsonObject Json() => new()
         {
@@ -26,7 +26,8 @@ internal static class HexLinkFilePack
             ["hash"] = Hash,
             ["error"] = Error?.Code,
             ["message"] = Error?.Message,
-            ["detail"] = Error?.Detail?.DeepClone()
+            ["detail"] = Error?.Detail?.DeepClone(),
+            ["held"] = Held ? true : null
         };
 
         public static Outcome Of(JsonObject said)
@@ -36,7 +37,7 @@ internal static class HexLinkFilePack
             HexLinkException? error = HexLinkData.Int(said, "error") is int code
                 ? new HexLinkException(code, HexLinkData.String(said, "message", 2000) ?? "A Link pack entry failed.", said["detail"]?.DeepClone())
                 : null;
-            return new Outcome(path, hash, error);
+            return new Outcome(path, hash, error, HexLinkData.Bool(said, "held") == true);
         }
     }
 
@@ -234,6 +235,8 @@ internal sealed partial class HexLinkSync
 
                 var outcomes = await peer.WriteFilePack(folder.Name, [entry], cancel);
                 HexLinkFilePack.Outcome outcome = outcomes[path];
+                if (outcome.Held)
+                    throw HexLinkHoldReply.HeldOn(Device.Name);
                 if (outcome.Error is { } error)
                     throw error;
                 return outcome.Hash ?? HexLinkFiles.Hash(bytes);
@@ -272,7 +275,10 @@ internal sealed partial class HexLinkSync
 
     private async Task WritePacked(PendingWrite[] batch)
     {
-        PendingWrite[] active = [.. batch.Where(each => !each.Cancel.IsCancellationRequested)];
+        foreach (PendingWrite pending in batch)
+            if (Holds?.IsHeld(pending.Entry.Path) == true)
+                pending.Answer.TrySetCanceled();
+        PendingWrite[] active = [.. batch.Where(each => !each.Cancel.IsCancellationRequested && !each.Answer.Task.IsCompleted)];
         try
         {
             if (active.Length == 0)
@@ -281,7 +287,9 @@ internal sealed partial class HexLinkSync
             foreach (PendingWrite pending in active)
             {
                 HexLinkFilePack.Outcome result = outcome[pending.Entry.Path];
-                if (result.Error is { } error)
+                if (result.Held)
+                    pending.Answer.TrySetException(HexLinkHoldReply.HeldOn(Device.Name));
+                else if (result.Error is { } error)
                     pending.Answer.TrySetException(error);
                 else
                     pending.Answer.TrySetResult(result.Hash ?? HexLinkFiles.Hash(pending.Entry.Bytes));

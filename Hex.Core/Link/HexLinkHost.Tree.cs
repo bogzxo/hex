@@ -108,9 +108,9 @@ internal sealed partial class HexLinkHost
             ?? throw HexLinkException.NotFound($"The workspace has no folder called {name}.");
         // Through the jail like any path, so a folder that's itself a link out is refused the same way
         HexLinkFiles.Resolve(Folders, folder.Name);
-        HexLinkTree tree = trees.GetOrAdd(folder.Name, _ => HexLinkTree.Shared(folder, () => services.Excludes, services.TreeCacheDirectory, session.SupportsBulk));
+        HexLinkTree tree = trees.GetOrAdd(folder.Name, _ => HexLinkTree.Shared(folder, () => services.Excludes, services.TreeCacheDirectory, session.SupportsBulk, services.Holds(folder)));
         if (tree.Folder != folder)
-            trees[folder.Name] = tree = HexLinkTree.Shared(folder, () => services.Excludes, services.TreeCacheDirectory, session.SupportsBulk);
+            trees[folder.Name] = tree = HexLinkTree.Shared(folder, () => services.Excludes, services.TreeCacheDirectory, session.SupportsBulk, services.Holds(folder));
         return tree;
     }
 
@@ -148,6 +148,8 @@ internal sealed partial class HexLinkHost
             await using var lease = await HexLinkPublicationFence.ForRoot(Path.GetDirectoryName(full)!).EnterLive(cancel);
             await EnsureGitFollowFile(full, cancel);
             Need(HexLinkRights.Edit, "sync/rename");
+            if (HoldOf(from, full) is not null || HoldOf(to, ResolveFile(to)) is not null)
+                throw HexLinkHoldReply.HeldOn(services.Device.Name);
             await services.RenameCase(full, ResolveFile(to), expected, cancel);
             tree.NoteCase(to[prefix.Length..]);
             return new JsonObject { ["renamed"] = true };
@@ -228,10 +230,19 @@ internal sealed partial class HexLinkHost
         if (!HexLinkAllowed.Has(Rights, HexLinkRights.View))
             return;
         var said = new JsonArray();
+        var holds = new JsonArray();
         foreach (HexLinkTreeChange change in changes)
-            said.Add((JsonNode)HexLinkTree.ChangeJson(session.SupportsBulk ? change : HexLinkTree.ForLegacy(change)));
+        {
+            if (change.HoldNotice is { } held)
+                holds.Add((JsonNode)new JsonObject { ["path"] = change.Path, ["held"] = held });
+            else
+                said.Add((JsonNode)HexLinkTree.ChangeJson(session.SupportsBulk ? change : HexLinkTree.ForLegacy(change)));
+        }
 
-        session.Tell("sync/changed", new JsonObject { ["folder"] = folder, ["changes"] = said });
+        var notice = new JsonObject { ["folder"] = folder, ["changes"] = said };
+        if (holds.Count > 0)
+            notice["hold_notices"] = holds;
+        session.Tell("sync/changed", notice);
     }
 
     private void StopTrees()

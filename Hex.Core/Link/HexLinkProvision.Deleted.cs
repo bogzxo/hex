@@ -63,7 +63,8 @@ internal sealed partial class HexLinkHost
                     ["diff", "--no-renames", "--name-only", "--diff-filter=D", "--ignore-submodules=all", "-z", "HEAD"], token);
                 foreach (string path in output.Split('\0', StringSplitOptions.RemoveEmptyEntries))
                 {
-                    if ((includeSystemFiles || !HexLinkSystemFiles.Matches(path)) && !File.Exists(Path.Combine(directory, path)))
+                    if ((includeSystemFiles || !HexLinkSystemFiles.Matches(path)) && HoldOf(wire + "/" + path) is null
+                          && !File.Exists(Path.Combine(directory, path)))
                         paths.Add(repository.Path.Length == 0 ? path : repository.Path + "/" + path);
                 }
             }

@@ -156,8 +156,15 @@ internal sealed partial class HexLinkPeer
     }
 
     /// <summary>A file of the other machine's deleted if it's still what was read (its hash), conflict otherwise, not found when it's gone.</summary>
-    public Task Delete(string path, string baseHash, CancellationToken cancel = default) =>
-        AskWithRelay("fs/delete", new JsonObject { ["path"] = path, ["base"] = baseHash }, cancel);
+    public async Task Delete(string path, string baseHash, CancellationToken cancel = default)
+    {
+        JsonNode? answer = await AskWithRelay("fs/delete", new JsonObject
+        {
+            ["path"] = path, ["base"] = baseHash, ["accept_held"] = true,
+        }, cancel);
+        if (answer is JsonObject said)
+            HexLinkHoldReply.Check(said, Device);
+    }
 
     // A notification of the working-tree sync's, taken
     private void TreeTold(string method, JsonObject said)
@@ -173,9 +180,14 @@ internal sealed partial class HexLinkPeer
         }
 
         if (changes.Count > 0)
-        {
             RememberTreeChanges(folder, changes);
-            hear(changes);
+        foreach (JsonObject notice in HexLinkData.Objects(said, "hold_notices", 2 * HexLinkTree.MaximumHoldNotices))
+        {
+            if (HexLinkData.String(notice, "path", HexLinkFiles.MOST_PATH) is { } path &&
+                path.StartsWith(folder + "/", StringComparison.Ordinal) && HexLinkData.Bool(notice, "held") is { } held)
+                changes.Add(new(path, null, HoldNotice: held));
         }
+        if (changes.Count > 0)
+            hear(changes);
     }
 }

@@ -82,7 +82,14 @@ internal sealed partial class HexLinkHost
                 Need(HexLinkRights.Edit, "sync/pack/write");
                 if (!PlatformPaths.Comparer.Equals(full, ResolveFile(entry.Path)))
                     throw new HexLinkException(HexLinkErrors.CONFLICT, "The packed file path changed before it was written.");
-                string? hash = await services.CompareAndReplacePacked(full, entry.Path, entry.Base, entry.Bytes, stop, entry.Executable, directories);
+                if (TakeHeldWrite(entry.Path, full, entry.Bytes))
+                  {
+                      results[i] = HexLinkData.Bool(metadata, "accept_held") == true
+                          ? new(entry.Path, HexLinkFiles.Hash(entry.Bytes), Held: true)
+                          : new(entry.Path, null, HexLinkHoldReply.HeldOn(services.Device.Name));
+                      return;
+                  }
+                  string? hash = await services.CompareAndReplacePacked(full, entry.Path, entry.Base, entry.Bytes, stop, entry.Executable, directories);
                 tree.RememberMode(full, entry.Executable);
                 results[i] = new(entry.Path, hash);
             }
@@ -130,17 +137,19 @@ internal sealed partial class HexLinkHost
                 Need(HexLinkRights.View, "sync/pack/read");
                 if (!PlatformPaths.Comparer.Equals(full, ResolveFile(path)))
                     throw new HexLinkException(HexLinkErrors.CONFLICT, "The packed file path changed before it was read.");
-                var info = new FileInfo(full);
+                string published = PublishedFile(path, full);
+                var info = new FileInfo(published);
                 if (info.Length > maximum)
                     throw new HexLinkException(HexLinkErrors.TOO_BIG, $"The file {path} has outgrown a Link file pack.");
-                byte[] bytes = await HexLinkFiles.ReadSharedAsync(full, cancel);
+                byte[] bytes = await HexLinkFiles.ReadSharedAsync(published, cancel);
                 int cost = HexLinkFilePack.WireCost(path, bytes.Length);
                 if (bytes.Length > maximum || length + cost > HexLinkFilePack.MaximumLength)
                     throw new HexLinkException(HexLinkErrors.TOO_BIG, $"The file {path} needs a separate Link file pack.");
                 length += cost;
                 int slash = path.IndexOf('/');
                 HexLinkTree tree = TreeOf(new JsonObject { ["folder"] = path[..slash] });
-                files.Add(new HexLinkFilePack.Entry(path, bytes, Executable: tree.Mode(full)));
+                bool? executable = HoldOf(path, full) is { } held ? held.Entry.BaseExecutable : tree.Mode(full);
+                files.Add(new HexLinkFilePack.Entry(path, bytes, Executable: executable));
             }
             catch (HexLinkException error)
             {

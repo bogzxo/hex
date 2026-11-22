@@ -258,7 +258,7 @@ internal sealed partial class HexLinkSync : IDisposable
         get
         {
             lock (gate)
-                return [.. SystemSkips().Concat(skipped.Values).DistinctBy(each => each.Path).OrderBy(each => each.Path, StringComparer.Ordinal)];
+                return [.. HoldSkips().Concat(SystemSkips()).Concat(skipped.Values).DistinctBy(each => each.Path).OrderBy(each => each.Path, StringComparer.Ordinal)];
         }
     }
 
@@ -310,6 +310,7 @@ internal sealed partial class HexLinkSync : IDisposable
             }
 
             string counts = $"{Sent} sent, {Received} received, {conflicted} {(conflicted == 1 ? "conflict" : "conflicts")}, {skips} skipped"
+                + (Held > 0 ? $", {Held} held" : string.Empty)
                 + (EolOnly > 0 ? $", {EolOnly} only differing in line ends" : string.Empty);
             if (Queued is > 0 and var retryCount)
                 counts += $", {retryCount} retrying";
@@ -347,6 +348,7 @@ internal sealed partial class HexLinkSync : IDisposable
             live = true;
             ready = false;
             peer.RightsChanged += UpdateRights;
+            WatchHolds();
             pullOnly = BoundPullMirror || !HexLinkAllowed.Has(peer.Granted, HexLinkRights.Edit);
             early = [];
             earlyOverflow = false;
@@ -384,7 +386,7 @@ internal sealed partial class HexLinkSync : IDisposable
             watch = new HexLinkTreeSubscription(tree, Saw, Quiet, Rescan);
             // The previous snapshot is only a digest offer. The remote still verifies each offered directory
             // against its current snapshot, so both current listings can run concurrently.
-            HexLinkManifest? previous = tree.PreviousManifest;
+            HexLinkManifest? previous = Held == 0 ? tree.PreviousManifest : null;
             Task<HexLinkManifest> scanMine = HexLinkSyncTiming.MeasureAsync("start.local-manifest",
                 () => tree.ManifestAsync(cancel));
             Task<HexLinkManifest> scanTheirs = HexLinkSyncTiming.MeasureAsync("start.manifest-round-trip",
@@ -656,6 +658,8 @@ internal sealed partial class HexLinkSync : IDisposable
             waiting = drained;
             drained = null;
             peer.RightsChanged -= UpdateRights;
+            if (Holds is not null)
+                Holds.Changed -= HoldsMoved;
             queue.Clear();
             queued.Clear();
             again.Clear();

@@ -98,6 +98,8 @@ internal sealed partial class HexLinkHost
             throw new HexLinkException(HexLinkErrors.CONFLICT, observed.Issues.GetValueOrDefault(path)
                 ?? "The other device's Git tip changed. Link will compare it again.");
         await HexLinkGitFollow.Fetch(source, wire, root, expected, target, cancel);
+        HexLinkHoldStore? holds = services.Holds(folder);
+        var heldChanges = await HexLinkHoldGit.Changes(holds, root, expected.Head, target.Head, cancel);
         HexLinkHeadMove move = await HexLinkGitFollow.Move(root, expected, target, state?.Agreed(path), cancel, () =>
         {
             Need(HexLinkRights.Edit, "git/follow-adopt");
@@ -108,6 +110,7 @@ internal sealed partial class HexLinkHost
         });
         if (move.Why is null)
         {
+            HexLinkHoldGit.Take(holds, heldChanges, Device.Name);
             followConfirmed[root] = new(name, target);
             state?.Agree(path, target);
             if (move.Backup is { } backup)

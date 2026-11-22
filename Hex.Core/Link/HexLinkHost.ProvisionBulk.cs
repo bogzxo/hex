@@ -40,7 +40,7 @@ internal sealed partial class HexLinkHost
     {
         HexLinkFileTransfer file = HexLinkFileTransfer.Of(parameters);
         string full = ResolveStreamedFile(file.Path, out _);
-        await using FileStream input = HexLinkFileTransfer.Read(full);
+        await using FileStream input = HexLinkFileTransfer.Read(PublishedFile(file.Path, full));
         if (input.Length != file.Length)
             throw new HexLinkException(HexLinkErrors.CONFLICT, "The file changed after its provisioning manifest.");
         await SendProvisionBytes(id, HexLinkProvisionBulk.FILE_PURPOSE, input, file.Length, file.Hash, cancel);
@@ -61,6 +61,7 @@ internal sealed partial class HexLinkHost
                 throw HexLinkException.NotFound("The workspace plan changed. Request it again.");
             HexLinkProvisionRepository planned = plan.Plan.Repositories.First(repo => repo.Id == name);
             string repository = HexLinkFiles.Resolve(Folders, wire, services.Excludes);
+            RequirePublishableGit(repository);
             List<string> have = HexLinkData.Strings(parameters, "have", HexLinkGit.MOST_HAVE, 64);
             services.Audit("git", Device, $"provision/bulk {planned.Path}");
             made = await Task.Run(() =>

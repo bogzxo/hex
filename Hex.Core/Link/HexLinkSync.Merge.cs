@@ -19,6 +19,8 @@ internal sealed partial class HexLinkSync
     private async Task<bool> TryTextMerge(string wire, string full, HexLinkSyncAgreed? agreed, byte[]? localBytes,
         string? mine, string? theirs, CancellationToken stop)
     {
+        if (Holds?.IsHeld(wire) == true)
+            return await ReconcileHold(wire, stop);
         if (agreed is null || localBytes is null || mine is null || theirs is null
             || localBytes.Length > HexLinkMerge.CACHE_FILE_BYTES || pullOnly || !remoteCertified)
             return false;

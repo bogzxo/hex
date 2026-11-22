@@ -46,7 +46,8 @@ internal static class HexLinkWorkspaces
     private sealed record ProvisionFacts(string Head, string? Branch, string? Origin, Dictionary<string, string> Modules);
 
     /// <summary>Builds a checkout plan for the actual repositories inside the folders a peer may see.</summary>
-    internal static HexLinkHostedProvision Provision(HexLinkWorkspace workspace, string? only, CancellationToken cancel, string? onlyRepository = null, bool deferWorktree = false)
+    internal static HexLinkHostedProvision Provision(HexLinkWorkspace workspace, string? only, CancellationToken cancel, string? onlyRepository = null,
+        bool deferWorktree = false, Func<string, HexLinkHold?>? holdOf = null)
     {
         if (HexLinkGit.Why() is { } why)
             throw new InvalidOperationException(why);
@@ -186,7 +187,8 @@ internal static class HexLinkWorkspaces
             string? branch = parent is null ? facts.Branch : null;
             if (!deferWorktree && (only is null || inScope))
                 ProvisionChanges(directory, path, deleted, largeChanges,
-                    selected.First(folder => wire == folder.Name || wire.StartsWith(folder.Name + "/", StringComparison.Ordinal)).IncludeSystemFiles, cancel);
+                    selected.First(folder => wire == folder.Name || wire.StartsWith(folder.Name + "/", StringComparison.Ordinal)).IncludeSystemFiles,
+                      cancel, holdOf is null ? null : file => holdOf(wire + "/" + file));
 
             repos.Add(new HexLinkProvisionRepository(id, path, head, branch, facts.Origin, parent));
             wirePaths.Add(id, wire);
@@ -197,12 +199,13 @@ internal static class HexLinkWorkspaces
         }
     }
 
-    private static void ProvisionChanges(string directory, string repositoryPath, List<string> deleted, List<string> largeChanges, bool includeSystemFiles, CancellationToken cancel)
+    private static void ProvisionChanges(string directory, string repositoryPath, List<string> deleted, List<string> largeChanges, bool includeSystemFiles,
+        CancellationToken cancel, Func<string, HexLinkHold?>? holdOf)
     {
         foreach (string status in HexLinkProvision.Status(directory, cancel))
         {
             string file = status[3..];
-            if (!includeSystemFiles && HexLinkSystemFiles.Matches(file))
+            if ((!includeSystemFiles && HexLinkSystemFiles.Matches(file)) || holdOf?.Invoke(file) is not null)
                 continue;
             string path = repositoryPath.Length > 0 ? repositoryPath + "/" + file : file;
             if ((status[0] == 'D' || status[1] == 'D') && !File.Exists(Path.Combine(directory, file)))

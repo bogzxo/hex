@@ -14,7 +14,8 @@ internal sealed partial class HexLinkHost
     private JsonObject FsList(JsonObject parameters)
     {
         Need(HexLinkRights.View, "fs/list");
-        return HexLinkFiles.List(Folders, HexLinkData.String(parameters, "path", HexLinkFiles.MOST_PATH) ?? string.Empty, services.Excludes);
+        string wire = HexLinkData.String(parameters, "path", HexLinkFiles.MOST_PATH) ?? string.Empty;
+        return PublishedListing(wire, HexLinkFiles.List(Folders, wire, services.Excludes));
     }
 
     private async Task<JsonNode?> FsRead(JsonObject parameters, CancellationToken cancel)
@@ -25,7 +26,7 @@ internal sealed partial class HexLinkHost
         await using var lease = await HexLinkPublicationFence.ForRoot(full).EnterLive(cancel);
         await EnsureGitFollowFile(full, cancel);
         Need(HexLinkRights.View, "fs/read");
-        return HexLinkFiles.Read(full, wire);
+        return HexLinkFiles.Read(PublishedFile(wire, full), wire);
     }
 
     // A file written if it's still what the writer read, through the editor so an open tab takes it
@@ -41,6 +42,8 @@ internal sealed partial class HexLinkHost
         Need(HexLinkRights.Edit, "fs/write");
         services.Audit("edit", Device, $"fs/write {wire}, {bytes.Length} bytes");
 
+        if (TakeHeldWrite(wire, full, bytes))
+            return HeldWriteReply(wire, HexLinkFiles.Hash(bytes), parameters);
         string? hash = await services.CompareAndReplace(full, wire, baseHash, bytes, cancel);
         return new JsonObject { ["path"] = wire, ["hash"] = hash };
     }
@@ -55,6 +58,8 @@ internal sealed partial class HexLinkHost
         await EnsureGitFollowFile(full, cancel);
         Need(HexLinkRights.Edit, "fs/delete");
         services.Audit("edit", Device, $"fs/delete {wire}");
+        if (TakeHeldWrite(wire, full, null))
+            return HeldWriteReply(wire, null, parameters);
         if (!File.Exists(full))
             throw HexLinkException.NotFound($"There's no file {wire}.");
         await services.CompareAndReplace(full, wire, baseHash, null, cancel);
@@ -93,7 +98,7 @@ internal sealed partial class HexLinkHost
         HexLinkWatch? watch = files;
         if (watch is null)
         {
-            var made = new HexLinkWatch(FileMoved, WatchEvery);
+            var made = new HexLinkWatch(FileMoved, WatchEvery, PublishedWatchHash);
             watch = Interlocked.CompareExchange(ref files, made, null) ?? made;
             if (watch != made)
                 made.Dispose();

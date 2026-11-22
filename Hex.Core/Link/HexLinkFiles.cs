@@ -766,6 +766,7 @@ internal sealed class HexLinkWatch : IDisposable
 
     private readonly Dictionary<string, Watched> watched = new(StringComparer.Ordinal);
     private readonly Action<string, string?> changed;
+    private readonly Func<string, string, (bool Held, string? Hash)>? projection;
     private readonly Timer timer;
     private int looking;
 
@@ -775,11 +776,14 @@ internal sealed class HexLinkWatch : IDisposable
         public long Length { get; set; } = -1;
         public long Written { get; set; }
         public string? Hash { get; set; }
+        public bool WasHeld { get; set; }
     }
 
-    public HexLinkWatch(Action<string, string?> changed, TimeSpan? every = null)
+    public HexLinkWatch(Action<string, string?> changed, TimeSpan? every = null,
+        Func<string, string, (bool Held, string? Hash)>? projection = null)
     {
         this.changed = changed;
+        this.projection = projection;
         TimeSpan period = every ?? TimeSpan.FromSeconds(1);
         timer = new Timer(_ => Look(), null, period, period);
     }
@@ -788,8 +792,11 @@ internal sealed class HexLinkWatch : IDisposable
     public bool Add(string wire, string full, out string? hash)
     {
         var file = new Watched(full);
-        Stamp(file);
-        hash = file.Hash = HexLinkFiles.HashOf(full);
+        var published = projection?.Invoke(wire, file.Full) ?? default;
+        file.WasHeld = published.Held;
+        if (!published.Held)
+            Stamp(file);
+        hash = file.Hash = published.Held ? published.Hash : HexLinkFiles.HashOf(full);
         lock (watched)
         {
             if (!watched.ContainsKey(wire) && watched.Count >= MOST)
@@ -839,9 +846,12 @@ internal sealed class HexLinkWatch : IDisposable
             {
                 try
                 {
-                    if (!Stamp(file))
+                    var published = projection?.Invoke(wire, file.Full) ?? default;
+                    bool wasHeld = file.WasHeld;
+                    file.WasHeld = published.Held;
+                    if (!published.Held && !Stamp(file) && !wasHeld)
                         continue;
-                    string? hash = HexLinkFiles.HashOf(file.Full);
+                    string? hash = published.Held ? published.Hash : HexLinkFiles.HashOf(file.Full);
                     if (hash == file.Hash)
                         continue;
                     file.Hash = hash;

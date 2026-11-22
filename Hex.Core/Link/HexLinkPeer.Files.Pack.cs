@@ -85,7 +85,7 @@ internal sealed partial class HexLinkPeer
     internal async Task<Dictionary<string, HexLinkFilePack.Outcome>> WriteFilePack(string folder,
         IReadOnlyList<HexLinkFilePack.Entry> files, CancellationToken cancel)
     {
-        JsonNode? reply = await HexLinkFilePack.Send(session, "sync/pack/write", new JsonObject { ["folder"] = folder }, files, cancel);
+        JsonNode? reply = await HexLinkFilePack.Send(session, "sync/pack/write", new JsonObject { ["folder"] = folder, ["accept_held"] = true }, files, cancel);
         if (reply is not JsonObject said)
             throw HexLinkException.Invalid("The peer sent no file pack outcome.");
         var paths = new HashSet<string>(files.Select(entry => entry.Path), StringComparer.Ordinal);

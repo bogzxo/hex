@@ -13,6 +13,7 @@ internal sealed class HexLinkHoldStore
 
     private readonly HexLinkFolder folder;
     private readonly Lock gate = new();
+    private long revision;
     private Dictionary<string, HexLinkHold> entries = new(PlatformPaths.Comparer);
 
     public HexLinkHoldStore(HexLinkFolder folder, string stateDirectory)
@@ -30,23 +31,34 @@ internal sealed class HexLinkHoldStore
 
     public string StateFile { get; }
     public string BlobDirectory { get; }
+    public int Count { get { lock (gate) return entries.Count; } }
+    internal long Revision => Volatile.Read(ref revision);
+    internal string BaseFile(HexLinkHold entry) => Path.Combine(BlobDirectory, entry.BaseHash);
     public event Action? Changed;
 
-    public HexLinkHold Hold(string path, byte[] baseBytes, HexLinkHoldBaseSource baseSource, bool baseDeleted = false)
+    public HexLinkHold Hold(string path, byte[] baseBytes, HexLinkHoldBaseSource baseSource, bool baseDeleted = false, bool? baseExecutable = null)
     {
         path = Wire(path);
-        _ = HexLinkFiles.Resolve([folder], path);
+        string full = HexLinkFiles.Resolve([folder], path);
+        path = WireFromFullPath(full) ?? throw new ArgumentException("The held path is outside the shared folder.", nameof(path));
         HexLinkHold entry;
         lock (gate)
         {
             if (entries.TryGetValue(path, out HexLinkHold? existing))
                 return existing;
             string hash = HexLinkFiles.Hash(baseBytes);
-            entry = new(path, DateTimeOffset.UtcNow, hash, baseSource, BaseDeleted: baseDeleted);
+            entry = new(path, DateTimeOffset.UtcNow, hash, baseSource, BaseDeleted: baseDeleted, BaseExecutable: baseExecutable);
             Commit(path, entry, hash, baseBytes);
         }
         Changed?.Invoke();
         return entry;
+    }
+
+    internal string? WireFromFullPath(string full)
+    {
+        string root = HexLinkFiles.Resolve([folder], folder.Name);
+        return PlatformPaths.IsUnder(full, root) && !PlatformPaths.Same(full, root)
+            ? folder.Name + "/" + Path.GetRelativePath(root, full).Replace('\\', '/') : null;
     }
 
     public bool IsHeld(string path) => Get(path) is not null;
@@ -61,6 +73,18 @@ internal sealed class HexLinkHoldStore
     {
         lock (gate)
             return [.. entries.Values.OrderBy(entry => entry.Path, PlatformPaths.Comparer)];
+    }
+
+    internal IReadOnlyList<(string Wire, string Relative)> InRepository(string repository)
+    {
+        var files = new List<(string Wire, string Relative)>();
+        foreach (HexLinkHold entry in List())
+        {
+            string full = Path.Combine(folder.Path, entry.Path[(folder.Name.Length + 1)..].Replace('/', Path.DirectorySeparatorChar));
+            if (PlatformPaths.IsUnder(full, repository))
+                files.Add((entry.Path, Path.GetRelativePath(repository, full).Replace('\\', '/')));
+        }
+        return files;
     }
 
     public HexLinkHoldSnapshot? Read(string path)
@@ -79,20 +103,24 @@ internal sealed class HexLinkHoldStore
     public bool SetIncomingDeleted(string path, string fromDevice) =>
         UpdateIncoming(path, null, fromDevice);
 
-    private bool UpdateIncoming(string path, byte[]? bytes, string fromDevice)
+    internal bool SetIncomingStreamed(string path, string staged, string hash, string fromDevice) =>
+        UpdateIncoming(path, null, fromDevice, staged, hash);
+
+    private bool UpdateIncoming(string path, byte[]? bytes, string fromDevice, string? staged = null, string? stagedHash = null)
     {
-        string? hash = bytes is null ? null : HexLinkFiles.Hash(bytes);
+        string? hash = bytes is null ? stagedHash : HexLinkFiles.Hash(bytes);
+        bool deleted = hash is null;
         lock (gate)
         {
             if (Get(path) is not { } entry)
                 return false;
-            if (entry.IncomingHash == hash && entry.IncomingDeleted == (bytes is null))
+            if (entry.IncomingHash == hash && entry.IncomingDeleted == deleted)
                 return true;
             HexLinkHold next = entry with
             {
-                IncomingHash = hash, IncomingDeleted = bytes is null, IncomingFrom = fromDevice, IncomingAt = DateTimeOffset.UtcNow,
+                IncomingHash = hash, IncomingDeleted = deleted, IncomingFrom = fromDevice, IncomingAt = DateTimeOffset.UtcNow,
             };
-            Commit(entry.Path, next, hash, bytes);
+            Commit(entry.Path, next, hash, bytes, staged);
         }
         Changed?.Invoke();
         return true;
@@ -140,7 +168,7 @@ internal sealed class HexLinkHoldStore
     }
 
     // Must be called under gate. Persist the new index before retiring any blobs it no longer references.
-    private void Commit(string path, HexLinkHold? entry, string? hash = null, byte[]? blob = null)
+    private void Commit(string path, HexLinkHold? entry, string? hash = null, byte[]? blob = null, string? staged = null)
     {
         HexLinkHold? previous = entries.GetValueOrDefault(path);
         var next = new Dictionary<string, HexLinkHold>(entries, entries.Comparer);
@@ -150,13 +178,16 @@ internal sealed class HexLinkHoldStore
             next.Remove(path);
 
         Directory.CreateDirectory(Path.GetDirectoryName(StateFile)!);
-        if (hash is not null && blob is not null)
+        if (hash is not null && (blob is not null || staged is not null))
         {
             string full = Path.Combine(BlobDirectory, hash);
             if (!File.Exists(full))
             {
                 Directory.CreateDirectory(BlobDirectory);
-                HexLinkFiles.WriteAtomic(full, blob);
+                if (blob is not null)
+                    HexLinkFiles.WriteAtomic(full, blob);
+                else
+                    CopyBlob(staged!, full);
             }
         }
 
@@ -176,8 +207,20 @@ internal sealed class HexLinkHoldStore
         }
 
         entries = next;
+        Interlocked.Increment(ref revision);
         Retire(previous?.BaseHash, next);
         Retire(previous?.IncomingHash, next);
+    }
+
+    private static void CopyBlob(string from, string to)
+    {
+        string temp = to + $".{Guid.NewGuid():N}.hexlink";
+        try
+        {
+            File.Copy(from, temp);
+            File.Move(temp, to);
+        }
+        finally { HexLinkGit.TryDelete(temp); }
     }
 
     private byte[] ReadBlob(string hash) => HexLinkFiles.ReadShared(Path.Combine(BlobDirectory, hash));
@@ -210,7 +253,8 @@ internal sealed class HexLinkHoldStore
         catch (Exception error) when (error is JsonException or InvalidOperationException or FormatException or ArgumentException)
         {
             // Leave the corrupt index beside the blobs for recovery.
-            try { File.Move(StateFile, StateFile + $".{Guid.NewGuid():N}.corrupt.hexlink"); }
+            try { File.Move(StateFile, Path.Combine(Path.GetDirectoryName(StateFile)!,
+                $".{Path.GetFileName(StateFile)}.{Guid.NewGuid():N}.corrupt.hexlink")); }
             catch (Exception move) when (move is IOException or UnauthorizedAccessException) { }
         }
         catch (FileNotFoundException)
@@ -226,6 +270,7 @@ internal sealed class HexLinkHoldStore
         ["baseHash"] = entry.BaseHash,
         ["baseSource"] = entry.BaseSource.ToString().ToLowerInvariant(),
         ["baseDeleted"] = entry.BaseDeleted,
+        ["baseExecutable"] = entry.BaseExecutable,
         ["incomingHash"] = entry.IncomingHash,
         ["incomingDeleted"] = entry.IncomingDeleted,
         ["incomingFrom"] = entry.IncomingFrom,
@@ -252,7 +297,8 @@ internal sealed class HexLinkHoldStore
 
         return new(path, heldAt.GetValue<DateTimeOffset>(), hash.ToLowerInvariant(), source, incoming?.ToLowerInvariant(), deleted,
             row["incomingFrom"]?.GetValue<string>(), row["incomingAt"]?.GetValue<DateTimeOffset>(),
-            row["noticeShown"]?.GetValue<bool>() == true, row["baseDeleted"]?.GetValue<bool>() == true);
+            row["noticeShown"]?.GetValue<bool>() == true, row["baseDeleted"]?.GetValue<bool>() == true,
+            row["baseExecutable"]?.GetValue<bool>());
     }
 
     private string Wire(string path)
@@ -268,6 +314,9 @@ internal sealed class HexLinkHoldStore
 
     internal static bool StorageArtifact(ReadOnlySpan<char> name)
     {
+        if (name.StartsWith(".sync-local-", StringComparison.OrdinalIgnoreCase) && name.EndsWith(".hexlink", StringComparison.OrdinalIgnoreCase)
+            && name.IndexOf(StateSuffix, StringComparison.OrdinalIgnoreCase) is >= 0 and var index)
+            name = name[1..(index + StateSuffix.Length)];
         int suffix = name.EndsWith(StateSuffix, StringComparison.OrdinalIgnoreCase) ? StateSuffix.Length : BlobSuffix.Length;
         return name.Length > StoragePrefix.Length + RootHashLength + FolderHashLength + suffix + 2
             && name.StartsWith(StoragePrefix, StringComparison.OrdinalIgnoreCase)

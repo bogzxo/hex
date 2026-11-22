@@ -114,7 +114,8 @@ internal sealed partial class HexLinkSync
         return true;
     }
 
-    private static async Task<byte[]?> ReadHeadBlob(string repository, string head, string path, CancellationToken cancel)
+    internal static async Task<byte[]?> ReadHeadBlob(string repository, string head, string path, CancellationToken cancel,
+        long maximum = HexLinkFiles.MOST_READ)
     {
         // Batch mode distinguishes an untracked path from an actual Git failure, and returns raw bytes.
         var start = new ProcessStartInfo("git")
@@ -162,7 +163,7 @@ internal sealed partial class HexLinkSync
                 throw new IOException($"Git could not read {path} from the shared commit.");
             if (parts[1] != "blob")
                 return null;
-            if (size > HexLinkFiles.MOST_READ)
+            if (size > maximum)
                 throw new HexLinkException(HexLinkErrors.TOO_BIG, $"{path} is too large to compare with the shared commit.");
 
             byte[] blob = new byte[size];
