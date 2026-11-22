@@ -2,6 +2,9 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
 using Hex.Core;
+using Hex.Shell;
+using Horizon.HIDL.Runtime;
+using Horizon.UI.Components;
 
 namespace Hex.Tests;
 
@@ -114,6 +117,45 @@ public sealed class PredictionProviderTests
 
         Assert.Equal(PredictionStatus.NoSuchModel, failure.Status);
         Assert.Contains("model 'zeta' not found", failure.Message);
+    }
+
+    [Fact]
+    public void Picker_refreshes_on_schedule_and_returns_to_manual_entry_for_offline_or_other_providers()
+    {
+        string provider = "ollama", name = "first:1";
+        bool online = true;
+        var server = new FakeServer(_ => Task.FromResult(online
+            ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent($$"""{"models":[{"name":"{{name}}"}]}""") }
+            : new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)));
+        using var client = new HttpClient(server);
+        var picker = new OllamaModelPicker(client);
+        var page = new SettingsPage
+        {
+            Settings = [EditorSettingsCatalog.Settings.Single(row => row.Key == "edit_predictions_model")],
+            ValueOf = key => new StringValue(key switch
+            {
+                "edit_predictions_provider" => provider, "edit_predictions_api_url" => "http://localhost:11434", _ => ""
+            })
+        };
+        picker.Update(page, 0);
+        Assert.Contains(name, Assert.Single(page.Settings).Choices!);
+        name = "second:latest";
+        picker.Update(page, 5_000);
+        Assert.Single(server.Sent);
+        picker.Update(page, 10_000);
+        Assert.Equal(["", name], Assert.Single(page.Settings).Choices);
+        online = false;
+        picker.Update(page, 20_000);
+        Assert.Equal(UIFormKind.Text, Assert.Single(page.Settings).Kind);
+        online = true;
+        provider = "openai";
+        picker.Update(page, 30_000);
+        Assert.Equal(3, server.Sent.Count);
+        provider = "ollama";
+        picker.Update(page, 31_000);
+        Assert.Contains(name, Assert.Single(page.Settings).Choices!);
+        picker.Update(null, 41_000);
+        Assert.Equal(4, server.Sent.Count);
     }
 
     [Fact]
