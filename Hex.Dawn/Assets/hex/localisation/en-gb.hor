@@ -3380,7 +3380,7 @@ let strings = {
         commit_staged: "Commit {count} staged",
         commit_all: "Commit all {count}",
         commit_tip: "Commit what's staged, or every change when nothing is (Ctrl+Alt+Enter)",
-        merge_changes: "Merge Changes",
+        merge_changes: "Merge conflicts",
         staged_changes: "Staged Changes",
         changes: "Changes",
         stage: "Stage",

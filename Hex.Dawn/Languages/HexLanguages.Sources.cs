@@ -27,6 +27,8 @@ internal sealed partial class HexLanguages
         ServersChanged++;
     }
 
-    private static bool CanRequest(HexDocument of, string provider) => !of.Editor.ReadOnly || provider is not
-        ("renameProvider" or "codeActionProvider" or "documentFormattingProvider" or "documentRangeFormattingProvider" or "documentOnTypeFormattingProvider");
+    private bool CanRequest(HexDocument of, string provider) => mergeResults.ContainsKey(of)
+        ? provider is "hoverProvider" or "signatureHelpProvider" or "definitionProvider" or "typeDefinitionProvider" or "referencesProvider"
+        : !of.Editor.ReadOnly || provider is not
+            ("renameProvider" or "codeActionProvider" or "documentFormattingProvider" or "documentRangeFormattingProvider" or "documentOnTypeFormattingProvider");
 }

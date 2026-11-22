@@ -1,4 +1,5 @@
 using System.Numerics;
+using Hex.Core.Git;
 using Hex.Core.Merge;
 
 namespace Hex.Dawn;
@@ -52,6 +53,8 @@ internal sealed partial class DawnScene
         tab.SavedCode = tab.Editor.Text;
         documents.Add(tab);
         Show(tab);
+        if (!session.IsBinary)
+            languages.AttachMergeResult(tab, session.Path);
         tabsDirty = true;
         return merge;
     }
@@ -109,6 +112,7 @@ internal sealed partial class DawnScene
     {
         if (!documents.Contains(tab))
             return;
+        languages.DetachMergeResult(tab);
         HexDocument previous = document;
         if (document != tab)
             Show(tab);
@@ -141,18 +145,88 @@ internal sealed partial class DawnScene
 
     private void OpenMarkedMergeEditor()
     {
-        HexDocument original = document;
-        string before = original.Editor.Text;
-        MergeModel model = MergeModel.FromMarkers(before);
-        if (model.ConflictCount == 0 || original.Path is not { } path)
+        if (document.Path is { } path)
+            OpenGitMergeEditor(null, path, document.Editor.Text);
+    }
+
+    private void OpenGitMergeEditor(GitRepository? repository, string path, string? markedText = null)
+    {
+        if (documents.FirstOrDefault(tab => tab.Merge is { } active &&
+            PlatformPaths.Comparer.Equals(active.Session.Path, path)) is { } existing)
+        {
+            Show(existing);
             return;
-        OpenMergeEditor(new(Path.GetFileName(path), "Mine", "Theirs", "Base", model, bytes =>
-            OnEditorForLink(() =>
+        }
+
+        HexDocument? original = Context.Documents.Find(path);
+        int version = original?.Editor.Document.Version ?? -1;
+        if (original is not null && HasChanges(original))
+        {
+            Say("Save the file before opening the merge editor.", error: true);
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
             {
-                if (!documents.Contains(original) || original.Editor.Text != before)
-                    throw new IOException("The original file changed. Open the merge editor again.");
-                original.Editor.Document.Replace(HexLinkFiles.Decode(bytes)?.Text ?? "");
+                repository ??= GitRepository.Find(path);
+                MergeSession? session = repository is { } repo ? await GitUnmerged.Open(repo, path, markedText) :
+                    markedText is { } text ? MarkedFileSession(text) : null;
+                PostLink(() =>
+                {
+                    if (session is null)
+                        Say("The file has no merge conflicts.");
+                    else if (!documents.Any(tab => tab.Merge is { } merge &&
+                        PlatformPaths.Comparer.Equals(merge.Session.Path, path)))
+                        OpenMergeEditor(session with
+                        {
+                            Complete = bytes => CompleteGitEdit(() => session.Complete(bytes), bytes),
+                            SideChoices = session.SideChoices is { } choices ? choices with
+                            {
+                                Complete = side => CompleteGitEdit(() => choices.Complete(side), null)
+                            } : null,
+                        });
+                });
+            }
+            catch (Exception error)
+            {
+                PostLink(() => Say(error.Message, error: true));
+            }
+        });
+
+        async Task CompleteGitEdit(Func<Task> write, byte[]? bytes)
+        {
+            LinkTabStamp stamp = await OnEditorForLink(() =>
+            {
+                LinkTabStamp current = LinkTabBeforeWrite(path);
+                if (current.Dirty || current.Document is { } open &&
+                    (open != original || open.Editor.Document.Version != version))
+                    throw new IOException("The open file changed. Open the merge editor again.");
+
+                return current;
+            });
+            await write();
+            if (bytes is null && File.Exists(path))
+                bytes = await File.ReadAllBytesAsync(path);
+            await OnEditorForLink(() =>
+            {
+                if (bytes is not null && HexLinkFiles.Decode(bytes) is { } decoded)
+                    LinkTakeIntoTab(path, decoded.Text, stamp);
+                git.Refresh(path);
                 return true;
-            }), static () => { }, path));
+            });
+        }
+
+        MergeSession? MarkedFileSession(string text)
+        {
+            byte[] before = File.ReadAllBytes(path);
+            if (HexLinkFiles.Decode(before) is not { } disk)
+                return null;
+            MergeModel model = MergeModel.FromMarkers(text, disk.Encoding);
+            return model.ConflictCount == 0 ? null : new(Path.GetFileName(path), "Mine", "Theirs", "Base", model,
+                bytes => HexLinkFiles.CompareAndReplace(path, Path.GetFileName(path), HexLinkFiles.Hash(before), bytes,
+                    CancellationToken.None), static () => { }, path);
+        }
     }
 }

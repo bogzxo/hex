@@ -14,10 +14,10 @@ internal sealed partial class HexLanguages
             if (places.Count == 0)
                 context.Notices.Say(context.Strings.Said("code_server.no_type_definition", ("word", word)));
             else if (places.Count > 1)
-                ShowDefinitionPlaces(context.Strings.Said("code_server.type_definitions_title", ("word", word), ("count", places.Count.ToString())), server, places, word, request.Workspace, alignName: false);
+                ShowDefinitionPlaces(context.Strings.Said("code_server.type_definitions_title", ("word", word), ("count", places.Count.ToString())), server, places, word, request.Workspace, alignName: false, mergeRequest: mergeResults.ContainsKey(of) ? request : null);
             else if (!places[0].OnDisk)
                 OpenSource(server, places[0], word, request, alignName: false);
-            else
+            else if (!GoToMergeLocation(of, places[0]))
                 context.Documents.OpenAt(places[0].Path, places[0].Line, places[0].Character);
         });
     }

@@ -62,7 +62,7 @@ internal sealed partial class DawnScene
 
         IEnumerable<UITreeItem> SideRows(IEnumerable<UITreeItem> rows) => rows.SelectMany(row => new[] { row }.Concat(SideRows(row.Children ?? [])));
         UITreeItem? Merging(string path) => SideRows(sideTree.Items).FirstOrDefault(row =>
-            row.Tooltip is { Length: > 0 } tip && path.Replace('\\', '/').EndsWith("/" + tip, StringComparison.Ordinal) && row.Parent?.Text.StartsWith("Merge Changes", StringComparison.Ordinal) == true);
+            row.Tooltip is { Length: > 0 } tip && path.Replace('\\', '/').EndsWith("/" + tip, StringComparison.Ordinal) && row.Parent?.Text.StartsWith(Said("git.merge_changes"), StringComparison.Ordinal) == true);
         bool On(string path) => document.Path is { } open && PlatformPaths.Same(open, path);
         Vector2 Lens(int action) => conflicts.Count > 0 && code.Module is { } module ? module.ToWorld(code.LensBounds(conflicts[0].Start, action).Center) : last;
         UINotification? SettledCard() => toasts.Cards.LastOrDefault(card => !card.Closed && card.Text.Contains("is settled", StringComparison.Ordinal));
@@ -77,8 +77,12 @@ internal sealed partial class DawnScene
 
         // Accept Incoming painted after the <<<<<<< line, clicked, one Ctrl+Z to have the block back
         test.WaitFor(() => conflicts.Count == 1 && code.LensBounds(conflicts[0].Start, 1).Width > 0.0f, 3.0f);
-        test.Check("conflicts: the first marker has the three lenses after it", () =>
-            code.Lenses is [{ Actions.Length: 3 } lens] && lens.Line == conflicts[0].Start && lens.Actions[1] == Said("conflicts.lens_incoming"));
+        test.Check("conflicts: the first marker has accept actions and a merge editor action", () =>
+            code.Lenses is [{ Actions.Length: 4 } lens] && lens.Line == conflicts[0].Start &&
+            lens.Actions[1] == Said("conflicts.lens_incoming") && lens.Actions[3] == "Open merge editor");
+        test.Check("conflicts: the editor banner has a resolver button", () =>
+            gitConflictBanner is { Visible: true } banner && banner.Children.Single() is StackPanel row &&
+            row.Children.OfType<Button>().Single().Label == "Open merge editor");
 
         // The pointer resting on it underlines it, for a look with HEX_SELFTEST_SHOTS set
         test.Hover(() => Lens(1));
@@ -119,6 +123,33 @@ internal sealed partial class DawnScene
         test.Click(() => Lens(0));
         test.Wait();
         test.Check("conflicts: Accept Current there keeps ours", () => code.Text.Replace("\r\n", "\n") == "values: {\n    size: 3\n}\n" && conflicts.Count == 0);
+
+        // Resolve the restored index conflict through the shared editor and check the explicit Continue action.
+        test.Run(() =>
+        {
+            code.Document.Undo();
+            UpdateConflicts(now: true);
+        });
+        bool ContinueOffered() => SideRows(sideTree.Items).Any(row => row.Text == Said("git_merge.continue_merge"));
+        test.Check("conflicts: Continue Merge is hidden until the index is clear", () => !ContinueOffered());
+        test.Click(() =>
+        {
+            Button? resolve = gitConflictBanner?.Children.OfType<StackPanel>().FirstOrDefault()?.Children.OfType<Button>().Single();
+            return resolve?.Module?.ToWorld(resolve.Bounds.Center) ?? last;
+        });
+        test.WaitFor(() => document.Merge is not null, 6.0f);
+        test.Check("conflicts: the editor uses the index branch labels", () =>
+            document.Merge?.Session is { MineLabel: "Mine: main", TheirsLabel: "Theirs: other" });
+        test.Run(() =>
+        {
+            document.Merge?.Go(1);
+            document.Merge?.AcceptCurrent(Hex.Core.Merge.MergeChoice.Theirs);
+            CompleteMergeEditor(document);
+        });
+        test.WaitFor(() => On(values) && ContinueOffered(), 6.0f);
+        test.Check("conflicts: Complete stages exact bytes and offers Continue Merge", () =>
+            On(values) && ContinueOffered() && git.OperationAt(values) == GitOperation.Merging
+            && GitProcess.Run(repo, ["show", ":values.hor"]).Output == "values: {\n    size: 2\n}\n");
 
         // A file with none, the commands greyed out and their key doing nothing
         string before = string.Empty;

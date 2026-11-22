@@ -22,7 +22,9 @@ internal sealed partial class HexGit
         string which = Several ? $"$(repo) {repository.Name}  " : string.Empty;
 
         // How far it is from what it follows is the sync item's to say, next to it
-        return $"{which}$(git-branch) {BranchName(status)}{star}{doing}";
+        int conflicts = status.Files.Values.Count(state => state.Change == GitChange.Conflicted);
+        string unresolved = conflicts > 0 ? $" · {HexText.Count("merge conflict", conflicts)}" : "";
+        return $"{which}$(git-branch) {BranchName(status)}{star}{doing}{unresolved}";
     }
 
     // What git said of the repository a path is in, or of the active one when there's no path or it's in none
