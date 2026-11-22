@@ -34,9 +34,24 @@ internal sealed partial class DawnScene
         }
     }
 
-    private IReadOnlyList<string> PublicationRecipients(string folder) =>
-        [.. LinkKnown.Select(device => device.Device.Id).Concat(LinkPeers.Select(peer => peer.Device.Id))
-            .Distinct(StringComparer.OrdinalIgnoreCase).Where(device => LinkSyncChosen(device).Contains(folder, PlatformPaths.Comparer))];
+    private IReadOnlyList<string> PublicationRecipients(string folder)
+    {
+        var recipients = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (linkServices?.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, folder)) is { } shared)
+        {
+            lock (linkSyncGate)
+            {
+                foreach (LinkSyncEntry entry in linkSyncs.Values)
+                    if (PlatformPaths.Comparer.Equals(entry.Folder, folder) && entry.Sync is { PublicationPairReady: true } sync &&
+                        PlatformPaths.Same(sync.LocalFolder.Path, shared.Path))
+                        recipients.Add(entry.DeviceId);
+            }
+        }
+        foreach (var known in LinkKnown)
+            if (LinkSyncChosen(known.Device.Id).Contains(folder, PlatformPaths.Comparer))
+                recipients.Add(known.Device.Id);
+        return [.. recipients];
+    }
 
     private async Task LinkPreparePublicationAndShare(HexLinkPeer peer)
     {
@@ -142,6 +157,14 @@ internal sealed partial class DawnScene
     }
 
     internal void LinkPublicationPairReady() => CurrentLinkPublication?.Pump.Poke();
+
+    private async Task<HexLinkPrivateWorktree> LinkStartPrivateWorktree(LinkServices services, HexLinkFolder folder, Guid id, CancellationToken cancel)
+    {
+        await using var live = await HexLinkPublicationFence.ForRoot(folder.Path).EnterLive(cancel);
+        var tree = new HexLinkTree(folder, () => services.Excludes);
+        HexLinkManifest snapshot = await Task.Run(tree.Manifest, live.Stop);
+        return await HexLinkPrivateWorktree.Open(LinkPrivateStorage, id, folder, snapshot, () => services.Excludes, live.Stop);
+    }
 
     internal async Task LinkFollowPrivateWorkingChanges(HexLinkFolder folder, CancellationToken cancel)
     {

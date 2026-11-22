@@ -49,10 +49,7 @@ internal sealed partial class DawnScene
         Guid id = Guid.NewGuid();
         try
         {
-            var tree = new HexLinkTree(shared, () => services.Excludes);
-            HexLinkManifest snapshot = await Task.Run(tree.Manifest, cancel);
-            HexLinkPrivateWorktree draft = await HexLinkPrivateWorktree.Open(LinkPrivateStorage, id, shared, snapshot,
-                () => services.Excludes, cancel);
+            HexLinkPrivateWorktree draft = await LinkStartPrivateWorktree(services, shared, id, cancel);
             linkPrivateDrafts[id] = draft;
             chat.LinkDraft = id;
             privateAgentRoots[chat.Id] = draft.Root;

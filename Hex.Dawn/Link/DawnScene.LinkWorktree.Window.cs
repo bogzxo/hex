@@ -27,10 +27,7 @@ internal sealed partial class DawnScene
         {
             holder.Add(LinkButton("Start private worktree", "git-branch", () => RunPrivateDeviceAction(id, async stop =>
             {
-                var tree = new HexLinkTree(shared, () => services.Excludes);
-                HexLinkManifest snapshot = await Task.Run(tree.Manifest, stop);
-                HexLinkPrivateWorktree draft = await HexLinkPrivateWorktree.Open(LinkPrivateStorage, id, shared, snapshot,
-                    () => services.Excludes, stop);
+                HexLinkPrivateWorktree draft = await LinkStartPrivateWorktree(services, shared, id, stop);
                 linkPrivateDrafts[id] = draft;
                 await RefreshPrivateDeviceStatus(id, draft, stop);
             }))).Enabled = !privateDeviceJobs.Contains(id);
