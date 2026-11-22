@@ -102,7 +102,6 @@ internal sealed partial class DawnScene
         if (HexAi.Off)
             return;
 
-        ollamaModels.Update(SettingsPage);
         SayPredictionsOnce();
 
         // A prediction taken is in the history now, the next is asked for at once
