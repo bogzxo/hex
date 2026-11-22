@@ -52,46 +52,41 @@ internal sealed class HexAgentProcess : IDisposable
     /// Where a program is, a whole path as it is, a name looked for on PATH with each of PATHEXT's endings (.exe, .cmd,
     /// .bat on Windows, nothing elsewhere). Null when it isn't anywhere.
     /// </summary>
-    public static string? Find(string program, string? path = null, string? endings = null)
+    public static string? Find(string program, string? path = null, string? endings = null, HexAgentProgramPaths? fallback = null)
     {
         if (program.Length == 0)
             return null;
         if (Path.IsPathRooted(program) || program.Contains('/') || program.Contains('\\'))
             return File.Exists(program) ? Path.GetFullPath(program) : null;
 
-        string[] tried = OperatingSystem.IsWindows()
+        bool windows = fallback?.Windows ?? OperatingSystem.IsWindows();
+        string[] tried = windows
             ? [.. (endings ?? Environment.GetEnvironmentVariable("PATHEXT") ?? ".COM;.EXE;.BAT;.CMD").Split(';', StringSplitOptions.RemoveEmptyEntries).Select(ending => ending.ToLowerInvariant())]
             : [string.Empty];
         if (Path.HasExtension(program))
             tried = [string.Empty, .. tried];
 
-        if (FindOn(path ?? Environment.GetEnvironmentVariable("PATH") ?? string.Empty, program, tried) is { } found)
+        char separator = windows ? ';' : ':';
+        var folders = (path ?? Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(separator, StringSplitOptions.RemoveEmptyEntries);
+        if (FindOn(folders, program, tried) is { } found)
             return found;
 
-        // Installed since Hex started (winget, npm -g), it's on the system's PATH as it is now, which Hex's own copy of
-        // it from its start hasn't got
-        if (path is null && OperatingSystem.IsWindows())
-        {
-            string now = Environment.ExpandEnvironmentVariables(
-                $"{Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.Machine)};{Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User)}");
-            return FindOn(now, program, tried);
-        }
-
-        return null;
+        fallback ??= path is null ? HexAgentProgramPaths.Current() : null;
+        return fallback is null ? null : FindOn(fallback.Folders(), program, tried);
     }
 
-    // The first of a program's names in the folders of a PATH
-    private static string? FindOn(string path, string program, string[] tried)
+    // The first of a program's names in a set of folders.
+    private static string? FindOn(IEnumerable<string> folders, string program, string[] tried)
     {
-        foreach (string folder in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        foreach (string folder in folders)
         {
             foreach (string ending in tried)
             {
                 try
                 {
-                    string candidate = Path.Combine(folder.Trim('"'), program + ending);
+                    string candidate = Path.Combine(folder.Trim().Trim('"'), program + ending);
                     if (File.Exists(candidate))
-                        return candidate;
+                        return Path.GetFullPath(candidate);
                 }
                 catch (ArgumentException)
                 {
@@ -126,6 +121,8 @@ internal sealed class HexAgentProcess : IDisposable
         {
             info.FileName = Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe";
             info.Arguments = $"/d /s /c \"{CmdQuote(found)} {string.Join(' ', arguments.Select(CmdQuote))}\"";
+            // npm's shim may also need a Node executable installed after Hex started.
+            info.Environment["PATH"] = Environment.GetEnvironmentVariable("PATH") + ";" + HexAgentProgramPaths.WindowsPath();
         }
         else
         {

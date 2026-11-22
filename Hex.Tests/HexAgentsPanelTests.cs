@@ -108,6 +108,59 @@ public sealed partial class HexAgentsPanelTests : IDisposable
     }
 
     [Fact]
+    public void Discovery_rechecks_a_fresh_path_after_the_process_path_misses()
+    {
+        string inherited = Path.Combine(folder, "inherited");
+        string registered = Path.Combine(folder, "registered");
+        Directory.CreateDirectory(inherited);
+        Directory.CreateDirectory(registered);
+        string? livePath = null;
+        var paths = new HexAgentProgramPaths(true, false, folder, null, null, null, () => livePath);
+        Assert.Null(HexAgentProcess.Find("claude", inherited, ".EXE", paths));
+
+        string installed = Path.Combine(registered, "claude.exe");
+        File.WriteAllText(installed, "");
+        livePath = $"\"{registered}\"";
+        Assert.Equal(installed, HexAgentProcess.Find("claude", inherited, ".EXE", paths));
+
+        string processChoice = Path.Combine(inherited, "claude.exe");
+        File.WriteAllText(processChoice, "");
+        Assert.Equal(processChoice, HexAgentProcess.Find("claude", inherited, ".EXE", paths));
+        if (OperatingSystem.IsWindows())
+            Assert.Equal(installed, HexAgentProcess.StartInfo(installed, ["--version"], folder).FileName);
+    }
+
+    [Theory]
+    [InlineData("Microsoft/WinGet/Links/claude.exe", "claude")]
+    [InlineData("Microsoft/WinGet/Packages/Anthropic.ClaudeCode_example/claude.exe", "claude")]
+    [InlineData("Microsoft/WinGet/Packages/Anthropic.ClaudeCode_example/bin/claude.exe", "claude")]
+    [InlineData("npm/claude.cmd", "claude")]
+    public void Discovery_finds_windows_install_locations_without_a_path_entry(string relative, string name)
+    {
+        string installed = Path.Combine(folder, relative.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(installed)!);
+        File.WriteAllText(installed, "");
+        var paths = new HexAgentProgramPaths(true, false, folder, folder, folder, null, () => null);
+        Assert.Equal(installed, HexAgentProcess.Find(name, "", ".EXE;.CMD", paths));
+    }
+
+    [Fact]
+    public void Discovery_finds_the_user_bin_and_the_login_shell_path_on_mac()
+    {
+        string localBin = Path.Combine(folder, ".local", "bin");
+        string shellBin = Path.Combine(folder, "from-the-shell");
+        Directory.CreateDirectory(localBin);
+        Directory.CreateDirectory(shellBin);
+        string claude = Path.Combine(localBin, "test-claude");
+        string fromProfile = Path.Combine(shellBin, "test-agent-from-profile");
+        File.WriteAllText(claude, "");
+        File.WriteAllText(fromProfile, "");
+        var paths = new HexAgentProgramPaths(false, true, folder, null, null, null, () => shellBin);
+        Assert.Equal(claude, HexAgentProcess.Find("test-claude", "", fallback: paths));
+        Assert.Equal(fromProfile, HexAgentProcess.Find("test-agent-from-profile", "", fallback: paths));
+    }
+
+    [Fact]
     public void A_program_run_has_its_lines_read_back_and_its_exit_said()
     {
         // A .cmd on Windows, which goes through cmd, a sh elsewhere, started in a group of its own

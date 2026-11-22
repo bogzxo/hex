@@ -136,6 +136,19 @@ internal sealed partial class DawnScene
         + (status.Parent is { } parent ? $" (started by #{parent})" : string.Empty)
         + (status.Unread.Length is > 0 and var unread ? $", {unread} unread message{(unread == 1 ? string.Empty : "s")}" : string.Empty);
 
+    private static readonly (string Id, string Name, string Program)[] CatalogAgents =
+    [
+        ("claude_code", "Claude Code", "claude"),
+        ("codex", "Codex", "codex"),
+        ("antigravity", "Antigravity", "agy")
+    ];
+
+    private bool NeedsAgentExtension(string id) =>
+        !HexAi.Off && !extensions.All.Any(extension => extension.Id == id) && !extensions.AgentRuns.ContainsKey(id);
+
+    private static string InstallAgentExtension(string id, string name, string program) =>
+        $"The '{program}' CLI is installed. On this machine, open Hex Settings → {HexExtensions.AVAILABLE} and install {name} ({id}).";
+
     private IEnumerable<McpToolResult?> AgentsList(JsonObject args)
     {
         PublishAgentStatuses();
@@ -144,9 +157,27 @@ internal sealed partial class DawnScene
             said.Append("You are chat #").Append(caller).Append(ChatById(caller)?.Parent is { } parent ? $", started by #{parent}" : string.Empty).Append(".\n\n");
 
         said.Append("Agent systems:\n");
-        foreach (HexAgentProfile profile in RunnableAgents())
+        var systems = RunnableAgents().Select(profile =>
+            (Profile: profile, Program: HexExtensions.Text(extensions.AgentRuns[profile.Id].Run, "program") ?? string.Empty)).ToArray();
+        var installable = CatalogAgents.Where(each => NeedsAgentExtension(each.Id)).ToArray();
+        long checkedAt = System.Environment.TickCount64;
+        Task<string?[]> checking = Task.Run(() =>
         {
-            said.Append("- ").Append(profile.Id).Append(" (").Append(profile.Name).Append(StateOf(profile) == AgentStates.Missing ? ", not installed" : string.Empty).Append(')');
+            HexAgentProgramPaths live = HexAgentProgramPaths.Current();
+            var systemPath = new Lazy<string?>(live.LivePath);
+            var paths = live with { LivePath = () => systemPath.Value };
+            return systems.Select(system => system.Program).Concat(installable.Select(system => system.Program))
+                .Select(program => HexAgentProcess.Find(program, fallback: paths)).ToArray();
+        });
+        while (!checking.IsCompleted)
+            yield return null;
+        string?[] found = checking.GetAwaiter().GetResult();
+        for (int i = 0; i < systems.Length; i++)
+        {
+            var (profile, program) = systems[i];
+            bool missing = found[i] is null;
+            RememberAgentProgram(profile.Id, program, missing, checkedAt);
+            said.Append("- ").Append(profile.Id).Append(" (").Append(profile.Name).Append(missing ? ", not installed" : string.Empty).Append(')');
             foreach (AgentOption option in OptionsOf(profile.Id))
             {
                 string[] values = [.. option.Choices.Select(choice => choice.Value).Where(value => value.Length > 0)];
@@ -157,6 +188,12 @@ internal sealed partial class DawnScene
             said.Append('\n');
         }
 
+        for (int i = 0; i < installable.Length; i++)
+        {
+            var (id, name, program) = installable[i];
+            if (found[systems.Length + i] is not null && NeedsAgentExtension(id))
+                said.Append('\n').Append(InstallAgentExtension(id, name, program)).Append('\n');
+        }
         said.Append("\nChats:\n");
         if (agentChats.Count == 0)
             said.Append("none\n");
@@ -188,14 +225,36 @@ internal sealed partial class DawnScene
         HexAgentProfile? profile = HexAgentProfiles.All.FirstOrDefault(each => each.Id == agent);
         if (profile is null || !extensions.AgentRuns.TryGetValue(agent, out var run))
         {
+            var catalog = CatalogAgents.FirstOrDefault(each => each.Id == agent);
+            if (catalog.Program is { } cli && NeedsAgentExtension(agent))
+            {
+                Task<string?> checking = Task.Run(() => HexAgentProcess.Find(cli));
+                while (!checking.IsCompleted)
+                    yield return null;
+                if (checking.GetAwaiter().GetResult() is not null)
+                {
+                    yield return McpToolResult.Error(InstallAgentExtension(agent, catalog.Name, cli));
+                    yield break;
+                }
+            }
             yield return McpToolResult.Error($"There's no agent system '{agent}' that can be started, hex_agent_list says which there are.");
             yield break;
         }
 
         if (StateOf(profile) == AgentStates.Missing)
         {
-            yield return McpToolResult.Error($"{profile.Name} isn't installed on this machine.");
-            yield break;
+            string program = HexExtensions.Text(run.Run, "program") ?? string.Empty;
+            long checkedAt = System.Environment.TickCount64;
+            Task<string?> checking = Task.Run(() => HexAgentProcess.Find(program));
+            while (!checking.IsCompleted)
+                yield return null;
+            bool missing = checking.GetAwaiter().GetResult() is null;
+            RememberAgentProgram(profile.Id, program, missing, checkedAt);
+            if (missing)
+            {
+                yield return McpToolResult.Error($"{profile.Name} isn't installed on this machine.");
+                yield break;
+            }
         }
 
         string prompt = args.String("prompt") ?? string.Empty;

@@ -178,13 +178,60 @@ internal sealed partial class DawnScene
         {
             Task<McpToolResult> agents = McpTools.CallAs("hex_agent_list", [], CancellationToken.None, null);
             behindEditor = McpTools.Call("hex_editor", [], CancellationToken.None);
-            TickAgentsOffscreen(0.016f);
-            agentAnswered = agents.IsCompleted;
+            agentAnswered = SpinWait.SpinUntil(() =>
+            {
+                TickAgentsOffscreen(0.016f);
+                return agents.IsCompleted;
+            }, TimeSpan.FromSeconds(8));
             editorWaited = !behindEditor.IsCompleted && mcpCalls.Count == 1;
         });
         test.WaitFor(() => behindEditor?.IsCompleted == true, 5.0f);
         test.Check("mcp: behind Dusk a call about agents is answered and one that drives the editor waits for it to come back", () =>
             agentAnswered && editorWaited && behindEditor is { IsCompletedSuccessfully: true });
+
+        // The same editor notices a CLI installed after it started and after the first agent listing.
+        const string discoveryId = "cli_discovery_fixture";
+        string cli = "hex-agent-fixture-" + Guid.NewGuid().ToString("N");
+        string prefix = Path.Combine(testFolder, "agent-cli-prefix");
+        string executable = OperatingSystem.IsWindows() ? Path.Combine(prefix, cli + ".exe") : Path.Combine(prefix, "bin", cli);
+        string? oldPrefix = null;
+        HexExtension? fixtureExtension = null;
+        test.Run(() =>
+        {
+            oldPrefix = System.Environment.GetEnvironmentVariable("NPM_CONFIG_PREFIX");
+            System.Environment.SetEnvironmentVariable("NPM_CONFIG_PREFIX", prefix);
+            string fixture = Path.Combine(testFolder, discoveryId);
+            Directory.CreateDirectory(fixture);
+            File.WriteAllText(Path.Combine(fixture, HexExtension.FILE), $$"""
+                let extension = { name: "CLI discovery fixture" };
+                func on_start(hex) {
+                    hex.agent({ id: "{{discoveryId}}", name: "CLI discovery fixture", run: { program: "{{cli}}" } });
+                }
+                """);
+            fixtureExtension = new HexExtension(fixture, builtIn: true);
+            extensions.Add(fixtureExtension);
+            extensions.Start(fixtureExtension);
+        });
+        Ask("hex_agent_list");
+        test.Check("mcp: a registered agent is marked missing while its executable is absent", () =>
+            Answered().Contains(discoveryId + " (CLI discovery fixture, not installed)", StringComparison.Ordinal));
+        test.Run(() =>
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(executable)!);
+            File.WriteAllText(executable, string.Empty);
+        });
+        Ask("hex_agent_list");
+        test.Check("mcp: listing agents again detects a CLI installed outside the process PATH", () =>
+            Answered().Contains(discoveryId + " (CLI discovery fixture)", StringComparison.Ordinal));
+        test.Run(() =>
+        {
+            System.Environment.SetEnvironmentVariable("NPM_CONFIG_PREFIX", oldPrefix);
+            if (fixtureExtension is not null)
+            {
+                extensions.ForgetAgents(fixtureExtension);
+                extensions.Remove(fixtureExtension);
+            }
+        });
 
         // Files written and changed through Hex, on the disk with their line endings kept, and in the editor when the file is
         // open with changes nobody saved, where it's one step to undo
