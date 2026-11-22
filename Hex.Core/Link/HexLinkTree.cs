@@ -64,7 +64,7 @@ internal sealed partial class HexLinkTree
         Root = Path.GetFullPath(folder.Path);
         this.excludes = excludes ?? (() => HexExcludes.Usual);
         this.streamLarge = streamLarge;
-        if (cacheDirectory is not null)
+        if (cacheDirectory is not null && !PlatformPaths.IsUnder(cacheDirectory, Root))
         {
             string key = HexLinkFiles.Hash(System.Text.Encoding.UTF8.GetBytes(Root));
             cacheFile = Path.Combine(cacheDirectory, $"tree-{key}.cache");
