@@ -1,6 +1,7 @@
 using System.Numerics;
 
 using Hex.Core.Git;
+using Horizon.Rendering;
 
 namespace Hex.Dawn;
 
@@ -14,6 +15,8 @@ internal sealed partial class DawnScene
     // The conflicts of the file on screen, and the version of its text they were found in
     private List<GitConflict> conflicts = [];
     private (HexDocument? Of, int Version) conflictsFor = (null, -1);
+    private Panel? gitConflictBanner;
+    private const float GIT_CONFLICT_BANNER_HEIGHT = 32.0f;
 
     // When the text last changed, to look again once the typing stops
     private const long CONFLICTS_SETTLE_MS = 300;
@@ -76,13 +79,50 @@ internal sealed partial class DawnScene
         if (!document.IsText || document.Merge is not null || document.DiffOf is not null || document.Picture is not null || !HasConflictMarker())
         {
             conflicts = [];
+            ShowGitConflictBanner(false);
             if (had)
                 LightConflicts();
             return;
         }
 
         conflicts = GitConflicts.Find(code.Text.Replace("\r\n", "\n").Split('\n'));
+        ShowGitConflictBanner(conflicts.Count > 0);
         LightConflicts();
+    }
+
+    private void ShowGitConflictBanner(bool show)
+    {
+        if ((gitConflictBanner?.Visible ?? false) == show)
+            return;
+
+        if (show && gitConflictBanner is null)
+        {
+            gitConflictBanner = codeScroll.Add(new Panel
+            {
+                Anchor = Origin.Top,
+                Pivot = Origin.Top,
+                Fill = UIFill.Horizontal,
+                Size = new Vector2(0, GIT_CONFLICT_BANNER_HEIGHT),
+                Position = new Vector2(0, GIT_CONFLICT_BANNER_HEIGHT),
+                Padding = new UIEdges(10, 2, 10, 2),
+            });
+            var row = gitConflictBanner.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 14, Fill = UIFill.Both });
+            row.Add(new Label { Text = "This file has merge conflicts", TextScale = 0.13f, Align = Origin.Left });
+            row.Add(new Button
+            {
+                Label = "Open merge editor",
+                Tooltip = "Open merge editor",
+                LabelScale = 0.13f,
+                OnPressed = OpenMarkedMergeEditor,
+            });
+        }
+
+        if (gitConflictBanner is { } banner)
+        {
+            banner.Visible = show;
+            banner.Color = WarningColor with { W = 0.14f };
+        }
+        codeScroll.Padding = new UIEdges(0, show ? GIT_CONFLICT_BANNER_HEIGHT : 0, 0, 0);
     }
 
     private bool HasConflictMarker()

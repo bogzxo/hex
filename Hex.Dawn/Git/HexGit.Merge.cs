@@ -15,10 +15,11 @@ internal sealed partial class HexGit
     {
         // Only there while git is in the middle of something, Continue first the way VS Code has them
         continueItem = context.Commands.Add("Git/operation", context.Strings.Said("git_merge.continue_merge"), () => ContinueOperation(ActiveRepository()), icon: "debug-continue");
-        continueItem.IsEnabled = () => ActiveRepository() is { Operation: not GitOperation.None };
+        continueItem.IsEnabled = () => ActiveRepository() is { Status: { } status, Operation: not GitOperation.None } &&
+            !status.Files.Values.Any(state => state.Change == GitChange.Conflicted);
         abortItem = context.Commands.Add("Git/operation", context.Strings.Said("git_merge.abort_merge"), () => AskAbort(ActiveRepository()), icon: "discard");
         abortItem.IsEnabled = () => ActiveRepository() is { Operation: not GitOperation.None };
-        continueItem.IsVisible = abortItem.IsVisible = continueItem.IsEnabled;
+        continueItem.IsVisible = abortItem.IsVisible = abortItem.IsEnabled;
     }
 
     /// <summary>What git is in the middle of in the repository a path is in, None for nothing or no repository.</summary>
@@ -47,16 +48,23 @@ internal sealed partial class HexGit
             return;
 
         following = operation;
-        (string abort, string carryOn) = operation switch
+        abortItem.Label = context.Strings.Said(operation switch
         {
-            GitOperation.Rebasing => ("git_merge.abort_rebase", "git_merge.continue_rebase"),
-            GitOperation.CherryPicking => ("git_merge.abort_cherry_pick", "git_merge.continue_cherry_pick"),
-            GitOperation.Reverting => ("git_merge.abort_revert", "git_merge.continue_revert"),
-            _ => ("git_merge.abort_merge", "git_merge.continue_merge")
-        };
-        abortItem.Label = context.Strings.Said(abort);
-        continueItem.Label = context.Strings.Said(carryOn);
+            GitOperation.Rebasing => "git_merge.abort_rebase",
+            GitOperation.CherryPicking => "git_merge.abort_cherry_pick",
+            GitOperation.Reverting => "git_merge.abort_revert",
+            _ => "git_merge.abort_merge"
+        });
+        continueItem.Label = ContinueLabel(operation);
     }
+
+    private string ContinueLabel(GitOperation operation) => context.Strings.Said(operation switch
+    {
+        GitOperation.Rebasing => "git_merge.continue_rebase",
+        GitOperation.CherryPicking => "git_merge.continue_cherry_pick",
+        GitOperation.Reverting => "git_merge.continue_revert",
+        _ => "git_merge.continue_merge",
+    });
 
     // Whether any repository found so far is in the middle of something, as of its last look
     private bool AnyOperation()
@@ -101,12 +109,6 @@ internal sealed partial class HexGit
             return;
         }
 
-        if (operation == GitOperation.Merging)
-        {
-            AskCommit(repository);
-            return;
-        }
-
         int conflicts = status.Files.Values.Count(state => state.Change == GitChange.Conflicted);
         if (conflicts > 0)
         {
@@ -114,7 +116,13 @@ internal sealed partial class HexGit
             return;
         }
 
-        string doing = continueItem.Label;
+        if (operation == GitOperation.Merging)
+        {
+            AskCommit(repository);
+            return;
+        }
+
+        string doing = ContinueLabel(operation);
         Run(repository, doing, () => repository.Git.Continue(operation), context.Strings.Said("git.remote_done", ("doing", doing)));
     }
 }

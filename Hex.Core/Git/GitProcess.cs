@@ -46,7 +46,7 @@ internal static class GitProcess
     /// git that isn't there or never finishes comes back as an exit of -1 with the reason.
     /// </summary>
     public static GitResult Run(string folder, IReadOnlyList<string> arguments, string? input = null, TimeSpan? patience = null, bool unattended = false,
-        IReadOnlyDictionary<string, string>? environment = null, CancellationToken cancel = default)
+        IReadOnlyDictionary<string, string>? environment = null, CancellationToken cancel = default, Stream? standardOutput = null)
     {
         cancel.ThrowIfCancellationRequested();
         var start = new ProcessStartInfo("git")
@@ -109,7 +109,7 @@ internal static class GitProcess
             // Hex makes so little garbage that the collector hardly comes round, and a status every few seconds had
             // hundreds of pipe handles open within minutes
             using StreamReader outputReader = git.StandardOutput, errorReader = git.StandardError;
-            Task<string> output = outputReader.ReadToEndAsync();
+            Task<string> output = standardOutput is null ? outputReader.ReadToEndAsync() : CopyOutput(outputReader.BaseStream, standardOutput);
             Task<string> error = errorReader.ReadToEndAsync();
             // Git can emit a result while it is still consuming stdin, as check-ignore --stdin does.
             Task writing = input is not null ? WriteInput(git.StandardInput.BaseStream, input) : Task.CompletedTask;
@@ -125,13 +125,19 @@ internal static class GitProcess
 
             cancel.ThrowIfCancellationRequested();
             writing.GetAwaiter().GetResult();
-            return new GitResult(git.ExitCode, output.Result, error.Result);
+            return new GitResult(git.ExitCode, output.GetAwaiter().GetResult(), error.GetAwaiter().GetResult());
         }
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
         {
             cancel.ThrowIfCancellationRequested();
             return new GitResult(-1, string.Empty, e.Message);
         }
+    }
+
+    private static async Task<string> CopyOutput(Stream from, Stream to)
+    {
+        await from.CopyToAsync(to).ConfigureAwait(false);
+        return string.Empty;
     }
 
     private static async Task WriteInput(Stream input, string content)

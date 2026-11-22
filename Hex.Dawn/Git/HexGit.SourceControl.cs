@@ -114,6 +114,17 @@ internal sealed partial class HexGit
         }
 
         // A merge going on says so above Commit, which finishes it once the conflicts are settled
+        if (repository.Operation != GitOperation.None && !status.Files.Values.Any(state => state.Change == GitChange.Conflicted))
+        {
+            string label = ContinueLabel(repository.Operation);
+            items.Add(new UITreeItem(label, "debug-continue")
+            {
+                Button = true,
+                Tooltip = label,
+                Tag = new SideTag(Pressed: () => ContinueOperation(repository), Id: SideId(repository, "continue"))
+            });
+        }
+
         bool merge = MergeOf(repository) is not null;
         if (merge)
         {
@@ -238,6 +249,7 @@ internal sealed partial class HexGit
 
     /// <summary>Shows a changed file, what changed in it when there's a way to (the diff), the file itself otherwise.</summary>
     public Action<GitRepository, string, bool>? ShowChange { get; set; }
+    public Action<GitRepository, string>? ShowMergeConflict { get; set; }
 
     // A deleted file has a diff too, all of it red, what was taken out
     private void OpenChange(Repository repository, string path, bool staged)
@@ -261,6 +273,8 @@ internal sealed partial class HexGit
                 actions.Add(new UITreeAction("remove", context.Strings.Said("git.unstage_changes"), () => StageFiles(repository, [path], false)));
                 break;
             case SectionKind.Conflicts:
+                if (ShowMergeConflict is { } resolve)
+                    actions.Add(new UITreeAction("diff", "Resolve in merge editor", () => resolve(repository.Git, path)));
                 actions.Add(new UITreeAction("add", context.Strings.Said("git.stage_resolved"), () => StageFiles(repository, [path], true)));
                 break;
             default:
@@ -340,6 +354,8 @@ internal sealed partial class HexGit
     {
         // Opening it first, then staging, and throwing its changes away last on its own in the error colour
         var menu = new Menu("git_file");
+        if (state.Change == GitChange.Conflicted && ShowMergeConflict is { } resolve)
+            menu.Add("Resolve in merge editor", () => resolve(repository.Git, path), icon: "diff");
         if (File.Exists(path))
         {
             menu.Add(context.Strings.Said("git.open_file"), () => context.Documents.Open(path), icon: "go-to-file");
