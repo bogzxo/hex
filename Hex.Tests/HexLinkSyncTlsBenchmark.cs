@@ -123,7 +123,8 @@ public sealed partial class HexLinkSyncTlsBenchmark(ITestOutputHelper output)
                 Write($"{label} skipped {skipped.Path}: {skipped.Why}");
             if (capability != HexLinkBulkSupport.None)
             {
-                Assert.Empty(sync.Skipped);
+                // Operating system metadata (a .DS_Store in a pinned repository) is excluded by design, not a failure.
+                Assert.Empty(sync.Skipped.Where(skipped => !HexLinkSystemFiles.Matches(skipped.Path)));
                 Assert.Equal(files, sync.Sent + sync.Received);
             }
             await sync.Flush(stop);
