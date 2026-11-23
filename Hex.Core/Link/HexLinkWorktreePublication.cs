@@ -118,7 +118,17 @@ internal sealed class HexLinkWorktreePublication : IHexLinkPublicationService
 
         async Task<HexLinkPublishReceipt?> Status(Guid id, CancellationToken stop) =>
             ReceiptOf(await peer.PublicationStatus(new(id, folder.Name, pin.Epoch, false, false), stop), id);
-        return new HexLinkDraftRoute(stop => peer.Manifest(folder.Name, stop), Status, async (id, edits, bypass, stop) =>
+        // A folder of the same name there that is another repository takes nothing of this one
+        async Task<HexLinkManifest> SameRepository(CancellationToken stop)
+        {
+            HexLinkManifest manifest = await peer.Manifest(folder.Name, stop);
+            string? mine = await Task.Run(() => HexLinkTree.FirstCommitOf(folder.Path), stop);
+            if (mine is not null && manifest.Root is not null && !mine.Equals(manifest.Root, StringComparison.OrdinalIgnoreCase))
+                throw new IOException($"{folder.Name} here and on {peer.Device.Name} are different repositories, their first commits differ."
+                    + $" Publishing needs the same repository on both; open the folder {peer.Device.Name} keeps under another name, or pin {folder.Name} to an authority that has it.");
+            return manifest;
+        }
+        return new HexLinkDraftRoute(SameRepository, Status, async (id, edits, bypass, stop) =>
         {
             await peer.SendPublication(Descriptor(folder, pin.Epoch, id, edits), edits, false, bypass, stop);
             return await Status(id, stop) ?? throw new IOException("The authority did not return the publication receipt.");
