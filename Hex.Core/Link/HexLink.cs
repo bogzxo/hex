@@ -63,18 +63,31 @@ internal sealed partial class HexLink(IHexLinkServices services) : IDisposable
         var peer = new HexLinkPeer(session, services.Device);
         host.GitFollowPeer = peer;
         var joined = new Joined(session, host, peer);
+        Joined? replaced = null;
         lock (links)
         {
-            string? refused = links.Count >= MOST ? $"this Hex has {MOST} links already"
-                : links.Any(link => link.Session.Connection.Device.Id == connection.Device.Id) ? "it's linked already" : null;
+            Joined? existing = links.FirstOrDefault(link => link.Session.Connection.Device.Id == connection.Device.Id);
+            // Two devices that dial each other at once each hold a different connection. Both keep the one dialled by the
+            // lower id, so neither refuses the other's and both ends of the link die and redial in a loop.
+            bool replaces = existing is not null && Preferred(connection) && !Preferred(existing.Session.Connection);
+            string? refused = existing is not null && !replaces ? "it's linked already"
+                : links.Count - (replaces ? 1 : 0) >= MOST ? $"this Hex has {MOST} links already" : null;
             if (refused is not null)
             {
                 connection.Dispose();
                 throw new HexLinkException(HexLinkErrors.BUSY, $"{connection.Device.Name} wasn't linked, {refused}.");
             }
 
+            if (replaces)
+            {
+                replaced = existing;
+                links.Remove(existing!);
+                if (existing!.Hello)
+                    PublishPeers();
+            }
             links.Add(joined);
         }
+        replaced?.Session.Close("replaced by the connection both ends keep");
 
         session.Requested = host.Handle;
         session.ToldAsync = (method, parameters) => method == HexLinkTalk.METHOD
@@ -127,16 +140,27 @@ internal sealed partial class HexLink(IHexLinkServices services) : IDisposable
 
     private void Gone(Joined joined, string why)
     {
+        bool stillLinked;
         lock (links)
         {
             if (links.Remove(joined) && joined.Hello)
                 PublishPeers();
+            // A connection replaced by the one both ends keep goes without the device going, so nothing is told it went
+            stillLinked = links.Any(link => link.Session.Connection.Device.Id == joined.Session.Connection.Device.Id);
         }
         Claims.Left(joined.Peer);
         joined.Host.Dispose();
         joined.Peer.Dispose();
-        Closed?.Invoke(joined.Session.Connection.Device, why);
+        if (!stillLinked)
+            Closed?.Invoke(joined.Session.Connection.Device, why);
         Changed?.Invoke();
+    }
+
+    /// <summary>Whether a connection is the one both ends keep when a device is connected twice: the one the lower device id dialled.</summary>
+    internal bool Preferred(HexLinkConnection connection)
+    {
+        int order = string.CompareOrdinal(services.Device.Id, connection.Device.Id);
+        return connection.Dialled ? order < 0 : order > 0;
     }
 
     /// <summary>A device's link cut (forgotten, or the person said so), false when it wasn't linked.</summary>

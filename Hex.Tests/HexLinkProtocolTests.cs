@@ -933,6 +933,30 @@ public sealed class HexLinkProtocolTests
     }
 
     [Fact]
+    public async Task Two_devices_that_dial_each_other_at_once_both_keep_the_connection_the_lower_id_dialled()
+    {
+        using var services = new LinkServices(DeviceA);
+        using var link = new HexLink(services);
+        bool lowDialled = string.CompareOrdinal(DeviceA.Id, DeviceB.Id) < 0;
+        var (mine, _) = HexLinkTestKit.Pair();
+        var (theirs, _) = HexLinkTestKit.Pair();
+        var (again, _) = HexLinkTestKit.Pair();
+        // The one the other end must keep is the one dialled from the lower id's end; this end holds the other first
+        var kept = new HexLinkConnection(theirs, DeviceB, "memory", lowDialled, () => HexLinkRights.View);
+        var dropped = new HexLinkConnection(mine, DeviceB, "memory", !lowDialled, () => HexLinkRights.View);
+        Assert.True(link.Preferred(kept));
+        Assert.False(link.Preferred(dropped));
+
+        Task<HexLinkPeer> first = link.Add(dropped);
+        Task<HexLinkPeer> second = link.Add(kept);
+        Assert.Equal(HexLinkErrors.BUSY, await CodeOf(link.Add(new HexLinkConnection(again, DeviceB, "memory", !lowDialled, () => HexLinkRights.View))));
+        // The connection that was held first is closed for the preferred one, which is not refused
+        await Task.WhenAny(first, Task.Delay(TimeSpan.FromSeconds(5)));
+        Assert.True(first.IsCompleted);
+        Assert.False(second.IsFaulted && second.Exception!.InnerException is HexLinkException { Code: HexLinkErrors.BUSY });
+    }
+
+    [Fact]
     public void The_allow_list_says_what_each_tool_takes()
     {
         Assert.Equal(HexLinkRights.View, HexLinkAllowed.Needs("hex_read"));
