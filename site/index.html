@@ -40,14 +40,14 @@
           <span>Menu</span>
         </button>
         <ul id="site-menu" class="site-menu" popover>
-          <li><a href="#switch">Switching</a></li>
+          <li><a href="#link">Hex Link</a></li>
+            <li><a href="#switch">Switching</a></li>
           <li><a href="#numbers">Numbers</a></li>
           <li><a href="#gallery">Gallery</a></li>
           <li><a href="#features">Features</a></li>
           <li><a href="#predict">Predictions</a></li>
           <li class="dusk"><a href="#dusk">Dusk</a></li>
           <li class="noon"><a href="#agents">Agents</a></li>
-          <li><a href="#link">Hex Link</a></li>
           <li><a href="#looks">Looks</a></li>
           <li><a href="#build">Build</a></li>
           <li class="menu-only"><a href="https://github.com/bogzxo/hex">GitHub</a></li>
@@ -103,11 +103,194 @@
       </div>
     </div>
 
+    <section id="link">
+      <div class="wrap">
+          <p class="eyebrow">Hex Link</p>
+          <h2>Modern Collaboration</h2>
+          <p class="intro">Hex Link joins Hex on the computers you and your team already have. Work in the same files, follow along while someone explains what they're doing, and lend the one good machine to everyone's autocomplete. No account, no server of ours in the middle: every connection is encrypted with each device's key pinned, and <strong>each device decides what the others may do on it</strong>.</p>
+
+          <h3 class="numbers-head">Who it's for</h3>
+          <ul class="features row who swipe" data-label="Who Hex Link is for">
+            <li class="rise">
+              <h3>Just sharing files</h3>
+              <p>Two computers, or yours and a friend's. Pair with a six-digit code, pick a folder and use <strong>Sync Folder</strong>. Save a file and it's on the other machine. Nothing is overwritten, edits that don't collide merge, and a <code>.hex-link-ignore</code> file keeps build output out. You can make the other device read-only.</p>
+            </li>
+            <li class="rise">
+              <h3>A team, and its newest developer</h3>
+              <p>Everyone edits the same file live, each with a named caret in their own colour. A dot beside a file in the tree shows who is in it, and you can <strong>follow</strong> someone while they talk you through it. <strong>Claims</strong> keep two people from editing the same file, <strong>Link Chat</strong> sits next to the code, and <strong>Hold</strong> keeps a half-finished change off everyone else's build.</p>
+            </li>
+            <li class="rise">
+              <h3>One developer, many machines</h3>
+              <p>Desktop, laptop, Mac. <strong>Send workspace</strong> puts every repository on a new device, and commits and branch switches follow. Start an agent on the machine that has the build tools, say the Mac for a release build, and steer it from the one in your hands. Open the same files on the next device and carry on where you stopped.</p>
+            </li>
+          </ul>
+          <p class="note">Devices find each other on your local network. Away from it, Link uses the VPN addresses of <a href="https://tailscale.com/">Tailscale</a>, so your machines can link from anywhere without opening a port on your router. Tailscale is its own product, set up separately.</p>
+
+
+          <figure class="demo" id="demo-link">
+            <div class="stage room" role="img" aria-label="One shared project with three people in it. Adam and Brandon are both typing in Mixer.cs: each has a named caret in their own colour, Adam near the top of the method and Brandon near the bottom, and the file tree shows a dot for each of them beside the file. Carie has claimed Voice.cs, shown by a padlock and Carie's dot. Brandon moves to open Voice.cs and is told that Carie has a claim to the file, so he stays in Mixer.cs.">
+              <div class="tree-pane">
+                <p class="stage-bar"><span class="stage-tab">Files</span></p>
+                <ul class="tree">
+                  <li class="file here"><span class="name">Mixer.cs</span><span class="dots"><i style="--who: var(--dawn)"></i><i style="--who: var(--dusk)"></i></span></li>
+                  <li class="file locked try"><span class="name">Voice.cs</span><span class="claim"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Carie</span></li>
+                  <li class="file"><span class="name">Program.cs</span></li>
+                </ul>
+              </div>
+              <div class="editor-pane">
+                <p class="stage-bar"><span class="stage-tab">Mixer.cs</span><span class="stage-chip">2 people here</span></p>
+                <pre class="stage-code" aria-hidden="true"><code><span class="k">float</span> <span class="c">Mix</span>(<span class="t">Voice</span> v)
+{
+    <span class="typed adam">gain = <span class="c">Clamp</span>(gain);</span><i class="caret other" data-name="Adam" style="--who: var(--dawn); --len: 19"></i>
+    v.<span class="c">Retune</span>(semitones);
+
+    <span class="typed brandon"><span class="k">return</span> v.Level * gain;</span><i class="caret other" data-name="Brandon" style="--who: var(--dusk); --len: 22"></i>
+}</code></pre>
+                <p class="stage-notice"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span><b>Carie</b> has a claim to <code>Voice.cs</code>. Brandon stays in <code>Mixer.cs</code>.</span></p>
+              </div>
+            </div>
+            <figcaption>Adam and Brandon type in the same file, a caret each. Carie has claimed <code>Voice.cs</code>, so when Brandon goes to open it he's told who holds it and carries on elsewhere. <button type="button" class="link demo-play" data-demo="demo-link" hidden>Play it</button></figcaption>
+          </figure>
+
+        <ul class="receipts" aria-label="Hex Link, measured over Wi-Fi">
+          <li><b>0.3 s</b><span>a save, to the other machine</span></li>
+          <li><b>12 ms</b><span>a keystroke, to the other editor</span></li>
+          <li><b>17.4 s</b><span>first sync, 3,951 files</span></li>
+          <li><b>0</b><span>servers of ours in between</span></li>
+        </ul>
+        <p class="note">Two Windows machines on the same Wi-Fi. Pair with a six-digit code or an invite, and Link finds your devices on the LAN or reaches them over Tailscale. <a href="https://github.com/bogzxo/hex/blob/master/docs/hex-link-test-evidence.md">All of the test evidence</a>.</p>
+
+          <h3 class="numbers-head" id="share-ai">Got the good machine? Lend it to the team.</h3>
+          <p>A local AI model wants a real graphics card, and not everyone has one. If you do, run the model on your machine and turn on sharing. Everyone you've linked gets AI autocomplete as they type, in the editor and in notebook cells, with nothing to install and no model to download. A new developer on a laptop gets the same help as the person with the big desktop, and it's your call who may use it.</p>
+          <ul class="features row swipe" data-label="Sharing AI predictions">
+            <li class="rise">
+              <h3>Your GPU, their autocomplete</h3>
+              <p>Only the request and the suggestion cross the link, over your LAN or Tailscale. The model stays on your machine.</p>
+            </li>
+            <li class="rise">
+              <h3>You choose who may use it</h3>
+              <p>Sharing is a switch on the machine with the model, and each device says whether it may use it.</p>
+            </li>
+            <li class="rise">
+              <h3>It says why when it can't</h3>
+              <p>No device connected, the device hasn't allowed it, or it doesn't share its model: Hex names which.</p>
+            </li>
+          </ul>
+
+          <ul class="features swipe" data-label="Hex Link">
+          <li class="rise flip">
+            <h3>Follow along while they explain</h3>
+            <div class="faces">
+              <div class="face front">
+                <p>On a call with a teammate? <strong>Follow</strong> them and your editor keeps up with them, same file, same line, their caret in their colour while they talk it through. Or <strong>Spy</strong> to jump to where they are once.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-together">More<span class="visually-hidden"> about following along</span></button>
+              </div>
+              <div class="face back" id="more-together">
+                <p>Their caret also shows on your minimap and in the gutter, so you can find them when it's off screen, and the file tree puts a dot on the file they're in. Undo only undoes your own edits. It works before the file is saved. The edits converge on every machine, a view-only device can watch, and one save writes the file everywhere with each machine's line endings kept.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to editing together</span></button>
+              </div>
+            </div>
+          </li>
+          <li class="rise flip">
+            <h3>Hold your half-done work</h3>
+            <div class="faces">
+              <div class="face front">
+                <p>Mid-refactor and it doesn't build? <strong>Hold</strong> those files. They stay on your machine and everyone else keeps building.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-hold">More<span class="visually-hidden"> about held changes</span></button>
+              </div>
+              <div class="face back" id="more-hold">
+                <p>Others can still change a file you hold, and theirs is kept beside yours. <strong>Submit</strong> merges the two. What collides opens in a merge editor: mine, theirs, both, or your own words.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to held changes</span></button>
+              </div>
+            </div>
+          </li>
+          <li class="rise flip">
+            <h3>Shared folders, kept in step</h3>
+            <div class="faces">
+              <div class="face front">
+                <p>Two-way sync of a folder as you save. Edits that don't collide merge by themselves. Nothing is ever overwritten.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-sync">More<span class="visually-hidden"> about shared folders</span></button>
+              </div>
+              <div class="face back" id="more-sync">
+                <p>One device is the folder's <strong>source of truth</strong>, and each other device gets a permission, read or edit. Commit or switch branch and the linked checkouts follow, history and index with the files.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to shared folders</span></button>
+              </div>
+            </div>
+          </li>
+          <li class="rise flip">
+            <h3>Agents on the machine that has the toolchain</h3>
+            <div class="faces">
+              <div class="face front">
+                <p>Start a Claude Code or Codex chat on another device, where the code is checked out and the build tools are installed, and steer it from here. When it asks permission, the request lands on your screen.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-remote">More<span class="visually-hidden"> about remote agents</span></button>
+              </div>
+              <div class="face back" id="more-remote">
+                <p>Rename, stop, restart or delete the chats you started there. The chat list groups them by device, running and finished, and each device folds away. Its owner decides how much you may manage.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to remote agents</span></button>
+              </div>
+            </div>
+          </li>
+          <li class="rise flip">
+            <h3>Agents don't edit over each other</h3>
+            <div class="faces">
+              <div class="face front">
+                <p>An agent <strong>claims</strong> a file before changing it. The second one is refused in 37 ms and told who holds it.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-claims">More<span class="visually-hidden"> about claims</span></button>
+              </div>
+              <div class="face back" id="more-claims">
+                <p>Or give it an <strong>isolated worktree</strong>: it publishes only when the <strong>pre-publish check</strong> passes. A file with a compile error was refused in 14.2 s and reached no machine.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to claims</span></button>
+              </div>
+            </div>
+          </li>
+          <li class="rise flip">
+            <h3>Commits follow you</h3>
+            <div class="faces">
+              <div class="face front">
+                <p>Commit or switch branch on one machine and the linked checkouts follow within a quarter of a second.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-follow">More<span class="visually-hidden"> about commits</span></button>
+              </div>
+              <div class="face back" id="more-follow">
+                <p>History and index come with the files, so the Mac that builds your release is already on the commit you just made.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to commits</span></button>
+              </div>
+            </div>
+          </li>
+          <li class="rise flip">
+            <h3>You say who can do what</h3>
+            <div class="faces">
+              <div class="face front">
+                <p>Each device gets its own permissions on yours: read files, edit files, control agents, use your model.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-rights">More<span class="visually-hidden"> about permissions</span></button>
+              </div>
+              <div class="face back" id="more-rights">
+                <p>A lab partner can watch without touching anything. A build machine can run agents and nothing else. Change it any time from the Devices window.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to permissions</span></button>
+              </div>
+            </div>
+          </li>
+          <li class="rise flip">
+            <h3>New machine? Send it the lot</h3>
+            <div class="faces">
+              <div class="face front">
+                <p><strong>Send workspace</strong> clones every repository onto another device, history and nested repositories included, then keeps them in step.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-send">More<span class="visually-hidden"> about sending a workspace</span></button>
+              </div>
+              <div class="face back" id="more-send">
+                <p>A Mac got nine repositories, about 413 MB, in three to four minutes and built them in 50 s. Anything skipped is listed with the reason, and the rest carries on.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to sending a workspace</span></button>
+              </div>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </section>
+
     <section id="switch">
       <div class="wrap">
         <p class="eyebrow">Coming from another editor</p>
         <h2>Switch without starting over</h2>
-        <p>Most of what your hands know comes over on the first day. The extensions don't, and that's where Hex is honestly behind: if your work lives in one marketplace extension, look for it in Hex's catalogue before you switch.</p>
+        <p>Your muscle memory will guide you through Hex. The extensions won't, and that's where Hex is honestly behind: if your work lives in one marketplace extension, look for it in Hex's catalogue before you switch.</p>
         <ul class="features row swipe" data-label="Coming from another editor">
           <li>
             <h3>Your keys already work</h3>
@@ -150,7 +333,7 @@
 
         <div class="persistent pair">
           <div>
-            <h3 class="numbers-head">Persistent Process. Closed isn't gone.</h3>
+            <h3 class="numbers-head">Persistent Process. Closed but not forgotten.</h3>
             <p>Close the last window and Hex goes to sleep instead of quitting, so opening it again is a wake, not a launch. It's off by default, the switch is in Getting started on the welcome page.</p>
             <p class="note">The window context and a minimally loaded engine are kept while the threads stay frozen, waiting for an open request.</p>
           </div>
@@ -604,159 +787,6 @@
         <p class="note">Any MCP client can use them, not only the agents Hex runs. The server is off until you switch it on.</p>
 
         <p class="note"><a href="https://github.com/bogzxo/hex/blob/master/docs/agents.md">Agents, MCP and No AI, the long version</a>.</p>
-      </div>
-    </section>
-
-    <section id="link">
-      <div class="wrap">
-        <p class="eyebrow">Hex Link</p>
-        <h2>Three machines. One codebase. No clashes.</h2>
-        <p class="intro">Hex Link joins Hex on the machines you and your team already have. Save on one and the others have it. Type in the same file and see each other's carets. No account, no server of ours in the middle: every connection is encrypted with each device's key pinned, and <strong>each device decides what the others may do on it</strong>.</p>
-
-        <figure class="demo" id="demo-link">
-          <div class="stage machines" role="img" aria-label="Three machines, Desk, Laptop and Mac, with the same file Mixer.cs open. A line typed on Desk appears on Laptop and Mac. A half-finished change on Laptop is marked Held and stays on Laptop until it is submitted.">
-            <div class="machine" style="--who: var(--dawn)">
-              <p class="stage-bar"><span class="stage-tab">Desk</span><span class="stage-chip">source of truth</span></p>
-              <pre class="stage-code" aria-hidden="true"><code><span class="k">float</span> <span class="c">Mix</span>(<span class="t">Voice</span> v)
-{
-    <span class="typed desk">gain = <span class="c">Clamp</span>(gain);</span><i class="caret"></i>
-    <span class="arrive late">v.<span class="c">Retune</span>(semitones);</span>
-}</code></pre>
-            </div>
-            <div class="machine" style="--who: var(--dusk)">
-              <p class="stage-bar"><span class="stage-tab">Laptop</span><span class="stage-chip held">1 held</span></p>
-              <pre class="stage-code" aria-hidden="true"><code><span class="k">float</span> <span class="c">Mix</span>(<span class="t">Voice</span> v)
-{
-    <span class="arrive">gain = <span class="c">Clamp</span>(gain);</span><i class="caret other" data-name="Desk"></i>
-    <span class="typed mine">v.<span class="c">Retune</span>(semitones);</span>
-}</code></pre>
-            </div>
-            <div class="machine" style="--who: var(--noon)">
-              <p class="stage-bar"><span class="stage-tab">Mac</span><span class="stage-chip">LAN, 6 ms</span></p>
-              <pre class="stage-code" aria-hidden="true"><code><span class="k">float</span> <span class="c">Mix</span>(<span class="t">Voice</span> v)
-{
-    <span class="arrive">gain = <span class="c">Clamp</span>(gain);</span><i class="caret other" data-name="Desk"></i>
-    <span class="arrive late">v.<span class="c">Retune</span>(semitones);</span>
-}</code></pre>
-            </div>
-          </div>
-          <figcaption>Desk's line reaches the others as it's typed. Laptop's half-done change is <b>held</b>, so it breaks nobody's build until it's submitted. <button type="button" class="link demo-play" data-demo="demo-link" hidden>Play it</button></figcaption>
-        </figure>
-
-        <ul class="receipts" aria-label="Hex Link, measured over Wi-Fi">
-          <li><b>0.3 s</b><span>a save, to the other machine</span></li>
-          <li><b>12 ms</b><span>a keystroke, to the other editor</span></li>
-          <li><b>17.4 s</b><span>first sync, 3,951 files</span></li>
-          <li><b>0</b><span>servers of ours in between</span></li>
-        </ul>
-        <p class="note">Two Windows machines on the same Wi-Fi. Pair with a six-digit code or an invite, and Link finds your devices on the LAN or reaches them over Tailscale. <a href="https://github.com/bogzxo/hex/blob/master/docs/hex-link-test-evidence.md">All of the test evidence</a>.</p>
-
-        <ul class="features swipe" data-label="Hex Link">
-          <li class="rise flip">
-            <h3>Type in the same file</h3>
-            <div class="faces">
-              <div class="face front">
-                <p>Several people in one file at once, each with a named caret. Follow someone through it. Undo only undoes yours.</p>
-                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-together">More<span class="visually-hidden"> about editing together</span></button>
-              </div>
-              <div class="face back" id="more-together">
-                <p>It works before the file is saved. The edits converge on every machine, a view-only device can watch, and one save writes the file everywhere with each machine's line endings kept.</p>
-                <button type="button" class="face-button">Back<span class="visually-hidden"> to editing together</span></button>
-              </div>
-            </div>
-          </li>
-          <li class="rise flip">
-            <h3>Hold your half-done work</h3>
-            <div class="faces">
-              <div class="face front">
-                <p>Mid-refactor and it doesn't build? <strong>Hold</strong> those files. They stay on your machine and everyone else keeps building.</p>
-                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-hold">More<span class="visually-hidden"> about held changes</span></button>
-              </div>
-              <div class="face back" id="more-hold">
-                <p>Others can still change a file you hold, and theirs is kept beside yours. <strong>Submit</strong> merges the two. What collides opens in a merge editor: mine, theirs, both, or your own words.</p>
-                <button type="button" class="face-button">Back<span class="visually-hidden"> to held changes</span></button>
-              </div>
-            </div>
-          </li>
-          <li class="rise flip">
-            <h3>Shared folders, kept in step</h3>
-            <div class="faces">
-              <div class="face front">
-                <p>Two-way sync of a folder as you save. Edits that don't collide merge by themselves. Nothing is ever overwritten.</p>
-                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-sync">More<span class="visually-hidden"> about shared folders</span></button>
-              </div>
-              <div class="face back" id="more-sync">
-                <p>One device is the folder's <strong>source of truth</strong>, and each other device gets a permission, read or edit. Commit or switch branch and the linked checkouts follow, history and index with the files.</p>
-                <button type="button" class="face-button">Back<span class="visually-hidden"> to shared folders</span></button>
-              </div>
-            </div>
-          </li>
-          <li class="rise flip">
-            <h3>Agents on the machine that has the GPU</h3>
-            <div class="faces">
-              <div class="face front">
-                <p>Start a Claude Code or Codex chat on another device and steer it from here. When it asks leave, the request lands on your screen.</p>
-                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-remote">More<span class="visually-hidden"> about remote agents</span></button>
-              </div>
-              <div class="face back" id="more-remote">
-                <p>Rename, stop, restart or delete the chats you started there. The chat list groups them by device, running and finished, and each device folds away. Its owner decides how much you may manage.</p>
-                <button type="button" class="face-button">Back<span class="visually-hidden"> to remote agents</span></button>
-              </div>
-            </div>
-          </li>
-          <li class="rise flip">
-            <h3>Agents don't edit over each other</h3>
-            <div class="faces">
-              <div class="face front">
-                <p>An agent <strong>claims</strong> a file before changing it. The second one is refused in 37 ms and told who holds it.</p>
-                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-claims">More<span class="visually-hidden"> about claims</span></button>
-              </div>
-              <div class="face back" id="more-claims">
-                <p>Or give it an <strong>isolated worktree</strong>: it publishes only when the <strong>pre-publish check</strong> passes. A file with a compile error was refused in 14.2 s and reached no machine.</p>
-                <button type="button" class="face-button">Back<span class="visually-hidden"> to claims</span></button>
-              </div>
-            </div>
-          </li>
-          <li class="rise flip">
-            <h3>Commits follow you</h3>
-            <div class="faces">
-              <div class="face front">
-                <p>Commit or switch branch on one machine and the linked checkouts follow within a quarter of a second.</p>
-                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-follow">More<span class="visually-hidden"> about commits</span></button>
-              </div>
-              <div class="face back" id="more-follow">
-                <p>History and index come with the files, so the Mac that builds your release is already on the commit you just made.</p>
-                <button type="button" class="face-button">Back<span class="visually-hidden"> to commits</span></button>
-              </div>
-            </div>
-          </li>
-          <li class="rise flip">
-            <h3>You say who can do what</h3>
-            <div class="faces">
-              <div class="face front">
-                <p>Each device gets its own permissions on yours: read files, edit files, control agents, use your model.</p>
-                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-rights">More<span class="visually-hidden"> about permissions</span></button>
-              </div>
-              <div class="face back" id="more-rights">
-                <p>A lab partner can watch without touching anything. A build machine can run agents and nothing else. Change it any time from the Devices window.</p>
-                <button type="button" class="face-button">Back<span class="visually-hidden"> to permissions</span></button>
-              </div>
-            </div>
-          </li>
-          <li class="rise flip">
-            <h3>New machine? Send it the lot</h3>
-            <div class="faces">
-              <div class="face front">
-                <p><strong>Send workspace</strong> clones every repository onto another device, history and nested repositories included, then keeps them in step.</p>
-                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-send">More<span class="visually-hidden"> about sending a workspace</span></button>
-              </div>
-              <div class="face back" id="more-send">
-                <p>A Mac got nine repositories, about 413 MB, in three to four minutes and built them in 50 s. Anything skipped is listed with the reason, and the rest carries on.</p>
-                <button type="button" class="face-button">Back<span class="visually-hidden"> to sending a workspace</span></button>
-              </div>
-            </div>
-          </li>
-        </ul>
       </div>
     </section>
 

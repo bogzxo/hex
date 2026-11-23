@@ -2432,7 +2432,7 @@ details:not([open])::details-content {
 
   /* Somebody else's caret, with their name on it */
   &.other {
-    background: var(--dawn);
+    background: var(--who, var(--dawn));
 
     &::after {
       content: attr(data-name);
@@ -2441,7 +2441,7 @@ details:not([open])::details-content {
       inset-inline-start: 0;
       padding: 0 0.3rem;
       border-radius: 3px 3px 3px 0;
-      background: var(--dawn);
+      background: var(--who, var(--dawn));
       color: var(--on-accent);
       font: 650 0.65rem/1.4 var(--sans);
     }
@@ -2460,6 +2460,91 @@ details:not([open])::details-content {
   font-size: 0.82rem;
 }
 
+/* One project, several people: a file tree with a dot for each person in a file and a padlock on one that's claimed,
+   and the file open beside it. Ends on the notice a claim gives, which is also the picture without Play */
+
+.stage.room {
+  display: grid;
+  grid-template-columns: minmax(9rem, 12rem) minmax(0, 1fr);
+  background: var(--surface);
+
+  @media (width < 36rem) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.tree-pane {
+  border-inline-end: 1px solid var(--border);
+
+  @media (width < 36rem) {
+    border-inline-end: 0;
+    border-block-end: 1px solid var(--border);
+  }
+}
+
+.tree {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0.5rem;
+  list-style: none;
+  font-size: 0.88rem;
+}
+
+.file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  font-family: var(--mono);
+
+  &.here {
+    background: color-mix(in srgb, var(--dawn) 14%, transparent);
+  }
+
+  & .dots {
+    display: flex;
+    gap: 0.25rem;
+  }
+
+  & .dots i {
+    inline-size: 0.6rem;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: var(--who);
+  }
+
+  /* Somebody's claim: their name and a padlock in their colour */
+  & .claim {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.05rem 0.4rem;
+    border: 1px solid var(--noon);
+    border-radius: 999px;
+    color: var(--noon);
+    font: 650 0.72rem/1.4 var(--sans);
+  }
+}
+
+.stage-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.6rem 0.9rem;
+  border-block-start: 1px solid var(--border);
+  background: color-mix(in srgb, var(--noon) 12%, transparent);
+  font-size: 0.85rem;
+
+  & svg {
+    flex: none;
+    color: var(--noon);
+  }
+}
+
 @keyframes demo-type {
   from { clip-path: inset(0 100% 0 0); }
   to { clip-path: inset(0 0 0 0); }
@@ -2472,6 +2557,14 @@ details:not([open])::details-content {
 
 @keyframes demo-out {
   to { opacity: 0; }
+}
+
+@keyframes demo-try {
+  30%, 70% { background: color-mix(in srgb, var(--dusk) 24%, transparent); }
+}
+
+@keyframes demo-caret {
+  from { translate: calc(var(--len) * -1ch) 0; }
 }
 
 @keyframes demo-offer {
@@ -2497,14 +2590,15 @@ details:not([open])::details-content {
   }
 
   #demo-link.playing {
-    & .typed.desk { animation: demo-type 1s steps(18) both; }
-    & .arrive:not(.late),
-    & .caret.other { animation: demo-in 0.2s 1.3s both; }
-    & .typed.mine { animation: demo-type 1.1s steps(22) 2.2s both; }
-    & .stage-chip.held { animation: demo-in 0.2s 3.3s both, demo-out 0.2s 5.2s forwards; }
-    & .arrive.late { animation: demo-in 0.25s 5.3s both; }
+    & .typed.adam { animation: demo-type 1.4s steps(19) both; }
+    & .typed.brandon { animation: demo-type 1.6s steps(22) 1.8s both; }
+    & .caret.other:nth-of-type(1) { animation: demo-in 0.2s both, demo-caret 1.4s steps(19) both; }
+    & .caret.other:nth-of-type(2) { animation: demo-in 0.2s 1.8s both, demo-caret 1.6s steps(22) 1.8s both; }
+    & .claim { animation: demo-in 0.3s 3.6s both; }
+    & .file.try { animation: demo-try 2.4s 5s both; }
+    & .stage-notice { animation: demo-in 0.3s 5.4s both; }
   }
-}
+  }
 
 @media (prefers-reduced-motion: no-preference) {
   @supports ((animation-timeline: view()) and (animation-range: entry)) {
