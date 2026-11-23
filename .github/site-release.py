@@ -30,6 +30,9 @@ def main(release_path, page_path):
 
     page = put(page, "button", html.escape(f"Download {title}"))
     page = put(page, "title", html.escape(title))
+    # The Mac apps have the version in their file names (Hex-3.4.7-macos-arm64.dmg), so latest/download can't name them
+    # without it, the links say whichever version was last written and are made the release's here
+    page = re.sub(r"Hex-\d[0-9A-Za-z.\-]*?-macos-", f"Hex-{version}-macos-", page)
 
     notes = section((release.get("body") or "").replace("\r\n", "\n"), version)
     if not notes:

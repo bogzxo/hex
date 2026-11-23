@@ -47,8 +47,9 @@ if ('IntersectionObserver' in window && parts.length) {
 
 /* The download for the system the page is opened on, a big button over the cards, and its card marked. The system
    from the browser's client hints where it has them (and the processor with them, which only Chromium says), its user
-   agent where not. A Mac is taken to be Apple silicon, an Intel one can't be told apart from the page; anything else
-   x64 unless it says ARM. Nothing guessed means no button, the cards say it all */
+   agent where not. A Mac's chip is told by Chromium's client hints or by the graphics card the browser names (Apple M1
+   against Intel, AMD); Safari only says Apple GPU, so a Mac that can't be told gets a button for each chip. Anything
+   else is x64 unless it says ARM. Nothing guessed means no button, the cards say it all */
 
 const yours = document.querySelector('.get-yours');
 if (yours) {
@@ -59,18 +60,46 @@ if (yours) {
     : /mac/i.test(hinted || ua) && !/iPhone|iPad/i.test(ua) ? 'mac'
     : /Linux/i.test(hinted || ua) && !/Android/i.test(ua) ? 'linux' : null;
 
+  // The chip of a Mac from the graphics card's name, null when the browser says no more than Apple GPU
+  const macChip = () => {
+    try {
+      const gl = document.createElement('canvas').getContext('webgl');
+      const info = gl?.getExtension('WEBGL_debug_renderer_info');
+      const name = info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : '';
+      if (/Apple M\d/i.test(name)) return 'arm64';
+      if (/Intel|AMD|Radeon|NVIDIA|GeForce/i.test(name)) return 'x64';
+    } catch {
+      // No WebGL, no guess
+    }
+    return null;
+  };
+
   const show = arch => {
     const card = document.querySelector(`.platform[data-os="${os}"]`);
     if (!card) return;
     const [setup, portable] = card.querySelectorAll('.pick');
     const link = pick => pick.querySelector(`a[data-arch="${arch}"]`) ?? pick.querySelector('a');
+    // A Mac that couldn't be told: a button for each chip, for the disk images
+    if (os === 'mac' && !arch) {
+      card.classList.add('yours');
+      const button = yours.querySelector('.button');
+      const [apple, intel] = setup.querySelectorAll('a');
+      button.href = apple.href;
+      button.textContent = 'Download for Apple silicon';
+      button.after(Object.assign(document.createElement('a'), { className: button.className, href: intel.href, textContent: 'Download for Intel' }));
+      yours.querySelector('.note').replaceChildren('A Mac with an M1, M2 or newer is Apple silicon, older ones are Intel (Apple menu, About This Mac). Or the ',
+        Object.assign(document.createElement('a'), { href: portable.querySelector('a').href, textContent: 'ZIP' }), ', or another system below.');
+      yours.hidden = false;
+      return;
+    }
     const main = link(setup), zip = link(portable);
     card.classList.add('yours');
     const button = yours.querySelector('.button');
     button.href = main.href;
     button.textContent = `Download for ${NAMES[os]}`;
     const note = yours.querySelector('.note');
-    note.replaceChildren(`Setup, ${main.textContent}. Or the `, Object.assign(document.createElement('a'), { href: zip.href, textContent: 'portable ZIP' }), ', or another system below.');
+    note.replaceChildren(os === 'mac' ? `Disk image, ${main.textContent}. Or the ` : `Setup, ${main.textContent}. Or the `,
+      Object.assign(document.createElement('a'), { href: zip.href, textContent: os === 'mac' ? 'ZIP' : 'portable ZIP' }), ', or another system below.');
     yours.hidden = false;
   };
 
@@ -99,10 +128,10 @@ if (yours) {
   }
 
   if (os) {
-    const guess = os === 'mac' ? 'arm64' : /arm|aarch64/i.test(ua) ? 'arm64' : 'x64';
+    const guess = os === 'mac' ? macChip() : /arm|aarch64/i.test(ua) ? 'arm64' : 'x64';
     if (navigator.userAgentData?.getHighEntropyValues) {
       navigator.userAgentData.getHighEntropyValues(['architecture'])
-        .then(values => show(values.architecture === 'arm' ? 'arm64' : os === 'mac' ? guess : 'x64'), () => show(guess));
+        .then(values => show(values.architecture === 'arm' ? 'arm64' : os === 'mac' ? (values.architecture === 'x86' ? 'x64' : guess) : 'x64'), () => show(guess));
     } else {
       show(guess);
     }

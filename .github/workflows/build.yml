@@ -38,13 +38,7 @@ jobs:
             rid: win-x64
           - os: ubuntu-latest
             rid: linux-x64
-          - os: macos-latest
-            rid: osx-arm64
-          # Apple's classic linker turns down an unaligned pointer in .NET's own System.Net.Security.Native on Intel,
-          # the newer one only warns about it
-          - os: macos-15-intel
-            rid: osx-x64
-            publish_args: -p:UseLdClassicXCodeLinker=false
+          # The Mac is the macos-app job's: Hex.app as a .dmg and a .zip for each chip, with no Hex Setup.app
           - os: ubuntu-24.04-arm
             rid: linux-arm64
           - os: windows-11-arm
@@ -130,36 +124,10 @@ jobs:
           if ($setup.ExitCode -ne 1) { throw 'Standalone setup did not forward its exit status.' }
           if (@(Get-ChildItem -LiteralPath publish/Hex.Setup -Directory).Count -ne 0) { throw 'Setup left its extraction folder behind.' }
 
-      - name: macOS icon
-        if: runner.os == 'macOS'
-        run: |
-          mkdir -p publish/hex.iconset
-          # The nightly build's own, grey with a yellow H
-          icon=Hex.Shell/Assets/hex_icon.png
-          if [ "${{ inputs.channel }}" = "dev" ]; then icon=Hex.Shell/Assets/hex_icon_dev.png; fi
-          for size in 16 32 128 256 512; do
-            sips -z "$size" "$size" "$icon" --out "publish/hex.iconset/icon_${size}x${size}.png"
-            double=$((size * 2))
-            sips -z "$double" "$double" "$icon" --out "publish/hex.iconset/icon_${size}x${size}@2x.png"
-          done
-          iconutil -c icns publish/hex.iconset -o publish/Hex/Assets/hex_icon.icns
-          cp publish/Hex/Assets/hex_icon.icns publish/Hex.Setup/Assets/hex_icon.icns
-
       - name: Bundle updater and prepare setup
         shell: pwsh
         run: |
           Copy-Item -LiteralPath publish/Hex.Setup -Destination publish/Hex/installer -Recurse
-          if ('${{ runner.os }}' -eq 'macOS') {
-            New-Item -ItemType Directory -Path 'publish/Hex Setup.app/Contents' -Force
-            Move-Item -LiteralPath publish/Hex.Setup -Destination 'publish/Hex Setup.app/Contents/MacOS'
-            New-Item -ItemType Directory -Path 'publish/Hex Setup.app/Contents/Resources' -Force
-            Copy-Item -LiteralPath 'publish/Hex Setup.app/Contents/MacOS/Assets/hex_icon.icns' -Destination 'publish/Hex Setup.app/Contents/Resources/hex.icns'
-            @'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <plist version="1.0"><dict><key>CFBundleExecutable</key><string>Hex.Installer</string><key>CFBundleIdentifier</key><string>com.bogzxo.hex.setup</string><key>CFBundleName</key><string>Hex Setup</string><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleIconFile</key><string>hex.icns</string><key>NSHighResolutionCapable</key><true/></dict></plist>
-          '@ | Set-Content -LiteralPath 'publish/Hex Setup.app/Contents/Info.plist'
-          }
-
       - name: Zip
         if: runner.os == 'Windows'
         shell: pwsh
@@ -172,11 +140,7 @@ jobs:
         working-directory: publish
         run: |
           zip -r ../Hex-${{ matrix.rid }}.zip Hex
-          if [ "${{ runner.os }}" = "macOS" ]; then
-            zip -r ../Hex-Setup-${{ matrix.rid }}.zip 'Hex Setup.app'
-          else
-            zip -r ../Hex-Setup-${{ matrix.rid }}.zip Hex.Setup
-          fi
+          zip -r ../Hex-Setup-${{ matrix.rid }}.zip Hex.Setup
 
       - uses: actions/upload-artifact@v4
         with:
@@ -191,7 +155,19 @@ jobs:
   # MACOS_TEAM_ID, MACOS_NOTARY_KEY_BASE64, MACOS_NOTARY_KEY_ID, MACOS_NOTARY_ISSUER), ad hoc signed without them, which
   # a Mac only opens for the person who built it, and the job summary says which it was.
   macos-app:
-    runs-on: macos-15
+    # One app for each chip, each built on a Mac of its own kind. A failed job doesn't hold the release back
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: arm64
+          # Apple's classic linker turns down an unaligned pointer in .NET's own System.Net.Security.Native on Intel,
+          # the newer one only warns about it
+          - os: macos-15-intel
+            arch: x64
+            publish_args: -p:UseLdClassicXCodeLinker=false
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -217,9 +193,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
-          key: macos-app-nuget-${{ hashFiles('**/*.csproj') }}
+          key: macos-app-${{ matrix.arch }}-nuget-${{ hashFiles('**/*.csproj') }}
           restore-keys: |
-            macos-app-nuget-
+            macos-app-${{ matrix.arch }}-nuget-
 
       - name: Check release version
         if: startsWith(github.ref, 'refs/tags/v')
@@ -278,10 +254,10 @@ jobs:
           NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
           NOTARY_ISSUER: ${{ secrets.MACOS_NOTARY_ISSUER }}
         run: |
-          args=(--arch arm64 --zip --dmg --out artifacts/macos --identity "$IDENTITY")
+          args=(--arch ${{ matrix.arch }} --zip --dmg --out artifacts/macos --identity "$IDENTITY")
           if [ -n "$NOTARY_KEY_FILE" ]; then args+=(--notary-key "$NOTARY_KEY_FILE" --notary-key-id "$NOTARY_KEY_ID" --notary-issuer "$NOTARY_ISSUER"); fi
           if [ -n "${{ inputs.channel }}" ]; then args+=(--channel "${{ inputs.channel }}"); fi
-          scripts/macos/make-app.sh "${args[@]}" -- "-p:HexNightly=${{ inputs.nightly }}" "-p:HexBuildFixed=${{ env.HEX_BUILD_FIXED }}"
+          scripts/macos/make-app.sh "${args[@]}" -- ${{ matrix.publish_args }} "-p:HexNightly=${{ inputs.nightly }}" "-p:HexBuildFixed=${{ env.HEX_BUILD_FIXED }}"
 
       - name: Check the app
         run: |
@@ -290,7 +266,7 @@ jobs:
           if [ "${{ steps.signing.outputs.identity }}" = "-" ]; then
             {
               echo "### Hex.app is ad hoc signed"
-              echo "No Developer ID certificate is in this repository's secrets, so macOS will not open this app after it is downloaded without Open Anyway in System Settings. See docs/macos-app.md."
+              echo "No Developer ID certificate is in this repository's secrets, so macOS asks the first time: Control-click Hex, then Open, then Open (or Open Anyway in System Settings, Privacy & Security). See docs/macos-app.md."
             } >> "$GITHUB_STEP_SUMMARY"
           else
             spctl --assess --type execute --verbose=2 "$app"
@@ -298,13 +274,13 @@ jobs:
             echo "### Hex.app is signed with Developer ID ${{ steps.signing.outputs.identity }}" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # What the other jobs' packages are called, Hex-<version>-macos-arm64 here, the .dmg and the .zip
+      # What the other jobs' packages are called, Hex-<version>-macos-<arch> here, the .dmg and the .zip
       - uses: actions/upload-artifact@v4
         with:
-          name: Hex-macos-arm64-app
+          name: Hex-macos-${{ matrix.arch }}-app
           path: |
-            artifacts/macos/Hex-*-macos-arm64.dmg
-            artifacts/macos/Hex-*-macos-arm64.zip
+            artifacts/macos/Hex-*-macos-${{ matrix.arch }}.dmg
+            artifacts/macos/Hex-*-macos-${{ matrix.arch }}.zip
 
       - name: Forget the keychain
         if: always()
@@ -312,12 +288,8 @@ jobs:
           security delete-keychain "$RUNNER_TEMP/hex-signing.keychain-db" 2>/dev/null || true
           rm -f "$RUNNER_TEMP/hex-notary.p8"
 
-  # TODO (off): an Intel build of the app. macos-15-intel with `--arch x64` and `-- -p:UseLdClassicXCodeLinker=false` (the
-  # reason build's matrix says), or `--arch universal` on one runner, were not tried, and the files would be named
-  # Hex-<version>-macos-x64 and -macos-universal. Add them here when one has been run.
-
   release:
-    # The macOS app is new and its job hasn't a release behind it yet: when it fails the release still goes out with
+    # The macOS apps are new and their jobs haven't a release behind it yet: when it fails the release still goes out with
     # the Windows and Linux builds, and says so, rather than nobody getting anything
     if: ${{ always() && startsWith(github.ref, 'refs/tags/v') && needs.build.result == 'success' }}
     needs: [build, macos-app]

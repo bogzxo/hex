@@ -5,12 +5,20 @@ install: no .NET, no runtime. `scripts/macos/make-app.sh` makes it from a checko
 
 ## Installing
 
-1. Open the `.dmg` (or unzip the `.zip`) and drag **Hex** onto **Applications**.
-2. A Hex that isn't signed with a Developer ID and notarized by Apple (every build made for a person's own Mac, see
-   below) is stopped by Gatekeeper the first time when it was downloaded: *Control-click Hex, Open*, or in System Settings,
-   Privacy & Security, "Open Anyway". A Hex built on the Mac it runs on has nothing to be stopped for.
+1. Download the `.dmg` for the Mac's chip, `Hex-<version>-macos-arm64.dmg` (Apple silicon, M1 and newer) or `-macos-x64.dmg`\n   (Intel), open it and drag **Hex** onto **Applications**. The `.zip` of the same name has the same app.
+2. Releases are signed ad hoc, not with a Developer ID, and not notarized (that takes a paid Apple Developer account, see
+   below). macOS stops an app like that the first time it opens after a download, with *"Hex can't be opened because Apple
+   cannot check it for malicious software"*. Open it anyway, once: *Control-click Hex in Applications, Open, Open*, or
+   open it, then System Settings, Privacy & Security, *"Open Anyway"* (macOS 15 Sequoia and newer no longer have
+   the Control-click way, only the Settings one; right after the first try, the button is under Privacy & Security). The Terminal way is `xattr -dr com.apple.quarantine /Applications/Hex.app`.
+   After that it opens like any other app. A Hex built on the Mac it runs on has nothing to be stopped for.
 3. Hex needs macOS 14 or newer (the minimum is read from the executable into Info.plist) and a Metal graphics card. The
-   build made on Apple silicon is arm64 only; `--arch universal` adds Intel (not tried yet).
+   release has one app for each chip, built on a Mac of that kind; `--arch universal` (both in one app) is not used.
+
+Hex updates itself from the app: Check for Updates downloads `Hex-<version>-macos-<arch>.zip` of the release, checks its
+digest, extracts it next to Hex.app, and when Hex closes a shell script moves the old app aside, the new one in and
+opens it, putting the old one back if a move fails (`BundleUpdate`). The folder Hex.app is in has to be writable by you,
+else the update says so and the dmg is the way. A Hex that isn't in an app opens the releases page.
 
 Settings, keys, the agents' chats and caches are in your own folders, never in the app, so replacing Hex.app with a
 newer one keeps all of it:
@@ -44,7 +52,8 @@ for its environment as it starts, so `git`, `dotnet`, `claude` and `codex` are f
 ```sh
 scripts/macos/make-app.sh                      # Hex.app for this Mac, ad hoc signed, in artifacts/macos
 scripts/macos/make-app.sh --zip --dmg          # and Hex-<version>-macos-<arch>.zip and .dmg
-scripts/macos/make-app.sh --arch universal     # arm64 and x64 joined with lipo
+scripts/macos/make-app.sh --arch x64           # for Intel (on an Intel Mac, or cross built on Apple silicon)
+scripts/macos/make-app.sh --arch universal     # arm64 and x64 joined with lipo (not what releases use)
 HORIZON_ROOT=~/release/horizon scripts/macos/make-app.sh   # against a clean checkout of the engine, as releases are made
 ```
 
@@ -92,12 +101,7 @@ copy downloaded to another Mac is quarantined and has to be opened by hand (abov
 
 ## GitHub release (CI)
 
-`.github/workflows/build.yml` has a `macos-app` job (runner `macos-15`, Apple silicon). It checks out the same commits as the
-other jobs (hex with its submodules, and the engine on development in `horizon/`), installs .NET 11 and runs
-`scripts/macos/make-app.sh --arch arm64 --zip --dmg`. The packages are `Hex-<version>-macos-arm64.dmg` and `.zip`, uploaded as
-the workflow artifact `Hex-macos-arm64-app` and attached to the GitHub release by the `release` job with the others, and
-to the nightly releases (`nightly.yml`). The older `Hex-osx-arm64.zip` of the `build` job (what Hex Setup and the update check
-download) is unchanged. The job summary says whether the app was signed with a Developer ID or only ad hoc.
+`.github/workflows/build.yml` has a `macos-app` job with two legs, `macos-15` (arm64) and `macos-15-intel` (x64, with\n`-p:UseLdClassicXCodeLinker=false` because Apple's classic linker turns down an unaligned pointer in .NET's own\nSystem.Net.Security.Native on Intel). Each checks out the same commits as the other jobs (hex with its submodules, and the\nengine on development in `horizon/`), installs .NET 11 and runs `scripts/macos/make-app.sh --arch <arch> --zip --dmg`. The\npackages are `Hex-<version>-macos-<arch>.dmg` and `.zip`, uploaded as the workflow artifact `Hex-macos-<arch>-app` and\nattached to the GitHub release by the `release` job with the others, and to the nightly releases (`nightly.yml`). The\nreleases have no Hex Setup.app and no `Hex-osx-*.zip` any more: the unsigned Setup app, made by hand, was called damaged by\nmacOS, and the app updates itself. The site's links (`site/index.html`) name the version in the file, which\n`.github/site-release.py` makes the latest release's when the page is published. The job summary says whether the app was\nsigned with a Developer ID or only ad hoc.
 
 Without the secrets below the job still runs and the app is ad hoc signed. With them it imports the certificate into a keychain
 of its own, signs every library, the program and the bundle with the hardened runtime, has Apple's notary service check the
@@ -114,12 +118,20 @@ Secrets to add in the repository's Settings, Secrets and variables, Actions:
 | `MACOS_NOTARY_KEY_ID` | that key's Key ID |
 | `MACOS_NOTARY_ISSUER` | the Issuer ID of App Store Connect, Users and Access, Integrations |
 
-The certificate secrets alone give a signed but not notarized app; all six give a notarized one. An Intel or universal job is left
-as a marked TODO in the workflow: it has not been run. The same signing and notarizing by hand:
+The certificate secrets alone give a signed but not notarized app; all six give a notarized one. Both legs of the job (arm64 and x64) sign and notarize the same way. The same signing and notarizing by hand:
 `scripts/macos/make-app.sh --identity "<name or hash>" --notary-key AuthKey.p8 --notary-key-id ID --notary-issuer ISSUER --zip --dmg`.
 
 ## Updates
 
-The Windows installer and updater (Hex.Installation) don't apply here: a new Hex.app replaces the old one in
-Applications, and the person's files stay where they are. An updating Hex.app would be notarized and use the
-Sparkle framework or replace itself the way the Windows one does; neither is done.
+The Windows installer and updater (Hex.Installation's installer handoff) don't apply here. A Hex in Hex.app replaces itself with
+`BundleUpdate` (see Installing); the person's files stay where they are because they are never in the app. It does not sign
+anything again: the app arrives with the signature it was made with, and a downloaded file made by Hex has no quarantine
+flag (it is removed anyway when there is one).
+
+## When there is a Developer ID
+
+With a paid Apple Developer account, add the six `MACOS_*` secrets above and nothing else changes in the workflow: the job
+signs with the hardened runtime, notarizes with Apple and staples the ticket, the dmg and the zip carry it, and macOS opens Hex
+without the first-open steps. Then the site, README and the notes can drop those steps, and `codesign --verify` plus
+`spctl --assess` in the Check the app step already run for a signed build. The updater needs no change: a notarized app
+replaced by a notarized app is still accepted.
