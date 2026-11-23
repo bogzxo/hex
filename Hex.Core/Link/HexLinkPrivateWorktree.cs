@@ -173,6 +173,18 @@ internal sealed partial class HexLinkPrivateWorktree
         await CompactStorage(force: false, cancel);
     }
 
+    // The worktree's repositories must be the snapshot's, said with both lists when they aren't
+    private void SameLayout(HexLinkManifest snapshot)
+    {
+        string[] now = HexLinkWorktreeScope.Layout(snapshot.NestedHeads);
+        if (!repositoryLayout.SequenceEqual(now, PlatformPaths.Comparer))
+            throw new IOException("The shared repository layout changed after this worktree was opened: it had "
+                + $"{Said(repositoryLayout)}, the shared folder now has {Said(now)}.");
+
+        static string Said(string[] layout) => string.Join(", ", layout.Take(12).Select(path => path.Length == 0 ? "the top" : path))
+            + (layout.Length > 12 ? $" and {layout.Length - 12} more" : string.Empty);
+    }
+
     /// <summary>How deep a repository is in the worktree, the top one 0, one a folder of it in 1 and so on.</summary>
     private static int Depth(string relative) =>
         relative.Length == 0 ? 0 : 1 + relative.Count(c => c is '/' or '\\');
@@ -183,8 +195,7 @@ internal sealed partial class HexLinkPrivateWorktree
         await operation.WaitAsync(cancel);
         try
         {
-            if (!repositoryLayout.SequenceEqual(HexLinkWorktreeScope.Layout(snapshot.NestedHeads), PlatformPaths.Comparer))
-                throw new IOException("The shared repository layout changed after this worktree was opened.");
+            SameLayout(snapshot);
             string[] missing = [.. repositoryLayout.Where(repo => desired.Contains(repo) && !materialized.Contains(repo, PlatformPaths.Comparer))];
             if (missing.Length > 0)
             {
@@ -285,8 +296,7 @@ internal sealed partial class HexLinkPrivateWorktree
         {
             if (HoldIncoming)
                 return;
-            if (!repositoryLayout.SequenceEqual(HexLinkWorktreeScope.Layout(snapshot.NestedHeads), PlatformPaths.Comparer))
-                throw new IOException("The shared repository layout changed after this worktree was opened.");
+            SameLayout(snapshot);
 
             var current = await Current(cancel);
             HexIgnoreFile? draftRules = draftTree.LinkIgnore.Read();

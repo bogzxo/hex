@@ -14,8 +14,7 @@ internal sealed partial class HexLinkPrivateWorktree
         {
             if (plan.Conflicts.Count != 0)
                 throw new InvalidOperationException("Settle private worktree conflicts before building.");
-            if (!repositoryLayout.SequenceEqual(HexLinkWorktreeScope.Layout(snapshot.NestedHeads), PlatformPaths.Comparer))
-                throw new IOException("The shared repository layout changed after this worktree was opened.");
+            SameLayout(snapshot);
 
             foreach (Repository repo in repositories)
             {
