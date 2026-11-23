@@ -46,7 +46,8 @@ Dependency direction: Hex -> {Dawn, Dusk, Shell} -> Core. Core has the model and
 | `Hex --mcp` (stdio client started it) | Bridge: finds the Hex that has the folder open (`--folder`, a bare folder arg, or cwd), else starts `Hex --window --folder X --mcp` under a global mutex, then pumps bytes. No window of its own. |
 | `Hex --mcp-connect` | Attach-only bridge. Never launches; exit 1 + stderr message if no server matches. For hosts (Codex) that start one connection per chat. |
 | `Hex --window --mcp` | The editor GUI with the server on for this run. |
-| `Hex --mcp-connect --folder F --agent-chat ID` | A per-chat bridge: `ID` becomes the tag in the handshake, so the server knows which Agents-panel chat is calling (`McpBridge.cs:56`). Built by `hex.mcp_server(chat)`. |
+| `Hex --mcp-connect --folder F --agent-chat ID` | A per-chat bridge. The handshake tag identifies the calling chat. Private chats resolve file paths and terminal working directories against their draft. Built by `hex.mcp_server(chat)`. |
+| `Hex --harness-hook --agent-chat ID --private-root R --folder F` | Claude's file hook asks the same editor to open a sparse private repository before a native operation on a missing file in the draft. |
 | `Hex --selftest mcp --exit` | Runs the in-editor MCP suite (`Hex.Dawn/Testing/DawnScene.SelfTest.Mcp.cs`). `--selftest` disables bridge mode even with `--mcp`. |
 | `Hex --lsp` | HIDL language server, not MCP. |
 
@@ -93,8 +94,10 @@ Comment-preserving edits of HIDL/layout text by value path. `HexSourceTree` (:19
 ### 4.7 Hidl/ (8 files)
 HIDL (`.hor`) analysis behind the editor and `Hex --lsp`: `HidlAnalysis`, `HidlSemantics`, `HidlReferences`, `HidlInlays`, `HidlLocals`, `HidlFunctions`, `HidlComponents` (what components a layout knows), and `HidlServer` (`HidlServer.cs:20`; `Serve()` :66 reads LSP on stdin/stdout; handles `shutdown`). HIDL has no entry in `language_servers.hor`: Hex is its own server. Consumers: Dawn code editor (diagnostics, completion, hover, go to definition for `.hor`), harness (`.hor` outline uses the real lexer).
 
-### 4.8 Search/ (7 files)
+### 4.8 Search/
 `HexSearch` (`HexSearch.cs:18`, partial `.Find` :14, `.Replace` :16; `HexResult` :11; `TextFilesUnder(roots)`, `RelativeTo`, `ReadLines`), `HexGlob` (:10), `HexScope` (:8; include/exclude boxes), `HexExcludes` (:9; `files_exclude`, `search_exclude`), `HexIgnoreFile` (:9; .gitignore when `search_use_ignore_files`). Consumers: Dawn Find in Files/Search side view, quick open, the harness index (`TextFilesUnder`), MCP `hex_find_in_files` (editor group, uses Dawn's search) and harness tools.
+
+`HexIgnoreFile` and `HexGlob` also parse the root `.hex-link-ignore` for Link. `HexLinkIgnore` refreshes the rules from disk. `HexLinkTree` applies them to manifests and watcher events, and `HexLinkFiles.Resolve` checks them for sync reads and writes. Private Publish checks both draft and authority rules. Replica projection and claim exchange apply local rules.
 
 ### 4.9 Workspace/ (6 files)
 `HexWorkspace` (`HexWorkspace.cs:18`; `.hex-workspace` multi-root file), `WorkspacePaths` (:4), `HexRunTarget` (:11; what F5/Run uses: project, file, task), `HexLocalHistory` (:16; kept versions, `HexKeptVersion`), `HexTrash` (recycle-bin moves), `HexFileFacts` (:17; encoding/EOL/indent sniffing `HexTextFacts`, image `HexImageFacts`). Consumers: `Hex.Dawn/Workspace/` (explorer, places), status bar, local history view.

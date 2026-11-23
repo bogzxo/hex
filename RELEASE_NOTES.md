@@ -1,3 +1,37 @@
+# Hex 3.4.2
+
+## Hex Link
+
+- Chat with the people connected to you. Link Chat opens on the right when another device connects, with each person's name in their device's colour. Close it and reopen it with Link: Chat. A count shows messages that arrived while it was closed.
+- Spy > and a device's name, in the command palette, jumps once to another person's file and caret. Use Follow to keep up with them.
+- Add a `.hex-link-ignore` file at the root of a shared folder to keep build output and other local files from syncing. It uses `.gitignore` rules, and changes to it apply at once. When you turn on Link or share a folder that has no such file, Hex offers to create one for common build output.
+- Files that are the same on both devices no longer show as conflicts when one copy has a UTF-8 BOM, when a file was only reformatted, or when a newer edit arrives while a sync is saving. A conflict over unsaved changes now clears once both saved files match.
+- AI autocomplete over Hex Link works on the device without a model. The device with the model shares it whenever Share with paired devices is on, even with its own predictions switched off. When predictions can't come over Link, Hex says why: no device is connected, the device hasn't allowed this one to use AI completions, or it doesn't share its model.
+- Private worktrees are safer. Editing `.hex-link-ignore` in a private copy never publishes ignored files as deletions. A publication that conflicted no longer raises a false conflict the next time. A file too large to publish is named. A private copy can be discarded while its authority is offline. Discarded copies and old snapshots are cleaned up.
+- File claims ignore paths that `.hex-link-ignore` leaves out.
+- Claims work in a folder kept in sync with Sync Folder, not only one shared or fetched with Get Workspace, and they show on both devices. Editing a file someone else has claimed, or one you're holding, says so. A claim keeps the time it was first made, and times are shown in your own zone.
+- A held file that conflicts can be resolved without the merge editor: agents read the conflicting regions and keep their version, the other one or a merged text.
+- Holding a file stops the other device's version from landing in it at once.
+- A folder synced from another device publishes private worktrees through that device, as one fetched with Get Workspace does.
+- Agents in a private worktree can name the shared folder by its path, read files before they're fetched, run terminal commands in their copy, and read the workspace's other folders.
+- The device that joins a pairing starts with Collaborator chosen, as the inviting device does.
+- Two copies of a folder that are already the same, one with Windows line endings and one with Mac or Linux ones, are matched on the first sync without anything being sent or rewritten.
+- A device can let agents started from another one run without asking for anything. This is a separate choice from file edits, which stays the default, and Devices warns what it allows.
+- An agent started by another agent takes the same permission level unless it's given its own.
+
+## Editor
+
+- AI autocomplete works in notebook cells, with the notebook's other cells as context. Code cells follow the kernel's language and Markdown cells the Markdown setting.
+- `.hex-link-ignore` files are coloured and shown as ignore files, like `.gitignore`.
+- A new Horizon game is made on the engine's NuGet packages, so nothing else needs to be on the machine to build it.
+- Files written by an agent show up in search and symbols in the next answer, and a folder added to the workspace is indexed in full straight away.
+- Rebuilding Hex itself is named so an agent can't mistake it for building its project, and on macOS it no longer replaces the files of the running Hex in place, which macOS answered by closing it.
+
+## Known issues
+
+- File claims made on one device don't yet show on the other in a folder kept in sync with Sync Folder, so the other side isn't warned. Hold changes to a file instead when two people work on it.
+- Publishing a private worktree from a device whose folder came from Sync Folder can end with "A task was canceled." Publish from the device that owns the folder, or copy the change across.
+
 # Hex 3.4.0 Modafinil
 
 ## Hex Link

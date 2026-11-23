@@ -194,6 +194,10 @@ internal sealed partial class LinkServices : IHexLinkServices, IDisposable
     public Func<HexLinkFolder, HexLinkWorktreeGatePolicy?>? GateFor { get; set; }
     public HexLinkWorktreeGatePolicy? WorktreeGate(HexLinkFolder folder) => GateFor?.Invoke(folder);
 
+    /// <summary>The folders this editor keeps in sync with a device, by the device's id.</summary>
+    public Dictionary<string, string[]> Chosen { get; } = [];
+    public IReadOnlyList<string> ChosenSyncFolders(string deviceId) => Chosen.GetValueOrDefault(deviceId) ?? [];
+
     public HexLinkDocuments Documents { get; } = new();
     public bool LegacyDocumentFixture => true;
     public Func<string, HexLinkPeer?>? DocumentRoute { get; set; }

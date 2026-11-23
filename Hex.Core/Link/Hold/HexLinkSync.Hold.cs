@@ -113,17 +113,30 @@ internal sealed partial class HexLinkSync
     internal async Task<HexLinkHoldBasis?> HoldBasis(string wire, CancellationToken cancel)
     {
         HexLinkSyncAgreed? agreed;
+        string? submittedHash;
         lock (gate)
         {
             agreed = bases.GetValueOrDefault(wire);
+            submittedHash = submittedHolds.GetValueOrDefault(wire)?.Hash;
             if (agreed is null)
                 return ready && remoteCertified && !remote.ContainsKey(wire) && !conflicts.ContainsKey(wire)
                     ? new([], HexLinkHoldBaseSource.Agreed, Deleted: true) : null;
         }
 
+        string full = Jailed(wire);
+
+        // A file just submitted is the shared version now, before the agreed base has moved to it: a hold of it again starts
+        // from what was submitted, not from the base the submit replaced, or the submitted lines would show as new changes
+        if (submittedHash is not null && submittedHash != agreed.Local && HexLinkTree.RegularFile(full, tree.Root) is { } sent
+            && sent.Length <= HexLinkFileTransfer.MaximumLength)
+        {
+            byte[] current = await HexLinkFiles.ReadSharedAsync(full, cancel);
+            if (HexLinkFiles.Hash(current) == submittedHash)
+                return new(current, HexLinkHoldBaseSource.Agreed, Executable: agreed.Executable);
+        }
+
         if (HexLinkMerge.CachedBase(agreed.Local) is { } cached)
             return new(cached, HexLinkHoldBaseSource.Agreed, Executable: agreed.Executable);
-        string full = Jailed(wire);
         if (HexLinkTree.RegularFile(full, tree.Root) is { } info && info.Length <= HexLinkFileTransfer.MaximumLength)
         {
             byte[] working = await HexLinkFiles.ReadSharedAsync(full, cancel);
@@ -208,18 +221,21 @@ internal sealed partial class HexLinkSync
     {
         if (Holds is null)
             return;
-        string[] released;
+        string[] released, taken;
         lock (gate)
         {
             var current = new HashSet<string>(Holds.List().Select(entry => entry.Path), PlatformPaths.Comparer);
             released = [.. holdPaths.Except(current, PlatformPaths.Comparer)];
+            taken = [.. current.Except(holdPaths, PlatformPaths.Comparer)];
             foreach (string wire in released)
                 remoteSeenWhileHeld.Remove(wire);
             foreach (string wire in current)
                 submittedHolds.Remove(wire);
             holdPaths = current;
         }
-        foreach (string wire in released)
+        // A file just held is compared with the other side's at once, so a version that came meanwhile is flagged as incoming
+        // now and not written over the hold, instead of when it next changes
+        foreach (string wire in released.Concat(taken))
             Dirty(wire);
         WakeGitFollow();
         Notify();

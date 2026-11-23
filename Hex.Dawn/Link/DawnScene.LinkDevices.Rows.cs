@@ -158,21 +158,27 @@ internal sealed partial class DawnScene
             _ => HexLinkPreset.Custom
         };
         LinkGrantControls(dialog.Body, preset, grants, (_, changed) => grants = changed);
-        Button picker = LinkActionRow(dialog.Body).Add(LinkButton(LinkPreApprovalLabel(preApproval, known.Shown), "shield", () => { }));
-        picker.Tooltip = Said("link.devices_preapproval_help");
-        picker.OnPressed = () =>
+        dialog.Body.Add(LinkLine(Said("link.devices_preapproval_heading", ("device", known.Shown))));
+        StackPanel choices = LinkActionRow(dialog.Body);
+        var buttons = new Dictionary<HexLinkPreApproval, Button>();
+        Label warning = dialog.Body.Add(new Label
         {
-            var menu = new Menu("remote starters");
-            foreach (HexLinkPreApproval policy in Enum.GetValues<HexLinkPreApproval>())
-                menu.Add(LinkPreApprovalName(policy), () =>
-                {
-                    preApproval = policy;
-                    Button measured = LinkButton(LinkPreApprovalLabel(preApproval, known.Shown), "shield", () => { });
-                    picker.Label = measured.Label;
-                    picker.Size = measured.Size;
-                }).IsChecked = () => preApproval == policy;
-            ContextMenu.Show(chrome, picker.Bounds.PointAt(Origin.TopLeft), menu);
-        };
+            Text = Said("link.devices_preapproval_warning"), TextScale = LINK_SMALL,
+            Wrap = true, Align = Origin.Left, Fill = UIFill.Horizontal,
+            Visible = preApproval == HexLinkPreApproval.Everything
+        });
+        foreach (HexLinkPreApproval policy in Enum.GetValues<HexLinkPreApproval>())
+        {
+            Button button = choices.Add(LinkButton(LinkPreApprovalName(policy), string.Empty, () =>
+            {
+                buttons[preApproval].Primary = false;
+                preApproval = policy;
+                buttons[preApproval].Primary = true;
+                warning.Visible = preApproval == HexLinkPreApproval.Everything;
+            }));
+            button.Primary = policy == preApproval;
+            buttons.Add(policy, button);
+        }
     }
 
     private static string LinkPreApprovalName(HexLinkPreApproval policy) =>

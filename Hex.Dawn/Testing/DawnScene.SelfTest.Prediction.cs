@@ -1,6 +1,7 @@
 using System.Diagnostics;
 
 using Hex.Core;
+using Hex.Core.Notebooks;
 
 using Horizon.UI.Components;
 
@@ -379,6 +380,10 @@ internal sealed partial class DawnScene
             ShowFace(HexFace.Dawn);
         });
 
+        TestPredictionNotebook(test, folder, () => server);
+        test.Run(() => Open(greeter));
+        test.Wait();
+
         // Everything as it was
         test.Run(() =>
         {
@@ -394,6 +399,109 @@ internal sealed partial class DawnScene
             server.Dispose();
         });
         test.Wait();
+    }
+
+    private void TestPredictionNotebook(HexPointerScript test, string folder, Func<HexFakePredictionServer> model)
+    {
+        string path = Path.Combine(folder, "prediction.ipynb");
+        var notebook = new Notebook();
+        var after = new NotebookCell { Kind = CellKind.Code, Source = "print(total)" };
+        after.Outputs.Add(new() { ["output_type"] = "stream", ["name"] = "stdout", ["text"] = "private output" });
+        notebook.Cells.AddRange([
+            new() { Kind = CellKind.Markdown, Source = "# Experiment" },
+            new() { Kind = CellKind.Code, Source = "total = 1" },
+            after
+        ]);
+        string cellPath = string.Empty;
+        int taken = 0, gone = 0, stalled = 0, requests = 0;
+
+        void Type(string text) => test.Run(() => Engine.Input.Post(Horizon.Input.InputEvent.Typed(text)));
+        void Reply(string text) => model().Next = new(HexFakePredictionServer.Kind.Answer, _ => text);
+
+        test.Run(() =>
+        {
+            File.WriteAllText(path, NotebookFile.Write(notebook));
+            settings.EditPredictionsInvocation = "after_typing";
+            settings.EditPredictionsDisabledLanguages = ["markdown"];
+            settings.EditPredictionsExclude = HexSettings.UsualEditPredictionsExclude;
+            Reply("+ 2");
+            Open(path);
+        });
+        test.WaitFor(() => NotebookShown && cellViews.Count == 3, 3.0f);
+        test.Run(() =>
+        {
+            EditCell(notebookShown!, 1);
+            cellViews[1].Editor.Document.MoveTo(new UITextPosition(0, "total = 1".Length));
+        });
+        Type(" ");
+        test.WaitFor(() => cellViews.Count == 3 && cellViews[1].Editor.HasPrediction, 5.0f);
+        test.Run(() => Console.WriteLine($"[Hex self-test] prediction: notebook source '{cellViews[1].Cell.Source}', caret {cellViews[1].Editor.Document.Caret}, ghost '{cellViews[1].Editor.Prediction?.Edits.FirstOrDefault().Text}', status {predictions.Status} {predictions.StatusText}, completion {cellViews[1].Editor.CompletionOpen}, item {predictionItemState} {predictionItemLanguage}, prompt {model().LastPrompt.ReplaceLineEndings("\\n")}"));
+        test.Check("prediction: the focused Python cell shows ghost text and sends the other cells' source", () =>
+            cellViews[1].Editor is { IsFocused: true, PredictionIsGhost: true, Prediction.Edits: [var edit] } && edit.Text == "+ 2"
+            && model().LastPrompt.Contains("prediction.ipynb#cell-", StringComparison.Ordinal)
+            && model().LastPrompt.Contains("# Experiment\n\ntotal = 1 <|fim_suffix|>\n\nprint(total)", StringComparison.Ordinal)
+            && !model().LastPrompt.Contains("private output", StringComparison.Ordinal)
+            && predictionItemState == PredictionItemState.On && predictionItemLanguage == cellViews[1].Editor.Highlighter?.Name);
+
+        test.Run(() =>
+        {
+            taken = predictionsTaken;
+            cellPath = predictionShownPath;
+            Reply(string.Empty);
+        });
+        PressKeys(test, "Tab");
+        test.WaitFor(() => predictions.History.Events(cellPath).Any(change => change.Path == cellPath && change.Predicted), 3.0f);
+        test.Run(() => Console.WriteLine($"[Hex self-test] prediction: notebook after Tab source '{cellViews[1].Cell.Source}', taken {predictionsTaken - taken}, focused {cellViews[1].Editor.IsFocused}, history {predictions.History.Events(cellPath).Count}"));
+        test.Check("prediction: Tab accepts into the notebook cell and records the edit", () =>
+            predictionsTaken == taken + 1 && cellViews[1].Cell.Source == "total = 1 + 2"
+            && cellViews[2].Cell.Source == "print(total)"
+            && predictions.History.Events(cellPath).Any(change => change.Path == cellPath && change.Predicted));
+
+        test.WaitFor(() => predictionAccepting is null && predictions.Status != PredictionStatus.Waiting, 3.0f);
+        test.Run(() =>
+        {
+            gone = model().Gone;
+            stalled = model().Stalled;
+            model().Next = new(HexFakePredictionServer.Kind.Stall);
+        });
+        Type(" ");
+        test.WaitFor(() => model().Stalled > stalled, 3.0f);
+        test.Run(() => EditCell(notebookShown!, 0));
+        test.WaitFor(() => model().Gone > gone, 3.0f);
+        test.Check("prediction: moving to another cell cancels the old cell's request", () =>
+            model().Stalled > stalled && model().Gone > gone && !cellViews[1].Editor.HasPrediction);
+
+        test.Run(() =>
+        {
+            Reply(" results");
+            requests = model().Requests;
+            cellViews[0].Editor.Document.MoveTo(new UITextPosition(0, "# Experiment".Length));
+        });
+        Type("s");
+        test.Settle(0.2f);
+        test.Check("prediction: Markdown can be switched off independently of Python", () =>
+            predictionItemState == PredictionItemState.LanguageOff && !cellViews[0].Editor.HasPrediction && model().Requests == requests);
+
+        test.Run(TogglePredictionsForLanguage);
+        Type("!");
+        test.WaitFor(() => cellViews[0].Editor.HasPrediction, 5.0f);
+        test.Check("prediction: enabling Markdown shows a prediction in that cell", () =>
+            cellViews[0].Editor.PredictionIsGhost && !cellViews[1].Editor.HasPrediction && predictionItemState == PredictionItemState.On);
+        PressKeys(test, "Escape");
+        test.Check("prediction: Escape dismisses the ghost and leaves the Markdown cell focused", () =>
+            !cellViews[0].Editor.HasPrediction && cellViews[0].Editor.IsFocused);
+
+        test.Run(() =>
+        {
+            settings.EditPredictionsExclude = ["*.ipynb"];
+            requests = model().Requests;
+        });
+        Type("?");
+        test.Settle(0.2f);
+        test.Check("prediction: the notebook path can exclude its cells", () =>
+            predictionItemState == PredictionItemState.FileOff && model().Requests == requests);
+        test.Run(Save);
+        CloseNotebookTest(test, path);
     }
 
     // Ticks timed while typing with predictions off and then on, a prediction asked and shown after every word, the 95th

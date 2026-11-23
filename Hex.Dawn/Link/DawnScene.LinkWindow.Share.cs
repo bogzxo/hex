@@ -211,6 +211,13 @@ internal sealed partial class DawnScene
     // A sync started from the window, why it couldn't said
     private void LinkSyncGo(string deviceId, string folder, bool force)
     {
+        IEnumerable<string> roots = linkServices?.Workspace.Folders
+            .Where(local => PlatformPaths.Comparer.Equals(local.Name, folder)).Select(local => local.Path) ?? [];
+        OfferLinkIgnoreFiles(roots, () => StartLinkSyncFromWindow(deviceId, folder, force));
+    }
+
+    private void StartLinkSyncFromWindow(string deviceId, string folder, bool force)
+    {
         _ = Task.Run(async () =>
         {
             string? why;

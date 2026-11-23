@@ -83,6 +83,53 @@ public sealed class HexLinkHoldServiceTests : IDisposable
         Assert.True(store.IsHeld(A));
     }
 
+    [Theory]
+    [InlineData("mine", "mine\n")]
+    [InlineData("theirs", "theirs\n")]
+    [InlineData("merged", "mine and theirs\n")]
+    public async Task An_agent_reads_the_waiting_conflict_as_text_and_settles_it_without_a_merge_editor(string resolution, string expected)
+    {
+        PutHeld(A, "base\n", "mine\n", "theirs\n");
+        Assert.Empty(service.PendingConflicts());
+        Assert.Single((await service.Update()).NeedsMerge);
+
+        var waiting = Assert.Single(service.PendingConflicts([A]));
+        var region = Assert.Single(waiting.Session!.Model.Conflicts);
+        Assert.Equal(["mine"], region.MineLines);
+        Assert.Equal(["theirs"], region.TheirsLines);
+        Assert.Equal(["base"], region.BaseLines);
+        var shown = Hex.Dawn.DawnScene.LinkHoldConflictJson(waiting);
+        Assert.Equal("mine", shown["regions"]![0]!["mine"]![0]!["text"]!.GetValue<string>());
+        Assert.Equal(1, shown["regions"]![0]!["mine"]![0]!["line"]!.GetValue<int>());
+
+        var done = await service.ResolveMerge(A, resolution, resolution == "merged" ? "mine and theirs\n" : null);
+        Assert.Equal(A, Assert.Single(done.Paths));
+        Assert.Equal(expected, Get(A));
+        Assert.Empty(service.PendingConflicts());
+        await Assert.ThrowsAsync<HexLinkException>(() => service.ResolveMerge(A, "mine", null));
+    }
+
+    [Fact]
+    public void A_relative_path_is_placed_in_the_folder_that_has_the_file_never_the_first()
+    {
+        string first = Directory.CreateDirectory(Path.Combine(root, "first")).FullName, second = Directory.CreateDirectory(Path.Combine(root, "second", "UI")).FullName;
+        File.WriteAllText(Path.Combine(second, "Hud.cs"), "x");
+        File.WriteAllText(Path.Combine(first, "Both.cs"), "x");
+        File.WriteAllText(Path.Combine(Path.GetDirectoryName(second)!, "Both.cs"), "x");
+        var workspace = new HexLinkWorkspace("Test", [new("first", first), new("second", Path.GetDirectoryName(second)!)], []);
+
+        Assert.Equal("second", Hex.Dawn.DawnScene.LinkHoldFolderFor(workspace, _ => null, ["UI/Hud.cs"], out _)!.Name);
+        Assert.Equal("second", Hex.Dawn.DawnScene.LinkHoldFolderFor(workspace, _ => null, ["second/UI/Hud.cs"], out _)!.Name);
+        Assert.Equal("second", Hex.Dawn.DawnScene.LinkHoldFolderFor(workspace, _ => null, [Path.Combine(second, "Hud.cs")], out _)!.Name);
+
+        Assert.Null(Hex.Dawn.DawnScene.LinkHoldFolderFor(workspace, _ => null, ["Missing.cs"], out string? missing));
+        Assert.Contains("none of the workspace's folders", missing);
+        Assert.Null(Hex.Dawn.DawnScene.LinkHoldFolderFor(workspace, _ => null, ["Both.cs"], out string? ambiguous));
+        Assert.Contains("first, second", ambiguous);
+        Assert.Null(Hex.Dawn.DawnScene.LinkHoldFolderFor(workspace, _ => null, ["UI/Hud.cs", "first/Both.cs"], out string? apart));
+        Assert.Contains("different folders", apart);
+    }
+
     [Fact]
     public async Task Plan_distinguishes_deletion_from_empty_bytes_and_accepts_deletion_as_a_side()
     {

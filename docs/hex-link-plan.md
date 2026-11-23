@@ -41,6 +41,18 @@ requests and send notifications, regardless of who dialled. Each endpoint applie
 workspace rules and feature availability. Network and disk work run off the editor thread. The editor applies
 posted changes and updates its UI. The local MCP pipe remains a separate entry point.
 
+### Chat between linked people
+
+Link Chat opens beside the editor when another device connects and there is room. The close button hides it,
+and the status bar and **Link: Chat** command open it again. On a narrow window an opened chat floats along
+the right edge, where it can be closed to give the editor its full width. Enter sends, and Shift+Enter adds a
+line. The transcript and unread count are held in memory until Link stops.
+
+The `talk/say` notification carries a message id, text and a Unix timestamp in milliseconds. The receiver
+takes the sender from the authenticated connection. A receiver can relay the message to its other linked
+viewers once, with the sender's device id and name. A relay ends at that hop. Incoming notifications require
+View, with a 2,000-character text limit, a rate limit and room for 4,096 accepted messages per Link session.
+
 ## 2. Devices and routes
 
 Link is opt-in in this installation's settings. A repository cannot turn it on. The listener defaults to TCP
@@ -233,6 +245,15 @@ contents. Existing copies are left on disk and appear under ?doesn't travel? aft
 continues to apply the ordinary workspace and Git exclusions. Editor suffixes like `*.swp` and `*~` can be added to
 those rules when appropriate for a project.
 
+Add a `.hex-link-ignore` file to a shared folder's root to leave local files and directories out of
+working-tree sync in either direction. It works in plain folders and Git repositories, including for tracked
+files. Use `.gitignore` patterns such as `*.pdb`, `/build/`, `cache/**/trace` and `!keep.pdb`. To re-include a
+file, its parent directories must remain visible. The rules file itself travels and Link reloads changes while
+sync keeps running. Existing files stay on disk when a rule starts ignoring them.
+
+Hex offers to create the file when you enable Link or share a folder in Devices. **Create** opens a starter
+file with common build-output rules. **Not now** remembers your choice for that folder.
+
 To opt a folder out of Link's operating-system defaults, add its absolute local path to `link_system_file_folders`
 under `editor` in your user settings, for example `link_system_file_folders = ["C:/source/special-workspace"]`.
 Restart Link on each device after changing the setting. Both ends must opt in before working-tree sync carries
@@ -303,8 +324,13 @@ time went.
 ### 5.8 Private worktrees and Publish
 
 The normal mode writes to the live workspace. People and agents can choose an isolated Git worktree, including
-eligible nested repositories. `hex_agent_spawn` and `hex_link_spawn` accept `worktree: private`. A private
-draft can follow incoming changes to untouched paths or hold them. Peers see names of unpublished paths without
+eligible nested repositories. `hex_agent_spawn` and `hex_link_spawn` accept `worktree: private` and a shared
+folder name or absolute path. The agent's file tools and publish status use paths relative to the private root.
+File tools also accept the shared folder name as a prefix. Reading or editing a file opens its repository when
+needed. Searches and declaration reads can include the workspace's other folders. The agent's Hex file edits
+stay inside its private tree, and `hex_terminal_run` starts a fresh shell there.
+
+A private draft can follow incoming changes to untouched paths or hold them. Peers see names of unpublished paths without
 receiving draft contents. If profile storage overlaps an export, Hex keeps drafts in a stable per-profile
 directory outside the share, using the platform's user data location.
 
@@ -314,11 +340,22 @@ preserve both sides for resolution. A failed gate leaves the draft available and
 anyway** explicitly bypasses the build gate and is audited. It cannot bypass authority, rights, path or base
 checks.
 
-Publication to another device uses direct pinned TLS and bulk transport. The authority validates the
+A path covered by `.hex-link-ignore` in the private draft or at the authority stays out of Publish. Adding a
+rule does not delete the file. A replica also keeps files covered by its local rules when a checked set arrives.
+Claims follow the local rules. Publish refuses a file over its size limit and names the path.
+
+Publication to another device uses direct pinned TLS and bulk transport. When syncing an existing checkout
+from a paired device that advertises itself as the folder authority, Hex pins that authenticated authority for
+the local folder. The authority validates the
 epoch and exact bases, fences the affected paths from live sync, journals and projects the checked set, and
-returns a durable receipt. Retrying a completed request returns the receipt. A failed or interrupted projection
-is recovered before ordinary sync proceeds. Manual reapplication of individual files is unnecessary.
-`hex_link_publish` offers `status`, `publish` and `discard` for the calling agent's draft.
+returns a durable receipt. Retrying a completed request returns the receipt. A receipt advances the draft's
+publication base and preserves edits made while the request was in flight. If the authority has no receipt and
+the draft has changed, Publish prepares a fresh set. A failed or interrupted authority projection is recovered
+before ordinary sync proceeds.
+
+`hex_link_publish` offers `status`, `materialize`, `publish` and `discard` for the calling agent's draft. Discard removes the local
+draft and its pending retry, including when the authority is offline. Snapshot cleanup retains bases used by other
+drafts and reclaims obsolete objects as the store grows.
 
 ## 6. Devices and editor UI
 

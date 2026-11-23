@@ -27,18 +27,17 @@ internal enum HexLinkEol
 /// <summary>
 /// What a file both sides agreed on was on each side, kept per path: the hash of the bytes this side has
 /// (<see cref="Local"/>) and of those the other side has (<see cref="Remote"/>), which are the same unless the two
-/// differ only in line ends (a Windows checkout with core.autocrlf against a Mac's), the hash of its text with every
-/// CR LF made LF (<see cref="Text"/>, null for a binary file or one not read), and each side's line ends.
+/// differ only in line endings or a UTF-8 BOM, the hash of its text with CRLF folded into LF and the BOM ignored
+/// (<see cref="Text"/>, null for a binary file or one not read), and each side's line endings.
 /// </summary>
 internal sealed record HexLinkSyncAgreed(string Local, string Remote, string? Text = null, HexLinkEol LocalEol = HexLinkEol.Unknown, HexLinkEol RemoteEol = HexLinkEol.Unknown, bool? Executable = null);
 
 internal sealed partial class HexLinkSync
 {
-    // A file's bytes as text when they are: its line ends, the hash its text has with CR LF made LF (the encoding in it,
-    // so the same words in UTF-8 and UTF-16 are still two files), and the text and encoding to convert it with
+    // The text hash folds CRLF into LF and ignores a UTF-8 BOM. The original encoding still controls writes.
     private readonly record struct TextInfo(HexLinkEol Eol, string? Norm, string? Text, string? Encoding);
 
-    private static TextInfo TextOf(byte[] bytes)
+    private static TextInfo TextOf(byte[] bytes, bool ignoreUtf8Bom = true)
     {
         if (HexLinkFiles.Decode(bytes) is not { } decoded)
             return new TextInfo(HexLinkEol.Binary, null, null, null);
@@ -72,7 +71,8 @@ internal sealed partial class HexLinkSync
             _ => HexLinkEol.Mixed
         };
         string norm = crlf > 0 ? text.Replace("\r\n", "\n", StringComparison.Ordinal) : text;
-        return new TextInfo(eol, HexLinkFiles.Hash(Encoding.UTF8.GetBytes(decoded.Encoding + "\n" + norm)), text, decoded.Encoding);
+        string encoding = ignoreUtf8Bom && decoded.Encoding == "utf-8-bom" ? "utf-8" : decoded.Encoding;
+        return new TextInfo(eol, HexLinkFiles.Hash(Encoding.UTF8.GetBytes(encoding + "\n" + norm)), text, decoded.Encoding);
     }
 
     /// <summary>
@@ -93,11 +93,13 @@ internal sealed partial class HexLinkSync
     }
 
     /// <summary>
-    /// Whether two files are the same as far as the sync's concerned: the same bytes, or both text that only differs
-    /// in CR LF against LF.
+    /// Whether two files have the same bytes or text that differs only in line endings.
     /// </summary>
-    public static bool SameText(byte[] one, byte[] other) =>
-        one.AsSpan().SequenceEqual(other) || (TextOf(one) is { Norm: { } a } && TextOf(other) is { Norm: { } b } && a == b);
+    public static bool SameText(byte[] one, byte[] other) => SameText(one, other, ignoreUtf8Bom: false);
+
+    private static bool SameText(byte[] one, byte[] other, bool ignoreUtf8Bom) =>
+        one.AsSpan().SequenceEqual(other) || (TextOf(one, ignoreUtf8Bom) is { Norm: { } a } &&
+            TextOf(other, ignoreUtf8Bom) is { Norm: { } b } && a == b);
 
     // A text file with one kind of line end made the receiver's, when the receiver's is known and the other kind; a
     // binary file, a mixed one or one with no line ends goes exactly as it is
@@ -119,12 +121,15 @@ internal sealed partial class HexLinkSync
         RemoveBase(path);
         bases[path] = agreed;
         Count(agreed, 1);
-        // What the other side has, with its text and line ends when they're known (its text is this side's, they agreed)
-        string? eol = agreed.Text is null ? null : EolWord(agreed.RemoteEol) is "lf" or "crlf" or "none" ? EolWord(agreed.RemoteEol) : null;
-        HexLinkTreeFile? previous = remote.GetValueOrDefault(path);
-        remote[path] = new HexLinkTreeFile(path, agreed.Remote, previous?.Size ?? 0, eol is null ? null : agreed.Text, eol,
-            agreed.Executable ?? previous?.Executable);
         tries.Remove(path);
+        // A later watch report is the current remote state. The agreement only records what this operation handled.
+        if (remoteObservedWhileWorking.Contains(path))
+            return;
+        string? eol = EolWord(agreed.RemoteEol);
+        bool knownText = agreed.Text is not null && eol is "lf" or "crlf" or "none";
+        HexLinkTreeFile? previous = remote.GetValueOrDefault(path);
+        remote[path] = new HexLinkTreeFile(path, agreed.Remote, previous?.Size ?? 0,
+            knownText ? agreed.Text : null, knownText ? eol : null, agreed.Executable ?? previous?.Executable);
     }
 
     private void RemoveBase(string path)

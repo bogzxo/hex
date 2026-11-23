@@ -156,9 +156,10 @@ internal sealed partial class DawnScene
         new(meta, null, RunAway: (arguments, cancel) =>
         {
             int budget = HexAgentProfiles.BudgetFor(McpServer.CallingClient.Value, arguments.Integer("max_chars"));
+            int? caller = McpServer.CallingChat.Value;
             return Task.Run(() =>
             {
-                HexAnswer said = answer(Harness, arguments, budget);
+                HexAnswer said = answer(LinkAgentIndex(caller), arguments, budget);
                 return said.Failed ? McpToolResult.Error(said.Text) : McpToolResult.Text(said.Text);
             }, cancel);
         });
@@ -200,6 +201,9 @@ internal sealed partial class DawnScene
     /// </summary>
     private void UpdateHarness(float dt)
     {
+        // A folder added to the workspace is the index's from now on, not from the next time something asks for the folders
+        if (harness is not null && !explorer.workspace.IsEmpty && !harnessRoots.SequenceEqual(explorer.workspace.Folders))
+            harnessRoots = [.. explorer.workspace.Folders];
         if (harness is null || (harnessSymbolsWait -= dt) > 0.0f)
             return;
 

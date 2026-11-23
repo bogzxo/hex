@@ -40,6 +40,8 @@ internal sealed partial class HexLinkHost
         await using var lease = await HexLinkPublicationFence.ForRoot(full).EnterLive(cancel);
         await EnsureGitFollowFile(full, cancel);
         Need(HexLinkRights.Edit, "fs/write");
+        if (!PlatformPaths.Comparer.Equals(full, ResolveFile(wire)))
+            throw new HexLinkException(HexLinkErrors.CONFLICT, "The file path changed before it was written.");
         services.Audit("edit", Device, $"fs/write {wire}, {bytes.Length} bytes");
 
         if (TakeHeldWrite(wire, full, bytes))
@@ -58,6 +60,8 @@ internal sealed partial class HexLinkHost
         await using var lease = await HexLinkPublicationFence.ForRoot(full).EnterLive(cancel);
         await EnsureGitFollowFile(full, cancel);
         Need(HexLinkRights.Edit, "fs/delete");
+        if (!PlatformPaths.Comparer.Equals(full, ResolveFile(wire)))
+            throw new HexLinkException(HexLinkErrors.CONFLICT, "The file path changed before it was deleted.");
         services.Audit("edit", Device, $"fs/delete {wire}");
         if (TakeHeldWrite(wire, full, null))
             return HeldWriteReply(wire, null, parameters);

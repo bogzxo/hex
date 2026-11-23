@@ -8,11 +8,17 @@ internal sealed partial class HexLinkSync
         bool? localMode = mine.Executable, remoteMode = theirs.Executable;
         if (!peer.Session.SupportsBulk || mine.Hash is null || mine.Hash != theirs.Hash || localMode == remoteMode)
             return false;
+        if (localMode is null || remoteMode is null)
+        {
+            // Windows can learn the executable bit from a peer without replacing a file whose contents already agree.
+            tree.RememberMode(full, remoteMode);
+            return false;
+        }
 
         bool push;
-        if (remoteMode is null || (localMode.HasValue && agreed?.Executable == remoteMode))
+        if (agreed?.Executable == remoteMode)
             push = true;
-        else if (localMode is null || agreed?.Executable == localMode)
+        else if (agreed?.Executable == localMode)
             push = false;
         else
         {

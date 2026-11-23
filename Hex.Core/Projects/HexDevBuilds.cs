@@ -27,6 +27,18 @@ internal static class HexDevBuilds
         }
     }
 
+    /// <summary>
+    /// Whether a file of a build is code a running process maps: its apphost (no extension), a dll, exe, dylib or so. macOS
+    /// kills a signed process whose mapped file is written over in place (Code Signature Invalid), and nothing tells such a
+    /// file from one that's free, so every one is renamed away for the build to write new files, never changed where it lies.
+    /// </summary>
+    internal static bool IsImage(string file)
+    {
+        string extension = Path.GetExtension(file);
+        return extension.Length == 0 || extension.Equals(".dll", StringComparison.OrdinalIgnoreCase) || extension.Equals(".exe", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".dylib", StringComparison.OrdinalIgnoreCase) || extension.Equals(".so", StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>Where the good build of a folder Hex runs from is kept, beside it.</summary>
     public static string GoodFolder(string bin) => Path.TrimEndingDirectorySeparator(Path.GetFullPath(bin)) + ".last-good";
 

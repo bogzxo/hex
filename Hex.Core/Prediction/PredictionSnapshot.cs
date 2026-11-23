@@ -4,6 +4,7 @@ namespace Hex.Core;
 /// A document as it is when the typing has paused, taken on the editor's thread without copying text: its lines (the
 /// document's own strings), the caret's line and column, the version it was at, its path inside its folder and its
 /// language. <paramref name="Related"/> is asked off the editor's thread for excerpts of other files to send with it.
+/// For a notebook cell, <paramref name="Notebook"/> holds the source around it, separate from the editable lines.
 /// </summary>
 internal sealed record PredictionSnapshot(
     object Document,
@@ -13,4 +14,5 @@ internal sealed record PredictionSnapshot(
     string[] Lines,
     int CaretLine,
     int CaretColumn,
-    Func<IReadOnlyList<PredictionExcerpt>>? Related = null);
+    Func<IReadOnlyList<PredictionExcerpt>>? Related = null,
+    PredictionNotebookContext? Notebook = null);

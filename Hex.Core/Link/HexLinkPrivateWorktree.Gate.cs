@@ -120,6 +120,7 @@ internal sealed partial class HexLinkPrivateWorktree
     private async Task<byte[]> ReadGateAuthority(string wire, FileVersion version,
         Func<string, CancellationToken, Task<byte[]>>? readAuthority, CancellationToken cancel)
     {
+        RequirePublishSize(wire, version.Size);
         try
         {
             byte[] content = readAuthority is null

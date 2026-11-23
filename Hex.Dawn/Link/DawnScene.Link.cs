@@ -106,7 +106,10 @@ internal sealed partial class DawnScene
         }
 
         if (LinkWanted && linkTransport is null)
-            StartLink();
+        {
+            if (StartLink())
+                OfferLinkIgnoreFiles(explorer.workspace.Folders);
+        }
         else if (!LinkWanted && linkTransport is not null)
         {
             StopLink();
@@ -209,11 +212,17 @@ internal sealed partial class DawnScene
             if (unpinned > 0)
                 linkAudit.Write("authority migration", string.Empty, $"Cleared {unpinned} unverified first-epoch folder binding(s).");
             linkCancel = new CancellationTokenSource();
-            link = new HexLink(linkServices)
+            var started = new HexLink(linkServices)
             {
                 Changed = LinkMoved,
                 Closed = (device, why) => PostLink(() => LinkClosed(device, why))
             };
+            started.TalkHeard += message => PostLink(() =>
+            {
+                if (link == started)
+                    HearLinkTalk(message);
+            });
+            link = started;
             linkTransport = new HexLinkTransport(linkIdentity, linkTrust)
             {
                 AllowPublic = settings.LinkAllowPublic,
@@ -250,6 +259,8 @@ internal sealed partial class DawnScene
             }
             if (linkEditorNotices is null)
                 BuildLinkEditorNotices();
+            if (linkTalkPanel is null)
+                BuildLinkTalk();
             ApplyLinkPredictions();
             mcpTools?.Refresh();
             AppDomain.CurrentDomain.ProcessExit += StopLinkAtExit;
@@ -303,6 +314,7 @@ internal sealed partial class DawnScene
         LinkShareStopAll();
         link?.Dispose();
         link = null;
+        ResetLinkTalk();
         SetLinkClaimSession(null);
         if (linkTrust is not null)
             linkTrust.Changed -= LinkTrustChanged;
@@ -524,8 +536,10 @@ internal sealed partial class DawnScene
         peer.SyncPausesChanged = () => PostLink(() => LinkAcceptRemotePauses(peer));
         peer.WorkspaceChanged = () => PostLink(() =>
         {
-            if (LinkPeerOf(peer.Device.Id) == peer)
-                LinkLearnAuthority(peer);
+            if (LinkPeerOf(peer.Device.Id) != peer)
+                return;
+            LinkLearnAuthority(peer);
+            LinkPinSyncedFolders(peer);
         });
         LinkAcceptRemotePauses(peer);
         peer.RightsChanged += () =>

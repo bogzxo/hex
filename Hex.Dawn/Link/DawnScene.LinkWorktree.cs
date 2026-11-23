@@ -38,9 +38,17 @@ internal sealed partial class DawnScene
             if (string.IsNullOrWhiteSpace(path))
                 return McpToolResult.Error("Supply a private worktree-relative repository or file path.");
             var draft = await LinkOpenStoredDraft(id, cancel);
-            string full = HexLinkFiles.Resolve([new HexLinkFolder("work", draft.Root)], "work/" + path);
-            await LinkMaterializePrivatePath(draft, Path.GetRelativePath(draft.Root, full).Replace('\\', '/'), cancel);
-            return McpToolResult.Text($"Private repository ready for {path}.");
+            // The folder itself, by its name or "." (the worktree's root is the shared folder), is the root repository, not a
+            // subfolder of that name
+            string asked = path.Trim().Replace('\\', '/').TrimEnd('/');
+            bool whole = asked is "" or "." || PlatformPaths.Comparer.Equals(asked, draft.SharedFolder.Name);
+            string relative = whole ? string.Empty : LinkPrivateRelativePath(path, draft.SharedFolder);
+            string full = HexLinkFiles.Resolve([new HexLinkFolder("work", draft.Root)], "work/" + relative);
+            string inside = whole ? string.Empty : Path.GetRelativePath(draft.Root, full).Replace('\\', '/');
+            await LinkMaterializePrivatePath(draft, inside, cancel);
+            string repository = HexLinkWorktreeScope.Nearest(draft.RepositoryPaths, inside);
+            return McpToolResult.Text($"Private repository ready: {(repository.Length == 0 ? $"the root of {draft.SharedFolder.Name}" : repository)}, "
+                + $"which holds {(inside.Length == 0 ? "the whole folder" : inside)}. Its files are in {draft.Root}.");
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or HexLinkException)
         {
@@ -57,6 +65,7 @@ internal sealed partial class DawnScene
             {
                 case "status":
                     HexLinkDraftStatus status = await draft.Status(cancel);
+                    var paths = status.Paths.Select(path => LinkPrivateRelativePath(path, draft.SharedFolder));
                     string plannedGate;
                     try
                     {
@@ -69,7 +78,7 @@ internal sealed partial class DawnScene
                     }
                     string repos = string.Join(", ", draft.MaterializedRepositories.Select(path => path.Length == 0 ? "root" : path));
                     string first = draft.FirstGate ? "\nThe first gate runs a full build in this private tree." : "";
-                    return McpToolResult.Text($"{status.Files} unpublished files ({status.Bytes} bytes) in {draft.Root}.\n{string.Join('\n', status.Paths)}" +
+                    return McpToolResult.Text($"{status.Files} unpublished files ({status.Bytes} bytes) in {draft.Root}.\n{string.Join('\n', paths)}" +
                         $"\nPrivate repositories: {repos}\nGate: {plannedGate}{first}");
                 case "discard":
                     bool inUse = await OnEditorForLink(() => agentChats.Count(chat => chat.LinkDraft == id && chat.Running) > 1).WaitAsync(cancel);

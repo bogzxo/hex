@@ -32,7 +32,7 @@ internal sealed partial class DawnScene
                 ("tab", McpSchema.String("The tab, its number from 1 or part of its title.")),
                 ("timeout", McpSchema.Number("Seconds to wait at the most, 120 by default. A command still going then is left running.")),
                 ("max_chars", McpSchema.Integer("The most of its output handed back, 6000 by default."))], "command")),
-            TerminalRun, Timeout: 610.0f)
+            TerminalRun, Timeout: 610.0f, TakesCaller: true)
     ];
 
     // Helper method for the tab an agent named, by number from 1 or part of its title, the current one when it named none
@@ -245,7 +245,9 @@ internal sealed partial class DawnScene
 
         // A read or a search of the workspace by the shell, turned back as the agent's own shell is, or an agent kept
         // off grep and cat by its guard ran them here instead (Codex did, through this very tool)
-        if (HexHarnessGuard.ForCommand(command, [.. explorer.workspace.Folders]) is { } instead)
+        string? privateRoot = LinkPrivateAgentRoot(CallerOf(arguments));
+        string[] roots = privateRoot is null ? [.. explorer.workspace.Folders] : [privateRoot, .. explorer.workspace.Folders];
+        if (HexHarnessGuard.ForCommand(command, roots) is { } instead)
         {
             yield return McpToolResult.Error($"This reads the workspace the long way, Hex answers it from its index, use {instead}. hex_terminal_run is for builds, tests, git and anything outside the workspace.");
             yield break;
@@ -257,7 +259,22 @@ internal sealed partial class DawnScene
             yield break;
         }
 
-        TerminalTab? tab = McpTab(arguments.String("tab"));
+        if (privateRoot is not null && arguments.String("tab") is { Length: > 0 })
+        {
+            yield return McpToolResult.Error("A private worktree command starts in its own shell. Leave tab unset.");
+            yield break;
+        }
+
+        TerminalTab? tab = privateRoot is null ? McpTab(arguments.String("tab")) : terminalPanel.NewTab(workingDirectory: privateRoot);
+        if (privateRoot is not null)
+        {
+            long giveUp = System.Environment.TickCount64 + 15_000;
+            while (System.Environment.TickCount64 < giveUp && tab?.FocusedView?.Process is not { IsRunning: true })
+                yield return null;
+            // The tab is the agent's own: a command left running in it can be read, sent to and interrupted by name
+            if (tab is not null && CallerOf(arguments) is { } owner)
+                LinkRememberPrivateTab(owner, tab.Title);
+        }
         if (arguments.String("tab") is { Length: > 0 } named && tab is null)
         {
             yield return McpToolResult.Error($"There's no tab {named}. hex_terminal list says them.");
@@ -275,6 +292,8 @@ internal sealed partial class DawnScene
 
         if (tab?.FocusedView is not { Process.IsRunning: true } view)
         {
+            if (privateRoot is not null && tab is not null)
+                terminalPanel.CloseTab(tab);
             yield return McpToolResult.Error("No shell is running in that tab, hex_terminal new opens one.");
             yield break;
         }
@@ -300,6 +319,8 @@ internal sealed partial class DawnScene
 
         int most = Math.Clamp(arguments.Integer("max_chars") ?? 6000, 400, 200_000);
         string output = McpMiddleCut(ran.Output, most);
+        if (privateRoot is not null && (ran.Exit is not null || view.Process is not { IsRunning: true }))
+            terminalPanel.CloseTab(tab);
         yield return McpToolResult.Text(ran.Exit is { } exit
             ? $"Exit {exit} in \"{tab.Title}\".\n{output}"
             : $"Still going in \"{tab.Title}\" after the timeout, left running (hex_terminal interrupt stops it). So far:\n{output}");

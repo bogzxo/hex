@@ -18,7 +18,7 @@ internal static class HexHarnessGuard
     /// workspace as well (hex_read, hex_edit and hex_write do them), Insist only its searches and the shell's reads,
     /// Remind lets everything through with the Hex tool said beside it.
     /// </summary>
-    public enum Mode { Strict, Insist, Remind }
+    public enum Mode { Strict, Insist, Remind, Off }
 
     // The agent's own file tools, by the Hex tool in their place, turned back only when the guard is strict
     private static readonly Dictionary<string, string> FILE_TOOLS = new(StringComparer.Ordinal)
@@ -35,6 +35,7 @@ internal static class HexHarnessGuard
     {
         "remind" => Mode.Remind,
         "insist" => Mode.Insist,
+        "off" => Mode.Off,
         _ => Mode.Strict
     };
 
@@ -71,6 +72,8 @@ internal static class HexHarnessGuard
     /// </summary>
     public static string? Answer(string call, IReadOnlyList<string> folders, Mode mode)
     {
+        if (mode == Mode.Off)
+            return null;
         JsonObject? given;
         try
         {
@@ -322,6 +325,20 @@ internal static class HexHarnessGuard
     private static string? Text(JsonObject? input, string key) =>
         input?[key] is JsonValue value && value.TryGetValue(out string? text) ? text : null;
 
+    internal static string? MissingPrivateFile(string call, string root)
+    {
+        if (JsonNode.Parse(call) is not JsonObject given ||
+            Text(given, "tool_name") is not ("Read" or "Edit" or "MultiEdit" or "Write" or "NotebookEdit") ||
+            given["tool_input"] is not JsonObject input ||
+            (Text(input, "file_path") ?? Text(input, "notebook_path") ?? Text(input, "path")) is not { Length: > 0 } asked)
+            return null;
+
+        string full = Path.GetFullPath(asked, root);
+        if (!PlatformPaths.IsUnder(full, root) || PlatformPaths.Same(full, root) || File.Exists(full))
+            return null;
+        return Path.GetRelativePath(root, full).Replace('\\', '/');
+    }
+
     /// <summary>
     /// The hook as a program, Hex started with --harness-hook by the agent system before one of its tools runs. The call
     /// comes on stdin, the answer goes on stdout, and anything that goes wrong lets the tool run, a broken guard must
@@ -333,12 +350,17 @@ internal static class HexHarnessGuard
         {
             var folders = new List<string>();
             Mode mode = Mode.Strict;
+            string? privateRoot = null, chat = null;
             for (int i = 0; i < args.Length - 1; i++)
             {
                 if (args[i] == "--folder")
                     folders.Add(args[i + 1]);
                 else if (args[i] == "--guard")
                     mode = ModeOf(args[i + 1]);
+                else if (args[i] == "--private-root")
+                    privateRoot = args[i + 1];
+                else if (args[i] == "--agent-chat")
+                    chat = args[i + 1];
             }
 
             // With no Hex answering for the workspace (it crashed, or it's restarting) the harness isn't there to turn the
@@ -348,13 +370,31 @@ internal static class HexHarnessGuard
             List<McpListing> running = McpDiscovery.All();
             if (folders.Count > 0 && !folders.Any(folder => McpDiscovery.For(folder, running) is not null))
                 return 0;
-            if (Answer(call, folders, mode) is { } said)
+            string? answer = Answer(call, folders, mode);
+            if (answer is null && privateRoot is not null && chat is not null &&
+                MissingPrivateFile(call, privateRoot) is { } path)
+            {
+                var editor = folders.Select(folder => McpDiscovery.For(folder, running)).FirstOrDefault(found => found is not null);
+                if (editor is null || !McpBridge.MaterializePrivateFile(editor, chat, path).GetAwaiter().GetResult())
+                {
+                    answer = new JsonObject
+                    {
+                        ["hookSpecificOutput"] = new JsonObject
+                        {
+                            ["hookEventName"] = "PreToolUse",
+                            ["permissionDecision"] = "deny",
+                            ["permissionDecisionReason"] = "Hex could not open this private repository. Use hex_read or hex_edit for the file to see why."
+                        }
+                    }.ToJsonString();
+                }
+            }
+            if (answer is { } said)
             {
                 using var output = new StreamWriter(Console.OpenStandardOutput(), new System.Text.UTF8Encoding(false));
                 output.Write(said);
             }
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or JsonException or OperationCanceledException)
         {
         }
 

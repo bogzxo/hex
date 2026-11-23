@@ -196,7 +196,8 @@ internal sealed partial class HexLinkTree
     private void AddGitIgnored(HashSet<string> ignored, IReadOnlyCollection<string> relative)
     {
         string[] repositories = nestedRepositories;
-        foreach (var paths in relative.Where(path => !ignored.Contains(path)).GroupBy(path => RepositoryContaining(path, repositories)))
+        foreach (var paths in relative.Where(path => !ignored.Contains(path) && !HexLinkIgnore.IsRulesFile(path))
+                     .GroupBy(path => RepositoryContaining(path, repositories)))
         {
             string? repository = paths.Key;
             if (repository is null && !InRepository)

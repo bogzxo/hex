@@ -102,6 +102,7 @@ internal sealed partial class DawnScene
                 commands.Add((Said("link.command_sync_stop", ("folder", sync.Folder), ("device", device)), () => LinkSyncStop(sync.DeviceId, sync.Folder)));
             commands.Add((Said("link.command_open_file", ("device", device)), () => LinkOpenRemoteCommand(peer)));
             commands.Add((Said("link.command_follow", ("device", device)), () => LinkFollow(peer.Device.Id)));
+            commands.Add((Said("link.command_spy", ("device", device)), () => LinkSpy(peer.Device.Id)));
             commands.Add((Said("link.command_clone", ("device", device)), () => LinkCloneCommand(peer)));
             commands.Add((Said("link.command_fetch", ("device", device)), () => LinkPickRepository(repository => LinkFetchInto(peer.Device.Id, repository))));
             commands.Add((Said("link.command_offer", ("device", device)), () => LinkOfferCommand(peer)));

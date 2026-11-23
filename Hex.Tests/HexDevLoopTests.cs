@@ -63,6 +63,25 @@ public sealed class HexDevLoopTests : IDisposable
     }
 
     [Fact]
+    public void Every_image_of_the_build_is_renamed_for_a_build_so_none_is_written_over_in_place()
+    {
+        string apphost = Path.Combine(folder, "Hex"), library = Path.Combine(folder, "Hex.Core.dll"), notes = Path.Combine(folder, "notes.txt");
+        File.WriteAllText(apphost, "apphost");
+        File.WriteAllText(library, "library");
+        File.WriteAllText(notes, "free");
+
+        var moved = DawnScene.MoveLockedAside(folder, everyImage: true);
+        Assert.Equal([apphost, library], moved.Select(item => item.From).Order());
+        Assert.All(moved, item => Assert.True(File.Exists(item.Aside) && !File.Exists(item.From)));
+        Assert.Equal("free", File.ReadAllText(notes));
+        Assert.Equal("apphost", File.ReadAllText(moved.Single(item => item.From == apphost).Aside));
+
+        DawnScene.PutBack(moved);
+        Assert.Equal("library", File.ReadAllText(library));
+        Assert.Equal("apphost", File.ReadAllText(apphost));
+    }
+
+    [Fact]
     public async Task Child_processes_can_hold_two_generations_of_a_build_dll()
     {
         if (!OperatingSystem.IsWindows())

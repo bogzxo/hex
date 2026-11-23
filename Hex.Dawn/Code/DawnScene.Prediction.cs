@@ -1,4 +1,5 @@
 using Hex.Core;
+using Hex.Core.Notebooks;
 
 using Horizon.UI.Components;
 using Horizon.UI.Scripting;
@@ -17,7 +18,14 @@ internal sealed partial class DawnScene
         internal PredictionEngine Engine { get; } = engine;
     }
 
+    private readonly record struct PredictionTarget(HexDocument Document, CodeEditor Editor,
+        HexNotebook? Notebook = null, NotebookCell? Cell = null)
+    {
+        public object Key => Cell is null ? Document : Editor;
+    }
+
     private PredictionSession? predictionSession;
+    private PredictionTarget? predictionEditingIn;
     private PredictionEngine predictions => predictionSession!.Engine;
 
     // The options last made and what they were made from, so the engine's question every tick of the debounce makes none
@@ -27,14 +35,14 @@ internal sealed partial class DawnScene
 
     // What was last asked for: the document, its version, the caret, its lines (references to the document's strings)
     // and its path as sent. A prediction for anything else is let go of
-    private HexDocument? predictionAsked;
+    private PredictionTarget? predictionAsked;
     private int predictionAskedVersion;
     private UITextPosition predictionAskedCaret;
     private string[]? predictionAskedLines;
     private string predictionAskedPath = string.Empty;
 
     // The prediction the editor is showing, and what it was shown for
-    private HexDocument? predictionShownIn;
+    private PredictionTarget? predictionShownIn;
     private int predictionShownVersion;
     private UITextPosition predictionShownCaret;
     private bool predictionShownGhost;
@@ -43,7 +51,8 @@ internal sealed partial class DawnScene
 
     // A prediction taken: its edit going into the history off the editor's thread, the next asked for once it's in
     private Task? predictionAccepting;
-    private HexDocument? predictionAcceptedIn;
+    private PredictionTarget? predictionAcceptedIn;
+    private int predictionAcceptedVersion;
 
     // The code files most recently typed in, newest first, with their caret's line then, for the excerpts sent along
     private (HexDocument? Document, int Line)[] predictionRecent = [];
@@ -70,6 +79,11 @@ internal sealed partial class DawnScene
         documentClosed += PredictionClosed;
         foreach (var open in documents)
             PreparePrediction(open);
+        foreach (NotebookCellView view in cellViews)
+        {
+            if (view.Cell.Kind != CellKind.Raw)
+                PreparePrediction(CellPredictionTarget(view));
+        }
         if (predictionItem is null)
             BuildPredictionItem();
         predictionItemWritten = false;
@@ -79,23 +93,23 @@ internal sealed partial class DawnScene
     {
         predictions.ShutDown();
         documentClosed -= PredictionClosed;
-        predictionShownIn = null;
+        ClearShownPrediction();
         foreach (var open in documents)
-        {
-            open.Editor.OnPredictionEnded = null;
-            open.Editor.OnPredictionTypedThrough = null;
-            open.Editor.ClearPrediction();
-        }
+            StopEditorPrediction(open.Editor);
+        foreach (NotebookCellView view in cellViews)
+            StopEditorPrediction(view.Editor);
         predictionSession = null;
         predictionRecent = [];
         predictionAccepting = null;
-        predictionAcceptedIn = predictionAsked = predictionAllowedFor = null;
+        predictionAcceptedIn = predictionAsked = predictionEditingIn = null;
+        predictionAllowedFor = null;
         predictionShownLines = predictionAskedLines = null;
         predictionOptions = null;
         predictionPrivacy = null;
         predictionPrivacyRoots = null;
         predictionPrivacyPatterns = predictionAllowedPatterns = predictionLanguagesOf = null;
-        predictionLanguageFor = predictionItemLanguage = null;
+        predictionLanguageFor = null;
+        predictionKernelLanguage = predictionLanguageId = predictionLanguageName = predictionItemLanguage = null;
         predictionLanguageKnown = false;
         predictionAskedPath = predictionShownPath = string.Empty;
         predictionOptionsOf = predictionPrivacyOf = predictionAllowedOf = null;
@@ -104,8 +118,10 @@ internal sealed partial class DawnScene
         predictionWaitingSince = -1;
     }
 
-    /// <summary>An editor told what to call when its prediction ends or is typed through. Once, as its document is made.</summary>
-    private void PreparePrediction(HexDocument prepared)
+    private void PreparePrediction(HexDocument prepared) => PreparePrediction(new PredictionTarget(prepared, prepared.Editor));
+
+    /// <summary>An editor told what to call when its prediction ends or is typed through.</summary>
+    private void PreparePrediction(PredictionTarget prepared)
     {
         CodeEditor editor = prepared.Editor;
         editor.OnPredictionEnded = taken => PredictionEnded(prepared, taken);
@@ -117,12 +133,25 @@ internal sealed partial class DawnScene
         };
     }
 
-    /// <summary>
-    /// Tell the engine which document version changed and whether the prediction survived the edit.
-    /// </summary>
-    private void PredictionEdited(HexDocument changed)
+    private static void StopEditorPrediction(CodeEditor editor)
     {
-        if (predictionSession is null || changed != document || !PredictionSettings.On(settings))
+        editor.OnPredictionEnded = null;
+        editor.OnPredictionTypedThrough = null;
+        editor.ClearPrediction();
+    }
+
+    private void PredictionEdited(HexDocument changed) => PredictionEdited(new PredictionTarget(changed, changed.Editor));
+
+    /// <summary>Tell the engine which editor version changed and whether the prediction survived the edit.</summary>
+    private void PredictionEdited(PredictionTarget changed)
+    {
+        if (predictionSession is null || changed.Document != document || !changed.Editor.IsFocused
+            || !PredictionSettings.On(settings) || LayoutTools)
+            return;
+        if (changed.Notebook is { } notebook
+            && (!NotebookShown || notebookShown != notebook || notebook.Remake || changed.Cell?.Kind == CellKind.Raw))
+            return;
+        if (changed.Cell is null && !IsPredictedFile(changed.Document))
             return;
 
         // An edit the prediction is still showing after was its own, typed through or a word of it taken (Ctrl+Right):
@@ -135,9 +164,19 @@ internal sealed partial class DawnScene
             predictionShownCaret = text.Caret;
         }
 
+        if (changed.Cell is null)
+            RememberEdited(changed.Document, text.Caret.Line);
+        QueuePrediction(changed, through);
+    }
+
+    private void QueuePrediction(PredictionTarget target, bool through = false)
+    {
+        if (predictionEditingIn is { } previous && previous != target)
+            ForgetPrediction(previous);
+
+        predictionEditingIn = target;
         predictions.ShortcutOnly = settings.PredictionShortcutOnly;
-        RememberEdited(changed, text.Caret.Line);
-        predictions.Edited(changed, text.Version, through);
+        predictions.Edited(target.Key, target.Editor.Document.Version, through);
     }
 
     /// <summary>Every tick: the engine asked, a finished prediction given to the editor, the status item brought up to date.</summary>
@@ -155,12 +194,21 @@ internal sealed partial class DawnScene
         predictions.ShortcutOnly = settings.PredictionShortcutOnly;
         SayPredictionsOnce();
 
+        if (predictionEditingIn is { } target && (!PredictionFocused(target)
+            || !PredictionSettings.On(settings) || LanguageOffOnScreen(target) || !AllowedOnScreen()
+            || target.Editor.ReadOnly || target.Document.Editor.ReadOnly))
+            ForgetPrediction(target);
+
         // A prediction taken is in the history now, the next is asked for at once
         if (predictionAccepting is { IsCompleted: true })
         {
             predictionAccepting = null;
-            if (predictionAcceptedIn is { } accepted && accepted == document)
-                predictions.Accepted(accepted);
+            if (predictionAcceptedIn is { } accepted && PredictionFocused(accepted)
+                && accepted.Editor.Document.Version == predictionAcceptedVersion)
+            {
+                QueuePrediction(accepted);
+                predictions.Accepted(accepted.Key);
+            }
             predictionAcceptedIn = null;
         }
 
@@ -197,16 +245,17 @@ internal sealed partial class DawnScene
             : null;
 
     /// <summary>
-    /// The document as it is when the typing has paused, null when a gate is shut (4.1). Its lines are the document's own
-    /// strings in a new array, the caret, the version, its path inside its folder with forward slashes, its language and
-    /// the lines round the last caret of the two other code files typed in most recently.
+    /// The editor's text as it is when typing has paused, null when a gate is shut (4.1). The editable lines, version
+    /// and caret belong to the file or cell being typed into. A notebook adds nearby cells' source as context and uses
+    /// the cell's id in the path sent to the model, so its edit history follows the cell when it moves.
     /// </summary>
     private PredictionSnapshot? PredictionSnapshotOf(object asked)
     {
-        if (asked is not HexDocument of || PredictionGateOf(of) != PredictionGate.Open || of.Path is not { } path)
+        if (predictionEditingIn is not { } target || !ReferenceEquals(asked, target.Key)
+            || PredictionGateOf(target) != PredictionGate.Open || target.Document.Path is not { } path)
             return null;
 
-        UITextDocument text = of.Editor.Document;
+        UITextDocument text = target.Editor.Document;
         var lines = new string[text.LineCount];
         long size = 0;
         for (int i = 0; i < lines.Length; i++)
@@ -219,37 +268,71 @@ internal sealed partial class DawnScene
 
         List<string> roots = WorkspaceRoots();
         string sent = HexPredictionGlue.Sent(roots, path);
-        predictionAsked = of;
+        PredictionNotebookContext? context = null;
+        if (target.Notebook is { } notebook && target.Cell is { } cell)
+        {
+            context = PredictionNotebookContext.Capture(notebook.Model, cell);
+            if (context is null)
+                return null;
+            sent += "#cell-" + Uri.EscapeDataString(cell.Id);
+            notebook.PredictionPaths.Add(sent);
+        }
+
+        predictionAsked = target;
         predictionAskedVersion = text.Version;
         predictionAskedCaret = text.Caret;
         predictionAskedLines = lines;
         predictionAskedPath = sent;
 
-        return new PredictionSnapshot(of, text.Version, sent, CodeLanguages.LanguageIdOf(of.Editor.Highlighter), lines,
-            text.Caret.Line, text.Caret.Column, RelatedExcerpts(of, roots));
+        return new PredictionSnapshot(target.Key, text.Version, sent, PredictionLanguage(target), lines,
+            text.Caret.Line, text.Caret.Column, RelatedExcerpts(target.Document, roots), context);
     }
 
-    /// <summary>The first gate of 4.1 that's shut for a document, or Open.</summary>
-    private PredictionGate PredictionGateOf(HexDocument of)
+    /// <summary>The first gate of 4.1 that's shut for the editor on screen, or Open.</summary>
+    private PredictionGate PredictionGateOf(PredictionTarget target)
     {
-        CodeEditor editor = of.Editor;
+        CodeEditor editor = target.Editor;
         UITextDocument text = editor.Document;
-        bool code = IsPredictedCode(of);
+        bool onScreen = PredictionTargetOnScreen() == target;
         return HexPredictionGlue.Gate(new PredictionFacts(
-            OnScreen: of == document && !LayoutTools,
-            Code: code,
+            OnScreen: onScreen,
+            Code: onScreen,
             Focused: editor.IsFocused,
-            ReadOnly: editor.ReadOnly,
+            ReadOnly: editor.ReadOnly || target.Document.Editor.ReadOnly,
             Selection: text.HasSelection,
             ExtraCarets: text.HasExtraCarets,
             PopupOpen: editor.CompletionOpen || editor.Signature is not null,
             On: PredictionSettings.On(settings),
-            LanguageOff: code && PredictionSettings.LanguageOff(settings, CodeLanguages.LanguageIdOf(editor.Highlighter)),
-            Allowed: code && PredictionAllowed(of.Path!)));
+            LanguageOff: onScreen && LanguageOffOnScreen(target),
+            Allowed: onScreen && target.Document.Path is { } path && PredictionAllowed(path)));
     }
 
-    // A file of code with a path, not a layout, a picture or a diff
-    private static bool IsPredictedCode(HexDocument of) => of.IsText && of.Picture is null && of.DiffOf is null && of.Path is not null;
+    // The editor of a file on its own, or the editor of the picked code or Markdown cell.
+    private PredictionTarget? PredictionTargetOnScreen()
+    {
+        if (LayoutTools)
+            return null;
+        if (NotebookShown)
+        {
+            HexNotebook notebook = notebookShown!;
+            if (notebook.Document == document && !notebook.Remake && notebook.Unreadable is null
+                && notebook.Selected >= 0 && notebook.Selected < cellViews.Count
+                && cellViews[notebook.Selected] is { } view && view.Notebook == notebook
+                && view.Cell.Kind is CellKind.Code or CellKind.Markdown)
+                return CellPredictionTarget(view);
+            return null;
+        }
+        return IsPredictedFile(document) ? new PredictionTarget(document, document.Editor) : null;
+    }
+
+    private static PredictionTarget CellPredictionTarget(NotebookCellView view) =>
+        new(view.Notebook.Document, view.Editor, view.Notebook, view.Cell);
+
+    private bool PredictionFocused(PredictionTarget target) =>
+        target.Editor.IsFocused && PredictionTargetOnScreen() == target;
+
+    private static bool IsPredictedFile(HexDocument of) =>
+        of.IsText && of.Picture is null && of.DiffOf is null && of.Path is not null;
 
     // Whether a file may be sent: inside the folders open and matching none of the patterns. Its size is checked as it's taken
     private bool PredictionAllowed(string path)
@@ -274,7 +357,7 @@ internal sealed partial class DawnScene
         List<(string Path, string[] Lines)>? taken = null;
         foreach (var (other, line) in predictionRecent)
         {
-            if (other is null || other == of || !documents.Contains(other) || !IsPredictedCode(other) || !PredictionAllowed(other.Path!)
+            if (other is null || other == of || !documents.Contains(other) || !IsPredictedFile(other) || !PredictionAllowed(other.Path!)
                 || PredictionSettings.LanguageOff(settings, CodeLanguages.LanguageIdOf(other.Editor.Highlighter)))
                 continue;
             UITextDocument text = other.Editor.Document;
@@ -314,22 +397,23 @@ internal sealed partial class DawnScene
     /// </summary>
     private void ShowPrediction(PredictionResult result)
     {
-        if (result.Document is not HexDocument of || of != document || of != predictionAsked || predictionAskedLines is not { } lines)
+        if (predictionAsked is not { } target || !ReferenceEquals(result.Document, target.Key)
+            || predictionAskedLines is not { } lines || PredictionGateOf(target) != PredictionGate.Open)
             return;
 
-        CodeEditor editor = of.Editor;
+        CodeEditor editor = target.Editor;
         UITextDocument text = editor.Document;
         if (text.Version != result.Version || text.Version != predictionAskedVersion)
             return;
         if (text.Caret != predictionAskedCaret || text.HasSelection || text.HasExtraCarets)
         {
-            predictions.Edited(of, text.Version);
+            QueuePrediction(target);
             return;
         }
         if (HexPredictionGlue.Edits(result.Edits, lines) is not { } edits)
             return;
 
-        predictionShownIn = of;
+        predictionShownIn = target;
         predictionShownVersion = text.Version;
         predictionShownCaret = text.Caret;
         predictionShownGhost = result.Ghost;
@@ -348,13 +432,13 @@ internal sealed partial class DawnScene
     /// tells the engine; by the caret going elsewhere, the engine asks again where it is now; by the keyboard going
     /// elsewhere, nothing.
     /// </summary>
-    private void PredictionEnded(HexDocument of, bool taken)
+    private void PredictionEnded(PredictionTarget target, bool taken)
     {
-        if (predictionShownIn != of)
+        if (predictionShownIn != target)
             return;
         predictionShownIn = null;
 
-        UITextDocument text = of.Editor.Document;
+        UITextDocument text = target.Editor.Document;
         if (taken)
         {
             predictionsTaken++;
@@ -364,25 +448,52 @@ internal sealed partial class DawnScene
                 after[i] = text.LineAt(i);
             string path = predictionShownPath;
             PredictionHistory history = predictions.History;
-            predictionAcceptedIn = of;
+            predictionAcceptedIn = target;
+            predictionAcceptedVersion = text.Version;
             predictionAccepting = Task.Run(() => history.Accepted(path, string.Join('\n', before), string.Join('\n', after)));
             return;
         }
 
-        if (text.Version != predictionShownVersion || !of.Editor.IsFocused)
+        if (text.Version != predictionShownVersion || !PredictionFocused(target))
             return;
         if (predictionShownGhost && (text.Caret != predictionShownCaret || text.HasSelection || text.HasExtraCarets))
         {
-            predictions.Edited(of, text.Version);
+            QueuePrediction(target);
             return;
         }
-        predictions.Dismissed(of);
+        predictions.Dismissed(target.Key);
+    }
+
+    private void ClearShownPrediction()
+    {
+        if (predictionShownIn is not { } shown)
+            return;
+        predictionShownIn = null;
+        shown.Editor.ClearPrediction();
+    }
+
+    // A cell left the screen or lost the keyboard, so its request and anything it was showing go.
+    private void ForgetPrediction(PredictionTarget target)
+    {
+        predictionSession?.Engine.Forget(target.Key);
+        if (predictionEditingIn == target)
+            predictionEditingIn = null;
+        if (predictionShownIn == target)
+            ClearShownPrediction();
+        if (predictionAsked == target)
+        {
+            predictionAsked = null;
+            predictionAskedLines = null;
+        }
+        if (predictionAcceptedIn == target)
+            predictionAcceptedIn = null;
     }
 
     // A document closed: what was asked for it goes, and its edits from the history
     private void PredictionClosed(HexDocument closed)
     {
-        predictions.Forget(closed);
+        if (predictionEditingIn is { } target && target.Document == closed)
+            ForgetPrediction(target);
         if (closed.Path is { } path)
             predictions.History.Closed(HexPredictionGlue.Sent(WorkspaceRoots(), path));
         for (int i = 0; i < predictionRecent.Length; i++)
@@ -390,14 +501,5 @@ internal sealed partial class DawnScene
             if (predictionRecent[i].Document == closed)
                 predictionRecent[i] = default;
         }
-        if (predictionShownIn == closed)
-            predictionShownIn = null;
-        if (predictionAsked == closed)
-        {
-            predictionAsked = null;
-            predictionAskedLines = null;
-        }
-        if (predictionAcceptedIn == closed)
-            predictionAcceptedIn = null;
     }
 }

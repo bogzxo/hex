@@ -30,9 +30,15 @@ internal sealed partial class DawnScene
                     return LINK_PREDICTION_ANSWER;
                 });
                 ConfigureCrossPrediction(PredictionProviders.OLLAMA, model.Url);
+                // A machine that only lends its model, its own predictions off, still serves (refused before 3.4.2)
+                settings.EditPredictions = false;
             });
             test.Check("link-cross-prediction: serving requires explicit opt-in", () => !LinkPredictServes());
-            test.Run(() => settings.EditPredictionsShare = true);
+            test.Run(() =>
+            {
+                settings.EditPredictionsShare = true;
+                ApplyLinkPredictions();
+            });
             test.WaitFor(() => server?.Stalled > 0, 25.0f);
             test.Check("link-cross-prediction: the loopback model got the synthetic code and no excluded text", () =>
             {

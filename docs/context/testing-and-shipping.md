@@ -154,6 +154,7 @@ Run these from the build output of a disposable checkout. Give each process a fr
 | `link-git-follow` | Authority branch and commit follow, file sync after Git moves, and the reverse path |
 | `link-ui` | Devices, invites, connection state, workspace offers and remote approval UI |
 | `link-editor-notices` | Claim and shared-session notices, named collaborators, Follow and narrow/scale layout |
+| `link-talk` | Loopback chat, automatic docking, unread messages, the palette and multiline keyboard input |
 
 `link-peer` is primarily a companion process. `link-cross` and `link-nearby` need two explicit invocations and use a real network route unless the cross test is configured for loopback. `HEX_LINK_TEST_WORKTREE=1` with `link-cross` runs the older paired working-tree **sync** fixture. Use `link-worktree` for private drafts and checked publication. The old cross-document fixture exercises the legacy protocol. Use `link-documents` for the current CRDT.
 
@@ -215,6 +216,7 @@ Names are CLI tokens. File = `Hex.Dawn/Testing/DawnScene.SelfTest.<X>.cs` unless
 | languages, semantic, lens, hidl-inlays, csharp, d, pyright | highlighting, semantic colours, reference-count lenses, parameter hints, csharp-ls, serve-d, Pyright | Languages, Semantic, CodeLens, Inlays, CSharp, D, Pyright |
 | completion-imports(-boundary), completion-documentation(-race), completion-triggers, header-path-completion, cpp-include-completion, clangd-services/-extensions/-midword | LSP completion variants | CompletionImports, CompletionDocumentation, CompletionTriggers, HeaderPaths, CppIncludes, Clangd |
 | range-formatting, on-type-formatting, organize-imports, using-quick-fix, rename-safety, python-rename, selection-ranges, type-definition, type-hierarchy, call-hierarchy, native-highlights, native-folding, native-inlays, native-signatures, python/csharp/quoted-signatures, signature-documentation, diagnostic-locations/-documentation, header-source, framework-navigation, definition-results, moved-files, server-startup, missing-sdk, nuget-restore, python-stubs, python-environment, python-create-environment, python-terminal, dotnet-terminal, dotnet-project-terminal, npminstall (explicit) | native LSP features per language | files of the same names under Testing/ |
+| prediction | Edit prediction against a loopback model server, including notebook cell context, Tab acceptance, focus changes, and privacy gates | Prediction |
 | hover-races, signature-races, navigation-races, language-edit-races | delayed server responses cannot overwrite newer state | `HexLanguages.*Races.cs`, `HexLanguages.EditRaceSelfTest.cs` |
 
 ### 4.3 Debugging

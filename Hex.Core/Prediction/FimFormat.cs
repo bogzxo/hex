@@ -69,8 +69,22 @@ internal sealed class FimFormat : IPredictionFormat
             lineEnd = text.Length;
         bool midLine = !text.AsSpan(caret, lineEnd - caret).IsWhiteSpace();
 
-        string before = Comment(input.Language, input.Path) + text[Before(text, caret)..caret];
-        string after = text[caret..After(text, caret, lineEnd)];
+        int start = Before(text, caret), end = After(text, caret, lineEnd);
+        string before = text[start..caret], after = text[caret..end];
+        if (input.Notebook is { } notebook)
+        {
+            if (start == 0 && notebook.Before.Length > 0 && !HasTokens(notebook.Before))
+            {
+                before = notebook.Before + "\n\n" + before;
+                before = before[Before(before, before.Length)..];
+            }
+            if (end == text.Length && notebook.After.Length > 0 && !HasTokens(notebook.After))
+            {
+                after += "\n\n" + notebook.After;
+                after = after[..After(after, 0, lineEnd - caret)];
+            }
+        }
+        before = Comment(input.Language, input.Path) + before;
         string written = suffixFirst ? suffix + after + prefix + before + middle : prefix + before + suffix + after + middle;
 
         // In the middle of a line only the rest of the line is wanted

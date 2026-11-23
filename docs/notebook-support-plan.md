@@ -17,6 +17,10 @@ Reuse the existing deferred texture upload and release path. Decode each immutab
 5. Run focused tests followed by the full unit suite and notebook graphical suite. Record exact limitations and measurements.
 6. Stabilize native table hover geometry and add compact CSV copy/export controls, preserving sorted row order and complete data.
 
+## Edit prediction
+
+With edit predictions enabled, type in a code cell and press Tab to take the suggestion. Code cells use the kernel language. To get predictions in Markdown cells, enable Markdown in the edit prediction language settings. The model gets the current cell's text and nearby cell source. The notebook path is checked against the same exclusions as other files.
+
 ## Compatibility boundary
 
 SVG support targets static SVG documents, including Matplotlib paths, transforms, definitions, clipping, gradients, and text. Embedded JavaScript, animation, remote assets, arbitrary HTML applications, and interactive widget runtimes require a separate trusted execution design. Preserve their MIME data and show available static representations. Math support is TeX mathematics supported by CSharpMath, not arbitrary TeX packages or document compilation.

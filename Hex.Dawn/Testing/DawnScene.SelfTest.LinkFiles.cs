@@ -96,6 +96,9 @@ internal sealed partial class DawnScene
             Read(Path.Combine(theirs, "only-a.txt")) == "Only on A.\n" && Read(Path.Combine(mine, "only-b.txt")) == "Only on B.\n");
         test.Check("link-files: a file git ignores (bin/) didn't travel", () =>
             File.Exists(Path.Combine(mine, "bin", "built.txt")) && !File.Exists(Path.Combine(theirs, "bin", "built.txt")));
+        test.Check("link-files: the Link ignore file travels but its matches stay here", () =>
+            Read(Path.Combine(theirs, HexLinkIgnore.FileName)) == "*.generated\n" &&
+            File.Exists(Path.Combine(mine, "local.generated")) && !File.Exists(Path.Combine(theirs, "local.generated")));
         test.Check("link-files: the choice is kept for when B links again", () =>
             LinkSyncChosen(peerId ?? string.Empty).Contains(LINK_SYNC_FOLDER));
 
@@ -215,6 +218,20 @@ internal sealed partial class DawnScene
         test.Run(() => document.Editor.GoTo(0, 0));
         test.Settle(0.2f);
         test.Check("link-files: moving the caret here lets go of following", () => LinkFollowing is null);
+
+        // Spy jumps once: B's file opened and the caret on B's, then nothing followed
+        test.Run(() =>
+        {
+            if (Context.Documents.Find(readme) is { } open)
+                CloseDocument(open);
+            if (peerId is not null)
+                LinkSpy(peerId);
+        });
+        bool SpiedOnB() => document.Path is { } spied && PlatformPaths.Same(spied, readme) && document.Editor.Document.Caret == new UITextPosition(0, 2);
+        test.WaitFor(SpiedOnB, 10.0f);
+        test.Check("link-files: Spy opens B's file here with the caret on B's and follows nothing after", () => SpiedOnB() && LinkFollowing is null);
+        test.Check("link-files: the palette offers Spy > B", () =>
+            LinkSharePaletteCommands().Any(command => command.Text == Said("link.command_spy", ("device", LINK_PEER_NAME))));
 
         // A's rights on B down to View: the sync goes pull-only, what changes here stays here, what changes there comes
         string pulled = Path.Combine(mine, "src", "pulled.txt"), pulledThere = Path.Combine(theirs, "src", "pulled.txt");
@@ -418,6 +435,8 @@ internal sealed partial class DawnScene
         if (GitProcess.Run(Path.GetDirectoryName(theirs)!, ["clone", "-q", "-c", "core.autocrlf=false", mine, theirs]) is { Ok: false } notCloned)
             return $"git clone failed, {notCloned.Why}";
 
+        File.WriteAllText(Path.Combine(mine, HexLinkIgnore.FileName), "*.generated\n");
+        File.WriteAllText(Path.Combine(mine, "local.generated"), "Built here.\n");
         File.WriteAllText(Path.Combine(mine, "only-a.txt"), "Only on A.\n");
         File.WriteAllText(Path.Combine(theirs, "only-b.txt"), "Only on B.\n");
         Directory.CreateDirectory(Path.Combine(mine, "bin"));

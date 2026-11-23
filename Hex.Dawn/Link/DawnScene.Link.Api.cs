@@ -221,9 +221,9 @@ internal sealed partial class DawnScene
         {
             Invited = pairing.Invited,
             Terms = terms,
-            Preset = terms?.Preset ?? (pairing.Invited ? HexLinkPreset.Collaborator : null),
+            Preset = terms?.Preset ?? (!host || pairing.Invited ? HexLinkPreset.Collaborator : null),
             InitialRights = terms is not null ? host ? terms.HostGrants : terms.HostRequests
-                : pairing.Invited ? LINK_COLLABORATOR : HexLinkRights.None,
+                : !host || pairing.Invited ? LINK_COLLABORATOR : HexLinkRights.None,
             ShareOnJoin = host && terms?.ShareWorkspace == true
         };
         pairing.Ended.Register(() =>

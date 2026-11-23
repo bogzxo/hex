@@ -72,6 +72,49 @@ internal sealed partial class DawnScene
         return await done.Task.WaitAsync(cancel);
     }
 
+    // A folder kept in sync with a linked device from before authorities were pinned (restored at start, or set up with
+    // Sync Folder) gets the pin a sync set up now would: the one the device advertises when it does, otherwise the one the
+    // election gives (both Hexes work out the same owner), and the sync is started again for it. Nothing is pinned for a folder the
+    // person stopped syncing or one the device holds no View right on.
+    private void LinkPinSyncedFolders(HexLinkPeer peer, bool start = true)
+    {
+        if (linkServices is not { } services || link is not { } connected || peer.IsClosed || !HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))
+            return;
+        foreach (string name in LinkSyncedWith(peer.Device.Id))
+        {
+            HexLinkFolder? local = services.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, name));
+            HexLinkFolder? remote = peer.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, name));
+            if (local is null || remote is null || services.FolderAuthorities.Of(local) is not null || LinkSyncOptedOut(peer.Device.Id, name))
+                continue;
+            HexLinkAuthority pin = remote.Authority ?? new HexLinkAuthority(
+                LinkAutoSyncOwner(peer.Session.Connection.Dialled, peer.Session.Connection.Rights, peer.Granted) ? services.Device.Id : peer.Device.Id, 1);
+            if (pin.DeviceId != services.Device.Id && pin.DeviceId != peer.Device.Id)
+                continue;
+            // Pinned for publication and claims, the sync stays the two-way one it was, as both devices pin it together. A
+            // folder the device pinned already (a share, a folder provisioned as a replica) isn't two-way, nothing says it ran so
+            if (remote.Authority is null && LinkProvisionedLocal(peer.Device.Id, name) is null)
+                LinkSyncMarkTwoWay(peer.Device.Id, name);
+            try
+            {
+                services.FolderAuthorities.Bind(local, pin, HexLinkAuthorityProvenance.Provisioned);
+            }
+            catch (HexLinkException error)
+            {
+                Say(error.Message, error: true);
+                continue;
+            }
+
+            linkAudit?.Write("authority-pin", services.Device.Id, $"{name} pinned to {pin.DeviceId} for the sync with {peer.Device.Name}");
+            connected.WorkspaceMoved();
+            if (start)
+                _ = Task.Run(async () =>
+            {
+                try { await LinkSyncStart(peer.Device.Id, name, remember: false, resume: true, cancel: peer.Session.Closing); }
+                catch (Exception e) when (e is OperationCanceledException or HexLinkException or IOException) { }
+            });
+        }
+    }
+
     // Only the pinned old owner can advertise its immediate successor to this device.
     private void LinkLearnAuthority(HexLinkPeer peer)
     {

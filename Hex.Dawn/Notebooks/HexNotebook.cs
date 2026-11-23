@@ -46,6 +46,9 @@ internal sealed class HexNotebook
     public bool Changed { get; set; }
     public float WriteIn { get; set; }
 
+    /// <summary>The cell paths used in prediction history, forgotten when the notebook closes.</summary>
+    public HashSet<string> PredictionPaths { get; } = new(StringComparer.Ordinal);
+
     /// <summary>Whether the cells on screen have to be made again (another notebook shown, cells added or taken out).</summary>
     public bool Remake { get; set; } = true;
 

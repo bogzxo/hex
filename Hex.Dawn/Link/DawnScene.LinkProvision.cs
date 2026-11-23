@@ -137,6 +137,15 @@ internal sealed partial class DawnScene
 
     internal void LinkShareWorkspaceCommand(string deviceId)
     {
+        if (link?.PeerOf(deviceId) is { IsClosed: false } peer &&
+            HexLinkAllowed.Has(peer.Session.Connection.Rights, HexLinkRights.View) && linkServices is { } services)
+            OfferLinkIgnoreFiles(services.Workspace.Folders.Select(folder => folder.Path), () => SendLinkWorkspaceOffer(deviceId));
+        else
+            SendLinkWorkspaceOffer(deviceId);
+    }
+
+    private void SendLinkWorkspaceOffer(string deviceId)
+    {
         string device = link?.PeerOf(deviceId)?.Device.Name ?? deviceId;
         Context.Work.Start($"link-offer-workspace-{deviceId}", Said("link.provision.share_title", ("device", device)),
             async work =>

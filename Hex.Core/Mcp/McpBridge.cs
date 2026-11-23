@@ -1,4 +1,6 @@
 using System.IO.Pipes;
+using System.Text;
+using System.Text.Json.Nodes;
 
 namespace Hex.Core;
 
@@ -80,6 +82,38 @@ internal static partial class McpBridge
         }
 
         return pipe;
+    }
+
+    internal static async Task<bool> MaterializePrivateFile(McpListing listing, string chat, string path)
+    {
+        using NamedPipeClientStream? pipe = Open(listing, chat);
+        if (pipe is null)
+            return false;
+        using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+        using var reader = new StreamReader(pipe, Encoding.UTF8, leaveOpen: true);
+        using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true);
+        var request = new JsonObject
+        {
+            ["jsonrpc"] = "2.0",
+            ["id"] = 1,
+            ["method"] = "tools/call",
+            ["params"] = new JsonObject
+            {
+                ["name"] = "hex_link_publish",
+                ["arguments"] = new JsonObject { ["action"] = "materialize", ["path"] = path }
+            }
+        };
+        try
+        {
+            await writer.WriteLineAsync(request.ToJsonString().AsMemory(), limit.Token);
+            await writer.FlushAsync(limit.Token);
+            string? answer = await reader.ReadLineAsync(limit.Token);
+            return answer is not null && JsonNode.Parse(answer)?["result"]?["isError"]?.GetValue<bool>() == false;
+        }
+        catch (Exception error) when (error is IOException or OperationCanceledException or System.Text.Json.JsonException)
+        {
+            return false;
+        }
     }
 
     /// <summary>

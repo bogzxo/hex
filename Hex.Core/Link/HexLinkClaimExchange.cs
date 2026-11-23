@@ -12,7 +12,11 @@ internal static class HexLinkClaimCaller
     public static HexLinkDevice? Of(JsonObject arguments) => callers.TryGetValue(arguments, out var device) ? device : null;
 }
 
-internal sealed record HexLinkClaimFolder(HexLinkFolder Folder, HexLinkClaimScope Scope, string AuthorityId);
+/// <summary>
+/// A folder claims are exchanged for. One with a pinned authority is scoped by it; one without is kept in sync with
+/// devices (the legacy pair, PairedWith the newline separated ids of those) and its claims are exchanged with exactly those.
+/// </summary>
+internal sealed record HexLinkClaimFolder(HexLinkFolder Folder, HexLinkClaimScope Scope, string AuthorityId, string PairedWith = "");
 
 /// <summary>Batches claim traffic once per editor interval. Only authenticated direct origins are relayed.</summary>
 internal sealed class HexLinkClaimExchange(IHexLinkServices services)
@@ -30,8 +34,12 @@ internal sealed class HexLinkClaimExchange(IHexLinkServices services)
     private sealed class LocalHead
     {
         public Dictionary<HexLinkClaimKey, HexLinkClaimRow> Rows { get; set; } = [];
+        public Dictionary<HexLinkClaimKey, (long Since, long Dropped)> Recent { get; } = [];
         public long Sequence;
     }
+
+    // How long a claim that was let go is remembered, so claiming the same thing again keeps the first time
+    private const long REMEMBER_MS = 120_000;
 
     private readonly Lock gate = new();
     private readonly Dictionary<string, Route> routes = new(StringComparer.Ordinal);
@@ -45,6 +53,12 @@ internal sealed class HexLinkClaimExchange(IHexLinkServices services)
     public bool Overflow { get; private set; }
     public HexLinkClaims Board { get; } = new();
     public IReadOnlyList<HexLinkClaimFolder> Folders => folders;
+
+    public IReadOnlyList<HexLinkClaim> List(long now) =>
+        [.. Board.List(now).Where(claim => !Hidden(claim.Scope, claim.Draft.Key))];
+
+    public IReadOnlyList<HexLinkClaim> At(HexLinkClaimScope scope, string path, bool prefix, long now) =>
+        Hidden(scope, path, prefix) ? [] : [.. Board.At(scope, path, prefix, now).Where(claim => !Hidden(scope, claim.Draft.Key))];
 
     public void Join(HexLinkPeer peer)
     {
@@ -71,13 +85,16 @@ internal sealed class HexLinkClaimExchange(IHexLinkServices services)
 
     public void RefreshFolders()
     {
-        var now = services.Workspace.Folders.Where(folder => folder.Authority is not null && HexLinkClaims.ValidPath(folder.Name, false)
-            && !folder.Name.Contains('/')).Take(HexLinkHost.MOST_TREES).Select(folder =>
-            {
-                var authority = folder.Authority!;
-                string identity = HexLinkFiles.Hash(Encoding.UTF8.GetBytes($"{authority.DeviceId}\n{authority.Epoch}\n{folder.Name}"));
-                return new HexLinkClaimFolder(folder, new HexLinkClaimScope(folder.Name, identity), authority.DeviceId);
-            }).ToArray();
+        HexLinkPeer[] peers;
+        lock (gate)
+            peers = [.. routes.Values.Select(route => route.Peer).Where(peer => !peer.IsClosed)];
+        var chosen = peers.ToDictionary(peer => peer.Device.Id, peer => services.ChosenSyncFolders(peer.Device.Id));
+        var now = services.Workspace.Folders.Where(folder => HexLinkClaims.ValidPath(folder.Name, false) && !folder.Name.Contains('/'))
+            .Select(folder => Paired(folder, peers, chosen) ?? (folder.Authority is { } authority
+                ? new HexLinkClaimFolder(folder, new HexLinkClaimScope(folder.Name,
+                    HexLinkFiles.Hash(Encoding.UTF8.GetBytes($"{authority.DeviceId}\n{authority.Epoch}\n{folder.Name}"))), authority.DeviceId)
+                : null))
+            .OfType<HexLinkClaimFolder>().Take(HexLinkHost.MOST_TREES).ToArray();
         lock (gate)
         {
             if (folders.SequenceEqual(now))
@@ -90,6 +107,23 @@ internal sealed class HexLinkClaimExchange(IHexLinkServices services)
                 route.Retry = 0;
             }
         }
+    }
+
+    // A folder this device keeps in sync with a linked device, or that device with it, counts for claims between the two
+    // when the two don't pin the same authority for it (none yet, or only one of them): both compute the same scope from
+    // the folder's name, so each side's claims reach the other. Two that pin the same authority use its scope instead.
+    private static HexLinkClaimFolder? Paired(HexLinkFolder folder, HexLinkPeer[] peers, Dictionary<string, IReadOnlyList<string>> chosen)
+    {
+        var synced = peers.Select(peer => (Peer: peer, Remote: peer.Workspace.Folders.FirstOrDefault(other => PlatformPaths.Comparer.Equals(other.Name, folder.Name))))
+            .Where(each => each.Remote is not null && (chosen[each.Peer.Device.Id].Contains(folder.Name, PlatformPaths.Comparer)
+                || each.Peer.ChosenSyncFolders.Contains(folder.Name, PlatformPaths.Comparer))).ToArray();
+        if (folder.Authority is not null && synced.All(each => each.Remote!.Authority == folder.Authority))
+            return null;
+        string[] with = [.. synced.Select(each => each.Peer.Device.Id).Order(StringComparer.Ordinal)];
+        if (with.Length == 0)
+            return null;
+        string identity = HexLinkFiles.Hash(Encoding.UTF8.GetBytes($"sync\n{folder.Name}"));
+        return new HexLinkClaimFolder(folder, new HexLinkClaimScope(folder.Name, identity), string.Empty, string.Join('\n', with));
     }
 
     public bool Subscribed(string deviceId, HexLinkClaimScope scope)
@@ -133,12 +167,7 @@ internal sealed class HexLinkClaimExchange(IHexLinkServices services)
                     || !route.Outgoing.Contains(frame.Scope) || !MayExchange(frame.Scope, route) || frame.Origin.Id == services.Device.Id
                     || frame.Origin.Id != route.Peer.Device.Id && Owner(frame.Scope) != route.Peer.Device.Id)
                     continue;
-                if (frame.Add.Any(row => Hidden(frame.Scope, row.Draft.Key)) || frame.Drop.Any(key => Hidden(frame.Scope, key)))
-                {
-                    // A receiver with stricter excludes must not show, block on, or relay excluded paths.
-                    frame = frame with { Add = [.. frame.Add.Where(row => !Hidden(frame.Scope, row.Draft.Key))],
-                        Drop = [.. frame.Drop.Where(key => !Hidden(frame.Scope, key))] };
-                }
+                frame = Filter(frame);
                 HexLinkClaimReceipt receipt = Board.Receive(frame, route.Peer.Device.Id, now);
                 if (receipt == HexLinkClaimReceipt.Gap)
                 {
@@ -183,9 +212,19 @@ internal sealed class HexLinkClaimExchange(IHexLinkServices services)
                             break;
                         }
                         rows.Add(draft.Key, new HexLinkClaimRow(draft,
-                            head.Rows.TryGetValue(draft.Key, out HexLinkClaimRow? existing) ? existing.SinceTick : now));
+                            head.Rows.TryGetValue(draft.Key, out HexLinkClaimRow? existing) ? existing.SinceTick
+                            : head.Recent.TryGetValue(draft.Key, out var gone) && now - gone.Dropped < REMEMBER_MS ? gone.Since : now));
                     }
                 }
+
+                // A claim that drops out for a moment (a saved editor) and comes back is still the one claimed first
+                foreach (var (key, row) in head.Rows)
+                {
+                    if (!rows.ContainsKey(key))
+                        head.Recent[key] = (row.SinceTick, now);
+                }
+                foreach (var key in head.Recent.Where(pair => now - pair.Value.Dropped >= REMEMBER_MS).Select(pair => pair.Key).ToArray())
+                    head.Recent.Remove(key);
 
                 HexLinkClaimRow[] add = [.. rows.Values.Where(row => !head.Rows.TryGetValue(row.Draft.Key, out var before) || before.Draft != row.Draft)];
                 HexLinkClaimKey[] drop = [.. head.Rows.Keys.Where(key => !rows.ContainsKey(key))];
@@ -318,8 +357,9 @@ internal sealed class HexLinkClaimExchange(IHexLinkServices services)
         // Heartbeats fit in one small notification. Larger snapshots page by feed and never exceed the wire frame limit.
         var batch = new JsonArray();
         int rows = 0;
-        foreach (HexLinkClaimFrame frame in frames)
+        foreach (HexLinkClaimFrame outgoing in frames)
         {
+            HexLinkClaimFrame frame = Filter(outgoing);
             int needed = frame.Add.Count + frame.Drop.Count;
             if (batch.Count == 128 || rows > 0 && rows + needed > 512)
             {
@@ -371,19 +411,43 @@ internal sealed class HexLinkClaimExchange(IHexLinkServices services)
 
     private bool Known(HexLinkClaimScope scope) => Owner(scope) is not null;
 
-    private bool MayExchange(HexLinkClaimScope scope, Route route) => Owner(scope) is { } owner
-        && (owner == services.Device.Id || owner == route.Peer.Device.Id);
+    private bool MayExchange(HexLinkClaimScope scope, Route route) =>
+        folders.FirstOrDefault(folder => folder.Scope == scope) is { } known
+        && (known.PairedWith.Length > 0 ? known.PairedWith.Split('\n').Contains(route.Peer.Device.Id)
+            : known.AuthorityId == services.Device.Id || known.AuthorityId == route.Peer.Device.Id);
 
-    private bool Hidden(HexLinkClaimScope scope, HexLinkClaimKey key)
+    // Drop notices must still reach the board when a path becomes hidden after its claim was accepted.
+    private HexLinkClaimFrame Filter(HexLinkClaimFrame frame)
     {
-        if (key.Path.Length == 0)
+        if (frame.Add.Count == 0)
+            return frame;
+        var visible = frame.Add.Where(row => !Hidden(frame.Scope, row.Draft.Key)).ToArray();
+        return visible.Length == frame.Add.Count ? frame : frame with { Add = visible };
+    }
+
+    private bool Hidden(HexLinkClaimScope scope, HexLinkClaimKey key) => Hidden(scope, key.Path, key.Prefix);
+
+    private bool Hidden(HexLinkClaimScope scope, string path, bool prefix)
+    {
+        if (path.Length == 0)
             return false;
-        HexExcludes excludes = services.Excludes;
-        string path = key.Path;
-        if (folders.FirstOrDefault(folder => folder.Scope == scope)?.Folder.IncludeSystemFiles != true &&
-            HexLinkSystemFiles.Matches(path))
+        HexLinkFolder? folder = folders.FirstOrDefault(item => item.Scope == scope)?.Folder;
+        if (folder?.IncludeSystemFiles != true && HexLinkSystemFiles.Matches(path))
             return true;
-        if (excludes.Hidden(path, key.Prefix))
+        if (folder is not null)
+        {
+            try
+            {
+                if (HexLinkIgnore.Matches(HexLinkIgnore.ForRoot(folder.Path).Read(), path, prefix))
+                    return true;
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                return true;
+            }
+        }
+        HexExcludes excludes = services.Excludes;
+        if (excludes.Hidden(path, prefix))
             return true;
         for (int slash = path.LastIndexOf('/'); slash >= 0; slash = path.LastIndexOf('/', slash - 1))
         {

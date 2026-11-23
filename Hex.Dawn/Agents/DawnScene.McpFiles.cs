@@ -108,6 +108,8 @@ internal sealed partial class DawnScene
     /// </summary>
     private IEnumerable<McpToolResult?> McpThenCheck(JsonObject args, string path, string done)
     {
+        harness?.Touch();
+        done += LinkEditNotes(path);
         yield return McpToolResult.Done(done);
         foreach (string? step in McpCheckIfAsked(args, path))
         {

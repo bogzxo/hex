@@ -37,6 +37,15 @@ internal sealed partial class HexLinkSync
             return true;
         }
 
+        if (SameText(localBytes, remoteFile.Bytes, ignoreUtf8Bom: true))
+        {
+            lock (gate)
+                SetBase(wire, AgreedOf(localBytes, remoteFile.Bytes) with { Executable = remoteFile.Executable });
+            Interlocked.Increment(ref eolOnly);
+            Notify();
+            return true;
+        }
+
         if (remoteFile.Bytes.Length > HexLinkMerge.CACHE_FILE_BYTES
             || await HexLinkMerge.TryTextAsync(basis, localBytes, remoteFile.Bytes, stop) is not { } result)
             return false;

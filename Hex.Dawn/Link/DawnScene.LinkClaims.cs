@@ -175,9 +175,12 @@ internal sealed partial class DawnScene
 
             string relative = HexExcludes.Relative(owner.Folder.Path, full);
             bool folderPrefix = prefix || relative.Length == 0;
-            return HexLinkClaims.ValidPath(relative, folderPrefix) ? (owner.Scope, relative, folderPrefix) : null;
+            if (!HexLinkClaims.ValidPath(relative, folderPrefix) ||
+                HexLinkIgnore.Matches(HexLinkIgnore.ForRoot(owner.Folder.Path).Read(), relative, folderPrefix))
+                return null;
+            return (owner.Scope, relative, folderPrefix);
         }
-        catch (Exception e) when (e is ArgumentException or NotSupportedException or IOException)
+        catch (Exception e) when (e is ArgumentException or NotSupportedException or IOException or UnauthorizedAccessException)
         {
             return null;
         }
@@ -188,10 +191,10 @@ internal sealed partial class DawnScene
         if (link?.Claims is not { } exchange)
             return [];
         long now = System.Environment.TickCount64;
-        return ClaimPathOf(exchange.Folders, absolutePath, false) is { } path ? exchange.Board.At(path.Scope, path.Relative, false, now) : [];
+        return ClaimPathOf(exchange.Folders, absolutePath, false) is { } path ? exchange.At(path.Scope, path.Relative, false, now) : [];
     }
 
-    internal int LinkClaimCount(string deviceId) => link?.Claims.Board.List(System.Environment.TickCount64).Count(claim => claim.DeviceId == deviceId) ?? 0;
+    internal int LinkClaimCount(string deviceId) => link?.Claims.List(System.Environment.TickCount64).Count(claim => claim.DeviceId == deviceId) ?? 0;
 
     internal bool LinkOpenClaimDocument(HexLinkClaim claim)
     {
@@ -253,16 +256,31 @@ internal sealed partial class DawnScene
     private static string ClaimHolder(HexLinkClaim claim) => claim.ChatId is { } id
         ? $"#{id} '{claim.Holder}' on {claim.DeviceName}" : $"{claim.Holder} on {claim.DeviceName}";
 
-    private static string ClaimAge(HexLinkClaim claim) =>
-        TimeSpan.FromMilliseconds(Math.Max(0, System.Environment.TickCount64 - claim.SinceTick)) is var age
-        && age.TotalMinutes >= 1 ? $"claimed {(int)age.TotalMinutes} min ago" : $"claimed {(int)age.TotalSeconds} s ago";
+    // One zone for every time said to an agent, local with its offset
+    internal static string ClaimTime(DateTimeOffset time) => time.ToLocalTime().ToString("HH:mm:ss zzz", CultureInfo.InvariantCulture);
+
+    internal static string ClaimAge(HexLinkClaim claim) =>
+        (TimeSpan.FromMilliseconds(Math.Max(0, System.Environment.TickCount64 - claim.SinceTick)) is var age && age.TotalMinutes >= 1
+            ? $"claimed {(int)age.TotalMinutes} min ago" : $"claimed {(int)age.TotalSeconds} s ago") + $", since {ClaimTime(claim.Since)}";
+
+    /// <summary>What an agent is told when the file it changed is claimed by another device or held here, empty when neither.</summary>
+    private string LinkEditNotes(string path)
+    {
+        var notes = new StringBuilder();
+        if (LinkHeldFile(path) is { } held)
+            notes.Append($" The file is held on this device since {ClaimTime(held.HeldAt)}{(held.HasIncoming ? $" and {held.IncomingFrom ?? "another device"} changed it too, see hex_link_hold update" : string.Empty)}, hex_link_hold submit sends it.");
+        string? local = linkServices?.Device.Id;
+        foreach (HexLinkClaim claim in LinkClaimsAt(path).Where(claim => claim.DeviceId != local).Take(3))
+            notes.Append($" Claimed by {ClaimHolder(claim)} ({claim.Kind.ToString().ToLowerInvariant()}, {ClaimAge(claim)}).");
+        return notes.ToString();
+    }
 
     private static string ClaimPlan(HexLinkClaim claim)
     {
         string plan = claim.PlanStep is { Length: > 0 } step ? $"Its step \"{step}\" is {claim.PlanState ?? "open"}. " : string.Empty;
         if (claim.Eta is not { } eta)
             return plan + "ETA unknown.";
-        return plan + $"ETA {eta.ToLocalTime():HH:mm:ss}.";
+        return plan + $"ETA {ClaimTime(eta)}.";
     }
 
     private string ClaimContact(HexLinkClaim claim)
@@ -287,7 +305,7 @@ internal sealed partial class DawnScene
         var overlap = new Dictionary<(string Device, int? Chat, string? Step), (HexLinkClaim Claim, HashSet<string> Files)>();
         foreach (ClaimInput entry in PlanClaims(chat, plan, exchange.Folders))
         {
-            foreach (HexLinkClaim claim in exchange.Board.At(entry.Scope, entry.Draft.Key.Path, entry.Draft.Key.Prefix, now))
+            foreach (HexLinkClaim claim in exchange.At(entry.Scope, entry.Draft.Key.Path, entry.Draft.Key.Prefix, now))
             {
                 if (claim.DeviceId == localId)
                     continue;
@@ -309,7 +327,7 @@ internal sealed partial class DawnScene
             return string.Empty;
         HexLinkDevice? inbound = HexLinkClaimCaller.Of(args);
         string? local = linkServices?.Device.Id;
-        IReadOnlyList<HexLinkClaim> claims = exchange.Board.List(System.Environment.TickCount64);
+        IReadOnlyList<HexLinkClaim> claims = exchange.List(System.Environment.TickCount64);
         var groups = claims.Where(claim => claim.ChatId is not null && claim.DeviceId != local
             && (inbound is null || exchange.Subscribed(inbound.Id, claim.Scope))).GroupBy(claim => (claim.DeviceId, claim.ChatId));
         var text = new StringBuilder();
@@ -352,7 +370,7 @@ internal sealed partial class DawnScene
                 yield break;
             }
             long now = System.Environment.TickCount64;
-            var claims = target is { } want ? exchange.Board.At(want.Scope, want.Relative, want.Prefix, now) : exchange.Board.List(now);
+            var claims = target is { } want ? exchange.At(want.Scope, want.Relative, want.Prefix, now) : exchange.List(now);
             yield return McpToolResult.Text(claims.Count == 0 ? "No current claims."
                 : string.Join('\n', claims.Take(500).Select(claim => $"{claim.Wire}{(claim.Prefix ? "/" : string.Empty)}: {ClaimHolder(claim)}, {claim.Kind.ToString().ToLowerInvariant()}, {ClaimAge(claim)}. {ClaimPlan(claim)}"))
                     + (claims.Count > 500 ? $"\n{claims.Count - 500} more claims. Use path to narrow." : string.Empty)
@@ -360,9 +378,14 @@ internal sealed partial class DawnScene
             yield break;
         }
 
-        if (target is not { } requested || CallerOf(args) is not { } id || ChatById(id) is not { } chat)
+        if (CallerOf(args) is not { } id || ChatById(id) is not { } chat)
         {
-            yield return McpToolResult.Error("Use a Hex agent chat and a path in a folder that was shared or provisioned.");
+            yield return McpToolResult.Error("Only a Hex agent chat can claim or release, this call isn't from one.");
+            yield break;
+        }
+        if (target is not { } requested)
+        {
+            yield return McpToolResult.Error(ClaimRefusal(exchange, supplied));
             yield break;
         }
 
@@ -386,6 +409,36 @@ internal sealed partial class DawnScene
         linkExplicitClaims[(requested.Scope, key)] = new HexLinkClaimDraft(key, ChatName(chat.Id), EtaTick: eta);
         linkClaimWait = 0;
         yield return McpToolResult.Text($"Claimed {supplied}. Release it when finished. Other holders keep their claims.");
+    }
+
+    // Exactly which condition a path failed to meet for a claim, in the order they're checked
+    private string ClaimRefusal(HexLinkClaimExchange exchange, string supplied)
+    {
+        HexLinkWorkspace workspace = linkServices?.Workspace ?? HexLinkWorkspace.Empty;
+        string names = string.Join(", ", workspace.Folders.Select(folder => folder.Name));
+        if (string.IsNullOrWhiteSpace(supplied))
+            return "Say the path to claim.";
+        string input = supplied.Trim().Replace('\\', '/');
+        HexLinkFolder? inside = null;
+        if (Path.IsPathFullyQualified(input))
+            inside = workspace.Folders.Where(folder => PlatformPaths.IsUnder(Path.GetFullPath(input), folder.Path)).MaxBy(folder => folder.Path.Length);
+        else
+        {
+            string first = input.Split('/')[0];
+            inside = workspace.Folders.FirstOrDefault(folder => PlatformPaths.Comparer.Equals(folder.Name, first)) ?? workspace.Folders.FirstOrDefault();
+        }
+        if (inside is null)
+            return $"{supplied} is in no folder of this workspace (folders: {(names.Length == 0 ? "none" : names)}).";
+        if (exchange.Folders.All(each => !PlatformPaths.Comparer.Equals(each.Scope.Folder, inside.Name)))
+        {
+            string chosen = linkServices is null ? string.Empty : string.Join(", ", LinkPeers.Select(peer =>
+                $"{peer.Device.Name}: {(linkServices.ChosenSyncFolders(peer.Device.Id).Count == 0 ? "no folder synced" : string.Join('/', linkServices.ChosenSyncFolders(peer.Device.Id)))}, "
+                + $"its folders {(peer.Workspace.Folders.Count == 0 ? "none" : string.Join('/', peer.Workspace.Folders.Select(folder => folder.Name)))}"));
+            return $"{inside.Name} has no claim scope: it has no pinned authority"
+                + $" ({(inside.Authority is null ? "none" : "pinned")}) and no linked device keeps a folder of that name in sync with it"
+                + $" ({(chosen.Length == 0 ? "no device is linked" : chosen)}). Sync it with Link: Sync Folder, or hex_link_authority it.";
+        }
+        return $"{supplied} is a path claims can't cover (ignored, hidden or not inside {inside.Name}).";
     }
 
     private IEnumerable<McpToolResult?> LinkClaimAgentMessage(JsonObject args)
@@ -418,7 +471,7 @@ internal sealed partial class DawnScene
         string tool = "hex_agent_message";
         if (peer is null)
         {
-            HexLinkClaim? claim = links.Claims.Board.List(System.Environment.TickCount64).FirstOrDefault(claim =>
+            HexLinkClaim? claim = links.Claims.List(System.Environment.TickCount64).FirstOrDefault(claim =>
                 claim.ChatId == chat && (claim.DeviceId.Equals(device, StringComparison.OrdinalIgnoreCase)
                     || claim.DeviceName.Equals(device, StringComparison.OrdinalIgnoreCase)));
             if (claim is not null && links.PeerOf(claim.Via) is { } authority)

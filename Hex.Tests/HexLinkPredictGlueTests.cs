@@ -224,6 +224,53 @@ public sealed class HexLinkPredictGlueTests : IDisposable
     }
 
     [Fact]
+    public void A_desktop_shares_its_model_with_its_own_predictions_switched_off()
+    {
+        var settings = new HexSettings(null, null)
+        {
+            EditPredictions = false,
+            EditPredictionsShare = true,
+            EditPredictionsProvider = PredictionProviders.OLLAMA,
+            EditPredictionsApiUrl = "http://127.0.0.1:11434",
+            EditPredictionsModel = "qwen2.5-coder:7b"
+        };
+
+        PredictionOptions? shared = DawnScene.MakeShareOptions(settings);
+        Assert.NotNull(shared);
+        Assert.Equal("qwen2.5-coder:7b", shared.Model);
+
+        settings.EditPredictionsProvider = PredictionProviders.LINK;
+        Assert.Null(DawnScene.MakeShareOptions(settings));
+
+        settings.EditPredictionsProvider = PredictionProviders.OLLAMA;
+        settings.EditPredictionsModel = string.Empty;
+        Assert.Null(DawnScene.MakeShareOptions(settings));
+    }
+
+    [Fact]
+    public async Task A_laptop_with_no_serving_device_is_told_why()
+    {
+        HexPredictionRelay.Remote = null;
+        HexPredictionRelay.WhyNoRemote = "Desk hasn't let this device use AI completions.";
+        try
+        {
+            var provider = new LinkProvider();
+            PredictionException refused = await Assert.ThrowsAsync<PredictionException>(async () =>
+            {
+                await foreach (string _ in provider.Complete(ASKED, CancellationToken.None))
+                {
+                }
+            });
+            Assert.Equal(PredictionStatus.Refused, refused.Status);
+            Assert.Equal("Desk hasn't let this device use AI completions.", refused.Message);
+        }
+        finally
+        {
+            HexPredictionRelay.WhyNoRemote = null;
+        }
+    }
+
+    [Fact]
     public void Statuses_go_over_the_wire_and_come_back()
     {
         foreach (PredictionStatus status in Enum.GetValues<PredictionStatus>())

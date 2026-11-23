@@ -102,6 +102,11 @@ internal sealed partial class HexCodeIndex
         Stats = new HexHarnessStats(cacheFolder is null ? null : Path.Combine(cacheFolder, "stats.tsv"));
     }
 
+    private int touched;
+
+    /// <summary>Something changed on the disk that the index can't wait two seconds to know of (a file an agent just wrote), the next look is made whatever the last one's age.</summary>
+    public void Touch() => Volatile.Write(ref touched, 1);
+
     /// <summary>The index as it is now, looked at again first when the last look is stale (or it's forced).</summary>
     public HexIndexSnapshot Current(bool force = false)
     {
@@ -124,6 +129,8 @@ internal sealed partial class HexCodeIndex
         long changedTo = -1;
         lock (looking)
         {
+            // A file changed through the harness itself is in the very next answer, not when the last look is stale
+            force |= Interlocked.Exchange(ref touched, 0) == 1;
             string[] now = [.. roots().Select(root => Path.GetFullPath(root).TrimEnd('\\', '/'))];
             HexIndexSnapshot was = snapshot;
             if (!force && Environment.TickCount64 - lastLook < StaleAfter && now.SequenceEqual(was.Roots, StringComparer.OrdinalIgnoreCase))

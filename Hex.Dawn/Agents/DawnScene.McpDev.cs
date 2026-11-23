@@ -47,8 +47,8 @@ internal sealed partial class DawnScene
 
         return
         [
-            new(new McpTool("hex_dev_build", "Build Hex",
-                "Build Hex from the source this Hex was built from, into the folder it runs from, so hex_dev_restart starts the new build. Debug builds of Hex only. Locked build files, including those held by MCP bridges, proxies and the dev guard, are moved aside first and put back if the build fails, so a failed build leaves this Hex and its next start as they were. Says the errors, file:line, when there are any.",
+            new(new McpTool("hex_dev_build", "Rebuild Hex itself (Hex development only)",
+                "Rebuild Hex itself (Hex development only), NOT a build of your project or game: use the shell or hex_run_task for that. It builds Hex from the source this Hex was built from, into the folder it runs from, so hex_dev_restart starts the new build. Debug builds of Hex only. Locked build files, including those held by MCP bridges, proxies and the dev guard, are moved aside first and put back if the build fails, so a failed build leaves this Hex and its next start as they were. Says the errors, file:line, when there are any.",
                 McpSchema.Empty()), null, RunAway: (_, cancel) => DevBuild(cancel)),
             new(new McpTool("hex_dev_test", "Test Hex",
                 "Run Hex's unit tests (Hex.Tests), all of them or those a filter picks, and say how many passed and which failed with why. hex_selftest runs the in-editor self tests in a Hex of its own, the newest build once hex_dev_build has made one.",
@@ -425,14 +425,16 @@ internal sealed partial class DawnScene
     /// can't be written over but can be renamed. Hex's state (data, settings and the like) is left alone: other builds
     /// run from agents' scratch in data, and their files aren't this build's to move. Says what was moved where, to be put back.
     /// </summary>
-    internal static List<(string From, string Aside)> MoveLockedAside(string folder)
+    internal static List<(string From, string Aside)> MoveLockedAside(string folder, bool? everyImage = null)
     {
         var moved = new List<(string, string)>();
         // Previous builds can still be mapped by Hex or its helpers, even across multiple builds in the same process.
         string suffix = "." + Guid.NewGuid().ToString("N") + DEV_ASIDE;
+        // Off Windows nothing says a file is in use, and writing over a mapped image kills the process, so every image is renamed
+        bool images = everyImage ?? !OperatingSystem.IsWindows();
         foreach (string file in Hex.Core.HexDevBuilds.BuildFiles(folder))
         {
-            if (file.EndsWith(DEV_ASIDE, StringComparison.OrdinalIgnoreCase) || !IsLocked(file))
+            if (file.EndsWith(DEV_ASIDE, StringComparison.OrdinalIgnoreCase) || (images ? !Hex.Core.HexDevBuilds.IsImage(file) : !IsLocked(file)))
                 continue;
 
             string aside = file + suffix;

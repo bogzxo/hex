@@ -56,6 +56,8 @@ internal sealed partial class HexLinkTree
     private readonly ConcurrentDictionary<string, HashStamp> hashes = new(StringComparer.Ordinal);
 
     private readonly Func<HexExcludes> excludes;
+    private HexIgnoreFile? lastLinkRules;
+    internal HexLinkIgnore LinkIgnore { get; }
     private volatile bool streamLarge;
     private readonly ConcurrentDictionary<string, string> movedCase = new(StringComparer.OrdinalIgnoreCase);
 
@@ -63,6 +65,7 @@ internal sealed partial class HexLinkTree
     {
         Folder = folder;
         Root = Path.GetFullPath(folder.Path);
+        LinkIgnore = HexLinkIgnore.ForRoot(Root);
         this.excludes = excludes ?? (() => HexExcludes.Usual);
         this.streamLarge = streamLarge;
         if (cacheDirectory is not null && !PlatformPaths.IsUnder(cacheDirectory, Root))
@@ -76,8 +79,9 @@ internal sealed partial class HexLinkTree
 
     internal const int MaximumHoldNotices = 80;
     internal HexLinkHoldStore? Holds { get; init; }
-    internal string[] HeldPaths() => Holds is { } holds
-        ? [.. holds.List().Take(MaximumHoldNotices).Select(entry => entry.Path)] : [];
+    private string[] HeldPaths(HexIgnoreFile? linkRules) => Holds is { } holds
+        ? [.. holds.List().Select(entry => entry.Path)
+            .Where(path => !HexLinkIgnore.Matches(linkRules, path[(Folder.Name.Length + 1)..])).Take(MaximumHoldNotices)] : [];
 
     internal bool HoldsRelative(string relative) => Holds?.IsHeld(Folder.Name + "/" + relative) == true;
 
@@ -105,18 +109,21 @@ internal sealed partial class HexLinkTree
         lock (scan)
         {
             RequireRoot();
+            HexIgnoreFile? linkRules = LinkIgnore.Read();
             long version = Volatile.Read(ref scanVersion), holdRevision = Holds?.Revision ?? 0;
             if (shareFreshScans && reuse && !verify && !provision && lastScan is { } previous &&
-                version == lastScanVersion && holdRevision == lastHoldRevision && Environment.TickCount64 - scannedAt < 250)
+                version == lastScanVersion && holdRevision == lastHoldRevision && ReferenceEquals(linkRules, lastLinkRules) &&
+                Environment.TickCount64 - scannedAt < 250)
                 return previous;
             LoadCache();
-            HexLinkManifest manifest = Scan(verify, provision);
+            HexLinkManifest manifest = Scan(verify, provision, linkRules);
             SaveCache(manifest.Files);
             if (shareFreshScans && !provision)
             {
                 lastScan = manifest;
                 lastScanVersion = version;
                 lastHoldRevision = holdRevision;
+                lastLinkRules = linkRules;
                 scannedAt = Environment.TickCount64;
             }
             return manifest;
@@ -127,10 +134,10 @@ internal sealed partial class HexLinkTree
         Func<IReadOnlyDictionary<string, string?>?, Func<string, bool>> select, CancellationToken cancel, bool verify = false)
     {
         lock (scan)
-            return Scan(verify, provision: false, select, cancel);
+            return Scan(verify, provision: false, LinkIgnore.Read(), select, cancel);
     }
 
-    private HexLinkManifest Scan(bool verify, bool provision,
+    private HexLinkManifest Scan(bool verify, bool provision, HexIgnoreFile? linkRules,
         Func<IReadOnlyDictionary<string, string?>?, Func<string, bool>>? select = null, CancellationToken cancel = default)
     {
         cancel.ThrowIfCancellationRequested();
@@ -156,7 +163,8 @@ internal sealed partial class HexLinkTree
             {
                 RecordGitWarning(issues, string.Empty, listed.Error);
                 InRepository = true;
-                relative = [.. listed.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.Ordinal).Take(MOST_FILES + 1)];
+                relative = [.. listed.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries)
+                    .Where(path => !HexLinkIgnore.Matches(linkRules, path)).Distinct(StringComparer.Ordinal).Take(MOST_FILES + 1)];
                 GitResult at = headAlreadyRead ?? GitProcess.Run(Root, ["rev-parse", "--verify", "--quiet", "HEAD"]);
                 if (at.Exit != 1 && (!at.Ok || !HexLinkGit.IsCommitId(at.Output.Trim())))
                     throw new IOException($"Git could not read HEAD in {Folder.Name}: {at.Why}");
@@ -175,7 +183,10 @@ internal sealed partial class HexLinkTree
         }
 
         bool onDiskNames = relative is null;
-        relative ??= Walk(systemFiles is null ? null : OmitSystemFile);
+        relative ??= Walk(systemFiles is null ? null : OmitSystemFile, linkRules);
+        if (!onDiskNames && !relative.Contains(HexLinkIgnore.FileName, PlatformPaths.Comparer) &&
+            File.Exists(Path.Combine(Root, HexLinkIgnore.FileName)))
+            relative.Add(HexLinkIgnore.FileName);
         // Detect a capped root listing before nested repositories replace any of its entries.
         CheckCount(relative.Count);
         var nested = layout is not null ? AddNestedGitFiles(relative, issues, provision, layout) : null;
@@ -206,7 +217,7 @@ internal sealed partial class HexLinkTree
                 NoteCase(each);
                 path = each;
             }
-            if (actual.Add(path))
+            if (!HexLinkIgnore.Matches(linkRules, path) && actual.Add(path))
                 paths.Add(path);
         }
 
@@ -217,7 +228,7 @@ internal sealed partial class HexLinkTree
             for (int i = 0; i < paths.Count; i++)
             {
                 cancel.ThrowIfCancellationRequested();
-                found[i] = FileOf(paths[i], verify);
+                found[i] = FileOf(paths[i], verify, linkRules);
             }
         }
         else
@@ -229,7 +240,7 @@ internal sealed partial class HexLinkTree
             };
             try
             {
-                Parallel.For(0, paths.Count, options, i => found[i] = FileOf(paths[i], verify));
+                Parallel.For(0, paths.Count, options, i => found[i] = FileOf(paths[i], verify, linkRules));
             }
             catch (AggregateException error)
             {
@@ -257,7 +268,7 @@ internal sealed partial class HexLinkTree
         return new HexLinkManifest(Folder.Name, head, files, root, NestedHeads: nested,
             CaseSensitive: PlatformPaths.Comparison == StringComparison.Ordinal, Checkout: checkout, Authority: Folder.Authority, GitIssues: issues.Count == 0 ? null : issues, ProvisionIssues: fileIssues,
             IncludeSystemFiles: Folder.IncludeSystemFiles, ExcludedSystemFiles: systemFiles is { Count: > 0 }
-                ? [.. systemFiles.Order(StringComparer.Ordinal)] : null, HeldPaths: HeldPaths());
+                ? [.. systemFiles.Order(StringComparer.Ordinal)] : null, HeldPaths: HeldPaths(linkRules));
     }
 
     // The first commit of the repository, worked out once per head (it only moves if history is rewritten). A history
@@ -282,11 +293,12 @@ internal sealed partial class HexLinkTree
     }
 
     /// <summary>A file of the tree, with unreadable paths represented explicitly.</summary>
-    public HexLinkTreeFile? FileOf(string relative) => FileOf(relative, verify: false);
+    public HexLinkTreeFile? FileOf(string relative) => FileOf(relative, verify: false, LinkIgnore.Read());
 
-    private HexLinkTreeFile? FileOf(string relative, bool verify)
+    private HexLinkTreeFile? FileOf(string relative, bool verify, HexIgnoreFile? linkRules)
     {
-        if (!Plain(relative) || SyncArtifact(relative) || Hidden(relative) || RepositoryUnavailable(relative))
+        if (!Plain(relative) || SyncArtifact(relative) || HexLinkIgnore.Matches(linkRules, relative) ||
+            Hidden(relative) || RepositoryUnavailable(relative))
             return null;
         string wire = Folder.Name + "/" + relative;
         if (wire.Length > HexLinkFiles.MOST_PATH)
@@ -353,6 +365,8 @@ internal sealed partial class HexLinkTree
 
     internal bool Gone(string relative)
     {
+        if (HexLinkIgnore.Matches(LinkIgnore.Read(), relative))
+            return false;
         if (Holds?.Get(Folder.Name + "/" + relative) is { } held)
             return held.BaseDeleted;
         if (!Plain(relative) || Hidden(relative) || RepositoryUnavailable(relative))
@@ -437,6 +451,8 @@ internal sealed partial class HexLinkTree
     {
         if (ExcludesSystemPath(relative))
             return true;
+        if (!folder && HexLinkIgnore.IsRulesFile(relative))
+            return false;
         HexExcludes rules = excludes();
         if (rules.Hidden(relative, folder))
             return true;
@@ -533,7 +549,7 @@ internal sealed partial class HexLinkTree
     }
 
     // The files of a folder that isn't a repository, by walking it, what builds make left out
-    private List<string> Walk(Action<string>? omitted)
+    private List<string> Walk(Action<string>? omitted, HexIgnoreFile? linkRules)
     {
         var found = new List<string>();
         var folders = new Stack<string>();
@@ -549,7 +565,7 @@ internal sealed partial class HexLinkTree
                     omitted?.Invoke(relative);
                     continue;
                 }
-                if (SyncArtifact(relative) || Hidden(relative))
+                if (SyncArtifact(relative) || Hidden(relative) || HexLinkIgnore.Matches(linkRules, relative))
                     continue;
                 found.Add(relative);
                 CheckCount(found.Count);
@@ -561,7 +577,7 @@ internal sealed partial class HexLinkTree
                 if (ExcludesSystemPath(relative))
                     omitted?.Invoke(relative);
                 else if (!SKIPPED.Contains(Path.GetFileName(child)) && !HexLinkHoldStore.StorageArtifact(Path.GetFileName(child))
-                    && !Hidden(relative, folder: true))
+                    && !Hidden(relative, folder: true) && !HexLinkIgnore.Matches(linkRules, relative, folder: true))
                     folders.Push(child);
             }
         }
@@ -570,16 +586,18 @@ internal sealed partial class HexLinkTree
     }
 
     /// <summary>
-    /// Which of some paths inside the folder the tree leaves out: in a repository what git ignores, otherwise what's
-    /// under .git, bin, obj or node_modules.
+    /// Which paths the tree leaves out under Link's ignore file, Git rules and workspace excludes.
+    /// Outside a repository the usual build folders are left out as well.
     /// </summary>
     public HashSet<string> Ignored(IReadOnlyCollection<string> relative)
     {
         using var timing = HexLinkSyncTiming.Measure("tree.git-ignore", relative.Count);
+        HexIgnoreFile? linkRules = LinkIgnore.Read();
         var ignored = new HashSet<string>(StringComparer.Ordinal);
         foreach (string each in relative)
         {
-            if (!Plain(each) || SyncArtifact(each) || Hidden(each) || RepositoryUnavailable(each))
+            if (!Plain(each) || SyncArtifact(each) || HexLinkIgnore.Matches(linkRules, each) ||
+                Hidden(each) || RepositoryUnavailable(each))
                 ignored.Add(each);
         }
 
@@ -860,6 +878,9 @@ internal sealed class HexLinkTreeWatch : IDisposable
         if (relative.StartsWith("..", StringComparison.Ordinal) || HexLinkTree.SyncArtifact(relative) ||
             relative.Split('/').Any(part => part.Equals(".git", StringComparison.OrdinalIgnoreCase)))
             return;
+        bool rulesChanged = HexLinkIgnore.IsRulesFile(relative);
+        if (rulesChanged)
+            tree.LinkIgnore.Invalidate();
         bool folder = Directory.Exists(full);
         // A folder only changed (its entries written, its time touched): each entry brings an event of its own, and
         // a dropped one an Error and a whole look. Looking the whole tree over for it made a checkout of many files
@@ -869,7 +890,12 @@ internal sealed class HexLinkTreeWatch : IDisposable
         lock (pending)
         {
             // A folder made, renamed or deleted takes its files with it, the whole tree looked over
-            if (tree.ExcludesSystemPath(relative) || folder || pending.Count > 10_000)
+            if (rulesChanged)
+            {
+                everything = true;
+                pending.Add(relative);
+            }
+            else if (tree.ExcludesSystemPath(relative) || folder || pending.Count > 10_000)
                 everything = true;
             else
                 pending.Add(relative);
@@ -970,6 +996,7 @@ internal sealed class HexLinkTreeWatch : IDisposable
                 if (verify)
                     verifyAt = Environment.TickCount64 + (long)VerifyEvery.TotalMilliseconds;
                 var then = known;
+                HexIgnoreFile? linkRules = tree.LinkIgnore.Read();
                 var next = new Dictionary<string, (string? Hash, bool? Executable, bool Unavailable)>(StringComparer.Ordinal);
                 bool unavailable = false;
                 foreach (HexLinkTreeFile file in now.Files)
@@ -984,7 +1011,8 @@ internal sealed class HexLinkTreeWatch : IDisposable
                 Dictionary<string, int>? added = null;
                 foreach (var (path, hash) in then)
                 {
-                    if (next.ContainsKey(path) || replaced?.Contains(path) == true)
+                    string relative = path[prefix.Length..];
+                    if (next.ContainsKey(path) || replaced?.Contains(path) == true || HexLinkIgnore.Matches(linkRules, relative))
                         continue;
                     added ??= AddedNames(then, changes);
                     if (!tree.HoldsRelative(path[prefix.Length..]) && added.Remove(path, out int index) && index >= 0 &&
@@ -995,7 +1023,7 @@ internal sealed class HexLinkTreeWatch : IDisposable
                         tree.NoteCase(moved.Path[prefix.Length..]);
                         continue;
                     }
-                    if (!unavailable && tree.Gone(path[prefix.Length..]))
+                    if (!unavailable && tree.Gone(relative))
                         changes.Add(new HexLinkTreeChange(path, null, Deleted: true));
                     else
                         next[path] = hash;
