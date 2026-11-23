@@ -1,3 +1,16 @@
+# Hex 3.4.5
+
+## Hex Link
+
+- File claims show on every device that keeps a folder in sync, also when a third device joins that never pinned the folder's authority. Claims follow the authority the synced devices agree on and pass through it between the others.
+- A private worktree on a device whose folder came only from Sync Folder publishes to the folder's authority. Before, it said there was no authority to publish to.
+- Publishing refuses when the authority's folder of the same name is a different repository, and says so. Before, it failed with a list of nested repositories that didn't match.
+- Link Chat is a tab of the right side, next to Properties, instead of a column of its own. Each message shows a dot in its sender's colour.
+- Each device can pick its own colour in Devices, under This device's details. Only that device can change it. Its caret, the dot beside the files it's editing, its badges and its Link Chat messages use that colour on every linked screen.
+- Hovering or clicking the chips on a device's row in the agents list now highlights the row and opens or closes it, as the rest of the row does.
+- An agent whose private worktree was discarded can still release its claims and talk to other agents.
+- `hex_link_claims` has a `status` action that shows the claim folders, scopes and routes this device has, for finding out why claims don't reach another device.
+
 # Hex 3.4.2
 
 ## Hex Link
@@ -29,8 +42,8 @@
 
 ## Known issues
 
-- File claims made on one device don't yet show on the other in a folder kept in sync with Sync Folder, so the other side isn't warned. Hold changes to a file instead when two people work on it.
-- Publishing a private worktree from a device whose folder came from Sync Folder can end with "A task was canceled." Publish from the device that owns the folder, or copy the change across.
+- File claims made on one device don't yet show on the other in a folder kept in sync with Sync Folder, so the other side isn't warned. Hold changes to a file instead when two people work on it. Fixed in 3.4.5.
+- Publishing a private worktree from a device whose folder came from Sync Folder can end with "A task was canceled." Publish from the device that owns the folder, or copy the change across. Fixed in 3.4.5.
 
 # Hex 3.4.0 Modafinil
 
