@@ -345,6 +345,7 @@ internal sealed partial class DawnScene
         }
 
         debugger.Quit();
+        StopDiscord();
         closeConfirmed = true;
         Engine.WindowManager.Close();
     }

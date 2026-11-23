@@ -685,7 +685,8 @@ internal sealed partial class DawnScene : Scene
         panelTicks
             .Add("spelling", UpdateSpelling)
             .Add("mcp", UpdateMcp)
-            .Add("link", UpdateLink);
+            .Add("link", UpdateLink)
+            .Add("discord", UpdateDiscord);
         if (!HexAi.Off)
             panelTicks.Add("noon", UpdateNoon).Add("chats_kept", UpdateChatsKept).Add("agent_data", UpdateAgentData);
         panelTicks
@@ -765,6 +766,7 @@ internal sealed partial class DawnScene : Scene
     {
         System.Environment.ExitCode = failures == 0 ? 0 : 1;
         Backups.DropAll();
+        StopDiscord();
         closeConfirmed = true;
         Engine.WindowManager.Close();
     }

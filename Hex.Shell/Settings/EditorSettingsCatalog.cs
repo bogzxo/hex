@@ -33,6 +33,9 @@ public static class EditorSettingsCatalog
     /// </summary>
     public const string AGENTS = "AI · Agents", AI = "AI · Prediction";
 
+    /// <summary>The Discord section of the editor: what Rich Presence shows of what is being edited (docs/discord.md).</summary>
+    public const string DISCORD = "Editor · Discord";
+
     /// <summary>
     /// The Link part. Connection is this machine's own side (on or off, its name, port and whether it's found), Sync what
     /// travels between the machines and what doesn't, Agents what a linked device's agents may do here (the slot of the
@@ -51,7 +54,7 @@ public static class EditorSettingsCatalog
     /// The sections in the order they're shown inside their parts, the editor's text first and the looks first of how
     /// Hex looks, they're the whole of the rest of it in one go.
     /// </summary>
-    public static readonly string[] Sections = [TEXT, CARET, CODE, SAVE, FILES, GIT, RUN, KEYS, DESIGNER, STARTUP, WindowsSource.GROUP,
+    public static readonly string[] Sections = [TEXT, CARET, CODE, SAVE, FILES, GIT, RUN, KEYS, DESIGNER, STARTUP, DISCORD, WindowsSource.GROUP,
         LOOKS, THEME, INTERFACE, GLASS, EFFECTS, BACKDROP, BACKDROP_CODE, BACKDROP_TERMINALS, RENDERING,
         AGENTS, AI, LINK, LINK_SYNC, LINK_AGENTS, LINK_PUBLISH];
 
@@ -243,6 +246,15 @@ public static class EditorSettingsCatalog
         new("edit_predictions_share", HexText.Get("settings_catalog.edit_predictions_share_title"), UIFormKind.Flag, HexText.Get("settings_catalog.edit_predictions_share_help"), AI),
         new("edit_predictions_terminal", HexText.Get("settings_catalog.edit_predictions_terminal_title"), UIFormKind.Flag, HexText.Get("settings_catalog.edit_predictions_terminal_help"), AI),
 
+        new(Hex.Core.HexSettings.DISCORD_PRESENCE, HexText.Get("settings_catalog.discord_presence_title"), UIFormKind.Flag,
+            HexText.Get(Hex.Core.HexDiscord.Configured ? "settings_catalog.discord_presence_help" : "settings_catalog.discord_presence_help_unconfigured"), DISCORD),
+        new("discord_show_file", HexText.Get("settings_catalog.discord_show_file_title"), UIFormKind.Flag, HexText.Get("settings_catalog.discord_show_file_help"), DISCORD),
+        new("discord_show_workspace", HexText.Get("settings_catalog.discord_show_workspace_title"), UIFormKind.Flag, HexText.Get("settings_catalog.discord_show_workspace_help"), DISCORD),
+        new("discord_show_language_icon", HexText.Get("settings_catalog.discord_show_language_icon_title"), UIFormKind.Flag, HexText.Get("settings_catalog.discord_show_language_icon_help"), DISCORD),
+        new("discord_idle_minutes", HexText.Get("settings_catalog.discord_idle_minutes_title"), UIFormKind.Whole, HexText.Get("settings_catalog.discord_idle_minutes_help"), DISCORD, Least: 0.0f, Most: 240.0f, Unit: "min"),
+        new("discord_hide_globs", HexText.Get("settings_catalog.discord_hide_globs_title"), UIFormKind.List, HexText.Get("settings_catalog.discord_hide_globs_help"), DISCORD,
+            KeyPlaceholder: HexText.Get("settings_catalog.discord_hide_globs_placeholder"), ValuePlaceholder: HexText.Get("settings_catalog.discord_hide_globs_add")),
+
         new(GIT_ENABLED, HexText.Get("settings_catalog.git_enabled_title"), UIFormKind.Flag, HexText.Get("settings_catalog.git_enabled_help"), GIT),
         new("git_blame", HexText.Get("settings_catalog.git_blame_title"), UIFormKind.Flag, HexText.Get("settings_catalog.git_blame_help"), GIT),
         new("git_autofetch", HexText.Get("settings_catalog.git_autofetch_title"), UIFormKind.Flag, HexText.Get("settings_catalog.git_autofetch_help"), GIT),
@@ -296,6 +308,7 @@ public static class EditorSettingsCatalog
         "auto_save_delay" => "auto_save",
         "git_autofetch_interval" => "git_autofetch",
         "backdrop_wrap_margin" or "wrap_flow" => "backdrop_wrap",
+        "discord_show_file" or "discord_show_workspace" or "discord_show_language_icon" or "discord_idle_minutes" or "discord_hide_globs" => "discord_presence",
         "backdrop_opacity" or "backdrop_scale" or "backdrop_across" or "backdrop_up" or "backdrop_stretch" or "backdrop_wrap" => "backdrop",
         _ when key.StartsWith("terminal_backdrop_", StringComparison.Ordinal) => "backdrop_terminal",
         _ when key.StartsWith("glass_", StringComparison.Ordinal) => "effect_glass",
@@ -454,6 +467,13 @@ public static class EditorSettingsCatalog
         ["edit_predictions_workspace"] = Values.Bool(true),
         ["edit_predictions_share"] = Values.Bool(false),
         ["edit_predictions_terminal"] = Values.Bool(false),
+
+        [Hex.Core.HexSettings.DISCORD_PRESENCE] = Values.Bool(false),
+        ["discord_show_file"] = Values.Bool(true),
+        ["discord_show_workspace"] = Values.Bool(true),
+        ["discord_show_language_icon"] = Values.Bool(true),
+        ["discord_idle_minutes"] = new NumberValue(10.0f),
+        ["discord_hide_globs"] = Horizon.HIDL.Library.Natives.List(Hex.Core.HexSettings.UsualDiscordHideGlobs),
 
         // Remembered once the first notice of what predictions send was given, never a row
         ["edit_predictions_notice_done"] = Values.Bool(false),

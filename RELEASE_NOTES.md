@@ -1,3 +1,9 @@
+# Hex 3.4.7 (unreleased)
+
+## Discord
+
+- Discord Rich Presence, off until you switch on Settings > Editor > Discord presence. It shows the file you are editing (name only, never a path), the workspace, a language picture, how long you have been in the workspace, and a Get Hex button. Files git ignores, files in a private Link worktree and patterns such as `**/.env*` and `**/secrets/**` are never named, and a folder's settings can only switch the sharing off. See `docs/discord.md`.
+
 # Hex 3.4.6
 
 ## Hex Link

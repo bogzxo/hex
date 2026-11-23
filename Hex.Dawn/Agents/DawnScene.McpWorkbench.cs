@@ -321,7 +321,7 @@ internal sealed partial class DawnScene
         // Where agents' own data lives is the person's to say, an agent could point it somewhere it controls
         if (HexSettings.AgentsCannotSet(key))
         {
-            yield return McpToolResult.Error("agent_data_folder decides where agent data is kept, it's only changed by hand in the settings window.");
+            yield return McpToolResult.Error($"{key} is only changed by hand in the settings window (agent data is kept where it says, and Discord presence shares what you do outside Hex).");
             yield break;
         }
 

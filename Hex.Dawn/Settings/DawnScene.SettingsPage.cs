@@ -390,6 +390,12 @@ internal sealed partial class DawnScene
             "edit_predictions_workspace" => Values.Bool(hex.settings.EditPredictionsWorkspace),
             "edit_predictions_share" => Values.Bool(hex.settings.EditPredictionsShare),
             "edit_predictions_terminal" => Values.Bool(hex.settings.EditPredictionsTerminal),
+            HexSettings.DISCORD_PRESENCE => Values.Bool(hex.settings.DiscordPresence),
+            "discord_show_file" => Values.Bool(hex.settings.DiscordShowFile),
+            "discord_show_workspace" => Values.Bool(hex.settings.DiscordShowWorkspace),
+            "discord_show_language_icon" => Values.Bool(hex.settings.DiscordShowLanguageIcon),
+            "discord_idle_minutes" => new NumberValue(hex.settings.DiscordIdleMinutes),
+            "discord_hide_globs" => Natives.List(hex.settings.DiscordHideGlobs),
             EditorSettingsCatalog.LINK_SYSTEM_FILE_FOLDERS => Natives.List(hex.settings.LinkSystemFileFolders),
             "files_associations" => UIFormPairs.Value(hex.settings.FileAssociations.Select(pair => (pair.Key, pair.Value))),
             "disabled_extensions" => Natives.List(hex.ExtensionNames().Where((_, at) => !hex.extensions.All[at].Enabled)),
@@ -779,6 +785,24 @@ internal sealed partial class DawnScene
                     break;
                 case ("edit_predictions_terminal", BooleanValue predictsInTerminal):
                     settings.EditPredictionsTerminal = predictsInTerminal.Value;
+                    break;
+                case (HexSettings.DISCORD_PRESENCE, BooleanValue discordOn):
+                    settings.DiscordPresence = discordOn.Value;
+                    break;
+                case ("discord_show_file", BooleanValue discordFile):
+                    settings.DiscordShowFile = discordFile.Value;
+                    break;
+                case ("discord_show_workspace", BooleanValue discordWorkspace):
+                    settings.DiscordShowWorkspace = discordWorkspace.Value;
+                    break;
+                case ("discord_show_language_icon", BooleanValue discordIcon):
+                    settings.DiscordShowLanguageIcon = discordIcon.Value;
+                    break;
+                case ("discord_idle_minutes", NumberValue discordIdle):
+                    settings.DiscordIdleMinutes = (int)Math.Clamp(MathF.Round(discordIdle.Value), 0.0f, 240.0f);
+                    break;
+                case ("discord_hide_globs", ListValue discordHide):
+                    settings.DiscordHideGlobs = HexSettings.Patterns(discordHide);
                     break;
                 case ("files_associations", ObjectValue associations):
                     // the open files pick the new languages up next tick, see UpdateLanguageModes
