@@ -89,7 +89,7 @@ internal sealed partial class DawnScene
     {
         var services = linkServices ?? throw new IOException("Link is off.");
         var folder = draft.SharedFolder;
-        var pin = services.FolderAuthorities.Of(folder) ?? throw new IOException("This worktree has no pinned folder authority.");
+        var pin = LinkPublishPin(services, folder) ?? throw new IOException("This worktree has no pinned folder authority.");
         HexLinkWorktreeGatePolicy? policy;
         if (pin.DeviceId == services.Device.Id)
             policy = LinkReadOwnedWorktreeGate(services, folder with { Authority = pin });
