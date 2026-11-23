@@ -345,7 +345,7 @@ internal sealed partial class DawnScene
         new(new McpTool("hex_link_claims", "Coordinate edits with linked devices",
             "List current claims or take and release one advisory claim for the calling chat. Agents must coordinate before editing another holder's path.",
             McpSchema.Object([
-                ("action", McpSchema.OneOf("What to do, list by default.", "list", "claim", "release")),
+                ("action", McpSchema.OneOf("What to do, list by default.", "list", "claim", "release", "status")),
                 ("path", McpSchema.String("A shared file or directory path. Required for claim and release. Optional list filter.")),
                 ("prefix", McpSchema.Flag("The path is a directory and includes all descendants.")),
                 ("eta_seconds", McpSchema.Integer("Optional estimate until you finish, in seconds."))
@@ -362,6 +362,21 @@ internal sealed partial class DawnScene
         exchange.RefreshFolders();
         string action = args.String("action") ?? "list", supplied = args.String("path") ?? string.Empty;
         var target = ClaimPathOf(exchange.Folders, supplied, args.Flag("prefix"));
+        if (action == "status")
+        {
+            string folders = string.Join('\n', exchange.Folders.Select(folder =>
+                $"{folder.Scope.Folder}#{folder.Scope.Identity[..Math.Min(8, folder.Scope.Identity.Length)]}: "
+                + (folder.PairedWith.Length > 0 ? $"synced with {string.Join('/', folder.PairedWith.Split('\n').Select(id => id[..Math.Min(8, id.Length)]))}"
+                    : $"authority {folder.AuthorityId[..Math.Min(8, folder.AuthorityId.Length)]}")
+                + (folder.Folder.Authority is { } pin ? $", pinned {pin.DeviceId[..Math.Min(8, pin.DeviceId.Length)]}" : ", not pinned")));
+            string chosen = linkServices is null ? string.Empty : string.Join('\n', LinkPeers.Select(peer =>
+                $"{peer.Device.Name}: we chose {string.Join('/', linkServices.ChosenSyncFolders(peer.Device.Id))}"));
+            string routes = string.Join('\n', exchange.RouteStatus());
+            yield return McpToolResult.Text($"Claim folders:\n{(folders.Length > 0 ? folders : "none")}"
+                + $"\nSync choices:\n{(chosen.Length > 0 ? chosen : "none")}\nRoutes:\n{(routes.Length > 0 ? routes : "none")}"
+                + $"\nExplicit claims here: {linkExplicitClaims.Count}. Board: {exchange.Board.List(System.Environment.TickCount64).Count}.");
+            yield break;
+        }
         if (action == "list")
         {
             if (supplied.Length > 0 && target is null)

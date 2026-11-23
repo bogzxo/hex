@@ -280,6 +280,9 @@ internal sealed partial class HexSettings
     /// <summary>Whether the user approved requesting a router mapping for the public listener.</summary>
     public bool LinkMapPublicPort;
 
+    /// <summary>The colour this device picked for itself on Link, #rrggbb, empty for the one its id gives it. Only it sets it.</summary>
+    public string LinkColour = string.Empty;
+
     /// <summary>Absolute local workspace roots that opt out of Link's default operating system file exclusions.</summary>
     public string[] LinkSystemFileFolders = [];
 

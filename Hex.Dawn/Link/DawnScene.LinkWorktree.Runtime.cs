@@ -300,9 +300,22 @@ internal sealed partial class DawnScene
 
     private HexLinkDraftRoute? LinkPrivatePublishRoute(HexLinkFolder folder)
     {
-        if (CurrentLinkPublication is not { } active ||
-            active.Services.FolderAuthorities.Of(folder) is not { } pin)
+        if (CurrentLinkPublication is not { } active || LinkPublishPin(active.Services, folder) is not { } pin)
             return null;
-        return active.Publication.Route(folder, link?.PeerOf(pin.DeviceId));
+        return active.Publication.Route(folder with { Authority = pin }, link?.PeerOf(pin.DeviceId));
+    }
+
+    // The authority a private worktree's folder publishes to: the one pinned here or, for a folder kept in sync with its
+    // authority that never pinned it here, the one the devices it's synced with say it is, as its claims are scoped by.
+    // A replica Sync Folder alone made said there was no authority to publish to
+    private HexLinkAuthority? LinkPublishPin(IHexLinkServices services, HexLinkFolder folder)
+    {
+        if ((services.FolderAuthorities.Of(folder) ?? folder.Authority) is { } pin)
+            return pin;
+        return LinkPeers.Where(peer => services.ChosenSyncFolders(peer.Device.Id).Contains(folder.Name, PlatformPaths.Comparer)
+                || peer.ChosenSyncFolders.Contains(folder.Name, PlatformPaths.Comparer))
+            .Select(peer => peer.Workspace.Folders.FirstOrDefault(other => PlatformPaths.Comparer.Equals(other.Name, folder.Name))?.Authority)
+            .OfType<HexLinkAuthority>().Distinct().ToArray() is [var agreed] && LinkPeers.Any(peer => peer.Device.Id == agreed.DeviceId)
+            ? agreed : null;
     }
 }

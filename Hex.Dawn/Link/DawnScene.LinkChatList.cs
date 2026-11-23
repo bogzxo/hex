@@ -303,7 +303,7 @@ internal sealed partial class DawnScene
         string tip = Said("link.fleet_head_tip", ("device", device.Name), ("there", LinkRightsSaid(device.Granted)));
         if (!device.Online)
             tip += "\n" + LinkChatOfflineReason(device.Name);
-        head.Add(new ChatListHeadButton(this, key, open, shown => SetLinkChatOpen(key, shown))
+        var button = head.Add(new ChatListHeadButton(this, key, open, shown => SetLinkChatOpen(key, shown))
         {
             Tooltip = tip,
             OnContextMenu = at => ContextMenu.Show(chrome, at, LinkDeviceMenu(device))
@@ -312,7 +312,7 @@ internal sealed partial class DawnScene
         {
             Bold = true, Dim = !device.Online, Color = device.Online ? null : LinkChatDimInk(),
             TextScale = 0.13f, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft,
-            Position = new Vector2(inset, -3), Align = Origin.Left, Tooltip = tip
+            Position = new Vector2(inset, -3), Align = Origin.Left
         });
         var status = device.Online ? LinkChatChip(Said("link.device_connected"), UIBadgeTone.Success)
             : LinkChatChip(Said("link.chats_offline"));
@@ -340,7 +340,7 @@ internal sealed partial class DawnScene
         var totals = head.Add(new Label
         {
             TextScale = 0.11f, Dim = true, Color = LinkChatDimInk(), Anchor = Origin.TopLeft, Pivot = Origin.TopLeft,
-            Position = new Vector2(inset, -26), Align = Origin.Left, Tooltip = summary
+            Position = new Vector2(inset, -26), Align = Origin.Left
         });
         List<Badge> rights = LinkRightsChips(device.Granted);
         Badge? needsYou = counts.NeedsYou > 0
@@ -349,13 +349,23 @@ internal sealed partial class DawnScene
         var lower = new List<Badge>(rights);
         if (needsYou is not null)
             lower.Add(needsYou);
+        // What's drawn over the head says its piece in the head's own tooltip: one with a tooltip of its own takes the
+        // pointer, and hovering or clicking a chip neither lit the device's row nor opened or closed it
+        var said = new List<string> { tip };
+        if (device.Online && device.Route.Length > 0 && upper.Count > 1 && upper[1].Tooltip.Length > 0)
+            said.Add(upper[1].Tooltip);
+        if (!device.Online)
+            said.Add(status.Tooltip);
         foreach (Badge chip in upper.Concat(lower))
         {
+            chip.Tooltip = string.Empty;
             chip.Anchor = Origin.TopRight;
             chip.Pivot = Origin.TopRight;
             chip.Colour ??= LinkBadgeColour(chip.Tone);
             head.Add(chip);
         }
+
+        button.Tooltip = string.Join('\n', said.Distinct());
 
         string glyph = $"$({(open ? "chevron-down" : "chevron-right")}) [color:{HexColour(LinkDeviceTint(device.Id, Skin))}]$(vm)[/color] ";
         int fitted = -1;

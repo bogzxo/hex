@@ -29,6 +29,7 @@ internal sealed class HexLinkClaimExchange(IHexLinkServices services)
         public HashSet<HexLinkClaimScope> PendingSnapshots { get; } = [];
         public long Retry;
         public bool Asking, NeedsSnapshot;
+        public string Refused = string.Empty;
     }
 
     private sealed class LocalHead
@@ -90,10 +91,7 @@ internal sealed class HexLinkClaimExchange(IHexLinkServices services)
             peers = [.. routes.Values.Select(route => route.Peer).Where(peer => !peer.IsClosed)];
         var chosen = peers.ToDictionary(peer => peer.Device.Id, peer => services.ChosenSyncFolders(peer.Device.Id));
         var now = services.Workspace.Folders.Where(folder => HexLinkClaims.ValidPath(folder.Name, false) && !folder.Name.Contains('/'))
-            .Select(folder => Paired(folder, peers, chosen) ?? (folder.Authority is { } authority
-                ? new HexLinkClaimFolder(folder, new HexLinkClaimScope(folder.Name,
-                    HexLinkFiles.Hash(Encoding.UTF8.GetBytes($"{authority.DeviceId}\n{authority.Epoch}\n{folder.Name}"))), authority.DeviceId)
-                : null))
+            .Select(folder => Scoped(folder, peers, chosen))
             .OfType<HexLinkClaimFolder>().Take(HexLinkHost.MOST_TREES).ToArray();
         lock (gate)
         {
@@ -109,16 +107,22 @@ internal sealed class HexLinkClaimExchange(IHexLinkServices services)
         }
     }
 
-    // A folder this device keeps in sync with a linked device, or that device with it, counts for claims between the two
-    // when the two don't pin the same authority for it (none yet, or only one of them): both compute the same scope from
-    // the folder's name, so each side's claims reach the other. Two that pin the same authority use its scope instead.
-    private static HexLinkClaimFolder? Paired(HexLinkFolder folder, HexLinkPeer[] peers, Dictionary<string, IReadOnlyList<string>> chosen)
+    // A folder's claims are scoped by its authority, the one it pins or, pinning none itself, the one every device it keeps
+    // the folder in sync with that pins one agrees on: so a replica that never pinned and the devices that did work out the
+    // same scope, and the authority relays between replicas. Only where no device pins one is the scope the folder's name,
+    // exchanged with exactly the devices it's kept in sync with. It once went by name whenever a synced device lacked the
+    // pin, and a third device joining unpinned moved the authority off the scope the pinned ones still used.
+    private static HexLinkClaimFolder? Scoped(HexLinkFolder folder, HexLinkPeer[] peers, Dictionary<string, IReadOnlyList<string>> chosen)
     {
         var synced = peers.Select(peer => (Peer: peer, Remote: peer.Workspace.Folders.FirstOrDefault(other => PlatformPaths.Comparer.Equals(other.Name, folder.Name))))
             .Where(each => each.Remote is not null && (chosen[each.Peer.Device.Id].Contains(folder.Name, PlatformPaths.Comparer)
                 || each.Peer.ChosenSyncFolders.Contains(folder.Name, PlatformPaths.Comparer))).ToArray();
-        if (folder.Authority is not null && synced.All(each => each.Remote!.Authority == folder.Authority))
-            return null;
+        HexLinkAuthority? pin = folder.Authority;
+        if (pin is null && synced.Select(each => each.Remote!.Authority).OfType<HexLinkAuthority>().Distinct().ToArray() is [var agreed])
+            pin = agreed;
+        if (pin is not null)
+            return new HexLinkClaimFolder(folder, new HexLinkClaimScope(folder.Name,
+                HexLinkFiles.Hash(Encoding.UTF8.GetBytes($"{pin.DeviceId}\n{pin.Epoch}\n{folder.Name}"))), pin.DeviceId);
         string[] with = [.. synced.Select(each => each.Peer.Device.Id).Order(StringComparer.Ordinal)];
         if (with.Length == 0)
             return null;
@@ -386,7 +390,9 @@ internal sealed class HexLinkClaimExchange(IHexLinkServices services)
                 route.Peer.Session.Closing, TimeSpan.FromSeconds(3));
             lock (gate)
             {
-                route.Outgoing.IntersectWith(ScopesOf(response as JsonObject, "accepted"));
+                HexLinkClaimScope[] accepted = ScopesOf(response as JsonObject, "accepted");
+                route.Refused = scopes.Except(accepted).Any() ? $"it took {accepted.Length} of {scopes.Length} folders" : string.Empty;
+                route.Outgoing.IntersectWith(accepted);
                 route.NeedsSnapshot = false;
             }
         }
@@ -394,17 +400,40 @@ internal sealed class HexLinkClaimExchange(IHexLinkServices services)
         {
             lock (gate)
             {
+                route.Refused = e.Message;
                 route.Outgoing.Clear();
                 if (e.Code == HexLinkErrors.METHOD_NOT_FOUND)
                     route.Retry = long.MaxValue;
             }
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException)
+        {
+            lock (gate)
+                route.Refused = "no answer in time";
+        }
         finally
         {
             lock (gate)
                 route.Asking = false;
         }
+    }
+
+    /// <summary>What each linked device is asked for and gives, for telling why claims don't cross.</summary>
+    public IReadOnlyList<string> RouteStatus()
+    {
+        lock (gate)
+            return [.. routes.Values.Select(route =>
+                $"{route.Peer.Device.Name} ({route.Peer.Device.Id[..Math.Min(8, route.Peer.Device.Id.Length)]}): "
+                + $"{(route.Peer.IsClosed ? "closed, " : string.Empty)}granted view {HexLinkAllowed.Has(route.Peer.Granted, HexLinkRights.View)}, "
+                + $"its view {HexLinkAllowed.Has(route.Peer.Session.Connection.Rights, HexLinkRights.View)}, "
+                + $"its folders {string.Join('/', route.Peer.Workspace.Folders.Select(folder => folder.Name + (folder.Authority is { } pin ? $"@{pin.DeviceId[..Math.Min(8, pin.DeviceId.Length)]}" : string.Empty)))}, "
+                + $"its chosen {string.Join('/', route.Peer.ChosenSyncFolders)}, "
+                + $"we send {Scopes(route.Outgoing)}, it sends {Scopes(route.Incoming)}, "
+                + $"asking {route.Asking}, snapshot {route.NeedsSnapshot}, retry in {Math.Max(0, route.Retry - Environment.TickCount64) / 1000} s"
+                + (route.Refused.Length > 0 ? $", last watch: {route.Refused}" : string.Empty))];
+
+        static string Scopes(IEnumerable<HexLinkClaimScope> scopes) =>
+            string.Join('/', scopes.Select(scope => $"{scope.Folder}#{scope.Identity[..Math.Min(8, scope.Identity.Length)]}")) is { Length: > 0 } text ? text : "nothing";
     }
 
     private string? Owner(HexLinkClaimScope scope) => folders.FirstOrDefault(folder => folder.Scope == scope)?.AuthorityId;

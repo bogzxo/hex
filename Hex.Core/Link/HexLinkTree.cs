@@ -278,6 +278,14 @@ internal sealed partial class HexLinkTree
 
     private volatile RootKnown? rootKnown;
 
+    /// <summary>The first commit of the repository a folder is, as a manifest's Root says it, null when it has none.</summary>
+    public static string? FirstCommitOf(string folder)
+    {
+        GitResult roots = GitProcess.Run(folder, ["rev-list", "--max-parents=0", "HEAD"]);
+        return roots.Ok ? roots.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(HexLinkGit.IsCommitId).Order(StringComparer.Ordinal).FirstOrDefault() : null;
+    }
+
     private string? RootOf(string head, Dictionary<string, HexLinkGitIssue> issues)
     {
         if (rootKnown is { } known && known.Head == head)

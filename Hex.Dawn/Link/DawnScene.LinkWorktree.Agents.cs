@@ -287,8 +287,11 @@ internal sealed partial class DawnScene
     {
         if (!privateAgentRoots.TryGetValue(caller, out var scope))
             return null;
+        // Gone, its files are out of reach, but what touches no file still works: a claim it holds can be let go of,
+        // which once stayed until its ETA because releasing was refused too
         if (!Directory.Exists(scope.Root))
-            return "This agent's private worktree was discarded.";
+            return tool is "hex_link_claims" or "hex_link_devices" or "hex_link_chat" or "hex_plan_update" or "hex_plan_read" || tool.StartsWith("hex_agent_", StringComparison.Ordinal)
+                ? null : "This agent's private worktree was discarded. Its files are gone; a new chat gets a fresh private worktree.";
         if (tool is "hex_link_authority" or "hex_link_worktree_gate")
             return "A person on the folder authority manages publish gate settings and authority transfers.";
 
