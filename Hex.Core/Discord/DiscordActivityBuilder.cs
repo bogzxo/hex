@@ -62,8 +62,10 @@ internal static class DiscordActivityBuilder
             case DiscordMode.Editing when snapshot.FilePath is { Length: > 0 } path:
                 bool hidden = snapshot.FileIgnoredByGit || snapshot.FileInPrivateWorktree || MatchesHide(path, privacy.HideGlobs);
                 bool named = privacy.ShowFile && !hidden;
-                details = named ? $"Editing {Path.GetFileName(path)}" : "Editing a file";
-                if (!hidden && privacy.ShowLanguageIcon && DiscordLanguages.Of(Path.GetExtension(path)) is { Name: not null } language)
+                // Cut at either slash, a path from another machine (a Windows one seen on a Mac) has the other kind
+                string name = path[(path.LastIndexOfAny(['/', '\\']) + 1)..];
+                details = named ? $"Editing {name}" : "Editing a file";
+                if (!hidden && privacy.ShowLanguageIcon && DiscordLanguages.Of(Path.GetExtension(name)) is { Name: not null } language)
                     (largeImage, largeText) = (language.Key, language.Name);
                 break;
             case DiscordMode.Editing:
