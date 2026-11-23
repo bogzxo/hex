@@ -82,7 +82,11 @@ public sealed class ReleaseClient(HttpClient? client = null)
         else
             _ = VersionOf(version);
         string name = $"Hex-{rid}.zip";
-        var asset = (release["assets"] as JsonArray)?.SingleOrDefault(a => a?["name"]?.GetValue<string>() == name)
+        var assets = release["assets"] as JsonArray;
+        // A Mac gets the app (Hex-3.4.7-macos-arm64.zip), the release has no portable folder for it any more
+        if (rid.StartsWith("osx-", StringComparison.Ordinal))
+            name = assets?.Select(a => a?["name"]?.GetValue<string>()).SingleOrDefault(n => n is not null && BundleUpdate.IsAppZip(n, rid)) ?? name;
+        var asset = assets?.SingleOrDefault(a => a?["name"]?.GetValue<string>() == name)
             ?? throw new InvalidOperationException(InstallText.Get("errors.missing_asset", ("asset", name)));
         var url = new Uri(asset["browser_download_url"]!.GetValue<string>());
         if (url.Scheme != "https" || url.Host != "github.com" || !url.AbsolutePath.StartsWith("/bogzxo/hex/releases/download/", StringComparison.Ordinal))

@@ -838,7 +838,7 @@
       <div class="wrap">
         <p class="eyebrow"><!-- release:title -->Hex 3.2.0 Amphetamine<!-- /release:title --></p>
         <h2>Get it</h2>
-        <p>One download, nothing else to install, not even .NET. Setup adds shortcuts and keeps Hex up to date; Portable is a ZIP you unpack and run.</p>
+        <p>One download, nothing else to install, not even .NET. On Windows and Linux, Setup adds shortcuts and keeps Hex up to date and Portable is a ZIP you unpack and run. On a Mac it's a disk image with Hex inside, and Hex updates itself.</p>
 
         <!-- The button for the system the page is opened on, put together by site.js from the cards under it -->
         <div class="get-yours" hidden>
@@ -854,12 +854,12 @@
             <div class="pick"><span>Portable</span><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-win-x64.zip" data-arch="x64">x64</a><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-win-arm64.zip" data-arch="arm64">ARM64</a></div>
           </li>
           <li class="platform" data-os="mac">
-            <h3>macOS</h3>
-            <p>macOS 11 or newer. The build is unsigned: if macOS blocks it, run <code>xattr -dr com.apple.quarantine /path/to/Hex</code>.</p>
-            <div class="pick"><span>Setup</span><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-osx-arm64.zip" data-arch="arm64">Apple silicon</a><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-osx-x64.zip" data-arch="x64">Intel</a></div>
-            <div class="pick"><span>Portable</span><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-osx-arm64.zip" data-arch="arm64">Apple silicon</a><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-osx-x64.zip" data-arch="x64">Intel</a></div>
-          </li>
-          <li class="platform" data-os="linux">
+              <h3>macOS</h3>
+              <p>macOS 14 or newer. Open the disk image and drag Hex to Applications. Hex isn't from an identified developer, so the first time, Control-click Hex, choose Open, then Open. On macOS 15 or newer, open Hex once, then System Settings, Privacy &amp; Security, Open Anyway. Still blocked? Run <code>xattr -dr com.apple.quarantine /Applications/Hex.app</code> in Terminal.</p>
+              <div class="pick"><span>Disk image</span><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-3.4.7-macos-arm64.dmg" data-arch="arm64">Apple silicon</a><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-3.4.7-macos-x64.dmg" data-arch="x64">Intel</a></div>
+              <div class="pick"><span>ZIP</span><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-3.4.7-macos-arm64.zip" data-arch="arm64">Apple silicon</a><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-3.4.7-macos-x64.zip" data-arch="x64">Intel</a></div>
+            </li>
+<li class="platform" data-os="linux">
             <h3>Linux</h3>
             <p>A Vulkan loader and driver.</p>
             <div class="pick"><span>Setup</span><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-linux-x64.zip" data-arch="x64">x64</a><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-linux-arm64.zip" data-arch="arm64">ARM64</a></div>

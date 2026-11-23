@@ -85,6 +85,11 @@ internal sealed partial class DawnScene
 
     private void PrepareHexUpdate(ReleaseAsset release)
     {
+        if (OperatingSystem.IsMacOS())
+        {
+            PrepareMacUpdate(release);
+            return;
+        }
         string root = Path.TrimEndingDirectorySeparator(Hex.Core.HexHost.ProgramFolder);
         PreparedInstallerUpdate? installer = null;
         StartWork("hex-update-prepare", InstallText.Get("updates.preparing"), async context =>
@@ -101,6 +106,37 @@ internal sealed partial class DawnScene
                 return;
             }
             RestartInto(installer.Executable, installer.Arguments(root), installer.Dispose, installer.HandedOff);
+        }, seen: false, cancellable: true);
+    }
+
+    /// <summary>
+    /// A Hex in Hex.app updates itself with the release's app zip, the old app put back if the new one can't be moved in.
+    /// Any other Hex on a Mac (built from source, a folder) has no installer to hand over to, it's sent to the release page.
+    /// </summary>
+    private void PrepareMacUpdate(ReleaseAsset release)
+    {
+        string? app = Hex.Core.HexBundle.Root;
+        if (app is null)
+        {
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("open", ["https://github.com/bogzxo/hex/releases" + (release.Channel == InstallChannel.Dev ? "" : "/latest")]) { UseShellExecute = false }); }
+            catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException) { }
+            Note("This Hex is not the app, download the new Hex from the releases page that opened.");
+            return;
+        }
+
+        BundleUpdate? update = null;
+        StartWork("hex-update-prepare", InstallText.Get("updates.preparing"), async context =>
+        {
+            update = await BundleUpdate.Prepare(release, app, u => context.Report(u.Fraction, u.Message), context.Token);
+        }, result =>
+        {
+            if (result.State != WorkState.Succeeded || update is null)
+            {
+                update?.Dispose();
+                Note(InstallText.Get("updates.prepare_failed", ("reason", result.Error ?? "")), error: true);
+                return;
+            }
+            RestartInto("/bin/sh", update.Script(Environment.ProcessId), update.Dispose, update.HandedOff);
         }, seen: false, cancellable: true);
     }
 }

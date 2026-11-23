@@ -224,6 +224,7 @@ internal sealed partial class HexSettings
             (settings, written) => written.Add("language_server_settings", settings.ServerSettingsObject())),
         Flag("csharp_analyzers_moved", settings => settings.CSharpAnalyzersMoved, (settings, value) => settings.CSharpAnalyzersMoved = value),
         .. PredictionRows,
+        .. DiscordRows,
         Special("files_associations",
             (settings, values) =>
             {

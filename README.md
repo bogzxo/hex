@@ -25,15 +25,14 @@ Neither needs a separate .NET installation.
 | --- | --- | --- |
 | Windows | [x64](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-win-x64.exe) · [ARM64](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-win-arm64.exe) | [x64](https://github.com/bogzxo/hex/releases/latest/download/Hex-win-x64.zip) · [ARM64](https://github.com/bogzxo/hex/releases/latest/download/Hex-win-arm64.zip) |
 | Linux | [x64](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-linux-x64.zip) · [ARM64](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-linux-arm64.zip) | [x64](https://github.com/bogzxo/hex/releases/latest/download/Hex-linux-x64.zip) · [ARM64](https://github.com/bogzxo/hex/releases/latest/download/Hex-linux-arm64.zip) |
-| macOS | [Apple silicon](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-osx-arm64.zip) · [Intel](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-osx-x64.zip) | [Apple silicon](https://github.com/bogzxo/hex/releases/latest/download/Hex-osx-arm64.zip) · [Intel](https://github.com/bogzxo/hex/releases/latest/download/Hex-osx-x64.zip) |
+| macOS | [Disk image, Apple silicon or Intel](https://github.com/bogzxo/hex/releases/latest) (`Hex-<version>-macos-arm64.dmg`, `-x64.dmg`) | The same app as a `.zip` |
 
-Windows Setup is an EXE; unpack the Linux and macOS Setup ZIPs first. Setup can also install **Hex Dev**, the nightly
+Windows Setup is an EXE; unpack the Linux Setup ZIP first. On a Mac, open the disk image and drag Hex to Applications; Hex updates itself from there. Setup can also install **Hex Dev**, the nightly
 build of the development branch, beside the stable one.
 [All releases](https://github.com/bogzxo/hex/releases) · [What changed](RELEASE_NOTES.md) · [Installation details](docs/installer.md)
 
 Windows needs **10 1809 or newer**. Linux needs a Vulkan loader and driver; on Debian/Ubuntu that's `libvulkan1` and
-the GPU's driver, such as `mesa-vulkan-drivers`. macOS needs **11 or newer**; the build is unsigned, so if macOS
-blocks it, run `xattr -dr com.apple.quarantine /path/to/Hex` on the unpacked folder.
+the GPU's driver, such as `mesa-vulkan-drivers`. macOS needs **14 or newer**. Hex isn't signed by an identified developer, so the first time, Control-click Hex in Applications, choose **Open**, then **Open** again (on macOS 15 or newer, open it once, then System Settings, Privacy & Security, **Open Anyway**). If macOS still says it's damaged or blocked, run `xattr -dr com.apple.quarantine /Applications/Hex.app` in Terminal.
 
 ## Fast, with receipts
 

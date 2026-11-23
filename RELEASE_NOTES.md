@@ -1,3 +1,18 @@
+# Hex 3.4.7
+
+## macOS
+
+- **On a Mac with Hex 3.4.6 or older, download the dmg once by hand.** Check for Updates in those versions looks for the portable zip, which isn't released any more, and says the asset is missing. From 3.4.7 on, Hex.app updates itself.
+
+- The Mac download is now Hex.app as a disk image (`Hex-<version>-macos-arm64.dmg` and `-macos-x64.dmg`, each also as a `.zip`), for Apple silicon and Intel. Hex Setup.app and the portable `Hex-osx-*.zip` are gone: the Setup app had no signature, so macOS called it damaged.
+- Hex needs macOS 14 or newer (the site and README said 11).
+- Hex isn't signed by an identified developer yet, so macOS stops it the first time it's opened. On macOS 15 and newer, open it once, then choose Open Anyway in System Settings > Privacy & Security. On macOS 14, Control-click Hex in Applications, choose Open, then Open. `xattr -dr com.apple.quarantine /Applications/Hex.app` does the same from Terminal.
+- Hex in Hex.app updates itself: Check for Updates downloads the new app, puts it in place of the old one when Hex closes, opens it, and puts the old one back if that fails. A Hex that isn't in an app (built from source) opens the releases page instead.
+
+## Discord
+
+- Discord Rich Presence, off until you switch on Settings > Editor > Discord presence. It shows the file you are editing (name only, never a path), the workspace, a language picture, how long you have been in the workspace, and a Get Hex button. Files git ignores, files in a private Link worktree and patterns such as `**/.env*` and `**/secrets/**` are never named, and a folder's settings can only switch the sharing off. See `docs/discord.md`.
+
 # Hex 3.4.6
 
 ## Hex Link
