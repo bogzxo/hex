@@ -13,8 +13,8 @@ namespace Hex.Core;
 /// </summary>
 internal static class HexDiscord
 {
-    /// <summary>The application id, empty for none made yet.</summary>
-    public const string ApplicationId = "";
+    /// <summary>The application id of Hex's application on Discord's developer portal.</summary>
+    public const string ApplicationId = "1574400359294832660";
 
     /// <summary>Where the "Get Hex" button goes.</summary>
     public const string Website = "https://bogzxo.github.io/hex/";
