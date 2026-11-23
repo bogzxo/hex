@@ -407,6 +407,23 @@ internal sealed class HexLinkClaimExchange(IHexLinkServices services)
         }
     }
 
+    /// <summary>What each linked device is asked for and gives, for telling why claims don't cross.</summary>
+    public IReadOnlyList<string> RouteStatus()
+    {
+        lock (gate)
+            return [.. routes.Values.Select(route =>
+                $"{route.Peer.Device.Name} ({route.Peer.Device.Id[..Math.Min(8, route.Peer.Device.Id.Length)]}): "
+                + $"{(route.Peer.IsClosed ? "closed, " : string.Empty)}granted view {HexLinkAllowed.Has(route.Peer.Granted, HexLinkRights.View)}, "
+                + $"its view {HexLinkAllowed.Has(route.Peer.Session.Connection.Rights, HexLinkRights.View)}, "
+                + $"its folders {string.Join('/', route.Peer.Workspace.Folders.Select(folder => folder.Name + (folder.Authority is { } pin ? $"@{pin.DeviceId[..Math.Min(8, pin.DeviceId.Length)]}" : string.Empty)))}, "
+                + $"its chosen {string.Join('/', route.Peer.ChosenSyncFolders)}, "
+                + $"we send {Scopes(route.Outgoing)}, it sends {Scopes(route.Incoming)}, "
+                + $"asking {route.Asking}, snapshot {route.NeedsSnapshot}, retry in {Math.Max(0, route.Retry - Environment.TickCount64) / 1000} s")];
+
+        static string Scopes(IEnumerable<HexLinkClaimScope> scopes) =>
+            string.Join('/', scopes.Select(scope => $"{scope.Folder}#{scope.Identity[..Math.Min(8, scope.Identity.Length)]}")) is { Length: > 0 } text ? text : "nothing";
+    }
+
     private string? Owner(HexLinkClaimScope scope) => folders.FirstOrDefault(folder => folder.Scope == scope)?.AuthorityId;
 
     private bool Known(HexLinkClaimScope scope) => Owner(scope) is not null;
