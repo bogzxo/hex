@@ -1,3 +1,25 @@
+# Hex 3.4.6
+
+## Hex Link
+
+- A device that reconnects to the host no longer gets stuck flipping between "Offline from the session" and a claim or "Shared Session". When two devices dialled each other at the same moment, each refused the other's connection, so both links dropped and redialled in a loop. Both ends now keep the connection dialled by the device with the lower id.
+- Each linked device's caret now also shows on the minimap and in the gutter, in the device's colour, so you can find someone whose caret is off screen. Hovering the gutter mark names the device.
+- The file tree shows a dot in each linked device's colour on the file that device is working in.
+
+## Dusk
+
+- Input typed at a password, passphrase, PIN or verification-code prompt is never kept in history, recalled with Up and Down, or sent to other tabs. Lines already in `history.txt` from earlier versions aren't cleaned.
+- Predictions work in the terminal. Turn on Terminal predictions under Settings > AI (edit predictions must be on). A suggestion shows dim after what you've typed: Tab or Right takes it, Escape dismisses it. Your recent commands go to the prediction model, except ones that look like they hold a secret. Nothing is suggested at a password prompt.
+
+## Editor
+
+- An edit prediction no longer draws over the inline git blame. The blame on that line is hidden while the prediction shows.
+- The markdown preview shows the document as a page in the middle of the view, a readable width that narrows with the view. The wheel scrolls it from anywhere, the margins too.
+
+## Agents
+
+- The folder agents keep their data in can be changed under Settings > AI > Agents. Leave it empty for the default. Data already kept stays where it is. A folder's own settings and agents can't change it.
+
 # Hex 3.4.5
 
 ## Hex Link
