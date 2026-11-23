@@ -9,7 +9,8 @@ internal sealed partial class DawnScene
 {
     private Panel markdownPreview = null!;
     private NotebookScrollPanel markdownScroll = null!;
-    private StackPanel markdownWritten = null!;
+    private MarkdownPagePanel markdownWritten = null!;
+    private const float PAGE_WIDTH = 800, PAGE_MARGIN = 24, PAGE_INNER = 48;
     private List<NotebookPicture> previewPictures = [];
     private HexDocument? markdownDocument;
     private int markdownVersion = -1;
@@ -28,10 +29,10 @@ internal sealed partial class DawnScene
             Anchor = Origin.TopLeft, Pivot = Origin.TopLeft,
             Zoom = delta => ZoomCode(delta > 0 ? CODE_ZOOM_STEP : 1 / CODE_ZOOM_STEP)
         });
-        markdownWritten = markdownScroll.Add(new StackPanel
+        markdownWritten = markdownScroll.Add(new MarkdownPagePanel
         {
             Direction = UIDirection.Vertical, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft,
-            Padding = new UIEdges(18, 16, 18, 48), Spacing = 6
+            Padding = new UIEdges(PAGE_INNER, 16 + 36, PAGE_INNER, 16 + 48), Spacing = 6
         });
         layout.Get<Button>("markdown_button").OnPressed = () => SwitchView(HexView.Markdown);
     }
@@ -77,8 +78,16 @@ internal sealed partial class DawnScene
             markdownVersion = version;
             markdownDelay = 0.15f;
         }
+        // The view is the desk, the page the field colour on it; the scroll panel spans the whole view so the wheel works anywhere
         markdownPreview.Color = compositor.Skin?.PanelColor;
+        markdownWritten.Color = compositor.Skin?.FieldColor;
         markdownScroll.Size = markdownPreview.Size;
-        FitWritten(markdownWritten, MathF.Max(120, markdownPreview.Size.X - markdownWritten.Padding.Total.X - 14), settings.CodeZoom, keepWidth: true);
+        float room = MathF.Max(120, markdownPreview.Size.X - markdownScroll.BarWidth - markdownScroll.BarGap);
+        float page = MathF.Min(PAGE_WIDTH * settings.CodeZoom, MathF.Max(120, room - PAGE_MARGIN * 2));
+        float margin = MathF.Max(0, (room - page) / 2);
+        float inner = MathF.Min(PAGE_INNER, page * 0.08f);
+        markdownWritten.Margin = margin;
+        markdownWritten.Padding = new UIEdges(margin + inner, markdownWritten.Padding.Top, margin + inner, markdownWritten.Padding.Bottom);
+        FitWritten(markdownWritten, MathF.Max(80, page - inner * 2 - 14), settings.CodeZoom, keepWidth: true);
     }
 }
