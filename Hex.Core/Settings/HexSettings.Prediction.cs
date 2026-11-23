@@ -67,6 +67,9 @@ internal sealed partial class HexSettings
     /// <summary>Whether this Hex offers its predictions to the devices paired with it over Hex Link.</summary>
     public bool EditPredictionsShare;
 
+    /// <summary>Whether the terminal's command line gets ghost text predictions too (never at a prompt for a password). Off until the user switches it on; needs edit_predictions on.</summary>
+    public bool EditPredictionsTerminal;
+
     /// <summary>Whether the notice of what is sent and where was given, the first time predictions were switched on. Given once.</summary>
     public bool EditPredictionsNoticeDone;
 
@@ -163,6 +166,7 @@ internal sealed partial class HexSettings
             (settings, written) => written.Add(EDIT_PREDICTIONS_EXCLUDE, Horizon.HIDL.Library.Natives.List(settings.EditPredictionsExclude))),
         Flag("edit_predictions_workspace", settings => settings.EditPredictionsWorkspace, (settings, value) => settings.EditPredictionsWorkspace = value),
         Flag("edit_predictions_share", settings => settings.EditPredictionsShare, (settings, value) => settings.EditPredictionsShare = value),
+        Flag("edit_predictions_terminal", settings => settings.EditPredictionsTerminal, (settings, value) => settings.EditPredictionsTerminal = value),
         Flag("edit_predictions_notice_done", settings => settings.EditPredictionsNoticeDone, (settings, value) => settings.EditPredictionsNoticeDone = value)
     ];
 }

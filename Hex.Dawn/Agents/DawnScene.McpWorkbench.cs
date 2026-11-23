@@ -312,9 +312,16 @@ internal sealed partial class DawnScene
         }
 
         // Whether code is sent to a model, where to, and whether it's shared with other devices is the person's to say
-        if (key is "edit_predictions" or "edit_predictions_share" or "edit_predictions_api_url" or "edit_predictions_provider")
+        if (key is "edit_predictions" or "edit_predictions_terminal" or "edit_predictions_share" or "edit_predictions_api_url" or "edit_predictions_provider")
         {
             yield return McpToolResult.Error($"{key} decides where code is sent, it's only changed by hand in the settings window.");
+            yield break;
+        }
+
+        // Where agents' own data lives is the person's to say, an agent could point it somewhere it controls
+        if (HexSettings.AgentsCannotSet(key))
+        {
+            yield return McpToolResult.Error("agent_data_folder decides where agent data is kept, it's only changed by hand in the settings window.");
             yield break;
         }
 

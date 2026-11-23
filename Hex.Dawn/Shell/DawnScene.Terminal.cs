@@ -208,6 +208,7 @@ internal sealed partial class DawnScene : ITerminalHostUi
             OpenTerminals();
 
         UpdateTerminalSession(dt);
+        UpdateTerminalPredictions();
     }
 
     /// <summary>The tabs the workspace kept when the settings say so and there are any, a shell in the workspace's folder otherwise.</summary>

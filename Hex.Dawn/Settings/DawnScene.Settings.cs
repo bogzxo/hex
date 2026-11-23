@@ -28,6 +28,8 @@ internal sealed partial class DawnScene
         SettingsSections.Missing = Said("settings_problems.no_settings", ("skeleton", Said("settings_problems.skeleton")));
         diagnosticSources.Add(SettingsDiagnosticsOf);
         settings = new HexSettings(kept ? Horizon.UI.Components.TerminalFiles.Settings() : null, Path.Combine(Hex.Core.HexHost.ProgramFolder, HexSettings.FILE));
+        if (kept)
+            Hex.Core.HexData.UseAgentFolder(settings.AgentDataFolder);
 
         layersScroll = layout.Get<ScrollPanel>("layers_scroll");
         usualLeft = treeScroll.Size.X;

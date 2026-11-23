@@ -328,6 +328,7 @@ internal sealed partial class DawnScene
             "agents_resume_after_limit" => Values.Bool(hex.settings.AgentsResumeAfterLimit),
             "agents_auto_settle_seconds" => new NumberValue(hex.settings.AgentsAutoSettleSeconds),
             "debugger_path" => new StringValue(hex.settings.DebuggerPath),
+            "agent_data_folder" => new StringValue(hex.settings.AgentDataFolder),
             "backdrop" => Values.Bool(hex.settings.BackdropOn),
             "backdrop_terminal" => Values.Bool(hex.settings.BackdropTerminal),
             "backdrop_image" => new StringValue(hex.settings.BackdropImage),
@@ -388,6 +389,7 @@ internal sealed partial class DawnScene
             HexSettings.EDIT_PREDICTIONS_EXCLUDE => Natives.List(hex.settings.EditPredictionsExclude),
             "edit_predictions_workspace" => Values.Bool(hex.settings.EditPredictionsWorkspace),
             "edit_predictions_share" => Values.Bool(hex.settings.EditPredictionsShare),
+            "edit_predictions_terminal" => Values.Bool(hex.settings.EditPredictionsTerminal),
             EditorSettingsCatalog.LINK_SYSTEM_FILE_FOLDERS => Natives.List(hex.settings.LinkSystemFileFolders),
             "files_associations" => UIFormPairs.Value(hex.settings.FileAssociations.Select(pair => (pair.Key, pair.Value))),
             "disabled_extensions" => Natives.List(hex.ExtensionNames().Where((_, at) => !hex.extensions.All[at].Enabled)),
@@ -696,6 +698,10 @@ internal sealed partial class DawnScene
                 case ("auto_save_delay", NumberValue delay):
                     settings.AutoSaveDelay = Math.Clamp(delay.Value, 0.25f, 60.0f);
                     break;
+                case ("agent_data_folder", StringValue agentFolder):
+                    settings.AgentDataFolder = agentFolder.Value.Trim().Trim('"');
+                    hex.AgentFolderTyped();
+                    break;
                 case ("debugger_path", StringValue debuggerPath):
                     settings.DebuggerPath = debuggerPath.Value.Trim().Trim('"');
                     break;
@@ -770,6 +776,9 @@ internal sealed partial class DawnScene
                     break;
                 case ("edit_predictions_share", BooleanValue shares):
                     settings.EditPredictionsShare = shares.Value;
+                    break;
+                case ("edit_predictions_terminal", BooleanValue predictsInTerminal):
+                    settings.EditPredictionsTerminal = predictsInTerminal.Value;
                     break;
                 case ("files_associations", ObjectValue associations):
                     // the open files pick the new languages up next tick, see UpdateLanguageModes

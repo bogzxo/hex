@@ -28,6 +28,12 @@ internal sealed partial class HexSettings
         "run_to_terminal", "debugger_path", "snap", "canvas_handles", LANGUAGE_OVERRIDES
     };
 
+    /// <summary>The key of the agent data folder, which no folder's settings and no agent (hex_settings_set) can change.</summary>
+    public const string AGENT_DATA_FOLDER = "agent_data_folder";
+
+    /// <summary>Whether a setting is only the person's to change by hand, never through an agent's hex_settings_set.</summary>
+    public static bool AgentsCannotSet(string key) => key == AGENT_DATA_FOLDER;
+
     /// <summary>
     /// The key the languages files of the folder were set to by hand are kept under (Change Language Mode), only ever in
     /// the workspace settings, by their path in the folder.

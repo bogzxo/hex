@@ -306,6 +306,12 @@ internal sealed partial class HexSettings
     public int AgentsAutoSettleSeconds = 30;
 
     /// <summary>
+    /// Where the agents' data is kept (chats, pictures, temporary and scratch files), empty for the data folder's agents
+    /// folder. The user's own setting only, a folder's settings and agents can't change it. See <see cref="HexData.UseAgentFolder"/>.
+    /// </summary>
+    public string AgentDataFolder = string.Empty;
+
+    /// <summary>
     /// Whether Don't show again was pressed on the card Agentic puts up while the server is off, saying what switching
     /// it on saves.
     /// </summary>
