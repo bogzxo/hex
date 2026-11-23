@@ -339,6 +339,7 @@ internal sealed partial class DawnScene
         linkDialling.Clear();
         linkNearbyAddresses.Clear();
         linkPresence.Clear();
+        LinkUpdateExplorerPresence();
         linkChatVersions.Clear();
         linkByTest = false;
         linkDirty = true;
@@ -604,7 +605,8 @@ internal sealed partial class DawnScene
     // A link gone, said unless Link itself was turned off
     private void LinkClosed(HexLinkDevice device, string why)
     {
-        linkPresence.Remove(device.Id);
+        if (linkPresence.Remove(device.Id))
+            LinkUpdateExplorerPresence();
         linkDirty = true;
         if (linkTransport is null)
             return;

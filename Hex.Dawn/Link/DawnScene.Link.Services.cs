@@ -161,6 +161,7 @@ internal sealed partial class DawnScene
         {
             hex.linkPresence[device.Id] = new LinkPresenceSeen(device, presence, DateTime.UtcNow);
             hex.linkDirty = true;
+            hex.LinkUpdateExplorerPresence();
         });
 
         // A card for the person, Apply, Keep as File or Discard, their answer going back (DawnScene.LinkGit)
