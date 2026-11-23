@@ -37,9 +37,33 @@ internal sealed partial class DawnScene
         new(0.35f, 0.85f, 0.55f, 1.0f), new(0.95f, 0.40f, 0.55f, 1.0f), new(0.95f, 0.85f, 0.30f, 1.0f)
     ];
 
-    /// <summary>The colour a device is drawn in, the same every time for the same device.</summary>
+    // The colours devices picked for themselves, by id, this one's included; one that picked none is drawn in its id's
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Vector4> linkPickedColours = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>A #rrggbb colour as a colour, null when it isn't one.</summary>
+    internal static Vector4? LinkColourOf(string? said) =>
+        said is { Length: 7 } && said[0] == '#' && uint.TryParse(said.AsSpan(1), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out uint rgb)
+            ? new Vector4(((rgb >> 16) & 0xFF) / 255.0f, ((rgb >> 8) & 0xFF) / 255.0f, (rgb & 0xFF) / 255.0f, 1.0f) : null;
+
+    /// <summary>Takes the colour a device picked for itself, or lets go of it for null, so it's drawn in it everywhere.</summary>
+    internal static void LinkPickColour(string deviceId, string? said)
+    {
+        if (deviceId.Length == 0)
+            return;
+        if (LinkColourOf(said) is { } colour)
+            linkPickedColours[deviceId] = colour;
+        else
+            linkPickedColours.TryRemove(deviceId, out _);
+    }
+
+    /// <summary>
+    /// The colour a device is drawn in: the one it picked for itself (only it can, in its own Devices), otherwise the same
+    /// one every time from its id. Its caret, the dot beside the files it's editing, its badges and its Link Chat lines.
+    /// </summary>
     internal static Vector4 LinkDeviceColour(string deviceId)
     {
+        if (linkPickedColours.TryGetValue(deviceId, out Vector4 picked))
+            return picked;
         uint hash = 2166136261;
         foreach (char c in deviceId)
             hash = (hash ^ c) * 16777619;

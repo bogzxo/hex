@@ -50,6 +50,7 @@ mcp_hint_quiet = false
 link = false
 link_port = 65535
 link_name = "not a choice"
+link_colour = "not a choice"
 link_discoverable = true
 link_allow_public = false
 link_map_public_port = false

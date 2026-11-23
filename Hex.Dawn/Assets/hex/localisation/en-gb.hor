@@ -4420,6 +4420,8 @@ let strings = {
         window_port_off: "Listens on port {port} when on",
         nearby_off: "The local network can't be searched, {why}. An address typed in still works.",
         name_label: "Name",
+        colour_label: "Colour",
+        colour_automatic: "Automatic",
         name_keep: "Keep",
         name_reset: "Use the Machine's Name",
         name_seen_as: "Other devices see this one as {name}",

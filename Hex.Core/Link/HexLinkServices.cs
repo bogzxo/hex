@@ -76,6 +76,9 @@ internal interface IHexLinkServices
         CancellationToken cancel, bool? executable, HexLinkFiles.PackDirectories directories) =>
         CompareAndReplace(full, wire, baseHash, bytes, cancel, executable);
 
+    /// <summary>The colour this device picked for itself, #rrggbb, null for the one its id gives it.</summary>
+    string? DeviceColour => null;
+
     /// <summary>Folders this device is already responsible for syncing with this peer.</summary>
     IReadOnlyList<string> ChosenSyncFolders(string deviceId) => [];
 

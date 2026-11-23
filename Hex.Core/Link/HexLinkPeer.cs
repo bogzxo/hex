@@ -59,6 +59,8 @@ internal sealed partial class HexLinkPeer : IDisposable
     public HexLinkWorkspace Workspace { get; private set; } = HexLinkWorkspace.Empty;
 
     internal IReadOnlyList<string> ChosenSyncFolders { get; private set; } = [];
+    /// <summary>The colour the device picked for itself (#rrggbb), null while it picked none.</summary>
+    internal string? Colour { get; private set; }
     internal IReadOnlyList<HexLinkSyncPause> PausedSyncFolders { get; private set; } = [];
     internal Action? SyncPausesChanged { get; set; }
 

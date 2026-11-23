@@ -50,6 +50,7 @@ mcp_hint_quiet = false
 link = false
 link_port = 1024
 link_name = ""
+link_colour = ""
 link_discoverable = true
 link_allow_public = false
 link_map_public_port = false

@@ -98,6 +98,7 @@ internal sealed partial class HexSettings
         Flag("link", settings => settings.Link, (settings, value) => settings.Link = value),
         Whole("link_port", settings => settings.LinkPort, (settings, value) => settings.LinkPort = value, 1024.0f, 65535.0f),
         Text("link_name", settings => settings.LinkName, (settings, value) => settings.LinkName = value.Trim()),
+        Text("link_colour", settings => settings.LinkColour, (settings, value) => settings.LinkColour = value.Trim()),
         Flag("link_discoverable", settings => settings.LinkDiscoverable, (settings, value) => settings.LinkDiscoverable = value),
         Flag("link_allow_public", settings => settings.LinkAllowPublic, (settings, value) => settings.LinkAllowPublic = value),
         Flag("link_map_public_port", settings => settings.LinkMapPublicPort, (settings, value) => settings.LinkMapPublicPort = value),

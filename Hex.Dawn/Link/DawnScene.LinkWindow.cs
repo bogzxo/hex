@@ -275,6 +275,7 @@ internal sealed partial class DawnScene
         UIDialog dialog = UIDialog.Show(chrome, Said("link.devices_identity_details"), string.Empty, new DialogChoice(Said("link.devices_done")));
         linkThisDeviceDialog = dialog;
         dialog.Body.Add(LinkNameRow());
+        dialog.Body.Add(LinkColourRow());
         if (LinkProtection == HexLinkProtection.File)
             dialog.Body.Add(LinkLine(Said("link.key_file")));
         if (LinkDevice is { } me)
@@ -304,6 +305,39 @@ internal sealed partial class DawnScene
         linkNameBox?.Focus();
     }
 
+
+    // The colours a device can pick for itself, the presence ones and a few more
+    private static readonly string[] LINK_PICKABLE_COLOURS =
+        ["#ED8C33", "#59B3F2", "#BF73F2", "#59D98C", "#F2668C", "#F2D94D", "#4DD9D9", "#F2F2F2", "#A6E04D", "#E05A4D"];
+
+    // The colour this device is drawn in on every linked screen, its caret, its dot beside the files it edits, its Link
+    // Chat lines. Only this device picks it, kept in link_colour and said with its hello; Automatic is its id's
+    private UIComponent LinkColourRow()
+    {
+        var row = new StackPanel { Direction = UIDirection.Horizontal, Spacing = 6.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, LINK_ROW) };
+        row.Add(new Label { Text = Said("link.colour_label"), TextScale = LINK_TEXT, Size = new Vector2(75, LINK_ROW), Align = Origin.Left, Anchor = Origin.Left, Pivot = Origin.Left });
+        void Pick(string colour)
+        {
+            if (colour == settings.LinkColour)
+                return;
+            settings.LinkColour = colour;
+            SaveSettings();
+            SettingsPage?.Refresh("link_colour");
+            LinkPickColour(LinkDevice?.Id ?? string.Empty, colour);
+            link?.WorkspaceMoved();
+        }
+        foreach (string colour in LINK_PICKABLE_COLOURS)
+        {
+            string picked = colour;
+            row.Add(new Button
+            {
+                Label = $"[color:{colour}]$(circle-filled)[/color]", Size = new Vector2(LINK_ROW, LINK_ROW), LabelScale = LINK_TEXT, Animated = false,
+                Anchor = Origin.Left, Pivot = Origin.Left, Tooltip = colour, OnPressed = () => Pick(picked)
+            });
+        }
+        row.Add(LinkButton(Said("link.colour_automatic"), "discard", () => Pick(string.Empty)));
+        return row;
+    }
 
     // The name this device goes by, typed in and kept in link_name, the machine's own name when it's left empty
     private UIComponent LinkNameRow()

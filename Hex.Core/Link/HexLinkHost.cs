@@ -219,6 +219,7 @@ internal sealed partial class HexLinkHost : IDisposable
             ["granted"] = HexLinkData.Words(rights),
             ["redial"] = redial,
             ["serves"] = Serves(),
+            ["colour"] = services.DeviceColour,
             ["syncChosen"] = new JsonArray([.. (HexLinkAllowed.Has(rights, HexLinkRights.View) ? services.ChosenSyncFolders(Device.Id) : [])
                 .Take(MOST_TREES).Select(folder => (JsonNode)folder)]),
             ["syncPaused"] = new JsonArray([.. (HexLinkAllowed.Has(rights, HexLinkRights.View) ? services.PausedSyncFolders(Device.Id) : [])

@@ -50,7 +50,10 @@ internal sealed partial class HexLinkPeer
             .Where(item => item.Folder is { Length: > 0 })
             .Select(item => new HexLinkSyncPause(item.Folder!, item.By))];
         bool pauseChanged = !PausedSyncFolders.SequenceEqual(paused);
-        bool changed = pauseChanged || !ChosenSyncFolders.SequenceEqual(chosen);
+        // The colour the device picked for itself, #rrggbb, said with its choices so a change of it travels the same way
+        string? colour = HexLinkData.String(hello, "colour", 7) is { Length: 7 } said && said[0] == '#' && said[1..].All(char.IsAsciiHexDigit) ? said : null;
+        bool changed = pauseChanged || !ChosenSyncFolders.SequenceEqual(chosen) || colour != Colour;
+        Colour = colour;
         ChosenSyncFolders = chosen;
         PausedSyncFolders = paused;
         if (pauseChanged)

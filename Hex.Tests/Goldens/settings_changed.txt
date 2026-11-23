@@ -50,6 +50,7 @@ mcp_hint_quiet = true
 link = true
 link_port = 23916
 link_name = "hex/test"
+link_colour = "hex/test"
 link_discoverable = false
 link_allow_public = true
 link_map_public_port = true

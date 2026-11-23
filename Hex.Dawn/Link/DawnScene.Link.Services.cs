@@ -81,6 +81,8 @@ internal sealed partial class DawnScene
             hex.LinkMoved();
         }
 
+        public string? DeviceColour => DawnScene.LinkColourOf(hex.settings.LinkColour) is not null ? hex.settings.LinkColour : null;
+
         public IReadOnlyList<string> ChosenSyncFolders(string deviceId) => hex.LinkSyncedWith(deviceId);
         public IReadOnlyList<HexLinkSyncPause> PausedSyncFolders(string deviceId) => hex.LinkSyncPaused(deviceId);
 

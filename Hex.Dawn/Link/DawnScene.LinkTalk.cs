@@ -15,12 +15,14 @@ internal sealed partial class DawnScene
     private readonly List<HexLinkTalk> linkTalkMessages = [];
     private Panel? linkTalkDock, linkTalkPanel;
     private Button? linkTalkSend;
+    private Button? linkTalkPropertiesTab, linkTalkTab;
     private VirtualStack? linkTalkRows;
     private CodeEditor? linkTalkDraft;
     private Label? linkTalkEmpty, linkTalkPlaceholder;
     private StatusItem? linkTalkStatus;
     private UISkin? linkTalkSkin;
-    private bool linkTalkOpen = true, linkTalkExplicit, linkTalkFocus;
+    // Picked on purpose, the properties stay the right side's tab when a device links
+    private bool linkTalkOpen, linkTalkExplicit, linkTalkFocus;
     private int linkTalkUnread;
 
     private void BuildLinkTalk()
@@ -69,6 +71,7 @@ internal sealed partial class DawnScene
 
         linkTalkStatus = statusBar.Add("$(comment-discussion)", right: true, pressed: ToggleLinkTalk, tooltip: Said("link.talk.open"));
         linkTalkStatus.IsVisible = () => LinkPeers.Count > 0 && !pane.IsShownInHierarchy;
+        BuildLinkTalkTabs();
     }
 
     private UIComponent DrawLinkTalk(HexLinkTalk message)
@@ -81,7 +84,8 @@ internal sealed partial class DawnScene
         string at = message.SentAt.ToLocalTime().ToString("t", CultureInfo.CurrentCulture);
         row.Add(new Label
         {
-            Text = $"[color:{HexColour(ink)}][b]{LinkTalkLiteral(name)}[/b][/color]  [color:dim]{at}[/color]",
+            // The sender's dot in the colour it chose for itself, the one beside the files it's editing
+            Text = $"[color:{HexColour(LinkDeviceColour(message.Sender.Id))}]$(circle-filled)[/color] [color:{HexColour(ink)}][b]{LinkTalkLiteral(name)}[/b][/color]  [color:dim]{at}[/color]",
             Align = Origin.TopLeft, Wrap = true, Fill = UIFill.Horizontal, TextScale = 0.125f
         });
         row.Add(new Label
@@ -142,7 +146,6 @@ internal sealed partial class DawnScene
         if (linkTalkPanel is null)
             return;
         HideLinkTalk();
-        linkTalkOpen = true;
         linkTalkMessages.Clear();
         linkTalkUnread = 0;
         linkTalkEmpty!.Visible = true;
@@ -168,7 +171,46 @@ internal sealed partial class DawnScene
 
         if (!body.Visible)
             SwitchFace(HexFace.Dawn);
+        if (!right.Shown)
+            ToggleProperties();
         linkTalkOpen = linkTalkExplicit = linkTalkFocus = true;
+    }
+
+    // The chat is a tab of the right side beside the properties, its head saying both while a device is linked
+    private void BuildLinkTalkTabs()
+    {
+        Panel head = layout.Get<Panel>("right_head");
+        Button Tab(string text, Action pressed)
+        {
+            float wide = Skin is { } skin ? MathF.Ceiling(skin.Font.MeasureLine(text, 0.13f, Horizon.UI.Drawing.UITextStyle.None, default) + skin.ButtonPadding.Total.X + 12.0f) : 96.0f;
+            var tab = head.Add(new Button
+            {
+                Label = text, Style = "button_flat", Animated = false, Anchor = Origin.Left, Pivot = Origin.Left, LabelScale = 0.13f, Size = new Vector2(wide, 24), Visible = false
+            });
+            tab.OnPressed = pressed;
+            return tab;
+        }
+        linkTalkPropertiesTab = Tab(Said("properties.title"), () =>
+        {
+            linkTalkOpen = linkTalkExplicit = false;
+            if (linkTalkPanel is { } pane)
+                SetLinkTalkVisible(pane, false);
+        });
+        linkTalkTab = Tab(Said("link.talk.title"), () => linkTalkOpen = linkTalkExplicit = linkTalkFocus = true);
+        linkTalkTab.Position = new Vector2(linkTalkPropertiesTab.Size.X + 4, 0);
+    }
+
+    private void FitLinkTalkTabs(bool linked, bool chatShown)
+    {
+        if (linkTalkPropertiesTab is not { } properties || linkTalkTab is not { } chat)
+            return;
+        layout.Get<Label>("inspector_title").Visible = !linked;
+        properties.Visible = chat.Visible = linked;
+        properties.Selected = !chatShown;
+        chat.Selected = chatShown;
+        string label = Said("link.talk.title") + (linkTalkUnread > 0 ? $" ({linkTalkUnread.ToString(CultureInfo.InvariantCulture)})" : string.Empty);
+        if (chat.Label != label)
+            chat.Label = label;
     }
 
     private void HideLinkTalk()
@@ -215,16 +257,25 @@ internal sealed partial class DawnScene
             status.Text += " " + Said("link.talk.unread", ("count", linkTalkUnread.ToString(CultureInfo.InvariantCulture)));
     }
 
-    // The open chat takes a column while the editor has room, a chat opened on purpose in a narrow window floats over its right edge.
+    // The open chat is a tab of the right side, over where the properties are while its tab is picked. It took a column
+    // of its own beside the editor, and with the properties out the editor had two sides on the right
     private float FitLinkTalk(float room, float height)
     {
         if (linkTalkPanel is not { } pane)
             return 0;
 
-        bool dock = room >= LINK_TALK_EDITOR_ROOM + LINK_TALK_MIN_WIDTH + LINK_TALK_GAP;
-        bool visible = body.Visible && linkTalkOpen && LinkPeers.Count > 0 && (dock || linkTalkExplicit);
-        linkTalkDock!.Visible = visible && dock;
+        // The colours devices picked for themselves, kept with what they last said, this one's from its settings
+        foreach (HexLinkPeer peer in LinkPeers)
+            LinkPickColour(peer.Device.Id, peer.Colour);
+        if (LinkDevice is { } here)
+            LinkPickColour(here.Id, settings.LinkColour);
+
+        bool linked = body.Visible && LinkPeers.Count > 0;
+        Panel head = layout.Get<Panel>("right_head");
+        bool visible = linked && linkTalkOpen && right.Shown && head.IsShownInHierarchy;
+        linkTalkDock!.Visible = false;
         SetLinkTalkVisible(pane, visible);
+        FitLinkTalkTabs(linked, visible);
         if (!visible)
             return 0;
 
@@ -241,32 +292,17 @@ internal sealed partial class DawnScene
             linkTalkRows!.Rebind();
         }
 
-        float width = dock ? MathF.Min(LINK_TALK_WIDTH, room - LINK_TALK_EDITOR_ROOM - LINK_TALK_GAP) : MathF.Min(LINK_TALK_WIDTH, room);
-        if (dock)
+        if (pane.Parent != chrome.Root)
         {
-            if (pane.Parent != linkTalkDock)
-            {
-                pane.Parent?.Remove(pane);
-                pane.Anchor = Origin.Center;
-                pane.Pivot = Origin.Center;
-                pane.Position = Vector2.Zero;
-                linkTalkDock.Add(pane);
-            }
-            linkTalkDock.Size = new Vector2(width + LINK_TALK_GAP, height);
+            pane.Parent?.Remove(pane);
+            pane.Anchor = Origin.TopLeft;
+            pane.Pivot = Origin.TopLeft;
+            chrome.Root.Add(pane);
         }
-        else
-        {
-            if (pane.Parent != chrome.Root)
-            {
-                pane.Parent?.Remove(pane);
-                pane.Anchor = Origin.TopLeft;
-                pane.Pivot = Origin.TopLeft;
-                chrome.Root.Add(pane);
-            }
-            pane.Position = new Vector2(center.Bounds.Max.X - chrome.Root.Bounds.Min.X - width, body.Bounds.Max.Y - chrome.Root.Bounds.Max.Y);
-        }
-
-        pane.Size = new Vector2(width, height);
+        var side = right.Bounds;
+        float top = head.Bounds.Min.Y - 6, width = MathF.Max(side.Width - 20, LINK_TALK_MIN_WIDTH);
+        pane.Position = new Vector2(side.Min.X + 10 - chrome.Root.Bounds.Min.X, top - chrome.Root.Bounds.Max.Y);
+        pane.Size = new Vector2(width, MathF.Max(top - side.Min.Y - 10, 120));
         if (linkTalkDraft!.Parent is Panel composer)
             composer.Size = composer.Size with { X = width - 20 };
         linkTalkPlaceholder!.Visible = linkTalkDraft.Text.Length == 0 && compositor.Focus != linkTalkDraft;
@@ -277,6 +313,6 @@ internal sealed partial class DawnScene
             linkTalkDraft.Focus();
         }
 
-        return dock ? width + LINK_TALK_GAP : 0;
+        return 0;
     }
 }
