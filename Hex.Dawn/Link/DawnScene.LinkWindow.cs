@@ -316,11 +316,14 @@ internal sealed partial class DawnScene
     {
         var row = new StackPanel { Direction = UIDirection.Horizontal, Spacing = 6.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, LINK_ROW) };
         row.Add(new Label { Text = Said("link.colour_label"), TextScale = LINK_TEXT, Size = new Vector2(75, LINK_ROW), Align = Origin.Left, Anchor = Origin.Left, Pivot = Origin.Left });
+        var swatches = new List<Button>();
         void Pick(string colour)
         {
             if (colour == settings.LinkColour)
                 return;
             settings.LinkColour = colour;
+            foreach (Button each in swatches)
+                each.Selected = each.Tooltip == colour;
             SaveSettings();
             SettingsPage?.Refresh("link_colour");
             LinkPickColour(LinkDevice?.Id ?? string.Empty, colour);
@@ -329,11 +332,14 @@ internal sealed partial class DawnScene
         foreach (string colour in LINK_PICKABLE_COLOURS)
         {
             string picked = colour;
-            row.Add(new Button
+            var swatch = new Button
             {
-                Label = $"[color:{colour}]$(circle-filled)[/color]", Size = new Vector2(LINK_ROW, LINK_ROW), LabelScale = LINK_TEXT, Animated = false,
+                Size = new Vector2(LINK_ROW, LINK_ROW), Animated = false, Selected = colour == settings.LinkColour,
                 Anchor = Origin.Left, Pivot = Origin.Left, Tooltip = colour, OnPressed = () => Pick(picked)
-            });
+            };
+            swatches.Add(row.Add(swatch));
+            // A label takes no pointer, the press is the button's
+            swatch.Add(new Label { Text = "$(circle-filled)", Anchor = Origin.Center, Pivot = Origin.Center, Align = Origin.Center, TextScale = 0.16f, Color = LinkColourOf(colour) ?? Vector4.One });
         }
         row.Add(LinkButton(Said("link.colour_automatic"), "discard", () => Pick(string.Empty)));
         return row;
