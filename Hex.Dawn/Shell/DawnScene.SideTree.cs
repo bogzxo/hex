@@ -114,6 +114,7 @@ internal sealed partial class DawnScene
         explorerFollowedDocument = document.Path;
         treeTitle.Text = Said("side.explorer_of", ("workspace", explorer.workspace.Name));
         explorer.explorerRows.Clear();
+        LinkUpdateExplorerPresence(rowsOnly: true);
         solutionHeads.Clear();
         explorerMade = 0;
         UseSideTree(true);
@@ -321,6 +322,7 @@ internal sealed partial class DawnScene
         };
 
         row.Pip = openInTabs.Contains(file) ? openInTabMark : null;
+        row.StatusDots = linkExplorerPresence?.GetValueOrDefault(file);
         explorer.explorerRows.Add((file, false, row));
         explorerMade++;
         DecorateRow(row, file, false, null);

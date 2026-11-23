@@ -237,19 +237,115 @@ internal sealed partial class DawnScene
     // A wire path as a file of this workspace, by the folder's name; null when there's no such folder or it isn't a path
     private string? LinkLocalOf(string wire)
     {
+        var folders = linkServices?.Workspace.Folders;
+
+        // Asked of every device every tick and a bad path throws, so the answers are kept for as long as the folders are these
+        // (and from the link's own threads, hence the lock)
+        lock (linkLocalCache)
+        {
+            if (!ReferenceEquals(folders, linkLocalCacheFor) || linkLocalCache.Count > 1024)
+            {
+                linkLocalCache.Clear();
+                linkLocalCacheFor = folders;
+            }
+            if (linkLocalCache.TryGetValue(wire, out string? known))
+                return known;
+        }
+
+        string? local = null;
         try
         {
-            return linkServices?.Workspace.Folders is { Count: > 0 } folders ? HexLinkFiles.Resolve(folders, wire) : null;
+            local = folders is { Count: > 0 } ? HexLinkFiles.Resolve(folders, wire) : null;
         }
         catch (HexLinkException)
         {
-            return null;
         }
+
+        lock (linkLocalCache)
+        {
+            if (ReferenceEquals(folders, linkLocalCacheFor))
+                linkLocalCache[wire] = local;
+        }
+        return local;
+    }
+
+    private readonly Dictionary<string, string?> linkLocalCache = new(StringComparer.Ordinal);
+    private object? linkLocalCacheFor;
+
+    // What the dots were last made from, see LinkPresenceDraw
+    private int linkExplorerPresenceInputs;
+
+    // The dot of each device that's in a file, by local path, in the colour its caret is drawn in; null when nobody is
+    private Dictionary<string, List<Vector4>>? linkExplorerPresence;
+    private string linkExplorerPresenceKey = string.Empty;
+
+    /// <summary>
+    /// Puts a dot in each device's colour on the Explorer's row of the file it's in, taking it off the row it left. Redone
+    /// when a device moves to another file, picks another colour, leaves or the Link goes; rowsOnly only lays the dots on
+    /// the rows just built.
+    /// </summary>
+    private void LinkUpdateExplorerPresence(bool rowsOnly = false)
+    {
+        Dictionary<string, List<Vector4>>? previous = linkExplorerPresence;
+        if (!rowsOnly)
+        {
+            var now = new Dictionary<string, List<Vector4>>(PlatformPaths.Comparer);
+            var key = new System.Text.StringBuilder();
+            foreach (LinkPresenceSeen seen in linkPresence.Values.OrderBy(seen => seen.Device.Id, StringComparer.Ordinal))
+            {
+                if (seen.Presence is not { File: { } file } || LinkLocalOf(file) is not { } path)
+                    continue;
+                if (!now.TryGetValue(path, out List<Vector4>? dots))
+                    now[path] = dots = [];
+                Vector4 colour = LinkDeviceColour(seen.Device.Id);
+                dots.Add(colour);
+                key.Append(path).Append('|').Append(colour).Append(';');
+            }
+
+            if (key.ToString() == linkExplorerPresenceKey)
+                return;
+            linkExplorerPresenceKey = key.ToString();
+            linkExplorerPresence = now.Count > 0 ? now : null;
+        }
+        else
+        {
+            previous = null;
+        }
+
+        bool redraw = false;
+        foreach (var (path, isFolder, row) in explorer.explorerRows)
+        {
+            if (isFolder)
+                continue;
+            List<Vector4>? dots = linkExplorerPresence?.GetValueOrDefault(path);
+            if (dots is null && previous?.ContainsKey(path) != true && row.StatusDots is null)
+                continue;
+            row.StatusDots = dots;
+            redraw = true;
+        }
+
+        if (redraw && !rowsOnly)
+            sideTree.Refresh();
     }
 
     // The others' carets drawn into the tabs that have their files, when something of them moved
     private void LinkPresenceDraw()
     {
+        // Every tick, so only when what the dots are made of (who is in which file, in which colour, in which folders) moved
+        var hash = new HashCode();
+        int sum = 0;
+        foreach (LinkPresenceSeen seen in linkPresence.Values)
+            sum += HashCode.Combine(seen.Device.Id, seen.Presence?.File, LinkDeviceColour(seen.Device.Id));
+        hash.Add(sum);
+        hash.Add(linkPresence.Count);
+        hash.Add(linkServices?.Workspace.Folders);
+        int explorerHash = hash.ToHashCode();
+        if (explorerHash != linkExplorerPresenceInputs)
+        {
+            linkExplorerPresenceInputs = explorerHash;
+            LinkUpdateExplorerPresence();
+        }
+
         string key = string.Join("|", linkPresence.Values.Select(seen => $"{seen.Device.Id}:{seen.Presence?.File}:{seen.Presence?.Line}:{seen.Presence?.Column}:{seen.Presence?.ToLine}:{seen.Presence?.ToColumn}:{seen.Presence?.PointerLine}:{seen.Presence?.PointerColumn}:{seen.Presence?.SharedDocument}:{seen.Device.Name}"))
             + "#" + documents.Count;
         if (key == linkPresenceDrawnKey && linkPresenceDrawn.All(documents.Contains))

@@ -333,6 +333,7 @@ internal sealed partial class DawnScene
     /// <summary>What changed between the old settings and the reloaded ones applied, as their rows would.</summary>
     private void ApplyReadSettings(HexSettings was)
     {
+        Hex.Core.HexData.UseAgentFolder(settings.AgentDataFolder);
         HexSettings now = settings;
         if (now.EditorSkin != was.EditorSkin || now.EditorTheme != was.EditorTheme)
             UseEditorSkin(now.EditorSkin, now.EditorTheme, save: false);

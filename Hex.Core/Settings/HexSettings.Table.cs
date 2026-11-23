@@ -94,6 +94,7 @@ internal sealed partial class HexSettings
         Flag("no_ai", settings => settings.NoAi, (settings, value) => settings.NoAi = value),
         Flag("agents_resume_after_limit", settings => settings.AgentsResumeAfterLimit, (settings, value) => settings.AgentsResumeAfterLimit = value),
         Whole("agents_auto_settle_seconds", settings => settings.AgentsAutoSettleSeconds, (settings, value) => settings.AgentsAutoSettleSeconds = value, 0.0f, 3600.0f),
+        OnDisk("agent_data_folder", settings => settings.AgentDataFolder, (settings, value) => settings.AgentDataFolder = value.Trim().Trim('"')),
         Flag("mcp_hint_quiet", settings => settings.McpHintQuiet, (settings, value) => settings.McpHintQuiet = value),
         Flag("link", settings => settings.Link, (settings, value) => settings.Link = value),
         Whole("link_port", settings => settings.LinkPort, (settings, value) => settings.LinkPort = value, 1024.0f, 65535.0f),

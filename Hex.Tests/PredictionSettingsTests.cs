@@ -232,7 +232,7 @@ public class PredictionSettingsTests
             Assert.Equal(["plaintext", "markdown"], settings.EditPredictionsDisabledLanguages);
             Assert.Empty(settings.WorkspaceValues);
             Assert.All(new[] { "edit_predictions", "edit_predictions_provider", "edit_predictions_api_url", "edit_predictions_api_key", "edit_predictions_model",
-                "edit_predictions_prompt_format", "edit_predictions_max_tokens", "edit_predictions_debounce", "edit_predictions_disabled_languages", "edit_predictions_share" },
+                "edit_predictions_prompt_format", "edit_predictions_max_tokens", "edit_predictions_debounce", "edit_predictions_disabled_languages", "edit_predictions_share", "edit_predictions_terminal" },
                 key => Assert.False(HexSettings.IsWorkspaceKey(key), key));
         });
     }
@@ -272,7 +272,7 @@ public class PredictionSettingsTests
     public void The_rows_are_in_the_AI_section_under_the_switch_and_the_key_is_listed_only_as_set()
     {
         UISetting[] rows = [.. EditorSettingsCatalog.Settings.Where(row => row.Key.StartsWith("edit_predictions", StringComparison.Ordinal))];
-        Assert.Equal(13, rows.Length);
+        Assert.Equal(14, rows.Length);
         Assert.Equal(["after_typing", "shortcut"], rows.Single(row => row.Key == "edit_predictions_invocation").Choices!);
         Assert.All(rows, row => Assert.Equal(EditorSettingsCatalog.AI, row.Group));
         Assert.All(rows.Where(row => row.Key != "edit_predictions"), row => Assert.Equal("edit_predictions", row.DependsOn));

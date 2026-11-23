@@ -194,6 +194,9 @@ internal sealed partial class DawnScene
                 && caret.Colour == LinkDeviceColour(peerId));
         test.WaitFor(DrawsBInReadme, 8);
         test.Check("link-files: B's caret is drawn in A's open tab of the file, in B's colour with its name", DrawsBInReadme);
+
+        test.Check("link-files: the Explorer gives B's file a dot in B's colour", () =>
+            peerId is not null && FileRow(readme, 0).StatusDots is { Count: 1 } dots && dots[0] == LinkDeviceColour(peerId));
         test.WaitFor(() => Context.Documents.Find(readme)?.Editor.RemoteCarets.Any(remote => remote.Id == peerId && remote.PointerColumn == 4) == true, 5);
         test.Check("link-files: B's mouse pointer reaches A independently of its text caret", () =>
             Context.Documents.Find(readme)?.Editor.RemoteCarets.Any(remote => remote.Id == peerId

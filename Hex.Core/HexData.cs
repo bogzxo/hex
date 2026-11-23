@@ -32,7 +32,93 @@ public static class HexData
     /// <summary>Whether the folder next to the exe couldn't be written and the user's local app data has it instead.</summary>
     public static bool Fallback => Where().Fallback;
 
-    public static string Agents => Path.Combine(Root, "agents");
+    /// <summary>
+    /// The agent data folder (chats, images, temp, scratch, limits): the one the user's settings name
+    /// (<see cref="UseAgentFolder"/>), else <c>agents</c> in the data folder. Every agent path goes through this.
+    /// </summary>
+    public static string Agents => ResolvedAgents();
+
+    // Read from every thread, so each is one immutable object swapped whole
+    private sealed record AgentsResolved(string Configured, string Root, string Default, string Folder);
+
+    private static volatile string configuredAgents = string.Empty;
+    private static volatile AgentsResolved? resolvedAgents;
+
+    /// <summary>Why the configured agent data folder isn't the one in use (it couldn't be made or written), null when it is or none is set.</summary>
+    public static string? AgentFolderProblem { get; private set; }
+
+    /// <summary>
+    /// Sets the agent data folder from the user's own settings (agent_data_folder), empty for the usual one. Existing data
+    /// isn't moved. Only ever called with the user's value, a folder's settings can't set it.
+    /// </summary>
+    public static void UseAgentFolder(string? configured)
+    {
+        configuredAgents = configured?.Trim() ?? string.Empty;
+        resolvedAgents = null;
+    }
+
+    private static string ResolvedAgents()
+    {
+        string root = Root;
+        string usual = Path.Combine(root, "agents");
+        string configured = configuredAgents;
+        if (resolvedAgents is { } known && known.Configured == configured && known.Root == root && known.Default == usual)
+            return known.Folder;
+
+        string folder = ResolveAgentFolder(configured, usual, out string? problem);
+        AgentFolderProblem = problem;
+        if (problem is not null)
+        {
+            System.Diagnostics.Trace.TraceWarning("Hex: " + problem);
+            try
+            {
+                File.AppendAllLines(Path.Combine(root, "agent_folder.log"), [$"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {problem}"]);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+
+        resolvedAgents = new AgentsResolved(configured, root, usual, folder);
+        return folder;
+    }
+
+    /// <summary>
+    /// The folder <paramref name="configured"/> names (~ and %VARIABLES% expanded, made when missing), or
+    /// <paramref name="usual"/> when it's empty, isn't a whole path, or can't be made or written (<paramref name="problem"/> says why).
+    /// </summary>
+    internal static string ResolveAgentFolder(string configured, string usual, out string? problem)
+    {
+        problem = null;
+        if (string.IsNullOrWhiteSpace(configured))
+            return usual;
+
+        string path = Environment.ExpandEnvironmentVariables(configured.Trim());
+        if (path == "~" || path.StartsWith("~/", StringComparison.Ordinal) || path.StartsWith("~\\", StringComparison.Ordinal))
+            path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), path.Length > 2 ? path[2..] : string.Empty);
+
+        try
+        {
+            if (!Path.IsPathFullyQualified(path))
+            {
+                problem = $"agent_data_folder '{configured}' isn't a full path, using {usual}";
+                return usual;
+            }
+
+            path = Path.GetFullPath(path);
+        }
+        catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            problem = $"agent_data_folder '{configured}' isn't a path ({e.Message}), using {usual}";
+            return usual;
+        }
+
+        if (Writable(path))
+            return path;
+
+        problem = $"agent_data_folder '{path}' can't be made or written, using {usual}";
+        return usual;
+    }
     public static string AgentChats => Path.Combine(Agents, "chats");
     public static string AgentHistory => Path.Combine(Agents, "history");
     public static string AgentImages => Path.Combine(Agents, "images");

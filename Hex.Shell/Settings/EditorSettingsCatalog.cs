@@ -241,6 +241,7 @@ public static class EditorSettingsCatalog
         AiList(Hex.Core.HexSettings.EDIT_PREDICTIONS_EXCLUDE),
         new("edit_predictions_workspace", HexText.Get("settings_catalog.edit_predictions_workspace_title"), UIFormKind.Flag, HexText.Get("settings_catalog.edit_predictions_workspace_help"), AI),
         new("edit_predictions_share", HexText.Get("settings_catalog.edit_predictions_share_title"), UIFormKind.Flag, HexText.Get("settings_catalog.edit_predictions_share_help"), AI),
+        new("edit_predictions_terminal", HexText.Get("settings_catalog.edit_predictions_terminal_title"), UIFormKind.Flag, HexText.Get("settings_catalog.edit_predictions_terminal_help"), AI),
 
         new(GIT_ENABLED, HexText.Get("settings_catalog.git_enabled_title"), UIFormKind.Flag, HexText.Get("settings_catalog.git_enabled_help"), GIT),
         new("git_blame", HexText.Get("settings_catalog.git_blame_title"), UIFormKind.Flag, HexText.Get("settings_catalog.git_blame_help"), GIT),
@@ -259,6 +260,7 @@ public static class EditorSettingsCatalog
         new("no_ai", HexText.Get("settings_catalog.no_ai_title"), UIFormKind.Flag, HexText.Get("settings_catalog.no_ai_help"), AGENTS),
         new("agents_resume_after_limit", HexText.Get("settings_catalog.agents_resume_after_limit_title"), UIFormKind.Flag, HexText.Get("settings_catalog.agents_resume_after_limit_help"), AGENTS),
         new("agents_auto_settle_seconds", HexText.Get("settings_catalog.agents_auto_settle_seconds_title"), UIFormKind.Whole, HexText.Get("settings_catalog.agents_auto_settle_seconds_help"), AGENTS, Least: 0.0f, Most: 3600.0f),
+        new("agent_data_folder", HexText.Get("settings_catalog.agent_data_folder_title"), UIFormKind.Text, HexText.Get("settings_catalog.agent_data_folder_help"), AGENTS, Placeholder: HexText.Get("settings_catalog.agent_data_folder_placeholder")),
         new("link", HexText.Get("settings_catalog.link_title"), UIFormKind.Flag, HexText.Get("settings_catalog.link_help"), LINK),
         new("link_port", HexText.Get("settings_catalog.link_port_title"), UIFormKind.Whole, HexText.Get("settings_catalog.link_port_help"), LINK, Least: 1024.0f, Most: 65535.0f),
         new("link_name", HexText.Get("settings_catalog.link_name_title"), UIFormKind.Text, HexText.Get("settings_catalog.link_name_help"), LINK, Placeholder: HexText.Get("settings_catalog.link_name_placeholder")),
@@ -419,6 +421,7 @@ public static class EditorSettingsCatalog
         ["no_ai"] = Values.Bool(false),
         ["agents_resume_after_limit"] = Values.Bool(true),
         ["agents_auto_settle_seconds"] = new NumberValue(30.0f),
+        ["agent_data_folder"] = new StringValue(string.Empty),
         ["link"] = Values.Bool(false),
         ["link_port"] = new NumberValue(47833.0f),
         ["link_name"] = new StringValue(string.Empty),
@@ -450,6 +453,7 @@ public static class EditorSettingsCatalog
         [Hex.Core.HexSettings.EDIT_PREDICTIONS_EXCLUDE] = Horizon.HIDL.Library.Natives.List(Hex.Core.HexSettings.UsualEditPredictionsExclude),
         ["edit_predictions_workspace"] = Values.Bool(true),
         ["edit_predictions_share"] = Values.Bool(false),
+        ["edit_predictions_terminal"] = Values.Bool(false),
 
         // Remembered once the first notice of what predictions send was given, never a row
         ["edit_predictions_notice_done"] = Values.Bool(false),
