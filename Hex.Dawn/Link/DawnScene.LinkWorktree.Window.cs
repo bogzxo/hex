@@ -11,6 +11,27 @@ internal sealed partial class DawnScene
     private HashSet<Guid> privateDeviceJobs { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
     private Dictionary<Guid, Process> privateDeviceEditors { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
 
+    /// <summary>What the card's More menu starts a private worktree of a shared folder with, null when one is already there or can't be.</summary>
+    private Action? LinkTryChangesSafely(string folder)
+    {
+        if (linkServices is not { } services ||
+            services.Workspace.Folders.FirstOrDefault(item => PlatformPaths.Comparer.Equals(item.Name, folder)) is not { } shared ||
+            LinkPrivateStoragePath is not { } storage)
+            return null;
+        string path = Path.GetFullPath(shared.Path);
+        if (PlatformPaths.Comparison != StringComparison.Ordinal)
+            path = path.ToUpperInvariant();
+        var id = new Guid(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes("device\n" + path)).AsSpan(0, 16));
+        if (File.Exists(Path.Combine(storage, "drafts", id.ToString("N"), "state.json")) || privateDeviceJobs.Contains(id))
+            return null;
+        return () => RunPrivateDeviceAction(id, async stop =>
+        {
+            HexLinkPrivateWorktree draft = await LinkStartPrivateWorktree(services, shared, id, stop);
+            linkPrivateDrafts[id] = draft;
+            await RefreshPrivateDeviceStatus(id, draft, stop);
+        });
+    }
+
     private void DrawLinkPrivateWorktree(StackPanel holder, string folder, HexLinkFolder? provisioned = null)
     {
         if (linkServices is not { } services ||
@@ -23,27 +44,14 @@ internal sealed partial class DawnScene
             holder.Add(LinkLine(LINK_PRIVATE_STORAGE_UNAVAILABLE));
             return;
         }
-        var pin = services.FolderAuthorities.Of(shared);
-        var gate = pin?.DeviceId == services.Device.Id
-            ? LinkReadOwnedWorktreeGate(services, shared with { Authority = pin })
-            : link?.PeerOf(pin?.DeviceId ?? "")?.Workspace.Folders.FirstOrDefault(
-                item => PlatformPaths.Comparer.Equals(item.Name, shared.Name) && item.Authority == pin)?.WorktreeGate;
-        holder.Add(LinkLine("Pre-publish check: " + (gate?.Options.Describe() ?? "builds the nearest project in each changed repository")));
         string path = Path.GetFullPath(shared.Path);
         if (PlatformPaths.Comparison != StringComparison.Ordinal)
             path = path.ToUpperInvariant();
         var id = new Guid(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes("device\n" + path)).AsSpan(0, 16));
         string saved = Path.Combine(storage, "drafts", id.ToString("N"), "state.json");
+        // Starting one is in the card's More menu (LinkTryChangesSafely), the card shows only one that's running
         if (!File.Exists(saved))
-        {
-            holder.Add(LinkButton("New isolated worktree", "git-branch", () => RunPrivateDeviceAction(id, async stop =>
-            {
-                HexLinkPrivateWorktree draft = await LinkStartPrivateWorktree(services, shared, id, stop);
-                linkPrivateDrafts[id] = draft;
-                await RefreshPrivateDeviceStatus(id, draft, stop);
-            }))).Enabled = !privateDeviceJobs.Contains(id);
             return;
-        }
 
         var buttons = holder.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 8, Fill = UIFill.Horizontal });
         string state = privateDeviceStatus.TryGetValue(id, out HexLinkDraftStatus? status)

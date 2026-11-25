@@ -27,6 +27,9 @@ internal sealed partial class HexLinkTransport
     // How many devices may come to an invitation without its token before only the token is taken
     private const int MOST_CODE_TRIES = 3;
 
+    /// <summary>How long a joiner waits on one address of an invitation before it starts dialling the next, 250 ms unless a test says.</summary>
+    internal int InviteStaggerMs { get; set; } = 250;
+
     /// <summary>
     /// An invitation is the person saying a device may pair now. One that came by its address or from Nearby rather than
     /// with the token is therefore asked about the way an open pairing window asks, with the six digits on both screens,
@@ -205,6 +208,7 @@ internal sealed partial class HexLinkTransport
         race.CancelAfter(TimeSpan.FromMilliseconds(Math.Min(HANDSHAKE_MS, remaining.TotalMilliseconds)));
         var pending = new Dictionary<Task<(SslStream Ssl, Socket Socket, string Pin, string Address)>,
             (int Port, string? SavedHost, bool IsLan)>();
+        Task previous = Task.CompletedTask;
         if (overrideRoute is not null)
             AddRoute(overrideRoute.Host, overrideRoute.Port, isLan: false);
         else
@@ -220,10 +224,37 @@ internal sealed partial class HexLinkTransport
             }
         }
 
+        // Dialled one after another as a happy-eyeballs race: each starts when the one before it fails or after a short
+        // wait, so a host with several adapters isn't handed a burst of handshakes and a quick first answer ends the rest
         void AddRoute(string host, int port, bool isLan)
         {
-            var dial = Connect(host, port, race.Token, pin => string.Equals(pin, invite.Pin, StringComparison.OrdinalIgnoreCase));
+            Task before = previous;
+            var dial = Staggered();
+            previous = dial;
             pending.Add(dial, (port, IPAddress.TryParse(host, out _) ? null : host, isLan));
+
+            async Task<(SslStream Ssl, Socket Socket, string Pin, string Address)> Staggered()
+            {
+                if (!before.IsCompleted)
+                {
+                    try
+                    {
+                        await Task.WhenAny(Settled(before), Task.Delay(InviteStaggerMs, race.Token));
+                    }
+                    catch (OperationCanceledException)
+                    {
+                    }
+                }
+
+                race.Token.ThrowIfCancellationRequested();
+                return await Connect(host, port, race.Token, pin => string.Equals(pin, invite.Pin, StringComparison.OrdinalIgnoreCase));
+            }
+        }
+
+        static async Task Settled(Task dial)
+        {
+            try { await dial; }
+            catch (Exception) { }
         }
 
         HexLinkRefused? failed = null;

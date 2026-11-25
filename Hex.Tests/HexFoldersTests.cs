@@ -19,6 +19,15 @@ public sealed class HexFoldersTests
             folders.Watch([folder]);
             _ = folders.In(folder);
 
+            // macOS's FSEvents says what was made in the last moments too, the folders just made above; what was before the
+            // watch started is let go of, so what is taken below is only what the test does
+            if (OperatingSystem.IsMacOS())
+            {
+                await Task.Delay(SETTLE_MS);
+                folders.TakeChanges();
+                _ = folders.In(folder);
+            }
+
             // Written where nothing was read, a build's obj, the languages look again but the explorer has nothing new to show
             File.WriteAllText(Path.Combine(unread, "made.txt"), "built");
             await Task.Delay(SETTLE_MS);

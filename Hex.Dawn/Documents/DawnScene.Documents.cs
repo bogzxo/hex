@@ -304,7 +304,11 @@ internal sealed partial class DawnScene
     {
         if (document.Merge is not null)
         {
-            Say("Use Complete merge to write the result.");
+            // A Link conflict is saved by saving it, any other merge by its own button
+            if (document.Merge.Session.LinkDevice is not null)
+                CompleteMergeEditor(document);
+            else
+                Say("Use Save merged file to write the result.");
             return;
         }
         // A picture or a diff is looked at, there's nothing of Hex's in it to write
@@ -695,7 +699,12 @@ internal sealed partial class DawnScene
         }
 
         commands.Add("Edit/history", Said("documents.undo"), Undo, "Ctrl+Z", "discard", UIKeyUse.BoundWhileTyping).IsEnabled = () => !LayoutTools || document.CanUndo || designer.recordPending || designer.CanUndoText;
-        commands.Add("Edit/history", Said("documents.redo"), Redo, "Ctrl+Y", "redo", UIKeyUse.BoundWhileTyping).IsEnabled = () => !LayoutTools || document.CanRedo || designer.CanRedoText;
+        MenuItem redo = commands.Add("Edit/history", Said("documents.redo"), Redo, RedoShortcut(OperatingSystem.IsMacOS()), "redo", UIKeyUse.BoundWhileTyping);
+        redo.IsEnabled = () => !LayoutTools || document.CanRedo || designer.CanRedoText;
+
+        // The Mac's own key for it is shown and bound (Shift+Cmd+Z), Cmd+Y goes on working for those who have it in their fingers
+        if (OperatingSystem.IsMacOS())
+            commands.Bind(Key.Y, () => { if (commands.CanPick(redo)) Redo(); }, control: true, whileTyping: true);
 
         // Ctrl+Tab goes through the files that are open, the way every editor does, with shift the other way
         commands.Bind(Key.Tab, () => CycleDocuments(1), control: true, whileTyping: true, shift: false);

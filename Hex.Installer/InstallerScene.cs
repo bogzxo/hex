@@ -27,6 +27,7 @@ internal sealed class InstallerScene : Scene
     private InstallChannel channel;
     private readonly WindowPanel optionsWindow;
     private readonly ToggleButton desktopHex, desktopDusk, applicationMenu, menuDusk, windowsAppPaths;
+    private readonly ToggleButton moduleLink, moduleLocalAi, moduleAgentic, moduleNotebooks, moduleDesigner;
     private InstallChoices choices;
     private string installRoot;
     private Task<string?>? folderPick;
@@ -58,6 +59,11 @@ internal sealed class InstallerScene : Scene
         applicationMenu = preferences.Get<ToggleButton>("application_menu");
         menuDusk = preferences.Get<ToggleButton>("menu_dusk");
         windowsAppPaths = preferences.Get<ToggleButton>("windows_app_paths");
+        moduleLink = preferences.Get<ToggleButton>("module_link");
+        moduleLocalAi = preferences.Get<ToggleButton>("module_local_ai");
+        moduleAgentic = preferences.Get<ToggleButton>("module_agentic");
+        moduleNotebooks = preferences.Get<ToggleButton>("module_notebooks");
+        moduleDesigner = preferences.Get<ToggleButton>("module_designer");
         applicationMenu.Label = InstallText.Get(OperatingSystem.IsWindows() ? "integration.menu_windows" : "integration.menu_linux");
         menuDusk.Label = InstallText.Get(OperatingSystem.IsWindows() ? "integration.menu_dusk_windows" : "integration.menu_dusk");
         desktopDusk.Visible = applicationMenu.Visible = menuDusk.Visible = !OperatingSystem.IsMacOS();
@@ -65,7 +71,15 @@ internal sealed class InstallerScene : Scene
         preferences.Get<Button>("options_cancel").OnPressed = optionsWindow.Close;
         preferences.Get<Button>("options_apply").OnPressed = () =>
         {
-            choices = new(desktopHex.State, desktopDusk.State, applicationMenu.State, menuDusk.State, windowsAppPaths.State);
+            var modules = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["link"] = moduleLink.State,
+                ["local_ai"] = moduleLocalAi.State,
+                ["agentic"] = moduleAgentic.State,
+                ["notebooks"] = moduleNotebooks.State,
+                ["designer"] = moduleDesigner.State
+            };
+            choices = new(desktopHex.State, desktopDusk.State, applicationMenu.State, menuDusk.State, windowsAppPaths.State, modules);
             optionsWindow.Close();
         };
         card = layout.Get<StackPanel>("card");
@@ -292,6 +306,11 @@ internal sealed class InstallerScene : Scene
         applicationMenu.State = choices.ApplicationMenu;
         menuDusk.State = choices.MenuDusk;
         windowsAppPaths.State = choices.WindowsAppPaths;
+        moduleLink.State = choices.IsModuleEnabled("link");
+        moduleLocalAi.State = choices.IsModuleEnabled("local_ai");
+        moduleAgentic.State = choices.IsModuleEnabled("agentic");
+        moduleNotebooks.State = choices.IsModuleEnabled("notebooks");
+        moduleDesigner.State = choices.IsModuleEnabled("designer");
         optionsWindow.Visible = true;
         optionsWindow.OnClosed = () => primary.Enabled = !busy;
         ui.Focus = desktopHex;

@@ -160,6 +160,26 @@ internal sealed partial class DawnScene
 
         internal bool FocusWhenShown { get; set; }
 
+        // The card this is the body of. The badges, the name and the close button sit over the button as its siblings, and
+        // the pointer being on any of them is on the card, which lights it
+        internal UIComponent? Card { get; set; }
+
+        protected override bool PointerLit
+        {
+            get
+            {
+                if (base.PointerLit)
+                    return true;
+                for (UIComponent? at = Module?.Compositor.HoveredComponent; at is not null && Card is not null; at = at.Parent)
+                {
+                    if (at == Card)
+                        return true;
+                }
+
+                return false;
+            }
+        }
+
         protected override void OnTextInput(char character)
         {
             switch (character)

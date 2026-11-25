@@ -1,5 +1,7 @@
 using System.Globalization;
 
+using Hex.Core.Modules;
+
 namespace Hex.Dawn;
 
 // Link's commands in the palette, all of them starting "Link:", what the status bar's link item opens the palette on.
@@ -10,6 +12,8 @@ internal sealed partial class DawnScene
     /// <summary>Link's commands for the palette, those that make sense right now.</summary>
     private List<(string Text, Action Picked)> LinkPaletteCommands()
     {
+        if (!HexModules.IsEnabled(HexModuleId.Link))
+            return [];
         var commands = new List<(string Text, Action Picked)> { (Said("link.command_open"), ShowLinkWindow) };
         if (!LinkOn)
         {
@@ -33,6 +37,7 @@ internal sealed partial class DawnScene
         LinkLiveDocumentCommands(commands);
         LinkHoldPaletteCommands(commands);
         AddLinkTalkCommand(commands);
+        LinkPortsPaletteCommands(commands);
         return commands;
     }
 
@@ -40,12 +45,16 @@ internal sealed partial class DawnScene
     private void LinkSwitch(bool on)
     {
         settings.Link = on;
+        linkFlagTurnedOff = !on && options.Link;
         SaveSettings();
         SettingsPage?.Refresh("link");
         if (on && options.SelfTest && !LinkOn)
             StartLink();
         else
             ApplyLink();
+        // The command used to say nothing and, started by --link, change nothing: now it says what it did
+        if (!on)
+            Say(Said("link.turned_off"));
     }
 
     // The pairing window opened, the notice saying what to type on the other machine

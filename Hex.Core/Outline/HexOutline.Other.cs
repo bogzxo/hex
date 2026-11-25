@@ -56,20 +56,31 @@ internal static partial class HexOutline
     /// <summary>The outline of a file of another language, by its extension, empty for one it doesn't know.</summary>
     private static List<OutlineEntry> OutlineOfOther(string text, string extension)
     {
+        if (extension is not (".cs" or ".d" or ".di" or ".slang" or ".hlsl" or ".py" or ".js" or ".ts" or ".mjs" or ".jsx" or ".tsx" or ".md" or ".markdown" or ".json" or ".yaml" or ".yml"))
+            return [];
+
         var entries = new List<OutlineEntry>();
-        string[] lines = text.Split('\n');
         bool fenced = false;
 
         // How deep the D type the lines are in is, its fields one in from it, -1 outside of one
         int typeDepth = -1;
-        for (int line = 0; line < lines.Length && entries.Count < 3000; line++)
+        int line = 0, start = 0;
+        while (entries.Count < 3000)
         {
-            string row = lines[line].TrimEnd('\r');
+            int newline = text.IndexOf('\n', start);
+            int end = newline < 0 ? text.Length : newline;
+            int content = end;
+            while (content > start && text[content - 1] == '\r')
+                content--;
+            ReadOnlySpan<char> span = text.AsSpan(start, content - start);
+
             switch (extension)
             {
                 case ".cs":
-                    if (!CsStarts.Contains(FirstWord(row)))
+                {
+                    if (!CsStarts.Contains(FirstWord(span)))
                         break;
+                    string row = span.ToString();
                     if (CsType().Match(row) is { Success: true } type)
                         entries.Add(new OutlineEntry(type.Groups[3].Value, line, type.Groups[3].Index, Depth(type.Groups[1].Value, 4), type.Groups[2].Value.Split(' ', StringSplitOptions.RemoveEmptyEntries)[^1] switch
                         {
@@ -82,8 +93,13 @@ internal static partial class HexOutline
                         entries.Add(new OutlineEntry(member.Groups[2].Value, line, member.Groups[2].Index, Depth(member.Groups[1].Value, 4),
                             member.Groups[3].Value == "(" ? "symbol-method" : member.Groups[3].Value is "{" or "=>" ? "symbol-property" : "symbol-field"));
                     break;
+                }
 
                 case ".d" or ".di":
+                {
+                    if (span.Trim().IsEmpty)
+                        break;
+                    string row = span.ToString();
                     if (DType().Match(row) is { Success: true } dType)
                     {
                         typeDepth = Depth(dType.Groups[1].Value, 4);
@@ -114,8 +130,13 @@ internal static partial class HexOutline
                         }
                     }
                     break;
+                }
 
                 case ".slang" or ".hlsl":
+                {
+                    if (span.Trim().IsEmpty)
+                        break;
+                    string row = span.ToString();
                     if (ShaderFunction().Match(row) is { Success: true } shader)
                     {
                         bool isStruct = shader.Groups[2].Success;
@@ -124,13 +145,25 @@ internal static partial class HexOutline
                             entries.Add(new OutlineEntry(name.Value, line, name.Index, Depth(isStruct ? shader.Groups[1].Value : shader.Groups[4].Value, 4), isStruct ? "symbol-struct" : "symbol-method"));
                     }
                     break;
+                }
 
                 case ".py":
+                {
+                    ReadOnlySpan<char> first = FirstWord(span);
+                    if (first is not ("def" or "class" or "async"))
+                        break;
+                    string row = span.ToString();
                     if (Python().Match(row) is { Success: true } python)
                         entries.Add(new OutlineEntry(python.Groups[3].Value, line, python.Groups[3].Index, Depth(python.Groups[1].Value, 4), python.Groups[2].Value == "class" ? "symbol-class" : "symbol-method"));
                     break;
+                }
 
                 case ".js" or ".ts" or ".mjs" or ".jsx" or ".tsx":
+                {
+                    ReadOnlySpan<char> first = FirstWord(span);
+                    if (first is not ("export" or "default" or "async" or "function" or "class" or "interface" or "type" or "enum" or "const" or "let"))
+                        break;
+                    string row = span.ToString();
                     if (Script().Match(row) is { Success: true } script)
                     {
                         bool declared = script.Groups[3].Success;
@@ -140,33 +173,39 @@ internal static partial class HexOutline
                             kind switch { "class" => "symbol-class", "interface" or "type" => "symbol-interface", "enum" => "symbol-enum", _ => "symbol-method" }));
                     }
                     break;
+                }
 
                 case ".md" or ".markdown":
-                    if (row.TrimStart().StartsWith("```", StringComparison.Ordinal))
+                    if (span.TrimStart().StartsWith("```", StringComparison.Ordinal))
                         fenced = !fenced;
-                    else if (!fenced && Heading().Match(row) is { Success: true } heading)
+                    else if (!fenced && span.Length > 0 && span[0] == '#' && Heading().Match(span.ToString()) is { Success: true } heading)
                         entries.Add(new OutlineEntry(heading.Groups[2].Value, line, heading.Groups[2].Index, heading.Groups[1].Length - 1, "symbol-string"));
                     break;
 
                 case ".json":
-                    if (JsonKey().Match(row) is { Success: true } key && Depth(key.Groups[1].Value, 2) <= 3)
+                    if (span.IndexOf(':') >= 0 && span.IndexOf('"') >= 0 && JsonKey().Match(span.ToString()) is { Success: true } key && Depth(key.Groups[1].Value, 2) <= 3)
                         entries.Add(new OutlineEntry(key.Groups[2].Value, line, key.Groups[2].Index, Math.Max(0, Depth(key.Groups[1].Value, 2) - 1), "symbol-key"));
                     break;
 
                 case ".yaml" or ".yml":
-                    if (!row.TrimStart().StartsWith('#') && YamlKey().Match(row) is { Success: true } yaml && Depth(yaml.Groups[1].Value, 2) <= 3)
+                    if (span.IndexOf(':') >= 0 && span.TrimStart() is not ['#', ..] && YamlKey().Match(span.ToString()) is { Success: true } yaml && Depth(yaml.Groups[1].Value, 2) <= 3)
                         entries.Add(new OutlineEntry(yaml.Groups[2].Value.Trim('"', '\''), line, yaml.Groups[2].Index, Depth(yaml.Groups[1].Value, 2), "symbol-key"));
                     break;
             }
+
+            if (newline < 0)
+                break;
+            start = newline + 1;
+            line++;
         }
 
         return entries;
     }
 
     // The first word of a line, what's before the first white space after the indent
-    private static ReadOnlySpan<char> FirstWord(string row)
+    private static ReadOnlySpan<char> FirstWord(ReadOnlySpan<char> row)
     {
-        ReadOnlySpan<char> line = row.AsSpan().TrimStart();
+        ReadOnlySpan<char> line = row.TrimStart();
         int end = 0;
         while (end < line.Length && !char.IsWhiteSpace(line[end]))
             end++;

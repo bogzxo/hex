@@ -72,14 +72,24 @@ internal sealed partial class HexGit
         listed.Clear();
         foreach (Repository repository in repositories.Values)
         {
-            bool inside = roots.Any(root => PlatformPaths.IsUnder(repository.Git.Root, root) || PlatformPaths.Same(repository.Git.Root, root));
-            bool around = roots.Any(root => PlatformPaths.IsUnder(root, repository.Git.Root));
-            if (!repository.Gone && (inside || around))
+            if (!repository.Gone && BelongsToWorkspace(roots, repository.Git.Root))
                 listed.Add(repository);
         }
 
         listed.Sort((a, b) => string.Compare(a.Git.Root, b.Git.Root, StringComparison.OrdinalIgnoreCase));
         return listed;
+    }
+
+    private static bool BelongsToWorkspace(IReadOnlyList<string> roots, string repositoryRoot)
+    {
+        for (int i = 0; i < roots.Count; i++)
+        {
+            string root = roots[i];
+            if (PlatformPaths.IsUnder(repositoryRoot, root) || PlatformPaths.Same(repositoryRoot, root) || PlatformPaths.IsUnder(root, repositoryRoot))
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>Every tick, what was made since the last look looked down from a moment after, nothing while nothing was.</summary>
@@ -128,7 +138,7 @@ internal sealed partial class HexGit
     /// Every second, the folders made lately looked at for a .git turning up, a stat each. A git init in a folder that was
     /// made a while before says nothing the workspace's watching passes on, git's own folder being left out of it.
     /// </summary>
-    private void LookAtNewFolders()
+    private bool LookAtNewFolders()
     {
         long now = Environment.TickCount64;
         bool changed = false;
@@ -150,6 +160,7 @@ internal sealed partial class HexGit
 
         if (changed)
             Adopted();
+        return changed;
     }
 
     /// <summary>The workspace's folders looked down for repositories, when they changed since the last look or when asked again.</summary>

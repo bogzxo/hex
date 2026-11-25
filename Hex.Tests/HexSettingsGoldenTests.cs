@@ -32,6 +32,7 @@ public class HexSettingsGoldenTests
     // What isn't a flag or a number is changed to one of these, a choice to another it takes
     private static readonly Dictionary<string, IRuntimeValue> changed = new(StringComparer.Ordinal)
     {
+        ["theme_follow_system"] = Values.Bool(true), // its default is on for a Mac and off elsewhere, so it is not flipped
         ["csharp_colors"] = Text("visual_studio"),
         ["git_pull_mode"] = Text("rebase"),
         ["git_smart_commit"] = Text("always"),
@@ -60,8 +61,11 @@ public class HexSettingsGoldenTests
         ["extension_catalog"] = Text(@"C:\catalogue"),
         ["git_account"] = Text("  somebody  "),
         ["edit_predictions_invocation"] = Text("shortcut"),
+        ["edit_predictions_mode"] = Text("subtle"),
         ["edit_predictions_provider"] = Text("openai"),
         ["edit_predictions_prompt_format"] = Text("zeta2"),
+        ["edit_predictions_thinking"] = Text("high"),
+        ["edit_predictions_system_prompt"] = Text("  You answer briefly.\n  "),
         ["edit_predictions_api_key"] = Text("sk-test-not-a-key"),
         ["edit_predictions_disabled_languages"] = Natives.List(["python", " rust ", "python"]),
         ["edit_predictions_exclude"] = Natives.List(["**/.env", "**/private/**"])
@@ -72,7 +76,20 @@ public class HexSettingsGoldenTests
     private const string API_KEY = "edit_predictions_api_key";
 
     private static string Shown(string key, IRuntimeValue value) =>
-        key == API_KEY ? "(not shown)" : Written(value).ReplaceLineEndings(" ");
+        key == API_KEY ? "(not shown)" : Portable(Written(value).ReplaceLineEndings(" "));
+
+    // A model that is a file is kept as its full path, lower-cased, so the golden would hold the folder the tests ran from
+    // and its separators. The folder is said as <cwd> and what follows it with forward slashes, the same on every system
+    private static string Portable(string written)
+    {
+        string here = Written(Text(LocalModelLibrary.FileId(Directory.GetCurrentDirectory())))[1..^1];
+        int at = written.IndexOf(here, StringComparison.Ordinal);
+        if (at < 0)
+            return written;
+        int end = written.IndexOf('"', at + here.Length);
+        string rest = written[(at + here.Length)..(end < 0 ? written.Length : end)].Replace("\\\\", "/");
+        return written[..at] + "file:<cwd>" + rest + (end < 0 ? string.Empty : written[end..]);
+    }
 
     private static HIDLObject Input(string which)
     {
@@ -92,6 +109,10 @@ public class HexSettingsGoldenTests
                 ("low", StringValue) => Values.Bool(true),
                 _ => null
             };
+
+            // Its default is on for a Mac and off elsewhere, so the goldens say it as off here and not as the default
+            if (key == "theme_follow_system" && which != "changed")
+                value = Values.Bool(false);
 
             if (key == API_KEY && !OperatingSystem.IsWindows() && !HexLinkSecrets.FileOnlyByEnvironment)
                 value = null;

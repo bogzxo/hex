@@ -19,7 +19,7 @@ internal sealed partial class DawnScene
         sideTree.TypeToFind = true;
         sideTree.FindNothingText = Said("side_tree.find_nothing");
         sideTree.DragManyText = Said("explorer_files.drag_many", ("count", "{0}"));
-        sideTree.DropCopies = () => explorerDropCopies || Horizon.Engine.GameEngine.Instance?.Input.Keyboard is { Control: true };
+        sideTree.DropCopies = () => explorerDropCopies || TreeView.CopyHeld(Horizon.Engine.GameEngine.Instance?.Input.Keyboard);
     }
 
     // The explorer of a workspace on screen, its rows there to type over

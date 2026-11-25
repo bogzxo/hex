@@ -16,7 +16,7 @@
 
   <ItemGroup>
     <Compile Remove="Link/HexLinkTransport*.cs;Link/HexLinkDns.cs;Link/HexLinkDiscovery.cs;Link/HexLinkPortMapping.cs;Link/HexRouterPortMapper*.cs;Prediction/*.cs" />
-    <Compile Include="Prediction/PredictionSettings.cs;Prediction/PredictionKey.cs;Prediction/PredictionStatus.cs;Prediction/PredictionTiming.cs" />
+    <Compile Include="Prediction/PredictionSettings.cs;Prediction/PredictionKey.cs;Prediction/PredictionStatus.cs;Prediction/PredictionTiming.cs;Prediction/PredictionTuning.cs" />
     <InternalsVisibleTo Include="Hex.Link.Transport" />
     <InternalsVisibleTo Include="Hex.Prediction.Runtime" />
     <InternalsVisibleTo Include="Hex" />

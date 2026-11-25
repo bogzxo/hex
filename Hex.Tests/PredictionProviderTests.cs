@@ -143,7 +143,7 @@ public sealed class PredictionProviderTests
         picker.Update(page, 5_000);
         Assert.Single(server.Sent);
         picker.Update(page, 10_000);
-        Assert.Equal(["", name], Assert.Single(page.Settings).Choices);
+        Assert.Equal(["", name], Assert.Single(page.Settings).Choices!);
         online = false;
         picker.Update(page, 20_000);
         Assert.Equal(UIFormKind.Text, Assert.Single(page.Settings).Kind);

@@ -1,4 +1,5 @@
 using Hex.Core;
+using Hex.Core.Modules;
 using Hex.Core.Notebooks;
 using Hex.Shell;
 
@@ -24,6 +25,9 @@ internal sealed partial class DawnScene
     private PredictionStatus predictionItemStatus;
     private string? predictionItemLanguage;
     private PredictionTiming predictionItemTiming;
+    private PredictionCounters predictionItemCounters;
+    private int predictionItemJumps;
+    private bool predictionItemRenames, predictionItemFar;
     private string? predictionItemStatusText;
     private bool predictionItemWritten;
 
@@ -56,6 +60,7 @@ internal sealed partial class DawnScene
     {
         predictionItem = statusBar.Add(string.Empty, right: true, pressed: ShowPredictionMenu, tooltip: string.Empty);
         predictionItem.IsVisible = () => predictionItemState != PredictionItemState.Hidden;
+        predictionItem.ContextMenuBuilder = PredictionContextMenu;
     }
 
     /// <summary>The commands, in a menu of their own under Edit and in the palette, their keys rebindable.</summary>
@@ -64,7 +69,16 @@ internal sealed partial class DawnScene
         predictionMenu = commands.DeclareSubmenu("Edit/comment", "prediction", Said("prediction.menu"), "sparkle");
         var toggle = commands.Add(PREDICTION_MENU, Said("prediction.toggle"), TogglePredictions, icon: "sparkle");
         toggle.IsChecked = () => settings.EditPredictions;
-        commands.Add(PREDICTION_MENU, Said("prediction.settings"), () => OpenSettings(EditorSettingsCatalog.AI), icon: "settings-gear");
+        // The settings of the predictions are the Local AI window's Predictions page; while AI is off for this run the
+        // window doesn't open, and Settings shows the No AI switch that turns it back on
+        commands.Add(PREDICTION_MENU, Said("local_ai.command_open"), () => OpenLocalAiWindow(), icon: "chip");
+        commands.Add(PREDICTION_MENU, Said("prediction.settings"), () =>
+        {
+            if (!HexModules.IsEnabled(HexModuleId.LocalAi))
+                OpenSettings(EditorSettingsCatalog.AGENTS);
+            else
+                OpenLocalAiWindow("predictions");
+        }, icon: "settings-gear");
     }
 
     private MenuItem? predictNowCommand;
@@ -90,14 +104,19 @@ internal sealed partial class DawnScene
         BindShared("Ctrl+Alt+.", whileTyping: true, predictNowCommand);
         Add(commands.Add(PREDICTION_MENU, Said("prediction.accept"), () => PredictionTargetOnScreen()?.Editor.AcceptPrediction(), "Alt+L", "check", UIKeyUse.BoundWhileTyping), () => InCode() && PredictionTargetOnScreen()?.Editor.HasPrediction == true);
         Add(commands.Add(PREDICTION_MENU, Said("prediction.accept_word"), () => PredictionTargetOnScreen()?.Editor.AcceptPredictionWord(), icon: "arrow-right"), () => InCode() && PredictionTargetOnScreen()?.Editor.PredictionIsGhost == true);
+        Add(commands.Add(PREDICTION_MENU, Said("prediction.accept_line"), () => PredictionTargetOnScreen()?.Editor.AcceptPredictionLine(), icon: "arrow-down"), () => InCode() && PredictionTargetOnScreen()?.Editor.PredictionIsGhost == true);
         Add(commands.Add(PREDICTION_MENU, Said("prediction.dismiss"), () => PredictionTargetOnScreen()?.Editor.ClearPrediction(), icon: "close"), () => InCode() && PredictionTargetOnScreen()?.Editor.HasPrediction == true);
+        Add(commands.Add(PREDICTION_MENU, Said("prediction.jump_next"), () => NextEditStep(1), "Alt+]", "arrow-down", UIKeyUse.BoundWhileTyping), () => InCode() && HasNextEdits());
+        Add(commands.Add(PREDICTION_MENU, Said("prediction.jump_previous"), () => NextEditStep(-1), "Alt+[", "arrow-up", UIKeyUse.BoundWhileTyping), () => InCode() && HasNextEdits());
+        Add(commands.Add(PREDICTION_MENU, Said("prediction.jump_accept_all"), NextEditAcceptAll, "Alt+Shift+L", "check-all", UIKeyUse.BoundWhileTyping), () => InCode() && HasNextEdits());
+        Add(commands.Add(PREDICTION_MENU, Said("prediction.jump_dismiss_all"), NextEditDismissAll, "Shift+Esc", "close-all", UIKeyUse.BoundWhileTyping), () => InCode() && HasNextEdits());
         ApplyKeyLayer(force: true);
     }
 
     /// <summary>Edit predictions switched on or off, in the user's settings.</summary>
     private void TogglePredictions()
     {
-        if (HexAi.Off)
+        if (!HexModules.IsEnabled(HexModuleId.LocalAi))
             return;
         settings.EditPredictions = !settings.EditPredictions;
         if (!settings.EditPredictions && predictionSession is not null)
@@ -110,7 +129,7 @@ internal sealed partial class DawnScene
     /// <summary>Edit predictions switched off, or on again, for the language of the file on screen.</summary>
     private void TogglePredictionsForLanguage()
     {
-        if (HexAi.Off || PredictionTargetOnScreen() is not { } target)
+        if (!HexModules.IsEnabled(HexModuleId.LocalAi) || PredictionTargetOnScreen() is not { } target)
             return;
 
         string language = PredictionLanguage(target);
@@ -135,28 +154,136 @@ internal sealed partial class DawnScene
             StartPredictions();
         QueuePrediction(target);
         predictions.PredictNow(target.Key);
+        predictNowSince = Environment.TickCount64;
+        predictNowSawWaiting = false;
+        predictNowTarget = target;
+    }
+
+    // Predict Now's answer waited for: "No prediction here" when it yields nothing, a word when the completion list hides it
+    private long predictNowSince = -1;
+    private bool predictNowSawWaiting;
+    private PredictionTarget? predictNowTarget;
+
+    private void UpdatePredictNowFeedback()
+    {
+        if (predictNowSince < 0 || predictNowTarget is not { } target)
+            return;
+
+        long elapsed = Environment.TickCount64 - predictNowSince;
+        if (predictions.Status == PredictionStatus.Waiting)
+            predictNowSawWaiting = true;
+
+        if (target.Editor.HasPrediction)
+        {
+            predictNowSince = -1;
+            if (target.Editor.CompletionOpen)
+                Say(Said("prediction.behind_list"));
+            return;
+        }
+
+        bool finished = predictNowSawWaiting ? predictions.Status != PredictionStatus.Waiting : elapsed > 1500;
+        if (finished && !(predictions.Status is PredictionStatus.NoSuchModel or PredictionStatus.Unreachable or PredictionStatus.Refused))
+        {
+            predictNowSince = -1;
+            Say(Said("prediction.none_here"));
+        }
+        else if (finished || elapsed > 15000)
+            predictNowSince = -1;
     }
 
     /// <summary>The item pressed: the switches, Predict Now and the settings.</summary>
     private void ShowPredictionMenu()
     {
-        if (HexAi.Off)
+        if (!HexModules.IsEnabled(HexModuleId.LocalAi))
             return;
+
+        ChooseAt(Said("prediction.menu"), Said("prediction.menu_text"), PredictionMenuChoices(), PredictionItemAnchor());
+    }
+
+    /// <summary>A right click on the item: the same rows as the press, as a context menu over the item.</summary>
+    private Menu? PredictionContextMenu()
+    {
+        if (!HexModules.IsEnabled(HexModuleId.LocalAi))
+            return null;
+
+        var menu = new Menu(Said("prediction.menu"));
+        foreach (var (text, picked) in PredictionMenuChoices())
+            menu.Add(text, picked);
+        return menu;
+    }
+
+    // The rows of the item's menu, from how things stand now
+    private List<(string Text, Action Picked)> PredictionMenuChoices()
+    {
+        string On(bool on) => Said(on ? "prediction.state_on" : "prediction.state_off");
+        string StateRow(string key, bool on) => Said(key, ("state", On(on)));
 
         var choices = new List<(string Text, Action Picked)>
         {
             (Said(settings.EditPredictions ? "prediction.menu_off" : "prediction.menu_on"), TogglePredictions),
+            (Said("local_ai_picker.menu_model", ("model", RoleModelName(LocalAiRole.Predict))), () => PickModelFor(LocalAiRole.Predict, PredictionItemAnchor(), ShowPredictionMenu)),
+            (ChatModelRow(), () => PickModelFor(LocalAiRole.Chat, PredictionItemAnchor(), ShowPredictionMenu)),
+            (StateRow("local_ai_picker.menu_eager", settings.EditPredictionsInvocation != "shortcut"), () => { TogglePredictionInvocation(); ShowPredictionMenu(); }),
+            (StateRow("local_ai_picker.menu_renames", settings.EditPredictionsRenames),
+                () => { TogglePredictionFlag("edit_predictions_renames", settings.EditPredictionsRenames = !settings.EditPredictionsRenames); ShowPredictionMenu(); }),
+            (StateRow("local_ai_picker.menu_far", settings.EditPredictionsFar),
+                () => { TogglePredictionFlag("edit_predictions_far", settings.EditPredictionsFar = !settings.EditPredictionsFar); ShowPredictionMenu(); }),
+            (Said("local_ai_picker.menu_mode", ("mode", Said("local_ai_picker.mode_" + (settings.PredictionSubtle ? "subtle" : "eager")))),
+                () => { TogglePredictionMode(); ShowPredictionMenu(); }),
         };
         if (PredictionTargetOnScreen() is { } target)
         {
             string language = PredictionLanguageName(target);
             bool off = LanguageOffOnScreen(target);
-            choices.Add((Said(off ? "prediction.menu_language_on" : "prediction.menu_language_off", ("language", language)), TogglePredictionsForLanguage));
-            if (PredictionSettings.On(settings) && PredictionSettings.Configured(settings))
+            choices.Add((Said(off ? "prediction.menu_language_on" : "prediction.menu_language_off", ("language", language), ("state", On(!off && settings.EditPredictions && PredictionSettings.On(settings)))),
+                () => { TogglePredictionsForLanguage(); ShowPredictionMenu(); }));
+            // Not offered when predictions are off for this language: the row above says so (now off)
+            if (!off && PredictionSettings.On(settings) && PredictionSettings.Configured(settings))
                 choices.Add((Said("prediction.predict_now"), PredictNow));
         }
-        choices.Add((Said("prediction.settings"), () => OpenSettings(EditorSettingsCatalog.AI)));
-        ChooseFrom(Said("prediction.menu"), Said("prediction.menu_text"), choices);
+        choices.Add((Said("local_ai_picker.menu_settings"), OpenLocalAiWindow));
+        return choices;
+    }
+
+    // The chat model's row: its name, or why there's none
+    private string ChatModelRow()
+    {
+        LocalAiRoleModels roles = LocalAiRoles.Resolve(settings, LocalModelLibrary.Shared);
+        return PredictionMenuState.ChatState(settings, roles) switch
+        {
+            ChatModelState.Chosen => Said("local_ai_picker.menu_chat_model", ("model", roles.Chat!.Name)),
+            ChatModelState.Automatic => Said("local_ai_picker.menu_chat_auto", ("model", roles.Chat!.Name)),
+            ChatModelState.SameAsPredictions => Said("local_ai_picker.menu_chat_same"),
+            ChatModelState.NoneCantChat => Said("local_ai_picker.menu_chat_cant", ("model", roles.Predict!.Name)),
+            _ => Said("local_ai_picker.menu_chat_model", ("model", Said("local_ai_picker.none"))),
+        };
+    }
+
+    // What a model row of the settings page reads: the model's name, empty for none
+    private string ModelRowText(string id) =>
+        id.Length == 0 ? string.Empty : LocalAiRoles.Lookup(settings, LocalModelLibrary.Shared, id)?.Name ?? id;
+
+    // Eager or subtle, in the user's settings
+    private void TogglePredictionMode()
+    {
+        settings.EditPredictionsMode = PredictionMenuState.OtherMode(settings.EditPredictionsMode);
+        SaveSettings();
+        SettingsPage?.Refresh("edit_predictions_mode");
+    }
+
+    // Predict as you type or only on the shortcut, in the user's settings
+    private void TogglePredictionInvocation()
+    {
+        settings.EditPredictionsInvocation = settings.EditPredictionsInvocation == "shortcut" ? "after_typing" : "shortcut";
+        SaveSettings();
+        SettingsPage?.Refresh("edit_predictions_invocation");
+    }
+
+    // A switch of the menu already flipped by the caller's argument, saved and the settings page told
+    private void TogglePredictionFlag(string key, bool _)
+    {
+        SaveSettings();
+        SettingsPage?.Refresh(key);
     }
 
     /// <summary>
@@ -179,13 +306,39 @@ internal sealed partial class DawnScene
     {
         if (settings.EditPredictionsProvider == PredictionProviders.LINK)
             return HexPredictionRelay.RemoteName ?? Said("prediction.a_device");
-        return PredictionUrl() is { } url ? url.Authority : settings.EditPredictionsApiUrl;
+        return PredictionUrl() is { } url ? url.Authority : PredictionSettings.ApiUrl(settings);
     }
 
-    // The server's URL as the provider makes it, null when it isn't one
-    private Uri? PredictionUrl() => settings.EditPredictionsProvider == PredictionProviders.OPENAI
-        ? PredictionProviders.OpenAiUrl(settings.EditPredictionsApiUrl)
+    // The server's URL as the provider makes it, null when it isn't one; llama.cpp's is Hex's own llama-server
+    private Uri? PredictionUrl() => settings.EditPredictionsProvider is PredictionProviders.OPENAI or PredictionProviders.LLAMACPP
+        ? PredictionProviders.OpenAiUrl(PredictionSettings.ApiUrl(settings))
         : PredictionProviders.OllamaUrl(settings.EditPredictionsApiUrl);
+
+    // Whether the item was last written as the dimmed "off" one, there with no session to ask
+    private bool predictionItemOffWritten;
+
+    /// <summary>
+    /// The item while predictions are switched off in the settings: kept for code files, saying so, so the menu it opens can
+    /// switch them on again. Nothing of the engine is touched, there's none running.
+    /// </summary>
+    private void UpdatePredictionItemOff()
+    {
+        if (predictionItem is null)
+            BuildPredictionItem();
+
+        PredictionItemState state = PredictionTargetOnScreen() is null ? PredictionItemState.Hidden : PredictionItemState.Off;
+        if (predictionItemOffWritten && state == predictionItemState)
+            return;
+
+        predictionItemOffWritten = true;
+        predictionItemWritten = false;
+        predictionItemState = state;
+        if (state == PredictionItemState.Hidden)
+            return;
+
+        predictionItem!.Text = $"$(circle-slash) {Said(HexPredictionGlue.ItemKey(state, PredictionStatus.Off), ("language", Said("status_bar.kind_plain_text")))}";
+        predictionItem.Tooltip = Said("prediction.tip_press");
+    }
 
     /// <summary>Every tick, what the item says, written only when it changes. Nothing is made while it doesn't.</summary>
     private void UpdatePredictionItem()
@@ -208,15 +361,22 @@ internal sealed partial class DawnScene
             predictionWaitingSince = -1;
         bool waitingLong = predictionWaitingSince >= 0 && Environment.TickCount64 - predictionWaitingSince > HexPredictionGlue.WAITING_AFTER_MS;
 
-        PredictionItemState state = HexPredictionGlue.ItemState(HexAi.Off, target is not null, settings.EditPredictions, PredictionSettings.Configured(settings),
+        PredictionItemState state = HexPredictionGlue.ItemState(!HexModules.IsEnabled(HexModuleId.LocalAi), target is not null, settings.EditPredictions, PredictionSettings.Configured(settings),
             settings.EditPredictionsWorkspace, target is { } editor && LanguageOffOnScreen(editor), target is null || AllowedOnScreen(), status, waitingLong);
 
         if (predictionItemWritten && state == predictionItemState && status == predictionItemStatus
             && predictionItemLanguage == language && predictionItemTiming == predictions.LastTiming
-            && ReferenceEquals(predictionItemStatusText, predictions.StatusText))
+            && ReferenceEquals(predictionItemStatusText, predictions.StatusText)
+            && predictionItemCounters == PredictionLog.Counters && predictionItemJumps == PendingJumps()
+            && predictionItemRenames == settings.EditPredictionsRenames && predictionItemFar == settings.EditPredictionsFar)
             return;
 
+        predictionItemCounters = PredictionLog.Counters;
+        predictionItemJumps = PendingJumps();
+        predictionItemRenames = settings.EditPredictionsRenames;
+        predictionItemFar = settings.EditPredictionsFar;
         predictionItemWritten = true;
+        predictionItemOffWritten = false;
         predictionItemState = state;
         predictionItemStatus = status;
         predictionItemLanguage = language;
@@ -233,7 +393,7 @@ internal sealed partial class DawnScene
         if (state == PredictionItemState.Failed && status is PredictionStatus.NoSuchModel or PredictionStatus.Unreachable or PredictionStatus.Refused && predictions.StatusText.Length > 0)
         {
             // Refused over Hex Link says why in its text, so a different reason is noticed again
-            string failure = $"{status}|{settings.EditPredictionsApiUrl}|{settings.EditPredictionsModel}|{(status == PredictionStatus.Refused ? predictions.StatusText : string.Empty)}";
+            string failure = $"{status}|{PredictionSettings.ApiUrl(settings)}|{PredictionSettings.Model(settings)}|{(status == PredictionStatus.Refused ? predictions.StatusText : string.Empty)}";
             if (failure != predictionFailureNoticed)
             {
                 predictionFailureNoticed = failure;
@@ -265,7 +425,11 @@ internal sealed partial class DawnScene
         else
         {
             Uri? url = PredictionUrl();
-            lines.Add(Said("prediction.tip_from", ("host", url?.Authority ?? settings.EditPredictionsApiUrl), ("model", settings.EditPredictionsModel)));
+            lines.Add(Said("prediction.tip_from", ("host", url?.Authority ?? PredictionSettings.ApiUrl(settings)), ("model", PredictionSettings.Model(settings))));
+            if (PredictionOptionsNow() is { } options)
+                lines.Add(Said("prediction.tip_kind", ("kind", Said("prediction.kind_" + PredictionModels.NameOf(PredictionModels.KindOf(options))))));
+            if (settings.EditPredictionsProvider == PredictionProviders.LLAMACPP && llamaServer is { } server)
+                lines.Add(Said("llamacpp.tip_state", ("state", LlamaServerStateText(server))));
             if (url is not null && !PredictionProviders.IsLocal(url))
                 lines.Add(Said("prediction.tip_remote", ("host", url.Host)));
         }
@@ -278,6 +442,13 @@ internal sealed partial class DawnScene
                 : Said("prediction.tip_latency", ("first", timing.FirstMs.ToString("0")), ("total", timing.TotalMs.ToString("0")),
                     ("prompt", timing.PromptTokens.ToString()), ("output", timing.OutputTokens.ToString())));
         }
+        string on = Said("prediction.tip_on"), off = Said("prediction.tip_off");
+        lines.Add(Said("prediction.tip_jumps", ("count", PendingJumps().ToString()),
+            ("renames", settings.EditPredictionsRenames ? on : off), ("far", settings.EditPredictionsFar ? on : off)));
+        PredictionCounters counts = PredictionLog.Counters;
+        lines.Add(Said("prediction.tip_counts", ("shown", counts.Shown.ToString()), ("jumps", counts.JumpsShown.ToString()),
+            ("taken", counts.JumpsAccepted.ToString()), ("dismissed", counts.JumpsDismissed.ToString()),
+            ("asked", counts.FarAsked.ToString()), ("found", counts.FarFound.ToString())));
         lines.Add(Said("prediction.tip_press"));
         return string.Join('\n', lines);
     }

@@ -91,8 +91,8 @@ internal sealed partial class DawnScene
         panel.Shown = MathF.Round(shown);
         if (MathF.Abs(panel.Holder.Size.Y - panel.Shown) >= 0.5f)
             panel.Holder.Size = new Vector2(0, panel.Shown);
-        if (moving)
-            Engine.WindowManager.RequestFrames();
+        if (moving && panel.Holder.Visible)
+            Engine.WindowManager.RequestSmooth();
         return moving;
     }
 
@@ -105,8 +105,10 @@ internal sealed partial class DawnScene
 
         float tall = panel.Root.Padding.Total.Y;
         int shown = 0;
-        foreach (UIComponent row in panel.Root.Children)
+        IReadOnlyList<UIComponent> rows = panel.Root.Children;
+        for (int i = 0; i < rows.Count; i++)
         {
+            UIComponent row = rows[i];
             if (!row.Visible)
                 continue;
             tall += row.Size.Y > 0 ? row.Size.Y : row.Bounds.Height;
@@ -121,7 +123,7 @@ internal sealed partial class DawnScene
     {
         panel.Made = NOT_DRAWN;
         systemsSettle = 3;
-        Engine.WindowManager.RequestFrames();
+        Engine.WindowManager.NoteChange();
     }
 
     // What each program says its version is, asked once off the editor's thread, empty while it's being asked
@@ -129,6 +131,18 @@ internal sealed partial class DawnScene
 
     /// <summary>The systems the panel lists, every agent profile an extension gave a way to run.</summary>
     private HexAgentProfile[] AgentSystems() => [.. HexAgentProfiles.All.Where(profile => extensions.AgentRuns.ContainsKey(profile.Id))];
+
+    /// <summary>Whether any agent system can run, checked without allocating an array on every panel tick.</summary>
+    private bool HasAgentSystems()
+    {
+        IReadOnlyList<HexAgentProfile> all = HexAgentProfiles.All;
+        for (int i = 0; i < all.Count; i++)
+        {
+            if (extensions.AgentRuns.ContainsKey(all[i].Id))
+                return true;
+        }
+        return false;
+    }
 
     /// <summary>A panel made empty in <paramref name="into"/>, drawn by <see cref="DrawSystems"/>.</summary>
     private SystemsPanel MakeSystemsPanel(UIComponent into, bool open, bool bottomUp = false)
@@ -159,105 +173,109 @@ internal sealed partial class DawnScene
             made = made * 31 + (StateOf(each) == AgentStates.Missing ? 1 : 0) + (panel.Folded.Contains(each.Id) ? 2 : 0);
         }
         if (made != panel.Made)
-        {
-            HexAgentProfile[] systems = AgentSystems();
-            // Each system its head alone until it's opened, the first time the panel's made. Open, a block of a few lines a
-            // system took a third of the fleet's height, and what it says is wanted now and then; the panel's own line says
-            // when a limit is near
-            if (panel.Made == NOT_DRAWN && !panel.FoldedOnce)
-            {
-                panel.FoldedOnce = true;
-                foreach (HexAgentProfile system in systems)
-                    panel.Folded.Add(system.Id);
-            }
-            panel.Made = made;
-            Empty(panel.Root);
-            panel.Refresh.Clear();
-            panel.Heads.Clear();
+            RebuildSystems(panel, made);
 
-            // The section's head as the Details column has its own, how many systems and how many working on its right
-            var head = panel.Root.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 22), Color = Vector4.Zero });
-            panel.Heads.Add(head);
-            head.Add(new Button
+        for (int i = 0; i < panel.Refresh.Count; i++)
+            panel.Refresh[i](width);
+    }
+
+    // Slow path extracted so Roslyn never hoists a closure display class onto the idle DrawSystems fast path
+    private void RebuildSystems(SystemsPanel panel, long made)
+    {
+        HexAgentProfile[] systems = AgentSystems();
+        // Each system its head alone until it's opened, the first time the panel's made. Open, a block of a few lines a
+        // system took a third of the fleet's height, and what it says is wanted now and then; the panel's own line says
+        // when a limit is near
+        if (panel.Made == NOT_DRAWN && !panel.FoldedOnce)
+        {
+            panel.FoldedOnce = true;
+            foreach (HexAgentProfile system in systems)
+                panel.Folded.Add(system.Id);
+        }
+        panel.Made = made;
+        Empty(panel.Root);
+        panel.Refresh.Clear();
+        panel.Heads.Clear();
+
+        // The section's head as the Details column has its own, how many systems and how many working on its right
+        var head = panel.Root.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 22), Color = Vector4.Zero });
+        panel.Heads.Add(head);
+        head.Add(new Button
+        {
+            Style = "button_flat", Fill = UIFill.Both, Animated = false, Label = string.Empty, Tooltip = Said("noon.systems_tip"),
+            OnPressed = () =>
             {
-                Style = "button_flat", Fill = UIFill.Both, Animated = false, Label = string.Empty, Tooltip = Said("noon.systems_tip"),
-                OnPressed = () =>
+                panel.Open = !panel.Open;
+                panel.Opening = panel.Open ? "*" : null;
+                SystemsFolded(panel);
+            }
+        });
+        head.Add(new Label
+        {
+            Text = $"$({(panel.Open ? (panel.BottomUp ? "chevron-up" : "chevron-down") : "chevron-right")}) {Said("noon.systems")}", TextScale = 0.125f, Bold = true, Dim = true,
+            Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(4, 0), Align = Origin.Left
+        });
+        var summary = head.Add(new Label { Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-6, 0), TextScale = 0.125f, Dim = true, Align = Origin.Right });
+        int summaryWorking = -1;
+        panel.Refresh.Add(_ =>
+        {
+            // Counted by places, the chats' Count with a lambda over the systems made garbage every few ticks
+            int working = 0;
+            for (int i = 0; i < agentChats.Count; i++)
+            {
+                if (!agentChats[i].Running)
+                    continue;
+                for (int s = 0; s < systems.Length; s++)
                 {
-                    panel.Open = !panel.Open;
-                    panel.Opening = panel.Open ? "*" : null;
-                    SystemsFolded(panel);
-                }
-            });
-            head.Add(new Label
-            {
-                Text = $"$({(panel.Open ? (panel.BottomUp ? "chevron-up" : "chevron-down") : "chevron-right")}) {Said("noon.systems")}", TextScale = 0.125f, Bold = true, Dim = true,
-                Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(4, 0), Align = Origin.Left
-            });
-            var summary = head.Add(new Label { Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-6, 0), TextScale = 0.125f, Dim = true, Align = Origin.Right });
-            int summaryWorking = -1;
-            panel.Refresh.Add(_ =>
-            {
-                // Counted by places, the chats' Count with a lambda over the systems made garbage every few ticks
-                int working = 0;
-                for (int i = 0; i < agentChats.Count; i++)
-                {
-                    if (!agentChats[i].Running)
-                        continue;
-                    for (int s = 0; s < systems.Length; s++)
+                    if (systems[s].Id == agentChats[i].Agent)
                     {
-                        if (systems[s].Id == agentChats[i].Agent)
-                        {
-                            working++;
-                            break;
-                        }
+                        working++;
+                        break;
                     }
                 }
-                // The limit nearest its end of any chat's, said on the panel's line once it's four fifths gone, in the
-                // warning's colour, so it's seen with every system folded
-                HexAgentLimit? nearest = null;
-                for (int i = 0; i < agentChats.Count; i++)
-                {
-                    if (agentChats[i].Limit is { } limit && (limit.Used >= 0.8 || limit.State == HexAgentLimitState.Hit) && (nearest is null || limit.Used > nearest.Used))
-                        nearest = limit;
-                }
-                int near = nearest is null ? -1 : (int)Math.Round(Math.Max(0, nearest.Used) * 100);
-                if (working * 1000 + near == summaryWorking)
-                    return;
-                summaryWorking = working * 1000 + near;
-                string said = working > 0
-                    ? Said("noon.systems_summary_working", ("count", systems.Length.ToString(CultureInfo.InvariantCulture)), ("working", working.ToString(CultureInfo.InvariantCulture)))
-                    : systems.Length.ToString(CultureInfo.InvariantCulture);
-                if (nearest is not null)
-                {
-                    Vector4 warn = nearest.State == HexAgentLimitState.Hit ? Skin?.Palette.Error ?? new Vector4(1.0f, 0.42f, 0.38f, 1.0f) : Skin?.Palette.Warning ?? new Vector4(1.0f, 0.78f, 0.3f, 1.0f);
-                    said = $"[color:{HexColour(warn)}]$(warning) {UIRichText.Literal(HexAgentLimits.KindName(nearest.Kind))} {near}%[/color] · {said}";
-                }
-                if (summary.Text != said)
-                    summary.Text = said;
-            });
-
-            if (systems.Length == 0)
-                panel.Root.Add(new Label { Text = Said("noon.system_none"), TextScale = 0.125f, Dim = true, Wrap = true, Fill = UIFill.Horizontal, Align = Origin.Left, Padding = new UIEdges(6, 0, 6, 0) });
-            // Folded, the section is a line a system, open each shows its lines unless it's been folded on its own
-            foreach (HexAgentProfile system in systems)
-                panel.Refresh.Add(SystemBlock(panel, system));
-
-            // At the foot of a column the panel's own head is its last row, so it stays under the pointer as the systems
-            // open over it. Each system keeps its head over its lines, the lines under another's head read as that one's
-            if (panel.BottomUp)
-            {
-                UIComponent[] rows = [.. panel.Root.Children];
-                int systemsFrom = Array.FindIndex(rows, row => panel.Heads.Contains(row) && row != panel.Heads[0]);
-                UIComponent[] own = systemsFrom < 0 ? rows : rows[..systemsFrom];
-                int at = 0;
-                foreach (UIComponent row in (systemsFrom < 0 ? [] : rows[systemsFrom..]).Concat(own))
-                    panel.Root.MoveChild(row, at++);
             }
-            panel.Opening = null;
-        }
+            // The limit nearest its end of any chat's, said on the panel's line once it's four fifths gone, in the
+            // warning's colour, so it's seen with every system folded
+            HexAgentLimit? nearest = null;
+            for (int i = 0; i < agentChats.Count; i++)
+            {
+                if (agentChats[i].Limit is { } limit && (limit.Used >= 0.8 || limit.State == HexAgentLimitState.Hit) && (nearest is null || limit.Used > nearest.Used))
+                    nearest = limit;
+            }
+            int near = nearest is null ? -1 : (int)Math.Round(Math.Max(0, nearest.Used) * 100);
+            if (working * 1000 + near == summaryWorking)
+                return;
+            summaryWorking = working * 1000 + near;
+            string said = working > 0
+                ? Said("noon.systems_summary_working", ("count", systems.Length.ToString(CultureInfo.InvariantCulture)), ("working", working.ToString(CultureInfo.InvariantCulture)))
+                : systems.Length.ToString(CultureInfo.InvariantCulture);
+            if (nearest is not null)
+            {
+                Vector4 warn = nearest.State == HexAgentLimitState.Hit ? Skin?.Palette.Error ?? new Vector4(1.0f, 0.42f, 0.38f, 1.0f) : Skin?.Palette.Warning ?? new Vector4(1.0f, 0.78f, 0.3f, 1.0f);
+                said = $"[color:{HexColour(warn)}]$(warning) {UIRichText.Literal(HexAgentLimits.KindName(nearest.Kind))} {near}%[/color] · {said}";
+            }
+            if (summary.Text != said)
+                summary.Text = said;
+        });
 
-        foreach (Action<float> refresh in panel.Refresh)
-            refresh(width);
+        if (systems.Length == 0)
+            panel.Root.Add(new Label { Text = Said("noon.system_none"), TextScale = 0.125f, Dim = true, Wrap = true, Fill = UIFill.Horizontal, Align = Origin.Left, Padding = new UIEdges(6, 0, 6, 0) });
+        // Folded, the section is a line a system, open each shows its lines unless it's been folded on its own
+        foreach (HexAgentProfile system in systems)
+            panel.Refresh.Add(SystemBlock(panel, system));
+
+        // At the foot of a column the panel's own head is its last row, so it stays under the pointer as the systems
+        // open over it. Each system keeps its head over its lines, the lines under another's head read as that one's
+        if (panel.BottomUp)
+        {
+            UIComponent[] rows = [.. panel.Root.Children];
+            int systemsFrom = Array.FindIndex(rows, row => panel.Heads.Contains(row) && row != panel.Heads[0]);
+            UIComponent[] own = systemsFrom < 0 ? rows : rows[..systemsFrom];
+            int at = 0;
+            foreach (UIComponent row in (systemsFrom < 0 ? [] : rows[systemsFrom..]).Concat(own))
+                panel.Root.MoveChild(row, at++);
+        }
+        panel.Opening = null;
     }
 
     // A system's block, its head that folds it and its lines while it's open, and what puts its words right

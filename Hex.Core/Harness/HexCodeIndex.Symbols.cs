@@ -78,7 +78,7 @@ internal sealed partial class HexCodeIndex
 
         // The ones of exactly that name straight out of the table, then every other symbol, plain loops over what's there
         bool byName = false;
-        if (asked.Length > 0 && index.ByName.TryGetValue(asked.ToLowerInvariant(), out var exact))
+        if (asked.Length > 0 && index.ByName.TryGetValue(asked, out var exact))
         {
             byName = true;
             foreach (var (file, symbol) in exact)
@@ -146,11 +146,43 @@ internal sealed partial class HexCodeIndex
         long cost = 0;
         foreach (HexIndexedFile file in index.Files)
         {
-            string[] lines = file.Lines;
-            for (int i = 0; i < lines.Length; i++)
+            if (file.TryGetCachedLines(out string[] cached))
             {
-                if (lines[i].Contains(text, StringComparison.Ordinal) && word.IsMatch(lines[i]))
-                    cost += file.Relative.Length + 8 + lines[i].Length;
+                for (int i = 0; i < cached.Length; i++)
+                {
+                    if (cached[i].AsSpan().Contains(text, StringComparison.Ordinal) && word.IsMatch(cached[i]))
+                        cost += file.Relative.Length + 8 + cached[i].Length;
+                }
+                continue;
+            }
+
+            if (file.HasInMemoryLines)
+            {
+                string[] lines = file.Lines;
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    if (lines[i].AsSpan().Contains(text, StringComparison.Ordinal) && word.IsMatch(lines[i]))
+                        cost += file.Relative.Length + 8 + lines[i].Length;
+                }
+                continue;
+            }
+
+            string? raw = HexSearch.ReadText(file.Path);
+            if (raw is null || !raw.AsSpan().Contains(text, StringComparison.Ordinal))
+                continue;
+
+            int start = 0;
+            while (true)
+            {
+                int newline = raw.IndexOf('\n', start);
+                int end = newline < 0 ? raw.Length : newline;
+                int content = newline >= 0 && end > start && raw[end - 1] == '\r' ? end - 1 : end;
+                ReadOnlySpan<char> span = raw.AsSpan(start, content - start);
+                if (span.Contains(text, StringComparison.Ordinal) && word.IsMatch(span))
+                    cost += file.Relative.Length + 8 + span.Length;
+                if (newline < 0)
+                    break;
+                start = newline + 1;
             }
         }
 

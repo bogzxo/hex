@@ -167,6 +167,70 @@ public sealed class HexLinkInviteTests : IDisposable
     }
 
     [Fact]
+    public void A_pasted_invitation_survives_whitespace_and_says_specifically_what_is_wrong_with_it()
+    {
+        HexLinkInvite invite = HexLinkInvite.Create(host.Device.Id, 47833, DateTimeOffset.UtcNow.AddMinutes(5), [IPAddress.Parse("192.168.1.5")])!;
+        string token = invite.Encode();
+        Assert.True(HexLinkInvite.TryParse(token + "\r\n", out HexLinkInvite? read));
+        Assert.Equal(invite.Port, read!.Port);
+        Assert.True(HexLinkInvite.TryParse("  " + token[..40] + "\n" + token[40..] + "\n\n", out _));
+        Assert.Null(HexLinkInvite.Problem(token + "\n"));
+        Assert.Equal("cut_off", HexLinkInvite.Problem(token[..30]));
+        Assert.Equal("invalid", HexLinkInvite.Problem(token[..^4]));
+        Assert.Equal("version", HexLinkInvite.Problem("hex-link:v9." + token["hex-link:v1.".Length..]));
+        HexLinkInvite stale = HexLinkInvite.Create(host.Device.Id, 47833, DateTimeOffset.UtcNow.AddMinutes(-1), [IPAddress.Parse("192.168.1.5")])!;
+        Assert.Equal("expired", HexLinkInvite.Problem(stale.Encode()));
+    }
+
+    [Fact]
+    public async Task An_invitation_naming_many_addresses_still_joins_and_leaves_no_handshakes_behind()
+    {
+        int port = host.Listen();
+        // A machine with several adapters names them all; each one answers
+        IPAddress[] addresses = [.. Enumerable.Range(1, 8).Select(i => IPAddress.Parse($"127.0.0.{i}"))];
+        Assert.True(host.Transport.OpenInvite(addresses, HexLinkTestMachine.WAIT,
+            _ => Task.FromResult<HexLinkRights?>(HexLinkRights.View)));
+        HexLinkPairResult paired = await Pair(host.Transport.ActiveInvite!, _ => Task.FromResult<HexLinkRights?>(HexLinkRights.View));
+        Assert.True(paired.Paired, paired.Reason);
+        Assert.Equal(port, joiner.Trust.Find(host.Device.Id)?.Port);
+
+        // The host counts a joiner's attempts per address and gives the slots back, so a second join works at once too
+        Assert.True(host.Transport.OpenInvite(addresses, HexLinkTestMachine.WAIT,
+            _ => Task.FromResult<HexLinkRights?>(HexLinkRights.View)));
+        Assert.True(HexLinkTestKit.Eventually(() => host.Transport.HandshakesHeld == 0));
+    }
+
+    [Fact]
+    public async Task Idle_connections_neither_lock_out_a_join_nor_hold_their_slots_for_long()
+    {
+        int port = host.Listen();
+        var idle = new List<System.Net.Sockets.TcpClient>();
+        try
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                var client = new System.Net.Sockets.TcpClient();
+                await client.ConnectAsync(IPAddress.Loopback, port);
+                idle.Add(client);
+            }
+
+            // Four sockets that say nothing don't stop a device getting in
+            Assert.True(host.Transport.OpenInvite([IPAddress.Loopback], HexLinkTestMachine.WAIT,
+                _ => Task.FromResult<HexLinkRights?>(HexLinkRights.View)));
+            HexLinkPairResult paired = await Pair(host.Transport.ActiveInvite!, _ => Task.FromResult<HexLinkRights?>(HexLinkRights.View));
+            Assert.True(paired.Paired, paired.Reason);
+
+            // and they're let go within a few seconds, the slots free again
+            Assert.True(HexLinkTestKit.Eventually(() => host.Transport.HandshakesHeld == 0, 10_000));
+        }
+        finally
+        {
+            foreach (var client in idle)
+                client.Dispose();
+        }
+    }
+
+    [Fact]
     public async Task A_vpn_winner_gives_pending_lan_routes_a_chance_to_finish()
     {
         var lan = new TaskCompletionSource<string>();

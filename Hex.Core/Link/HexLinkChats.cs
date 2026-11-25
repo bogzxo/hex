@@ -150,13 +150,18 @@ internal static class HexLinkChats
     // A head as a string to see whether it moved, its version left out (that moves with every row)
     private static string HeadKey(JsonObject head)
     {
-        var copy = (JsonObject)head.DeepClone();
-        copy.Remove("version");
-        copy.Remove("rows");
-        copy.Remove("count");
-        copy.Remove("seq");
-        copy.Remove("whole");
-        return copy.ToJsonString();
+        // Serialised without a deep clone of the whole head: the version is lifted off and put back (it's last either way)
+        JsonNode? version = head["version"];
+        head.Remove("version");
+        try
+        {
+            return head.ToJsonString();
+        }
+        finally
+        {
+            if (version is not null)
+                head["version"] = version;
+        }
     }
 
     /// <summary>

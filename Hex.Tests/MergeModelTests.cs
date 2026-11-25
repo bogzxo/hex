@@ -169,6 +169,51 @@ public sealed class MergeModelTests
         Assert.Equal(text, model.ToText());
     }
 
+    [Fact]
+    public void Two_files_with_no_base_conflict_only_where_they_differ()
+    {
+        MergeModel model = MergeModel.FromTwo(Bytes("a\nb\nc\nd\ne\n"), Bytes("a\nB\nc\nd\nE\n"));
+        Assert.Equal(2, model.ConflictCount);
+        Assert.Equal(["b"], model.Conflicts[0].MineLines);
+        Assert.Equal(["B"], model.Conflicts[0].TheirsLines);
+        Assert.Equal(["e"], model.Conflicts[1].MineLines);
+        Assert.Equal(["E"], model.Conflicts[1].TheirsLines);
+        model.Conflicts[0].Resolution = new(MergeChoice.Theirs);
+        model.Conflicts[1].Resolution = new(MergeChoice.Mine);
+        Assert.Equal("a\nB\nc\nd\ne\n", model.ToText());
+    }
+
+    [Fact]
+    public void A_merge_save_keeps_each_lines_own_ending_byte_for_byte()
+    {
+        MergeModel model = MergeModel.FromTwo(Bytes("a\r\nb\nc\r\nd\ne\r\n"), Bytes("a\r\nB\nc\r\nd\nE\r\n"));
+        model.Conflicts[0].Resolution = new(MergeChoice.Theirs);
+        model.Conflicts[1].Resolution = new(MergeChoice.Mine);
+        Assert.Equal(Bytes("a\r\nB\nc\r\nd\ne\r\n"), model.ToBytes());
+
+        model.Conflicts[1].Resolution = new(MergeChoice.BothMineFirst);
+        Assert.Equal(Bytes("a\r\nB\nc\r\nd\ne\r\nE\r\n"), model.ToBytes());
+    }
+
+    [Fact]
+    public void Uniform_merge_files_keep_their_one_ending()
+    {
+        MergeModel crlf = MergeModel.FromTwo(Bytes("a\r\nb\r\n"), Bytes("a\r\nB\r\n"));
+        crlf.Conflicts[0].Resolution = new(MergeChoice.Theirs);
+        Assert.Equal(Bytes("a\r\nB\r\n"), crlf.ToBytes());
+        MergeModel lf = MergeModel.FromTwo(Bytes("a\nb\n"), Bytes("a\nB\n"));
+        lf.Conflicts[0].Resolution = new(MergeChoice.Theirs);
+        Assert.Equal(Bytes("a\nB\n"), lf.ToBytes());
+    }
+
+    [Fact]
+    public void Identical_files_with_no_base_have_no_conflict()
+    {
+        MergeModel model = MergeModel.FromTwo(Bytes("same\ntext\n"), Bytes("same\ntext\n"));
+        Assert.Equal(0, model.ConflictCount);
+        Assert.Equal("same\ntext\n", model.ToText());
+    }
+
     private static async Task Clean(string basis, string mine, string theirs, string expected)
     {
         MergeModel model = await Three(basis, mine, theirs);

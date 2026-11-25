@@ -65,17 +65,33 @@ internal sealed partial class HexLinkSync
     private async Task PollGitFollow(CancellationToken cancel)
     {
         peer.GitFollowHint += WakeGitFollow;
+        List<FileSystemWatcher> watchers = [];
+        watched = false;
         try
         {
             long every = (long)GitFollowFullCheck.TotalMilliseconds;
             long fullAt = Environment.TickCount64 + every;
             while (!followUnsupported)
             {
-                bool hinted = await followHint.WaitAsync(LocalTipPoll, cancel);
+                // A local move is told by the watchers on the git directories, so the files are only looked at by the clock as a
+                // slow fallback (and by the quick poll where no watcher could be made)
+                if (watchers.Count == 0 && !watched)
+                    watchers = WatchGitDirectories();
+                bool hinted = await followHint.WaitAsync(watchers.Count > 0 ? WatchedFallback : LocalTipPoll, cancel);
+                if (Interlocked.Exchange(ref localTipEvent, 0) != 0)
+                {
+                    // Bursts of ref writes (a checkout, a fetch) are one look
+                    await Task.Delay(100, cancel);
+                    Interlocked.Exchange(ref localTipEvent, 0);
+                    hinted = false;
+                    if (!LocalTipMoved(cancel) && Environment.TickCount64 < fullAt)
+                        continue;
+                }
                 // The full check asks the other side for its tips. Between them only this side's files are read.
-                if (!hinted && Environment.TickCount64 < fullAt && !LocalTipMoved(cancel))
+                else if (!hinted && Environment.TickCount64 < fullAt && !LocalTipMoved(cancel))
                     continue;
-                fullAt = Environment.TickCount64 + every;
+                // With the watchers on this side and the other side's hint for its own moves, the comparing is a slow safety net
+                fullAt = Environment.TickCount64 + (watchers.Count > 0 ? Math.Max(every, (long)WatchedFallback.TotalMilliseconds) : every);
                 try { await CheckGitFollow(cancel); }
                 catch (Exception error) when (GitFollowRecoverable(error))
                 {
@@ -85,7 +101,77 @@ internal sealed partial class HexLinkSync
             }
         }
         catch (OperationCanceledException) when (cancel.IsCancellationRequested) { }
-        finally { peer.GitFollowHint -= WakeGitFollow; }
+        finally
+        {
+            peer.GitFollowHint -= WakeGitFollow;
+            foreach (FileSystemWatcher each in watchers)
+                each.Dispose();
+        }
+    }
+
+    // How often this side's tips are read when watchers are on the git directories and say nothing
+    private static readonly TimeSpan WatchedFallback = TimeSpan.FromSeconds(10);
+    private int localTipEvent;
+    private bool watched;
+
+    // A watcher on each followed repository's git directories (HEAD, the refs, packed-refs, a lock appearing) that wakes the
+    // loop. Only events on those files count: an object written by a fetch or commit says nothing about a tip.
+    private List<FileSystemWatcher> WatchGitDirectories()
+    {
+        List<FileSystemWatcher> made = [];
+        bool located = true;
+        foreach (FollowRepository repo in followRepositories)
+        {
+            string[] directories = repo.Scan.GitDirectories();
+            if (directories.Length == 0)
+            {
+                located = false;
+                continue;
+            }
+
+            foreach (string directory in directories)
+            {
+                try
+                {
+                    var watcher = new FileSystemWatcher(directory)
+                    {
+                        IncludeSubdirectories = true,
+                        NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size,
+                        InternalBufferSize = 16 * 1024
+                    };
+                    FileSystemEventHandler moved = (_, e) => GitFollowFileMoved(e.Name);
+                    watcher.Changed += moved;
+                    watcher.Created += moved;
+                    watcher.Deleted += moved;
+                    watcher.Renamed += (_, e) => GitFollowFileMoved(e.Name);
+                    watcher.Error += (_, _) => { Interlocked.Exchange(ref localTipEvent, 1); WakeGitFollow(); };
+                    watcher.EnableRaisingEvents = true;
+                    made.Add(watcher);
+                }
+                catch (Exception e) when (e is IOException or ArgumentException or PlatformNotSupportedException or UnauthorizedAccessException)
+                {
+                    // No watcher for it (too many, or the directory is gone): the quick poll stays on
+                    foreach (FileSystemWatcher each in made)
+                        each.Dispose();
+                    watched = true;
+                    return [];
+                }
+            }
+        }
+
+        // Directories not found yet (the first read hasn't run) are tried again next loop
+        watched = located;
+        return made;
+    }
+
+    private void GitFollowFileMoved(string? name)
+    {
+        if (name is null || !(name.Contains("HEAD", StringComparison.Ordinal) || name.StartsWith("refs", StringComparison.Ordinal)
+            || name.Contains("packed-refs", StringComparison.Ordinal) || name.Contains("index.lock", StringComparison.Ordinal)
+            || name.Contains("reftable", StringComparison.Ordinal) || name.Contains("hexlink", StringComparison.OrdinalIgnoreCase)))
+            return;
+        Interlocked.Exchange(ref localTipEvent, 1);
+        WakeGitFollow();
     }
 
     // A followed repository's HEAD here moved since it was last seen, read from HEAD and its loose ref alone. Each move

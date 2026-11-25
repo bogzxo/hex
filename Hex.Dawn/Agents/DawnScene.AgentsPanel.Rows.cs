@@ -19,10 +19,104 @@ internal sealed partial class DawnScene
     // The widest a bubble of what was asked is, of the width there is
     private const float AGENTS_BUBBLE = 0.86f;
 
-    // The rows on screen, each with the entry and the version of it it was made from
-    private readonly List<(HexAgentEntry Entry, int Version, UIComponent Row)> agentRowsShown = [];
-    private (HexAgentChat? Chat, int Dropped, bool Narrow, object? Skin, float Motion) agentRowsFor;
+    // The rows on screen, each with the entry, its rendered version, component, last seen version, and turn-end flag
+    private readonly List<(HexAgentEntry Entry, int Version, UIComponent Row, int Seen, bool EndsTurn)> agentRowsShown = [];
+    private (HexAgentChat? Chat, int Dropped, int Reshaped, bool Narrow, object? Skin, float Motion) agentRowsFor;
     private Panel? agentsTyping;
+
+    // Bounded LRU cache of recently viewed chats' materialized rows so switching among recent chats reuses built UI trees
+    // without pinning unbounded memory (capped at AGENT_ROW_CACHE_CHATS chats).
+    private const int AGENT_ROW_CACHE_CHATS = 6;
+    private sealed class CachedChatRows(int chatId, bool narrow, object? skin, float motion)
+    {
+        public int ChatId { get; } = chatId;
+        public bool Narrow { get; set; } = narrow;
+        public object? Skin { get; set; } = skin;
+        public float Motion { get; set; } = motion;
+        public Dictionary<HexAgentEntry, (int Version, UIComponent Row, List<Action<float>>? Fits)> Rows { get; } = new(ReferenceEqualityComparer.Instance);
+    }
+    private readonly List<CachedChatRows> agentRowCache = [];
+
+    private void SaveChatRowsToCache(HexAgentChat leaving, bool narrow, object? skin, float motion)
+    {
+        CachedChatRows? bucket = null;
+        for (int i = 0; i < agentRowCache.Count; i++)
+        {
+            if (agentRowCache[i].ChatId == leaving.Id)
+            {
+                bucket = agentRowCache[i];
+                agentRowCache.RemoveAt(i);
+                break;
+            }
+        }
+        if (bucket is null)
+        {
+            if (agentRowCache.Count >= AGENT_ROW_CACHE_CHATS)
+                agentRowCache.RemoveAt(0);
+            bucket = new CachedChatRows(leaving.Id, narrow, skin, motion);
+        }
+        else
+        {
+            bucket.Narrow = narrow;
+            bucket.Skin = skin;
+            bucket.Motion = motion;
+            bucket.Rows.Clear();
+        }
+
+        HexAgentEntry? streamingEntry = agentStreamState?.Entry;
+        for (int i = 0; i < agentRowsShown.Count; i++)
+        {
+            var shown = agentRowsShown[i];
+            UIComponent row = shown.Row;
+            if (ReferenceEquals(shown.Entry, streamingEntry))
+                continue;
+            if (agentsRows.IsWaiting(row) || row is Panel { Visible: false, Children.Count: 0 })
+                continue;
+            // Do not cache rows whose running timer labels are bound to dictionaries cleared on switch
+            if (shown.Entry.State == HexAgentToolState.Running && shown.Entry.Kind == HexAgentEntryKind.Tool)
+                continue;
+            agentRowFits.TryGetValue(row, out List<Action<float>>? fits);
+            bucket.Rows[shown.Entry] = (shown.Version, row, fits);
+        }
+        agentRowCache.Add(bucket);
+    }
+
+    private bool TryTakeCachedRow(HexAgentChat chat, HexAgentEntry entry, int version, out UIComponent row, out List<Action<float>>? fits)
+    {
+        for (int i = agentRowCache.Count - 1; i >= 0; i--)
+        {
+            CachedChatRows bucket = agentRowCache[i];
+            if (bucket.ChatId != chat.Id)
+                continue;
+            if (bucket.Narrow != agentRowsFor.Narrow || !ReferenceEquals(bucket.Skin, agentRowsFor.Skin) || bucket.Motion != agentRowsFor.Motion)
+            {
+                agentRowCache.RemoveAt(i);
+                break;
+            }
+            if (bucket.Rows.Remove(entry, out var cached) && cached.Version == version && cached.Row.Parent is null)
+            {
+                row = cached.Row;
+                fits = cached.Fits;
+                return true;
+            }
+            break;
+        }
+        row = null!;
+        fits = null;
+        return false;
+    }
+
+    private void EvictAgentRowCache(int chatId)
+    {
+        for (int i = agentRowCache.Count - 1; i >= 0; i--)
+        {
+            if (agentRowCache[i].ChatId == chatId)
+            {
+                agentRowCache.RemoveAt(i);
+                break;
+            }
+        }
+    }
 
     // Where each chat was scrolled to as another was put on screen, null for at its end (where it follows what comes),
     // and where the one put on screen goes back to once its rows are laid out
@@ -39,8 +133,8 @@ internal sealed partial class DawnScene
 
     private static void Empty(UIComponent of)
     {
-        foreach (UIComponent child in of.Children.ToArray())
-            of.Remove(child);
+        for (int i = of.Children.Count - 1; i >= 0; i--)
+            of.Remove(of.Children[i]);
     }
 
     // How wide the rows have, from the side bar's width and never the scroll's own, a scroll bar coming and going
@@ -56,32 +150,34 @@ internal sealed partial class DawnScene
     // What each row does with a new width, made with the row, and the width they were last fitted to
     private readonly Dictionary<UIComponent, List<Action<float>>> agentRowFits = [];
     private List<Action<float>>? agentFitsMaking;
+    private bool agentCollectingFits;
     private int agentRowsFitted = -1;
 
     /// <summary>Something of the row being made that follows the width, run now and again whenever the width moves.</summary>
     private void FollowWidth(Action<float> fit)
     {
         fit(AgentsWidth());
-        agentFitsMaking?.Add(fit);
+        if (agentCollectingFits)
+            (agentFitsMaking ??= []).Add(fit);
     }
 
     // A row made with what of it follows the width kept by it
-    private UIComponent FittedRowOf(HexAgentChat chat, HexAgentEntry entry)
+    private UIComponent FittedRowOf(HexAgentChat chat, HexAgentEntry entry, bool endsTurn = true, int index = -1)
     {
-        var fits = new List<Action<float>>();
-        agentFitsMaking = fits;
+        agentFitsMaking = null;
+        agentCollectingFits = true;
         try
         {
-            UIComponent row = RowOf(chat, entry);
+            UIComponent row = RowOf(chat, entry, index);
             // The last row of a turn that's over has the turn's line under it, how long it took, its calls and its files
-            if (TurnFooter(chat, entry) is { } footer)
+            if (endsTurn && TurnFooter(chat, entry, index) is { } footer)
             {
                 var both = new StackPanel { Fill = UIFill.Horizontal, Spacing = 6 };
                 both.Add(row);
                 both.Add(footer);
                 row = both;
             }
-            if (fits.Count > 0)
+            if (agentFitsMaking is { Count: > 0 } fits)
                 agentRowFits[row] = fits;
             // Right-clicked, what it says can be copied, or opened as text to pick any part of it out
             row.OnContextMenu ??= at => ContextMenu.Show(chrome, at, AgentRowMenu(chat, entry));
@@ -90,6 +186,7 @@ internal sealed partial class DawnScene
         finally
         {
             agentFitsMaking = null;
+            agentCollectingFits = false;
         }
     }
 
@@ -128,8 +225,39 @@ internal sealed partial class DawnScene
     private void DrawAgentRows()
     {
         HexAgentChat? chat = agentChat;
-        var key = (chat, (chat?.Dropped ?? 0) + (chat?.Reshaped ?? 0) * 100_000, chat is { Entries.Count: > 0 } && AgentsNarrow(), (object?)Skin, settings.UiAnimation);
+        var key = (chat, chat?.Dropped ?? 0, chat?.Reshaped ?? 0, chat is { Entries.Count: > 0 } && AgentsNarrow(), (object?)Skin, settings.UiAnimation);
         bool fresh = key != agentRowsFor;
+
+        // When older entries spill off the front during streaming, trim only the dropped prefix instead of rebuilding
+        // every visible row and re-parsing markdown from scratch
+        if (fresh && chat is { Entries.Count: > 0 } && ReferenceEquals(chat, agentRowsFor.Chat)
+            && key.Item3 == agentRowsFor.Reshaped && key.Item4 == agentRowsFor.Narrow
+            && ReferenceEquals(key.Item5, agentRowsFor.Skin) && key.Item6 == agentRowsFor.Motion)
+        {
+            int spilled = key.Item2 - agentRowsFor.Dropped;
+            if (spilled > 0 && spilled <= agentRowsShown.Count)
+            {
+                int prefixStart = agentsEarlier is not null ? 1 : 0;
+                for (int i = 0; i < spilled; i++)
+                {
+                    var dropped = agentRowsShown[i];
+                    agentRowFits.Remove(dropped.Row);
+                    agentsRunningTimes.Remove(dropped.Entry);
+                    runningSecondsShown.Remove(dropped.Entry);
+                    agentsGroupTimes.Remove(dropped.Entry);
+                    groupTenthsShown.Remove(dropped.Entry);
+                    agentsQuestionTimes.Remove(dropped.Entry);
+                }
+                agentRowsShown.RemoveRange(0, spilled);
+                agentsRows.RemoveRange(prefixStart, spilled);
+                // If the new first entry was a hidden member of a spilled tool group, force it to rebuild as group head
+                if (agentRowsShown.Count > 0 && agentRowsShown[0].Row is Panel { Visible: false, Children.Count: 0 })
+                    agentRowsShown[0] = agentRowsShown[0] with { Version = int.MinValue, Seen = -1 };
+                UpdateAgentEarlierCount(chat);
+                agentRowsFor = key;
+                fresh = false;
+            }
+        }
 
         // Only another chat comes in moving, rows made again for a new width or theme are just there, and so is all of
         // it the first time it's drawn after the view was opened again
@@ -147,7 +275,11 @@ internal sealed partial class DawnScene
             if (chat != agentRowsFor.Chat)
             {
                 if (agentRowsFor.Chat is { } leaving)
+                {
                     agentScrolls[leaving.Id] = agentsScroll.Offset >= agentsScroll.MaxOffset - 0.5f ? null : agentsScroll.Offset;
+                    if (agentRowsShown.Count > 0)
+                        SaveChatRowsToCache(leaving, agentRowsFor.Narrow, agentRowsFor.Skin, agentRowsFor.Motion);
+                }
                 agentScrollWanted = chat is null ? null : (chat, agentScrolls.GetValueOrDefault(chat.Id));
                 agentsScroll.ScrollToEnd();
             }
@@ -155,9 +287,12 @@ internal sealed partial class DawnScene
             agentRowsFor = key;
             agentRowsShown.Clear();
             agentsRunningTimes.Clear();
+            runningSecondsShown.Clear();
             agentsGroupTimes.Clear();
+            groupTenthsShown.Clear();
             agentsQuestionTimes.Clear();
             agentRowFits.Clear();
+            agentStreamState = null;
             agentsRows.Clear(keep: typing);
             agentsWaitingRow = null;
 
@@ -178,70 +313,115 @@ internal sealed partial class DawnScene
         if (chat is null)
             return;
 
-        for (int i = 0; i < chat.Entries.Count; i++)
+        if (fresh)
+            agentsRows.BeginBatch();
+        try
         {
-            HexAgentEntry entry = chat.Entries[i];
-
-            // A call after the first of a group is drawn by the group's first row, its own place in the list kept by a row
-            // of nothing so the rows still go one to an entry. The first row goes by what the whole group is
-            bool member = InToolGroup(chat, i);
-            int version = member ? entry.Version : Groupable(entry) ? ToolGroupKey(chat, i) : entry.Version;
-            // A row made again once its turn is over, for the turn's line under it, or once it no longer ends it
-            if (!member)
-                version = version * 2 + (EndsTurn(chat, i) ? 1 : 0);
-            if (i < agentRowsShown.Count)
+            for (int i = AgentRowsFrom(chat, fresh); i < chat.Entries.Count; i++)
             {
-                if (agentRowsShown[i].Version == version)
-                    continue;
+                HexAgentEntry entry = chat.Entries[i];
 
-                // A call that's become part of a group, or one that's left one, is made again as what it is now
-                bool wasMember = agentRowsShown[i].Row is Panel { Visible: false, Children.Count: 0 };
-                if (member && wasMember)
+                // A call after the first of a group is drawn by the group's first row, its own place in the list kept by a row
+                // of nothing so the rows still go one to an entry. The first row goes by what the whole group is
+                bool member = InToolGroup(chat, i);
+                int version = member ? entry.Version : Groupable(entry) ? ToolGroupKey(chat, i) : entry.Version;
+                // A row made again once its turn is over, for the turn's line under it, or once it no longer ends it
+                bool endsTurn = !member && EndsTurn(chat, i);
+                if (!member)
+                    version = version * 2 + (endsTurn ? 1 : 0);
+                if (i < agentRowsShown.Count)
                 {
-                    agentRowsShown[i] = (entry, version, agentRowsShown[i].Row);
+                    if (agentRowsShown[i].Version == version)
+                    {
+                        if (agentRowsShown[i].Seen != entry.Version)
+                            agentRowsShown[i] = agentRowsShown[i] with { Seen = entry.Version };
+                        continue;
+                    }
+
+                    // The words being streamed are laid out again at most four times a second, each a whole Markdown parse and a new
+                    // tree of labels for the row. What's left unmade is asked for again on the next look, and the last one, when the
+                    // agent stops, is made at once (Running is no longer true)
+                    bool isTailText = !fresh && i == chat.Entries.Count - 1 && entry.Kind is HexAgentEntryKind.Text or HexAgentEntryKind.Thinking;
+                    if (isTailText && chat.Running
+                        && ReferenceEquals(agentStreamRow, entry) && System.Environment.TickCount64 - agentStreamAt < STREAM_REBUILD_MS)
+                    {
+                        agentsDrawn = (-1, -1);
+                        continue;
+                    }
+
+                    // A call that's become part of a group, or one that's left one, is made again as what it is now
+                    bool wasMember = agentRowsShown[i].Row is Panel { Visible: false, Children.Count: 0 };
+                    if (member && wasMember)
+                    {
+                        agentRowsShown[i] = (entry, version, agentRowsShown[i].Row, entry.Version, endsTurn);
+                        continue;
+                    }
+
+                    // One not made yet is made as its entry is whenever it comes into sight, nothing to make again
+                    UIComponent was = agentRowsShown[i].Row;
+                    if (!member && agentsRows.IsWaiting(was))
+                    {
+                        agentRowsShown[i] = (entry, version, was, entry.Version, endsTurn);
+                        continue;
+                    }
+
+                    // Streaming text that only grew at its tail: update only the unstable tail paragraph in place without
+                    // re-parsing completed paragraphs above it or replacing the row in VirtualStack
+                    if (isTailText && !endsTurn && TryUpdateStreamingMarkdown(entry))
+                    {
+                        agentRowsShown[i] = (entry, version, was, entry.Version, endsTurn);
+                        agentStreamRow = entry;
+                        agentStreamAt = System.Environment.TickCount64;
+                        continue;
+                    }
+
+                    // Made again in its place, a tool that finished giving a little pop
+                    if (agentStreamState is { Entry: var tracked } && ReferenceEquals(tracked, entry))
+                        agentStreamState = null;
+                    UIComponent made = member ? agentsRows.RentGroupedPlace() : FittedRowOf(chat, entry, endsTurn, i);
+                    agentsRows.Replace(was, made);
+                    agentRowFits.Remove(was);
+                    agentRowsShown[i] = (entry, version, made, entry.Version, endsTurn);
+                    agentStreamRow = entry;
+                    agentStreamAt = System.Environment.TickCount64;
+                    // A tool of its own that finished gives a little pop, a group changing as its calls come and go doesn't
+                    if (entry.Kind == HexAgentEntryKind.Tool && !Groupable(entry) && entry.State != HexAgentToolState.Running)
+                        PopRow(made);
                     continue;
                 }
 
-                // One not made yet is made as its entry is whenever it comes into sight, nothing to make again
-                UIComponent was = agentRowsShown[i].Row;
-                if (!member && agentsRows.IsWaiting(was))
+                int at = agentsTyping is null ? agentsRows.Children.Count : agentsRows.IndexOf(agentsTyping);
+
+                // A whole chat put on screen has its rows made only as they come into sight, the dozen or two at its end
+                // first, where every row it keeps was made at once
+                if (fresh && !member)
                 {
-                    agentRowsShown[i] = (entry, version, was);
+                    UIComponent place = agentsRows.RentWaitingPlace();
+                    agentsRows.InsertLater(at, place, entry);
+                    agentRowsShown.Add((entry, version, place, entry.Version, endsTurn));
                     continue;
                 }
 
-                // Made again in its place, a tool that finished giving a little pop
-                UIComponent made = member ? GroupedPlace() : FittedRowOf(chat, entry);
-                agentsRows.Replace(was, made);
-                agentRowFits.Remove(was);
-                agentRowsShown[i] = (entry, version, made);
-                // A tool of its own that finished gives a little pop, a group changing as its calls come and go doesn't
-                if (entry.Kind == HexAgentEntryKind.Tool && !Groupable(entry) && entry.State != HexAgentToolState.Running)
-                    PopRow(made);
-                continue;
+                UIComponent row = member ? agentsRows.RentGroupedPlace() : FittedRowOf(chat, entry, endsTurn, i);
+                agentsRows.Insert(at, row, entry);
+                agentRowsShown.Add((entry, version, row, entry.Version, endsTurn));
+                if (!fresh && !member && i == chat.Entries.Count - 1 && entry.Kind is HexAgentEntryKind.Text or HexAgentEntryKind.Thinking)
+                {
+                    agentStreamRow = entry;
+                    agentStreamAt = System.Environment.TickCount64;
+                }
+
+                // A row that just came slides in on its own, what was asked from the right where its bubble is
+                if (member)
+                    continue;
+                if (!fresh && !still)
+                    SlideRowIn(row, 0.0f, entry.Kind == HexAgentEntryKind.User ? 16.0f : 0.0f);
             }
-
-            int at = agentsTyping is null ? agentsRows.Children.Count : agentsRows.IndexOf(agentsTyping);
-
-            // A whole chat put on screen has its rows made only as they come into sight, the dozen or two at its end
-            // first, where every row it keeps was made at once
-            if (fresh && !member)
-            {
-                UIComponent place = new Panel { Size = Vector2.Zero, Color = Vector4.Zero };
-                agentsRows.InsertLater(at, place, entry, () => MadeLater(chat, entry, place));
-                agentRowsShown.Add((entry, version, place));
-                continue;
-            }
-
-            UIComponent row = member ? GroupedPlace() : FittedRowOf(chat, entry);
-            agentsRows.Insert(at, row, entry);
-            agentRowsShown.Add((entry, version, row));
-
-            // A row that just came slides in on its own, what was asked from the right where its bubble is
-            if (member)
-                continue;
-            if (!fresh && !still)
-                SlideRowIn(row, 0.0f, entry.Kind == HexAgentEntryKind.User ? 16.0f : 0.0f);
+        }
+        finally
+        {
+            if (fresh)
+                agentsRows.EndBatch();
         }
 
         // Rows made in the moment after another chat came on screen come in quickly a few at a time, as a whole chat did
@@ -255,6 +435,47 @@ internal sealed partial class DawnScene
         FitAgentRows();
     }
 
+    // The words row made again last while streaming, and when
+    private const long STREAM_REBUILD_MS = 250;
+    private HexAgentEntry? agentStreamRow;
+    private long agentStreamAt;
+
+    // Incremental markdown state for the active streaming Text/Thinking row so completed paragraphs above the tail
+    // are kept in place and never re-parsed when only the tail grows
+    private (HexAgentEntry Entry, Panel Row, StackPanel Written, int StableEnd, int StableChildren, bool Thinking, UIEdges Padding)? agentStreamState;
+
+    /// <summary>
+    /// Where the rows have to be looked at again from: the first entry that's new or whose version moved since its row was
+    /// made, taken back to the start of its group of calls and to the row before that, whose turn's end can move with it.
+    /// What's before is not looked at, so a line streamed in goes through the tail and not the whole chat.
+    /// </summary>
+    private int AgentRowsFrom(HexAgentChat chat, bool fresh)
+    {
+        IReadOnlyList<HexAgentEntry> entries = chat.Entries;
+        if (fresh || agentRowsShown.Count == 0 || entries.Count == 0)
+            return 0;
+
+        int first = Math.Min(agentRowsShown.Count, entries.Count - 1);
+        for (int i = 0; i < first; i++)
+        {
+            if (agentRowsShown[i].Seen != entries[i].Version || !ReferenceEquals(agentRowsShown[i].Entry, entries[i]))
+            {
+                first = i;
+                break;
+            }
+        }
+
+        first = GroupStart(chat, first);
+        return first == 0 ? 0 : GroupStart(chat, first - 1);
+    }
+
+    private static int GroupStart(HexAgentChat chat, int index)
+    {
+        while (index > 0 && InToolGroup(chat, index))
+            index--;
+        return index;
+    }
+
     // How long after a chat comes on screen the rows made for it slide in, and how many have so far
     private const long ARRIVING_MS = 300;
     private long agentsArrivingUntil;
@@ -263,10 +484,37 @@ internal sealed partial class DawnScene
     /// <summary>A row that waited for its place to come into sight made, and put in the place's stead among the rows shown.</summary>
     private UIComponent MadeLater(HexAgentChat chat, HexAgentEntry entry, UIComponent place)
     {
-        UIComponent made = FittedRowOf(chat, entry);
-        int at = agentRowsShown.FindIndex(shown => ReferenceEquals(shown.Row, place));
-        if (at >= 0)
-            agentRowsShown[at] = agentRowsShown[at] with { Row = made };
+        int rowIndex = -1;
+        int version = entry.Version;
+        bool endsTurn = true;
+        for (int i = 0; i < agentRowsShown.Count; i++)
+        {
+            if (ReferenceEquals(agentRowsShown[i].Row, place))
+            {
+                rowIndex = i;
+                version = agentRowsShown[i].Version;
+                endsTurn = agentRowsShown[i].EndsTurn;
+                break;
+            }
+        }
+
+        UIComponent made;
+        if (TryTakeCachedRow(chat, entry, version, out UIComponent cached, out List<Action<float>>? fits))
+        {
+            made = cached;
+            if (fits is { Count: > 0 })
+            {
+                agentRowFits[made] = fits;
+                int width = AgentsWidth();
+                for (int f = 0; f < fits.Count; f++)
+                    fits[f](width);
+            }
+        }
+        else
+            made = FittedRowOf(chat, entry, endsTurn, rowIndex);
+
+        if (rowIndex >= 0)
+            agentRowsShown[rowIndex] = agentRowsShown[rowIndex] with { Row = made };
         if (System.Environment.TickCount64 < agentsArrivingUntil)
             SlideRowIn(made, Math.Min(agentsArrived++, 8) * 0.025f);
         return made;
@@ -425,7 +673,7 @@ internal sealed partial class DawnScene
         Animated = false, OnPressed = pressed
     };
 
-    private UIComponent RowOf(HexAgentChat chat, HexAgentEntry entry)
+    private UIComponent RowOf(HexAgentChat chat, HexAgentEntry entry, int index = -1)
     {
         UISkin? skin = Skin;
         switch (entry.Kind)
@@ -436,9 +684,11 @@ internal sealed partial class DawnScene
             case HexAgentEntryKind.Text:
             {
                 // A picture it links under its words, small, a click opening it full screen
-                UIComponent said = AgentMarkdown(entry.Text, thinking: false);
+                bool trackStream = chat.Running && ReferenceEquals(chat.Entries[^1], entry);
+                UIComponent said = AgentMarkdown(entry.Text, thinking: false, trackStream ? entry : null);
                 if (PictureStrip(PicturesIn(entry.Text, asked: false), Origin.Left) is not { } pictures)
                     return said;
+                agentStreamState = null;
                 var both = new StackPanel { Fill = UIFill.Horizontal, Spacing = 4 };
                 both.Add(said);
                 both.Add(pictures);
@@ -446,7 +696,7 @@ internal sealed partial class DawnScene
             }
 
             case HexAgentEntryKind.Thinking:
-                return AgentMarkdown(entry.Text, thinking: true);
+                return AgentMarkdown(entry.Text, thinking: true, chat.Running && ReferenceEquals(chat.Entries[^1], entry) ? entry : null);
 
             case HexAgentEntryKind.Note:
                 return new Panel { Fill = UIFill.Horizontal, Padding = new UIEdges(2, 0, 2, 0) }.With(Text(NoteText(entry.Text), 0.125f, dim: true));
@@ -476,7 +726,7 @@ internal sealed partial class DawnScene
 
             default:
             {
-                UIComponent call = Groupable(entry) ? ToolGroupRow(chat, entry, skin) : ToolRow(chat, entry, skin);
+                UIComponent call = Groupable(entry) ? ToolGroupRow(chat, entry, skin, index) : ToolRow(chat, entry, skin);
                 // Pictures it was asked to show, under its row the way a pasted one is under the bubble, see hex_show_image
                 if (!ShowsPictures(entry) || entry.State != HexAgentToolState.Done || entry.Output is not { } shown
                     || PictureStrip(PicturesIn(shown, asked: false), Origin.Left) is not { } pictures)
@@ -489,24 +739,94 @@ internal sealed partial class DawnScene
         }
     }
 
-    private UIComponent AgentMarkdown(string text, bool thinking)
+    private UIComponent AgentMarkdown(string text, bool thinking, HexAgentEntry? streamingEntry = null)
     {
         var padding = thinking ? new UIEdges(10, 3, 10, 6) : new UIEdges(6, 8, 8, 10);
         var panel = new Panel { Fill = UIFill.Horizontal, Padding = padding };
         var written = panel.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 4, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft });
         // Replies are documents, including their tables and code blocks, rather than one compact label.
-        WriteMarkdown(written, WithPlaces(text), string.Empty);
-        foreach (var child in Descendants(written))
+        if (streamingEntry is not null)
         {
-            if (child is Label label)
+            int stableEnd = HexAgentRows.StableMarkdownSplit(text);
+            int stableChildren = 0;
+            if (stableEnd > 0)
             {
-                label.OnLink = OpenAgentLink;
-                label.Dim = thinking;
+                WriteMarkdown(written, WithPlaces(text[..stableEnd]), string.Empty);
+                stableChildren = written.Children.Count;
             }
-            else if (child is NotebookTablePanel table) table.Strip.Visible = false;
+            if (stableEnd < text.Length)
+                WriteMarkdown(written, WithPlaces(text[stableEnd..]), string.Empty);
+            WireAgentMarkdownChildren(written, 0, thinking);
+            agentStreamState = (streamingEntry, panel, written, stableEnd, stableChildren, thinking, padding);
+        }
+        else
+        {
+            WriteMarkdown(written, WithPlaces(text), string.Empty);
+            WireAgentMarkdownChildren(written, 0, thinking);
         }
         FollowWidth(width => FitWritten(written, MathF.Max(32, width - padding.Total.X), keepWidth: true));
         return panel;
+    }
+
+    /// <summary>
+    /// Updates only the unstable tail paragraph of the active streaming markdown row, keeping already-completed
+    /// paragraphs above it untouched. Returns false if the row needs a full rebuild (e.g. a linked picture appeared).
+    /// </summary>
+    private bool TryUpdateStreamingMarkdown(HexAgentEntry entry)
+    {
+        if (agentStreamState is not { } state || !ReferenceEquals(state.Entry, entry))
+            return false;
+        string text = entry.Text;
+        if (text.Length < state.StableEnd)
+            return false;
+        // Linked pictures need a PictureStrip wrapper outside the markdown panel, fall back to full rebuild
+        if (!state.Thinking && text.Contains("![", StringComparison.Ordinal) && PicturesIn(text, asked: false).Count > 0)
+            return false;
+
+        StackPanel written = state.Written;
+        int fromChild = Math.Min(state.StableChildren, written.Children.Count);
+        for (int i = written.Children.Count - 1; i >= fromChild; i--)
+            written.Remove(written.Children[i]);
+
+        int newStableEnd = HexAgentRows.StableMarkdownSplit(text, state.StableEnd);
+        if (newStableEnd < state.StableEnd)
+            newStableEnd = state.StableEnd;
+
+        int newStableChildren = fromChild;
+        if (newStableEnd > state.StableEnd)
+        {
+            WriteMarkdown(written, WithPlaces(text[state.StableEnd..newStableEnd]), string.Empty);
+            newStableChildren = written.Children.Count;
+        }
+        if (newStableEnd < text.Length)
+            WriteMarkdown(written, WithPlaces(text[newStableEnd..]), string.Empty);
+
+        WireAgentMarkdownChildren(written, fromChild, state.Thinking);
+        FitWritten(written, MathF.Max(32, AgentsWidth() - state.Padding.Total.X), keepWidth: true);
+        agentStreamState = state with { StableEnd = newStableEnd, StableChildren = newStableChildren };
+        return true;
+    }
+
+    private void WireAgentMarkdownChildren(StackPanel written, int fromIndex, bool thinking)
+    {
+        for (int i = fromIndex; i < written.Children.Count; i++)
+            WireAgentMarkdownSubtree(written.Children[i], thinking);
+    }
+
+    // Zero-allocation recursive walk replacing Descendants(root) on every streaming update
+    private void WireAgentMarkdownSubtree(UIComponent component, bool thinking)
+    {
+        if (component is Label label)
+        {
+            label.OnLink = OpenAgentLink;
+            label.Dim = thinking;
+        }
+        else if (component is NotebookTablePanel table)
+            table.Strip.Visible = false;
+
+        IReadOnlyList<UIComponent> children = component.Children;
+        for (int i = 0; i < children.Count; i++)
+            WireAgentMarkdownSubtree(children[i], thinking);
     }
 
     // What was asked, a raised bubble at the right, as wide as its longest line and no wider than most of the room
@@ -526,7 +846,20 @@ internal sealed partial class DawnScene
         float longest = float.MaxValue;
         if (skin is not null)
         {
-            longest = shown.Split('\n').Max(line => skin.Font.MeasureLine(line, scale, UITextStyle.None, default)) + padding;
+            longest = 0.0f;
+            ReadOnlySpan<char> span = shown.AsSpan();
+            while (true)
+            {
+                int nl = span.IndexOf('\n');
+                ReadOnlySpan<char> line = nl < 0 ? span : span[..nl];
+                float w = skin.Font.MeasureLine(line, scale, UITextStyle.None, default);
+                if (w > longest)
+                    longest = w;
+                if (nl < 0)
+                    break;
+                span = span[(nl + 1)..];
+            }
+            longest += padding;
             if (under is not null)
                 longest = Math.Max(longest, skin.Font.MeasureLine(under, 0.125f, UITextStyle.None, default) + padding);
         }
@@ -551,7 +884,9 @@ internal sealed partial class DawnScene
         // The pictures pasted with it, small under the words, the bubble as wide as they need
         if (PictureStrip(PicturesIn(entry.Text, asked: true), Origin.Left) is StackPanel pictures)
         {
-            float wide = pictures.Children.Sum(each => each.Size.X) + pictures.Spacing * (pictures.Children.Count - 1);
+            float wide = pictures.Spacing * (pictures.Children.Count - 1);
+            for (int p = 0; p < pictures.Children.Count; p++)
+                wide += pictures.Children[p].Size.X;
             longest = Math.Max(longest == float.MaxValue ? 0 : longest, wide + padding);
             stack.Add(pictures);
         }
@@ -569,22 +904,34 @@ internal sealed partial class DawnScene
         return holder;
     }
 
+    // The whole seconds each running call's label says, and how a running time is written
+    private readonly Dictionary<HexAgentEntry, int> runningSecondsShown = [];
+    private readonly Dictionary<HexAgentEntry, int> groupTenthsShown = [];
+    private static string RunningSeconds(double seconds) => HexAgentRows.SmallInt((int)seconds);
+
     /// <summary>The times of the tools still running brought up to now, a few times a second.</summary>
     private void TickRunningTimes()
     {
         foreach (var (entry, label) in agentsRunningTimes)
         {
-            if (entry.State == HexAgentToolState.Running)
-                label.Text = Said("agents_panel.tool_running", ("seconds", entry.Seconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)));
+            // Whole seconds, so the label is written (and laid out) once a second, not ten times
+            if (entry.State == HexAgentToolState.Running && (int)entry.Seconds != runningSecondsShown.GetValueOrDefault(entry, -1))
+            {
+                runningSecondsShown[entry] = (int)entry.Seconds;
+                label.Text = Said("agents_panel.tool_running", ("seconds", RunningSeconds(entry.Seconds)));
+            }
         }
 
         // A group's time, how long any of its calls was going, going on while one of them runs
-        foreach (var (time, calls) in agentsGroupTimes.Values)
+        foreach (var (first, (time, calls)) in agentsGroupTimes)
         {
             double seconds = GroupSeconds(calls);
-            string said = seconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "s";
-            if (time.Text != said)
-                time.Text = said;
+            int tenths = (int)Math.Round(seconds * 10.0);
+            if (tenths != groupTenthsShown.GetValueOrDefault(first, -1))
+            {
+                groupTenthsShown[first] = tenths;
+                time.Text = HexAgentRows.FormatTenthsSeconds(seconds);
+            }
         }
 
         TickQuestionTimes();

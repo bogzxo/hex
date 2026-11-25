@@ -37,8 +37,11 @@ internal static class DawnResident
     /// <summary>Set as the editor of a wake up is made, so it shows the window once it has something to show in it.</summary>
     public static bool Waking { get; set; }
 
+    /// <summary>Set when Hex is explicitly restarting so closing the window exits the process instead of sleeping.</summary>
+    public static bool ExitRequested { get; set; }
+
     /// <summary>Whether this run can go to sleep, the program having said how to make another editor.</summary>
-    public static bool Possible => make is not null;
+    public static bool Possible => make is not null && !ExitRequested;
 
     /// <summary>Called once by the program, how a new editor is made (and hosted with Dusk), and with what.</summary>
     public static void Prepare(Func<HexOptions, DawnScene> makeEditor, HexOptions startedWith)

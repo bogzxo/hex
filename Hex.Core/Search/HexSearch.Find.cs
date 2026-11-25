@@ -39,6 +39,8 @@ internal static partial class HexSearch
             return new HexSearchOutcome(found, error);
 
         HexScope? scope = HexScope.Of(include, exclude);
+        string[]? fullRoots = scope is null ? null : [.. roots.Select(Path.GetFullPath)];
+        StringComparison comparison = options.MatchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
         var matches = new List<(int Column, int Length)>();
         foreach (string file in TextFilesUnder(roots))
         {
@@ -46,29 +48,44 @@ internal static partial class HexSearch
                 break;
 
             string full = Path.GetFullPath(file);
-            if (scope is not null && !InScope(scope, roots, full))
+            if (scope is not null && !InScope(scope, fullRoots!, full))
                 continue;
 
-            string[] lines = open is not null && open.TryGetValue(full, out string? text) ? text.Split('\n') : ReadLines(file);
+            string? openText = null;
+            bool fromOpen = open is not null && open.TryGetValue(full, out openText);
+            string? content = fromOpen ? openText : ReadText(file);
+            if (content is null || (pattern is null && !content.AsSpan().Contains(query, comparison)))
+                continue;
+
             // Worked out for a file with a match in it, which a few of the workspace's files have
             string? relative = null;
-            for (int line = 0; line < lines.Length && found.Count < MOST_FOUND; line++)
+            int line = 0, start = 0;
+            while (found.Count < MOST_FOUND)
             {
-                string said = lines[line];
-                AllMatches(said, query, options, pattern, matches);
-                if (matches.Count == 0)
-                    continue;
+                int newline = content.IndexOf('\n', start);
+                int end = newline < 0 ? content.Length : newline;
+                int limit = !fromOpen && newline >= 0 && end > start && content[end - 1] == '\r' ? end - 1 : end;
+                ReadOnlySpan<char> said = content.AsSpan(start, limit - start);
 
-                // The row shows the line without its indent, what's lit is where the match is in that
-                relative ??= RelativeTo(roots, file);
-                string trimmed = said.Trim();
-                int lead = said.Length - said.TrimStart().Length;
-                foreach (var (column, length) in matches)
+                AllMatches(said, query, options, pattern, matches);
+                if (matches.Count > 0)
                 {
-                    if (found.Count >= MOST_FOUND)
-                        break;
-                    found.Add(new HexResult(file, line, column, $"{relative}:{line + 1}  {trimmed}", length, column - lead));
+                    // The row shows the line without its indent, what's lit is where the match is in that
+                    relative ??= RelativeTo(roots, file);
+                    string trimmed = said.Trim().ToString();
+                    int lead = said.Length - said.TrimStart().Length;
+                    foreach (var (column, length) in matches)
+                    {
+                        if (found.Count >= MOST_FOUND)
+                            break;
+                        found.Add(new HexResult(file, line, column, $"{relative}:{line + 1}  {trimmed}", length, column - lead));
+                    }
                 }
+
+                if (newline < 0)
+                    break;
+                start = newline + 1;
+                line++;
             }
         }
 
@@ -94,19 +111,23 @@ internal static partial class HexSearch
     public static List<(int Column, int Length)> AllMatches(string line, string query, UIFindOptions options, Regex? pattern)
     {
         var into = new List<(int Column, int Length)>();
-        AllMatches(line, query, options, pattern, into);
+        AllMatches(line.AsSpan(), query, options, pattern, into);
         return into;
     }
 
     /// <summary>The same into a list that's kept, emptied first.</summary>
-    public static void AllMatches(string line, string query, UIFindOptions options, Regex? pattern, List<(int Column, int Length)> into)
+    public static void AllMatches(string line, string query, UIFindOptions options, Regex? pattern, List<(int Column, int Length)> into) =>
+        AllMatches(line.AsSpan(), query, options, pattern, into);
+
+    /// <summary>The same over a line span, avoiding per-line string allocations.</summary>
+    public static void AllMatches(ReadOnlySpan<char> line, string query, UIFindOptions options, Regex? pattern, List<(int Column, int Length)> into)
     {
         into.Clear();
         if (pattern is not null)
         {
             try
             {
-                for (Match match = pattern.Match(line); match.Success; match = match.NextMatch())
+                foreach (ValueMatch match in pattern.EnumerateMatches(line))
                 {
                     if (match.Length > 0 && (!options.WholeWord || IsWholeWord(line, match.Index, match.Length)))
                         into.Add((match.Index, match.Length));
@@ -122,23 +143,30 @@ internal static partial class HexSearch
             return;
 
         StringComparison comparison = options.MatchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
-        for (int at = line.IndexOf(query, comparison); at >= 0; at = line.IndexOf(query, at + query.Length, comparison))
+        int offset = 0;
+        while (offset <= line.Length - query.Length)
         {
+            int rel = line[offset..].IndexOf(query, comparison);
+            if (rel < 0)
+                break;
+            int at = offset + rel;
             if (!options.WholeWord || IsWholeWord(line, at, query.Length))
                 into.Add((at, query.Length));
+            offset = at + query.Length;
         }
     }
 
     /// <summary>Where something is first on a line as the options say (the pattern built from them for a regex), null for nowhere.</summary>
     public static int? FirstMatch(string line, string query, UIFindOptions options, Regex? pattern)
     {
+        ReadOnlySpan<char> span = line.AsSpan();
         if (pattern is not null)
         {
             try
             {
-                for (Match match = pattern.Match(line); match.Success; match = match.NextMatch())
+                foreach (ValueMatch match in pattern.EnumerateMatches(span))
                 {
-                    if (match.Length > 0 && (!options.WholeWord || IsWholeWord(line, match.Index, match.Length)))
+                    if (match.Length > 0 && (!options.WholeWord || IsWholeWord(span, match.Index, match.Length)))
                         return match.Index;
                 }
             }
@@ -151,7 +179,7 @@ internal static partial class HexSearch
         StringComparison comparison = options.MatchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
         for (int at = line.IndexOf(query, comparison); at >= 0; at = line.IndexOf(query, at + query.Length, comparison))
         {
-            if (!options.WholeWord || IsWholeWord(line, at, query.Length))
+            if (!options.WholeWord || IsWholeWord(span, at, query.Length))
                 return at;
         }
         return null;
@@ -167,17 +195,17 @@ internal static partial class HexSearch
         return on.Count == 0 ? string.Empty : $", {string.Join(", ", on)} (the find bar's toggles)";
     }
 
-    private static bool IsWholeWord(string line, int at, int length) =>
+    private static bool IsWholeWord(ReadOnlySpan<char> line, int at, int length) =>
         (at == 0 || !UITextDocument.IsWordChar(line[at - 1])) && (at + length >= line.Length || !UITextDocument.IsWordChar(line[at + length]));
 
     // Whether the include and exclude boxes keep a file, by where it is in the folder it's under, and with more than one
     // folder by that with the folder's name in front as well
-    private static bool InScope(HexScope scope, IReadOnlyList<string> roots, string full)
+    private static bool InScope(HexScope scope, string[] fullRoots, string full)
     {
         string? root = null;
-        foreach (string folder in roots)
+        for (int i = 0; i < fullRoots.Length; i++)
         {
-            string whole = Path.GetFullPath(folder);
+            string whole = fullRoots[i];
             if (full.StartsWith(whole, PlatformPaths.Comparison) && (root is null || whole.Length > root.Length))
                 root = whole;
         }
@@ -186,6 +214,6 @@ internal static partial class HexSearch
             return scope.Keeps(Path.GetFileName(full));
 
         string inside = HexExcludes.Relative(root, full);
-        return scope.Keeps(inside, roots.Count > 1 ? $"{Path.GetFileName(root.TrimEnd('\\', '/'))}/{inside}" : null);
+        return scope.Keeps(inside, fullRoots.Length > 1 ? $"{Path.GetFileName(root.TrimEnd('\\', '/'))}/{inside}" : null);
     }
 }

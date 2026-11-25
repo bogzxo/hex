@@ -107,6 +107,67 @@ internal sealed partial class DawnScene
             page.DependentShown("auto_save_delay") is (true, var faint) && faint == !autoSave);
 
         TestSettingsPage(test);
+        TestSettingsToggleCost(test);
+    }
+
+    // What a toggle in the settings costs the UI thread: the row's set path, then the next ticks (nav, chips, the changed
+    // count), one line per setting. A toggle is to be under a frame
+    private void TestSettingsToggleCost(HexPointerScript test)
+    {
+        SettingsPage page = null!;
+        var spent = new List<string>();
+        double worst = 0.0;
+        test.Run(() =>
+        {
+            page = SettingsPage!;
+            page.Find(string.Empty);
+        });
+
+        // The settings kept in a file of their own for this, a self test keeps nothing otherwise and a save would cost nothing
+        HexSettings? usual = null;
+        string folder = Path.Combine(Path.GetTempPath(), "hex-toggle-cost-" + Guid.NewGuid().ToString("N"));
+        test.Run(() =>
+        {
+            Directory.CreateDirectory(folder);
+            usual = settings;
+            settings = new HexSettings(Path.Combine(folder, "settings.hor"));
+            settingsSaveDeferred = true;
+        });
+
+        // The first round warms the code up (a debug build compiles it as it's reached), the second is what's held to a frame
+        string[] keys = ["minimap", "wrap_code", "git_blame", "link_discoverable"];
+        int turn = 0;
+        foreach (string key in keys.Concat(keys))
+        {
+            bool warm = turn++ >= keys.Length;
+            test.Run(() =>
+            {
+                if (page.ValueOf?.Invoke(key) is not BooleanValue now)
+                    return;
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                page.Enter(key, Values.Bool(!now.Value));
+                double set = watch.Elapsed.TotalMilliseconds;
+                watch.Restart();
+                int count = page.ModifiedCount;
+                double counted = watch.Elapsed.TotalMilliseconds;
+                watch.Restart();
+                string? wrote = settings.Save();
+                spent.Add($"{key} toggle {set:F1}ms, changed count {counted:F1}ms ({count}), a save on the spot would be {watch.Elapsed.TotalMilliseconds:F1}ms{wrote}");
+                if (warm)
+                    worst = Math.Max(worst, set);
+            });
+            test.Wait();
+        }
+
+        test.Run(() =>
+        {
+            settingsSaveDeferred = false;
+            FlushZoomSettings();
+            settings = usual!;
+            Directory.Delete(folder, recursive: true);
+            File.WriteAllLines("C:/Users/bogdan/source/repos/bogzxo/horizon/hex/Hex/bin/Debug/net11.0/data/agents/temp/scratch/toggle-cost.txt", spent);
+        });
+        test.Check("settings toggle: under a frame", () => worst < 16.0);
     }
 
     // The page's own part of a round of the settings. The controls down one right edge with the search's, the key on

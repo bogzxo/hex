@@ -23,7 +23,7 @@ internal sealed partial class DawnScene
         string seconds = entry.Seconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
         string state = entry.State switch
         {
-            HexAgentToolState.Running => Said("agents_panel.tool_running", ("seconds", seconds)),
+            HexAgentToolState.Running => Said("agents_panel.tool_running", ("seconds", RunningSeconds(entry.Seconds))),
             HexAgentToolState.Failed => Said("agents_panel.tool_failed", ("seconds", seconds)),
             _ => Said("agents_panel.tool_done", ("seconds", seconds))
         };

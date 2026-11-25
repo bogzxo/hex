@@ -12,7 +12,8 @@ internal sealed partial class DawnScene
     {
         commands.Add("Agents/open", Said("agent.explain"), () => RequestAgent("explain"), icon: "robot").IsEnabled = CanAskAgent;
         commands.Add("Agents/open", Said("agent.change"), () => RequestAgent("change"), icon: "edit").IsEnabled = CanAskAgent;
-        if (!HexAi.Off)
+        BuildAgentReview();
+        if (AgenticEnabled)
             languages.MoreActions = AgentActions;
     }
 
@@ -24,7 +25,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private IReadOnlyList<UIChoice> AgentActions(HexDocument of, UITextPosition from, UITextPosition to)
     {
-        if (HexAi.Off || of != document || !CanAskAgent() || AgentFor(null) is null)
+        if (!AgenticEnabled || of != document || !CanAskAgent() || (AgentFor(null) is null && LinkRunsOnDevices().Count == 0))
             return [];
 
         string group = Said("agent.actions_group");
@@ -80,7 +81,19 @@ internal sealed partial class DawnScene
             return;
         if (AgentFor(null) is not { } agent)
         {
-            Say(Said("agents_panel.no_agents"));
+            string spot = $"{HexSearch.RelativeTo(explorer.workspace.Folders, captured.Path)}:{captured.Line}";
+            void Draft()
+            {
+                // On the device Runs on says: the box holds what was asked, sending it starts the agent there
+                agentDraftContext = captured;
+                agentsInput.Text = asked(spot);
+                ShowAgentsPanel();
+            }
+
+            if (LinkRunsOnPeer() is not null)
+                Draft();
+            else if (!AgentOfferHost(Draft))
+                Say(Said("agents_panel.no_agents"));
             return;
         }
 
@@ -93,6 +106,27 @@ internal sealed partial class DawnScene
         SendToAgent();
         ShowAgentsPanel();
         Say(Said("agent.started", ("where", where)));
+    }
+
+    /// <summary>
+    /// With no agent system on this machine but a linked device that may be steered: offers to run the agent there (the box's
+    /// Runs on, started with hex_link_spawn when sent), <paramref name="again"/> being what was asked. False when there's no such device.
+    /// </summary>
+    private bool AgentOfferHost(Action again)
+    {
+        if (LinkRunsOnDevices().FirstOrDefault() is not { } host)
+            return false;
+        string name = LinkNameOf(host.Device.Id, host.Device.Name), go = Said("link.ai_run_on_go", ("device", name));
+        Context.Windows.Ask(Said("link.ai_run_on_title"), Said("link.ai_run_on_text", ("device", name)), [Said("link.pair_cancel"), go], answer =>
+        {
+            if (answer != go)
+                return;
+            ShowAgentsPanel();
+            NewAgentChat();
+            LinkPickRunsOn(host.Device.Id);
+            again();
+        });
+        return true;
     }
 
     private bool CanAskAgent() => document.DiffOf is null && document.Picture is null && !code.ReadOnly;
@@ -110,6 +144,9 @@ internal sealed partial class DawnScene
     private void RequestAgent(string kind)
     {
         if (CaptureAgentContext() is not { } captured) return;
+        // No agent system here: the device a new chat can run on is offered (hex_link_spawn when it's sent)
+        if (AgentFor(null) is null && LinkRunsOnPeer() is null && AgentOfferHost(() => RequestAgent(kind)))
+            return;
         // Keep an existing draft editable, rather than replacing unsent instructions.
         string instruction = Said(kind == "change" ? "agent.change_prompt" : "agent.explain_prompt");
         agentDraftContext = captured;

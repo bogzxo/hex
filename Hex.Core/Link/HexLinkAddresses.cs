@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 
 namespace Hex.Core;
@@ -56,6 +57,69 @@ internal static class HexLinkAddresses
             .Select((address, at) => (address, at))
             .OrderBy(pair => Rank(pair.address)).ThenBy(pair => pair.at)
             .Select(pair => pair.address)];
+    }
+
+    /// <summary>
+    /// Addresses in the order worth dialling from this machine: those inside a subnet of one of its own interfaces first
+    /// (a virtual switch's 192.168.x.1 is not the LAN just because it is in 192.168/16), then the usual rank order. Nothing
+    /// is dropped, only each address once, the order among equals kept; what may be dialled is DialAddresses' to say.
+    /// </summary>
+    public static List<IPAddress> Preferred(IEnumerable<IPAddress> addresses, IReadOnlyList<(IPAddress Address, int PrefixLength)> local)
+    {
+        var seen = new HashSet<IPAddress>();
+        return [.. addresses.Select(address => address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address)
+            .Where(address => seen.Add(address))
+            .Select((address, at) => (address, at))
+            .OrderBy(pair => OnLocalNetwork(pair.address, local) ? 0 : 1).ThenBy(pair => Rank(pair.address)).ThenBy(pair => pair.at)
+            .Select(pair => pair.address)];
+    }
+
+    /// <summary>The unicast IPv4 addresses and prefix lengths of this machine's interfaces that are up, loopback left out.</summary>
+    public static List<(IPAddress Address, int PrefixLength)> LocalNetworks()
+    {
+        var networks = new List<(IPAddress, int)>();
+        try
+        {
+            foreach (var face in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (face.OperationalStatus != OperationalStatus.Up || face.NetworkInterfaceType == NetworkInterfaceType.Loopback)
+                    continue;
+                foreach (var unicast in face.GetIPProperties().UnicastAddresses)
+                    if (unicast.Address.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(unicast.Address))
+                        networks.Add((unicast.Address, unicast.PrefixLength));
+            }
+        }
+        catch (NetworkInformationException)
+        {
+        }
+
+        return networks;
+    }
+
+    private static bool OnLocalNetwork(IPAddress address, IReadOnlyList<(IPAddress Address, int PrefixLength)> local)
+    {
+        if (address.AddressFamily != AddressFamily.InterNetwork)
+            return false;
+        Span<byte> a = stackalloc byte[4];
+        Span<byte> b = stackalloc byte[4];
+        address.TryWriteBytes(a, out _);
+        foreach (var (own, prefix) in local)
+        {
+            if (own.AddressFamily != AddressFamily.InterNetwork || prefix is < 1 or > 32 || !own.TryWriteBytes(b, out _))
+                continue;
+            int bits = prefix;
+            bool same = true;
+            for (int i = 0; i < 4 && bits > 0 && same; i++, bits -= 8)
+            {
+                int mask = bits >= 8 ? 0xFF : (0xFF << (8 - bits)) & 0xFF;
+                same = (a[i] & mask) == (b[i] & mask);
+            }
+
+            if (same)
+                return true;
+        }
+
+        return false;
     }
 
     // How good an address is to dial, lower first

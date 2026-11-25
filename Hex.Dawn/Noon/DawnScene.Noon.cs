@@ -72,7 +72,7 @@ internal sealed partial class DawnScene
             noonFleetHidden = !shown;
         noonFleetDrawn = NOT_DRAWN;
         noonWait = 0.0f;
-        Engine.WindowManager.RequestFrames();
+        Engine.WindowManager.NoteChange();
     }
 
     /// <summary>
@@ -86,7 +86,12 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>The fleet's key, putting it away when it's on screen and bringing it when it isn't, whatever the width.</summary>
-    private void ToggleFleet() => ShowFleet(!noonFleet.Visible);
+    private void ToggleFleet()
+    {
+        if (!noonBuilt)
+            return;
+        ShowFleet(!noonFleet.Visible);
+    }
 
     // How wide the chat's column is at most, centred in the middle
     private const float NOON_COLUMN = 920.0f;
@@ -119,8 +124,28 @@ internal sealed partial class DawnScene
     // Where the Agents view sat in the side bar, it goes back there as Noon is left
     private int agentsViewIndex = -1;
 
-    private void BuildNoon()
+    // Whether Agentic's widgets have been built yet, deferred until it's first shown or warmed
+    private bool noonBuilt;
+
+    /// <summary>Registers Agentic's commands before the menu bar is built, leaving its widgets until Agentic is shown or warmed.</summary>
+    private void RegisterNoonCommands()
     {
+        commands.Add("Agents/open", Said("noon.command"), () => SwitchFace(Face == HexFace.Noon ? HexFace.Dawn : HexFace.Noon), "Ctrl+Alt+Shift+N", "robot", UIKeyUse.BoundWhileTyping);
+        AddNoonCommands();
+        RegisterNoonStageCommands();
+        AddAgentDataItems((group, label, picked, icon, destructive) => commands.Add($"Agents/data/agent_data:{group}", label, picked, icon: icon, destructive: destructive), track: true);
+    }
+
+    /// <summary>Builds Agentic's three-column UI once, lazily on first show or warm.</summary>
+    private void EnsureNoon()
+    {
+        if (noonBuilt || !AgenticEnabled)
+            return;
+        EnsureAgentsPanel();
+        if (agentsView is null)
+            return;
+        noonBuilt = true;
+
         // In the body's place between the title bar and the status bar
         noonView = root.Insert(IndexIn(root, body) + 1, new StackPanel { Direction = UIDirection.Horizontal, Anchor = Origin.Left, Pivot = Origin.Left, Spacing = 0, Visible = false });
 
@@ -156,7 +181,23 @@ internal sealed partial class DawnScene
         });
         agentsHarnessShown = (-1, -1);
         // And under that, how much the agents' data takes on the disk, opening its folders and tidying it (DawnScene.AgentData)
-        BuildAgentData();
+        noonAgentData = noonFleet.Add(new Button
+        {
+            Style = "button_flat",
+            Fill = UIFill.Horizontal,
+            Size = new Vector2(0, NOON_HARNESS),
+            Align = Origin.Left,
+            LabelScale = 0.13f,
+            Animated = false,
+            Label = agentData is { } usage
+                ? $"$(database) {Said("agent_data.noon", ("size", HexDataTidy.Bytes(usage.Total)))}"
+                : $"$(database) {Said("agent_data.title")}",
+            Tooltip = agentData is { } measured
+                ? Said("agent_data.noon_tip", ("chats", measured.ChatCount.ToString()), ("images", measured.ImageCount.ToString()), ("folder", HexData.Root))
+                    + (HexData.Fallback ? "\n" + Said("agent_data.fallback") : string.Empty)
+                : string.Empty,
+            OnPressed = () => ContextMenu.Show(chrome, noonAgentData!.Bounds.PointAt(Origin.TopLeft), AgentDataMenu())
+        });
 
         // The chat in the middle, the Agents view is put in it as Noon comes up
         // The wheel turned over the margins round the chat's column scrolls the chat, as it would over the column itself
@@ -175,8 +216,6 @@ internal sealed partial class DawnScene
         GripNoon();
 
         DressChrome();
-        commands.Add("Agents/open", Said("noon.command"), () => SwitchFace(Face == HexFace.Noon ? HexFace.Dawn : HexFace.Noon), "Ctrl+Alt+Shift+N", "robot", UIKeyUse.BoundWhileTyping);
-        AddNoonCommands();
     }
 
     /// <summary>
@@ -194,12 +233,19 @@ internal sealed partial class DawnScene
         if (face == Face)
             return;
 
-        // No Agentic with No AI on, it was never made. A workspace left in it, --face noon or a call asking for it
+        // No Agentic with module_agentic or No AI off, it was never made. A workspace left in it, --face noon or a call asking for it
         // stays in Dawn
-        if (face == HexFace.Noon && HexAi.Off)
+        if (face == HexFace.Noon && !AgenticEnabled)
         {
             Say(Said("no_ai.no_agentic"));
             return;
+        }
+
+        if (face == HexFace.Noon)
+        {
+            EnsureNoon();
+            if (!noonBuilt || agentsView is null)
+                return;
         }
 
         Face = face;
@@ -208,7 +254,8 @@ internal sealed partial class DawnScene
         noonFleetOpened = false;
         bool noon = face == HexFace.Noon;
         body.Visible = !noon;
-        noonView.Visible = noon;
+        if (noonView is not null)
+            noonView.Visible = noon;
         if (noon)
         {
             agentsViewIndex = IndexIn(left, agentsView);
@@ -225,8 +272,11 @@ internal sealed partial class DawnScene
         }
         else
         {
-            left.Insert(Math.Max(0, agentsViewIndex), agentsView);
-            agentsView.Visible = false;
+            if (agentsView is not null)
+            {
+                left.Insert(Math.Max(0, agentsViewIndex), agentsView);
+                agentsView.Visible = false;
+            }
             PlaceAgentsView(Side == HexSide.Agents);
             if (document.View == HexView.Code || document.IsText)
                 code.Focus();
@@ -242,7 +292,7 @@ internal sealed partial class DawnScene
         UseFaceTheme();
         if (Skin is { } skin)
             HexModeSwitch.Dress(modeToggle, skin);
-        Engine.WindowManager.RequestFrames();
+        Engine.WindowManager.NoteChange();
     }
 
     /// <summary>
@@ -275,6 +325,8 @@ internal sealed partial class DawnScene
     /// <summary>Noon's columns fitted to the window and drawn again when what they show moved, a few times a second.</summary>
     private void UpdateNoon(float dt)
     {
+        if (!AgenticEnabled)
+            return;
         UpdateFamilyWindow();
         WarmFaces();
         if (Face != HexFace.Noon)
@@ -292,6 +344,8 @@ internal sealed partial class DawnScene
     // The three columns over the body's room, the context giving way on a narrow window
     private void FitNoon()
     {
+        if (!noonBuilt || agentsView is null)
+            return;
         UIRect screen = chrome.Root.Bounds;
         if (screen.IsEmpty || top.Bounds.IsEmpty)
             return;
@@ -467,8 +521,8 @@ internal sealed partial class DawnScene
                 noonFleetCheap = cheap;
         }
 
-        foreach (Action<float> refresh in noonCards)
-            refresh(width);
+        for (int i = 0; i < noonCards.Count; i++)
+            noonCards[i](width);
         if (noonSystems is not null)
             DrawSystems(noonSystems, width);
 

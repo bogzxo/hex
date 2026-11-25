@@ -117,6 +117,9 @@ internal sealed partial class DawnScene
             case StatusBar bar:
                 McpStatusItems(module, bar, depth + 1, into);
                 break;
+            case ListBox rows:
+                McpListRows(module, rows, depth + 1, into);
+                break;
             case Notifications cards:
                 McpCards(module, cards, depth + 1, into);
                 break;
@@ -156,6 +159,36 @@ internal sealed partial class DawnScene
             mcpTargets[id] = target;
             string text = item.Detail.Length > 0 ? $"{Plain(item.Text)}  {Plain(item.Detail)}" : Plain(item.Text);
             into.Add(new HexScreenNode(id, "TreeRow", text, null, McpBox(module, bounds), depth, true, false, true, target));
+        }
+    }
+
+    // The rows of a list (a chooser's, a picker's) in sight: what each says, a group's heading as such, a star's state and
+    // which one is chosen. A row is pointed at by where it is when the click comes
+    private void McpListRows(UIModule module, ListBox list, int depth, List<HexScreenNode> into)
+    {
+        for (int i = 0; i < list.Items.Length; i++)
+        {
+            if (list.RowBounds(i) is not { } bounds)
+                continue;
+
+            string item = list.Items[i], id = $"{McpIdOf(list, 'l')}.{i}";
+            UIChoice? choice = list.Choice?.Invoke(item);
+            string text = choice is null ? item
+                : choice.Segments is { Count: > 0 } pieces ? string.Join("  ", pieces.Select(piece => piece.Text))
+                : string.Join("  ", new[] { choice.Quiet, choice.Text, choice.Detail }.Where(part => part.Length > 0));
+            if (choice?.Starred is { } starred)
+                text += starred ? "  [starred]" : "  [not starred]";
+            if (choice?.Header == true)
+                text = $"-- {text} --";
+            if (i == list.Index)
+                text += "  [chosen]";
+
+            var weak = new WeakReference<ListBox>(list);
+            int row = i;
+            Func<Vector2?> target = () => weak.TryGetTarget(out ListBox? alive) && alive.Module is { } at && alive.RowBounds(row) is { } now ? McpCenter(McpBox(at, now)) : null;
+            mcpTargets[id] = target;
+            into.Add(new HexScreenNode(id, choice?.Header == true ? "ListHeading" : "ListRow", Plain(text), null, McpBox(module, bounds), depth, true, i == list.Index,
+                choice?.Header != true, target));
         }
     }
 

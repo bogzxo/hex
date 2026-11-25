@@ -31,12 +31,12 @@ internal sealed partial class DawnScene
                     continue;
 
                 UIDialog.Show(chrome, Said("link.ignore.title"), Said("link.ignore.body", ("folder", Path.GetFileName(folder))),
-                    new DialogChoice(Said("link.ignore.create"), () =>
+                    new DialogChoice(Said("link.ignore.leave"), () =>
                     {
                         CreateLinkIgnore(path);
                         Next();
                     }),
-                    new DialogChoice(Said("link.ignore.later"), () =>
+                    new DialogChoice(Said("link.ignore.keep_all"), () =>
                     {
                         try
                         {
@@ -94,6 +94,7 @@ internal sealed partial class DawnScene
             }
         }
 
-        Open(path);
+        // Said, not opened: the file is there for whoever wants to look, and a tab opening was a surprise
+        Notify(Said("link.ignore.created"), actions: (Said("link.ignore.open"), () => Open(path)));
     }
 }

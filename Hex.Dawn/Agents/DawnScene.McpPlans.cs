@@ -220,7 +220,7 @@ internal sealed partial class DawnScene
                 continue;
 
             string text = $"{MailName(chat)} is finished with {string.Join(", ", waiting)} ({string.Join("; ", finished)}). Your plan names them, go ahead when it suits your work.";
-            Deliver(other, chat, "progress", text, directive: false);
+            Deliver(other, chat, "progress", text, directive: false, resume: false);
             yield return $"Told {MailName(other)} that {string.Join(", ", waiting)} are free.";
         }
     }

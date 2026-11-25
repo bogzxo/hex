@@ -28,30 +28,54 @@ internal static class GitMerge
         ("REVERT_HEAD", GitOperation.Reverting)
     ];
 
+    private static readonly string[] OperationArguments =
+    [
+        "rev-parse",
+        "--git-path", "rebase-merge",
+        "--git-path", "rebase-apply",
+        "--git-path", "MERGE_HEAD",
+        "--git-path", "CHERRY_PICK_HEAD",
+        "--git-path", "REVERT_HEAD"
+    ];
+
     /// <summary>What git is in the middle of, None for nothing (or git not saying).</summary>
     public static GitOperation Operation(this GitRepository repository)
     {
-        var arguments = new List<string> { "rev-parse" };
-        foreach (var (path, _) in Markers)
+        return GitProcess.Run(repository.Root, OperationArguments, (exit, output, _) =>
         {
-            arguments.Add("--git-path");
-            arguments.Add(path);
-        }
+            if (exit != 0)
+                return GitOperation.None;
 
-        GitResult result = GitProcess.Run(repository.Root, arguments);
-        if (!result.Ok)
+            // One line each in the order asked, relative to the root unless git keeps them somewhere else altogether
+            int index = 0;
+            ReadOnlySpan<char> remaining = output;
+            while (!remaining.IsEmpty && index < Markers.Length)
+            {
+                int nl = remaining.IndexOf('\n');
+                ReadOnlySpan<char> line;
+                if (nl < 0)
+                {
+                    line = remaining;
+                    remaining = default;
+                }
+                else
+                {
+                    line = remaining[..nl];
+                    remaining = remaining[(nl + 1)..];
+                }
+
+                line = line.Trim();
+                if (line.IsEmpty)
+                    continue;
+
+                string at = Path.GetFullPath(Path.Combine(repository.Root, line.ToString()));
+                if (File.Exists(at) || Directory.Exists(at))
+                    return Markers[index].Operation;
+                index++;
+            }
+
             return GitOperation.None;
-
-        // One line each in the order asked, relative to the root unless git keeps them somewhere else altogether
-        string[] lines = result.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        for (int i = 0; i < Math.Min(lines.Length, Markers.Length); i++)
-        {
-            string at = Path.GetFullPath(Path.Combine(repository.Root, lines[i].Trim()));
-            if (File.Exists(at) || Directory.Exists(at))
-                return Markers[i].Operation;
-        }
-
-        return GitOperation.None;
+        });
     }
 
     /// <summary>Calls it off, the working tree and the branch back to how they were before it. What git said when it went wrong, null when it didn't.</summary>
@@ -60,9 +84,25 @@ internal static class GitMerge
         if (Verb(operation) is not { } verb)
             return null;
 
-        GitResult result = GitProcess.Run(repository.Root, [verb, "--abort"]);
-        return result.Ok ? null : GitStash.Said(result);
+        GitRepository.InvalidateInFlight(repository.Root);
+        try
+        {
+            GitResult result = GitProcess.Run(repository.Root, [verb, "--abort"]);
+            return result.Ok ? null : GitStash.Said(result);
+        }
+        finally
+        {
+            GitRepository.InvalidateInFlight(repository.Root);
+        }
     }
+
+    // GIT_EDITOR takes precedence over -c core.editor in git, so override it too to accept the message git already has
+    // even when GitProcess or the parent environment sets GIT_EDITOR=false or an interactive editor
+    private static readonly IReadOnlyDictionary<string, string> ContinueEnvironment = new Dictionary<string, string>
+    {
+        ["GIT_EDITOR"] = "true",
+        ["GIT_SEQUENCE_EDITOR"] = "true"
+    };
 
     /// <summary>
     /// Carries on once the conflicts are settled and staged, with the message git already has (no editor to stop in, there's
@@ -73,8 +113,16 @@ internal static class GitMerge
         if (Verb(operation) is not { } verb)
             return null;
 
-        GitResult result = GitProcess.Run(repository.Root, ["-c", "core.editor=true", verb, "--continue"]);
-        return result.Ok ? null : GitStash.Said(result);
+        GitRepository.InvalidateInFlight(repository.Root);
+        try
+        {
+            GitResult result = GitProcess.Run(repository.Root, ["-c", "core.editor=true", verb, "--continue"], environment: ContinueEnvironment);
+            return result.Ok ? null : GitStash.Said(result);
+        }
+        finally
+        {
+            GitRepository.InvalidateInFlight(repository.Root);
+        }
     }
 
     // The git command each one is

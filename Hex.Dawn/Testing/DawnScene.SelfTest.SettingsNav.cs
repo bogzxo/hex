@@ -136,7 +136,7 @@ internal sealed partial class DawnScene
         test.Run(OnRowNotTyped);
         test.Wait();
         test.Check("settings nav: (a row has the keyboard before Ctrl+F)", () => page.FocusedKey is not null);
-        test.Run(() => GameEngine.Instance.Input.Play(new InputScript().Chord(0.05f, Key.ControlLeft, Key.F)));
+        test.Run(() => GameEngine.Instance.Input.Play(new InputScript().Chord(0.05f, HexKeyStroke.PrimaryKey, Key.F)));
         test.Settle(0.5f);
         test.Check("settings nav: Ctrl+F from a row puts the keyboard in the search", () => page.Search.IsFocused && page.FocusedKey is null);
 
@@ -148,7 +148,7 @@ internal sealed partial class DawnScene
             page.GoTo(page.SectionsShown[0]);
             page.FocusFirstRow();
             from = Group(page.FocusedKey!);
-            GameEngine.Instance.Input.Play(new InputScript().HoldKey(0.0f, Key.ControlLeft, 0.6f));
+            GameEngine.Instance.Input.Play(new InputScript().HoldKey(0.0f, HexKeyStroke.PrimaryKey, 0.6f));
         });
         test.Settle(0.15f);
         test.Run(() => page.Press(UIKeyboard.PAGE_DOWN));
@@ -270,7 +270,7 @@ internal sealed partial class DawnScene
         test.Wait();
 
         // Ctrl+, for real on the keyboard
-        test.Run(() => GameEngine.Instance.Input.Play(new InputScript().Chord(0.05f, Key.ControlLeft, Key.Comma)));
+        test.Run(() => GameEngine.Instance.Input.Play(new InputScript().Chord(0.05f, HexKeyStroke.PrimaryKey, Key.Comma)));
         test.WaitFor(() => SettingsPage is { Restoring: false }, 3.0f);
         test.Settle(0.3f);
         test.Run(() => Shot("settings-remembered"));

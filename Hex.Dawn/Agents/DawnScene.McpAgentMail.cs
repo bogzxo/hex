@@ -23,7 +23,7 @@ internal sealed partial class DawnScene
     private IEnumerable<HexMcpTool> AgentMailTools() =>
     [
         new(new McpTool("hex_agent_message", "Message another agent",
-            "Tell another agent of your family something while you both keep working, your parent by default (the chat that started you), or a chat you started, or one your parent started. Another chat whose open plan step names a file yours does can be told too, to agree who goes first. Say what you found as soon as it matters to the others, ask what you need to know, say when you're blocked, give instructions. An agent that can be told more as it works takes it in at once, the rest find it in hex_agent_inbox, and an instruction starts a finished agent working on it.",
+            "Tell another agent of your family something while you both keep working, your parent by default (the chat that started you), or a chat you started, or one your parent started. Another chat whose open plan step names a file yours does can be told too, to agree who goes first. Say what you found as soon as it matters to the others, ask what you need to know, say when you're blocked, give instructions. An agent that can be told more as it works takes it in at once, the rest find it in hex_agent_inbox. A message of any kind (finding, progress, answer, question, blocked or instruction) to a chat that isn't working, one that finished or one the user stopped, starts a new turn for it with the message about a second later, messages arriving together in one turn, and the answer says it resumed it with your message. Not when the message answers one that chat sent you a second ago (so two agents can't wake each other for good), then it stays in the inbox. A chat whose agent system can't be resumed keeps it in its inbox, and the answer says so.",
             McpSchema.Object([
                 ("text", McpSchema.String("What to tell it, complete in itself, path:line for code.")),
                 ("to", new JsonObject { ["type"] = new JsonArray("integer", "string"), ["description"] = "Local chat ID, or device:chat for a linked holder." }),
@@ -118,7 +118,8 @@ internal sealed partial class DawnScene
     /// A message given to a chat's agent, at once when it's working and can be told more, otherwise kept for it to read,
     /// an instruction starting it again when it's finished. Both chats get a short note of it. Says what became of it.
     /// </summary>
-    private string Deliver(HexAgentChat to, HexAgentChat? from, string kind, string text, bool directive, string? fromName = null)
+    private string Deliver(HexAgentChat to, HexAgentChat? from, string kind, string text, bool directive, string? fromName = null,
+        bool resume = true, bool allowStopped = true)
     {
         var message = new HexAgentMail(hub.NextMailSeq(), from?.Id, fromName ?? (from is null ? "an agent outside Hex's panel" : MailName(from)), kind, text, directive) { To = to.Id };
         to.Post(message);
@@ -132,7 +133,7 @@ internal sealed partial class DawnScene
         {
             log.Add(message, HexMailRoute.WokeWait);
             to.Note($"$(mail) from {message.FromName} · {kind}: {line}");
-            return $"{MailName(to)} is waiting for its agents, the message wakes it.";
+            return $"{MailName(to)} is waiting in hex_agent_wait, delivered now: the wait ends at once with the message.";
         }
 
         if (to.Running && SteeredRun(to) is not null)
@@ -147,7 +148,10 @@ internal sealed partial class DawnScene
             {
                 log.Add(message, HexMailRoute.Steered);
                 to.MailRead(unread[^1].Seq);
-                return $"{MailName(to)} takes it in as it works.";
+                // Written to its stdin, which an agent reads between its steps: not while a tool call is still going
+                return ToolGoing(to)
+                    ? $"{MailName(to)} is in a tool call that hasn't ended, it's queued on its stdin and it reads it when that call ends, not before."
+                    : $"{MailName(to)} takes it in now, between its steps.";
             }
         }
 
@@ -155,26 +159,70 @@ internal sealed partial class DawnScene
         if (to.Running)
         {
             log.Add(message, HexMailRoute.Inbox);
-            return $"{MailName(to)} is working and can't be told more as it goes, it's in its inbox"
+            return $"{MailName(to)} is working and can't be told more as it goes, queued in its inbox until it reads it (hex_agent_inbox, or its next hex_agent_wait)"
                 + (directive ? ", and starts its next turn if it isn't read by the end of this one." : ".");
         }
 
-        if (directive && !to.Stopped && extensions.AgentRuns.TryGetValue(to.Agent, out var run))
+        // Not working: any message from another agent starts a turn on it, a finished chat and a stopped one alike (a stopped
+        // one only for a message that isn't an approval's question, and not for an echo of what it just sent)
+        bool echo = from is not null && mailResume.Echo(from.Id, to.Id);
+        if (from is not null)
+            mailResume.Sent(from.Id, to.Id);
+        if (resume && (!to.Stopped || allowStopped) && !echo)
         {
-            // Already posted. AfterAgentTurn will start it once the previous run's output has drained.
+            if (!extensions.AgentRuns.ContainsKey(to.Agent))
+            {
+                log.Add(message, HexMailRoute.Inbox);
+                return $"{MailName(to)}'s agent system can't be resumed, so the message is in its inbox and it reads it when it next works.";
+            }
+
+            // Already posted. The turn starts a moment later, once what comes with it is in, and once the previous run's
+            // output has drained (TickMailResume), taking every message it hasn't read in the one turn
+            mailResume.Schedule(to.Id);
             if (AgentRunBusy(to))
             {
                 log.Add(message, HexMailRoute.Inbox);
-                return $"{MailName(to)} is finishing its last turn. The instruction is in its inbox and its next turn starts on it.";
+                return $"{MailName(to)} is finishing its last turn, resumed it with your message: it's in its inbox and its next turn starts on it.";
             }
 
             log.Add(message, HexMailRoute.StartedTurn);
-            StartAgent(to, run.Extension, run.Run, string.Empty, text);
-            return $"{MailName(to)} had finished, it's working on it now. hex_agent_wait waits for it.";
+            return $"{MailName(to)} {(to.Stopped ? "was stopped" : "had finished")}, resumed it with your message. hex_agent_wait waits for it.";
         }
 
         log.Add(message, HexMailRoute.Inbox);
-        return $"{MailName(to)} isn't working, it reads it when it next does.";
+        return echo
+            ? $"{MailName(to)} isn't working. It messaged you a moment ago, so this didn't start it again (against two agents waking each other for good), it reads it when it next works."
+            : $"{MailName(to)} isn't working, it reads it when it next does.";
+    }
+
+    // The chats a message is waiting to start a turn for, and who messaged whom a moment ago
+    private readonly HexMailResume mailResume = new();
+
+    /// <summary>
+    /// Every tick: the chats a message was kept for whose debounce is over start a turn on everything unread, one turn for
+    /// the messages that came together. One whose last run hasn't drained yet waits for it, one that's working again by
+    /// then reads its inbox as it goes.
+    /// </summary>
+    private void TickMailResume()
+    {
+        foreach (int id in mailResume.Ready())
+        {
+            if (ChatById(id) is not { } chat || chat.Running || chat.UnreadMail().Length == 0)
+            {
+                mailResume.Cancel(id);
+                continue;
+            }
+
+            if (AgentRunBusy(chat))
+                continue;
+
+            mailResume.Take(id);
+            if (!extensions.AgentRuns.TryGetValue(chat.Agent, out var run))
+                continue;
+
+            chat.Stopped = false;
+            StartAgent(chat, run.Extension, run.Run, string.Empty, "messages sent while it wasn't working");
+        }
     }
 
     // Who a message typed in the panel's box is from, as the agent reads it

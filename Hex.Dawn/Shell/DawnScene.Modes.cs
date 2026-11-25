@@ -1,3 +1,4 @@
+using Hex.Core.Modules;
 using Hex.Shell;
 
 using Horizon.UI;
@@ -32,7 +33,7 @@ internal sealed partial class DawnScene
         HexModes.InBackground(HexMode.Dawn, TickAgentsOffscreen);
         // Both ways between the editor and the terminal go through the faces' transition
         HexModes.Transition = FaceTransition;
-        if (!HexAi.Off)
+        if (HexModules.IsEnabled(HexModuleId.Agentic))
             HexAgentProcess.Woken = Engine.WindowManager.Wake;
         HexModes.Leaving += leavingMode = mode =>
         {
@@ -60,8 +61,8 @@ internal sealed partial class DawnScene
     /// </summary>
     private void TickAgentsOffscreen(float dt)
     {
-        // With No AI on there are no agents to read, only the MCP server's calls go on
-        if (!HexAi.Off)
+        // With Agentic or No AI off there are no agents to read, only the MCP server's calls go on
+        if (HexModules.IsEnabled(HexModuleId.Agentic))
         {
             TakeAgentLines();
             PublishAgentStatuses();
@@ -123,6 +124,10 @@ internal sealed partial class DawnScene
         // Dusk was made bigger or smaller meanwhile, the editor follows so the swap doesn't jump
         if (HexModes.InterfaceSize is { } shared && shared != compositor.Scale)
             SetInterfaceSize(shared, remember: true);
-        Engine.WindowManager.RequestFrames();
+        float smoothTime = MotionFor(FACE_TIME);
+        if (smoothTime > 0.0f)
+            Engine.WindowManager.RequestSmooth(smoothTime);
+        else
+            Engine.WindowManager.RequestFrames();
     }
 }

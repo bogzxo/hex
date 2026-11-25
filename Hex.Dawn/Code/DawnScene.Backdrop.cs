@@ -14,7 +14,14 @@ internal sealed partial class DawnScene
     public const string USUAL_BACKDROP = HexFrame.USUAL_BACKDROP;
 
     private Texture? backdropPicture;
+    private string? backdropLoadedPath;
     private UIWrapShape? backdropShape;
+
+    // Pending GPU texture load deferred to the render thread's exclusive phase (simulation paused)
+    private readonly Lock backdropSync = new();
+    private string? pendingBackdropPath;
+    private UIWrapShape? pendingBackdropShape;
+    private Action<float>? backdropExclusive;
 
     // Whether the picture has been read the first time, which waits for the first tick, there's no graphics device as
     // the editor is made
@@ -22,6 +29,10 @@ internal sealed partial class DawnScene
 
     // Whether the first tick has given the editors of code their font, which doesn't wait for the picture
     private bool codeFontRead;
+
+    // The stage compositor's uploaded frame count last time we checked, so kept glass over or bordering the canvas hole
+    // blurs again whenever the stage uploads a new frame into the hole
+    private long lastStageFramesUploaded;
 
     // The picture being read ahead, and the shape it made for the picture and wrapping it was read for (null when the
     // code doesn't wrap round it). Null when nothing was read ahead
@@ -35,9 +46,104 @@ internal sealed partial class DawnScene
     /// <param name="shaped">The shape already made of the picture the settings say, made again when there's none.</param>
     private void ApplyBackdrop(UIWrapShape? shaped = null)
     {
-        backdropPicture = settings.BackdropOn && File.Exists(BackdropPath) ? Texture.Load(BackdropPath, smooth: true) : null;
+        if (!settings.BackdropOn || !File.Exists(BackdropPath))
+        {
+            CancelPendingBackdrop();
+            backdropPicture = null;
+            backdropLoadedPath = null;
+            MakeBackdropShape(null);
+            ShowBackdropEverywhere();
+            compositor.ForgetGlass();
+            return;
+        }
+
+        string path = BackdropPath;
+        if (backdropPicture is { IsValid: true } && string.Equals(backdropLoadedPath, path, PlatformPaths.Comparison))
+        {
+            CancelPendingBackdrop();
+            MakeBackdropShape(shaped);
+            ShowBackdropEverywhere();
+            compositor.ForgetGlass();
+            return;
+        }
+
+        if (Horizon.Core.EntityLifecycle.IsRenderThread)
+        {
+            CancelPendingBackdrop();
+            backdropPicture = Texture.Load(path, smooth: true);
+            backdropLoadedPath = path;
+            MakeBackdropShape(shaped);
+            ShowBackdropEverywhere();
+            compositor.ForgetGlass();
+            return;
+        }
+
+        lock (backdropSync)
+        {
+            pendingBackdropPath = path;
+            pendingBackdropShape = shaped;
+            if (backdropExclusive is null)
+            {
+                backdropExclusive = _ => LoadPendingBackdrop();
+                Engine.WindowManager.Exclusive += backdropExclusive;
+            }
+        }
+        Engine.WindowManager.RequestExclusive();
+    }
+
+    private void CancelPendingBackdrop()
+    {
+        Action<float>? handler;
+        lock (backdropSync)
+        {
+            pendingBackdropPath = null;
+            pendingBackdropShape = null;
+            handler = backdropExclusive;
+            backdropExclusive = null;
+        }
+
+        if (handler is not null)
+            Engine.WindowManager.Exclusive -= handler;
+    }
+
+    // Runs on the render thread during WindowManager.Exclusive (simulation paused) so Vulkan Texture.Load never runs on Simulation
+    private void LoadPendingBackdrop()
+    {
+        string? path;
+        UIWrapShape? shaped;
+        Action<float>? handler;
+        lock (backdropSync)
+        {
+            path = pendingBackdropPath;
+            shaped = pendingBackdropShape;
+            pendingBackdropPath = null;
+            pendingBackdropShape = null;
+            handler = backdropExclusive;
+            backdropExclusive = null;
+        }
+
+        if (handler is not null)
+            Engine.WindowManager.Exclusive -= handler;
+
+        if (IsDisposed || path is null || !settings.BackdropOn)
+            return;
+
+        string current = BackdropPath;
+        if (!string.Equals(current, path, PlatformPaths.Comparison))
+        {
+            path = current;
+            shaped = null;
+        }
+
+        if (!File.Exists(path))
+            return;
+
+        backdropPicture = Texture.Load(path, smooth: true);
+        backdropLoadedPath = path;
         MakeBackdropShape(shaped);
         ShowBackdropEverywhere();
+        compositor.ForgetGlass();
+        Engine.WindowManager.RequestFrames();
     }
 
     // The shape the wrapped code runs round, the outline of what is drawn in the picture's file to the pixel
@@ -94,6 +200,16 @@ internal sealed partial class DawnScene
     {
         UpdateBackdropArrange();
 
+        if (stage.Enabled)
+        {
+            long stageUploaded = Volatile.Read(ref stage.Statistics.FramesUploaded);
+            if (stageUploaded != lastStageFramesUploaded)
+            {
+                lastStageFramesUploaded = stageUploaded;
+                compositor.ForgetGlass();
+            }
+        }
+
         if (!codeFontRead)
         {
             codeFontRead = true;
@@ -118,11 +234,14 @@ internal sealed partial class DawnScene
             ShowBackdrop(open.Editor);
 
         // The cells have no text area of their own to hold it, the view behind them does, one picture however many there are
-        notebookBackdrop.Picture = backdropPicture;
-        notebookBackdrop.PictureScale = settings.BackdropScale;
-        notebookBackdrop.PictureOffset = new Vector2(settings.BackdropAcross, settings.BackdropUp);
-        notebookBackdrop.PictureStretch = settings.BackdropStretch;
-        notebookBackdrop.PictureOpacity = settings.BackdropOpacity;
+        if (notebookBackdrop is not null)
+        {
+            notebookBackdrop.Picture = backdropPicture;
+            notebookBackdrop.PictureScale = settings.BackdropScale;
+            notebookBackdrop.PictureOffset = new Vector2(settings.BackdropAcross, settings.BackdropUp);
+            notebookBackdrop.PictureStretch = settings.BackdropStretch;
+            notebookBackdrop.PictureOpacity = settings.BackdropOpacity;
+        }
         foreach (NotebookCellView view in cellViews)
             view.Editor.Color = CellEditorColor;
     }

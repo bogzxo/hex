@@ -10,7 +10,7 @@ namespace Hex.Dawn;
 
 internal sealed partial class DawnScene
 {
-    private const float LINK_TALK_WIDTH = 260, LINK_TALK_MIN_WIDTH = 200, LINK_TALK_EDITOR_ROOM = 320, LINK_TALK_GAP = 8;
+    private const float LINK_TALK_MIN_WIDTH = 200, LINK_TALK_EDITOR_ROOM = 320, LINK_TALK_GAP = 8;
 
     private readonly List<HexLinkTalk> linkTalkMessages = [];
     private Panel? linkTalkDock, linkTalkPanel;
@@ -52,7 +52,7 @@ internal sealed partial class DawnScene
             Fill = UIFill.Both, WordWrap = true, TextScale = 0.14f, Padding = new UIEdges(6, 4),
             LineNumbers = false, IndentGuides = false, StickyScroll = false, CaretBand = false,
             CheckSyntax = false, Minimap = false, Color = Vector4.Zero,
-            Tooltip = Said("link.talk.compose_tip"), CompletionSource = _ => null
+            Tooltip = Said("link.talk.compose_tip"), CompletionSource = LinkTalkComplete
         });
         linkTalkDraft.OnEnter = () =>
         {
@@ -72,27 +72,105 @@ internal sealed partial class DawnScene
         linkTalkStatus = statusBar.Add("$(comment-discussion)", right: true, pressed: ToggleLinkTalk, tooltip: Said("link.talk.open"));
         linkTalkStatus.IsVisible = () => LinkPeers.Count > 0 && !pane.IsShownInHierarchy;
         BuildLinkTalkTabs();
+
+        // The history read back at Link's start, which came before these rows were made
+        if (linkTalkMessages.Count > 0)
+        {
+            linkTalkEmpty.Visible = false;
+            linkTalkRows.ItemCount = linkTalkMessages.Count;
+            linkTalkRows.ItemsChanged();
+            linkTalkRows.ScrollToEnd();
+        }
     }
 
     private UIComponent DrawLinkTalk(HexLinkTalk message)
     {
         var row = new StackPanel { Spacing = 2 };
         string name = LinkNameOf(message.Sender.Id, message.Sender.Name);
-        if (message.Sender.Id == LinkDevice?.Id)
-            name = Said("link.talk.you", ("device", name));
         Vector4 ink = LinkChatReadableInk(LinkDeviceColour(message.Sender.Id));
         string at = message.SentAt.ToLocalTime().ToString("t", CultureInfo.CurrentCulture);
-        row.Add(new Label
+        if (message.Model is { } model)
         {
-            // The sender's dot in the colour it chose for itself, the one beside the files it's editing
-            Text = $"[color:{HexColour(LinkDeviceColour(message.Sender.Id))}]$(circle-filled)[/color] [color:{HexColour(ink)}][b]{LinkTalkLiteral(name)}[/b][/color]  [color:dim]{at}[/color]",
-            Align = Origin.TopLeft, Wrap = true, Fill = UIFill.Horizontal, TextScale = 0.125f
-        });
-        row.Add(new Label
+            // A model's answer: the model by name, the device it runs on in that device's colour
+            row.Add(new Label
+            {
+                Text = $"[color:{HexColour(LinkDeviceColour(message.Sender.Id))}]$(hubot)[/color] [b]{LinkTalkLiteral(model)}[/b] [color:{HexColour(ink)}]{LinkTalkLiteral(Said("link.talk.on_device", ("device", name)))}[/color]  [color:dim]{at}[/color]",
+                Align = Origin.TopLeft, Wrap = true, Fill = UIFill.Horizontal, TextScale = 0.125f,
+                Tooltip = Said("link.talk.model_tip", ("model", model), ("device", name))
+            });
+            if (message.Thinking is { } thinking)
+                row.Add(DrawLinkTalkThought(message.Id, thinking));
+        }
+        else
         {
-            Text = LinkTalkLiteral(message.Text), Align = Origin.TopLeft, Wrap = true, Fill = UIFill.Horizontal, TextScale = 0.145f
-        });
+            if (message.Sender.Id == LinkDevice?.Id)
+                name = Said("link.talk.you", ("device", name));
+            row.Add(new Label
+            {
+                // The sender's dot in the colour it chose for itself, the one beside the files it's editing
+                Text = $"[color:{HexColour(LinkDeviceColour(message.Sender.Id))}]$(circle-filled)[/color] [color:{HexColour(ink)}][b]{LinkTalkLiteral(name)}[/b][/color]  [color:dim]{at}[/color]",
+                Align = Origin.TopLeft, Wrap = true, Fill = UIFill.Horizontal, TextScale = 0.125f
+            });
+        }
+        if (message.Ref is { } reference)
+            LinkTalkReference(row, message, reference);
+        else
+            LinkTalkLines(row, message);
         return row;
+    }
+
+    // The messages whose model's thinking is open, kept as their rows are made again while scrolling
+    private readonly HashSet<Guid> linkTalkThoughtsOpen = [];
+
+    /// <summary>
+    /// What a model thought before its answer, folded under a line that opens it as a quote: dim text on a faint band,
+    /// set in from the answer. Opened and folded in place, the row not made again, as the agents panel's tool groups are.
+    /// </summary>
+    private UIComponent DrawLinkTalkThought(Guid id, string thinking)
+    {
+        var holder = new StackPanel { Fill = UIFill.Horizontal, Spacing = 3 };
+        bool open = linkTalkThoughtsOpen.Contains(id);
+        string Head(bool opened) => $"$({(opened ? "chevron-down" : "chevron-right")}) $(lightbulb) {Said("link.talk.thought")}";
+        var toggle = holder.Add(new Button
+        {
+            Style = "button_flat", Animated = false, Label = Head(open), LabelScale = 0.12f, Align = Origin.Left,
+            Size = new Vector2(0, 20), Fill = UIFill.Horizontal, Padding = new UIEdges(2, 0, 2, 0),
+            Tooltip = Said(open ? "link.talk.thought_hide" : "link.talk.thought_show")
+        });
+        StackPanel? quote = null;
+        void Lay(bool opening)
+        {
+            if (opening)
+            {
+                quote ??= MakeQuote();
+                if (quote.Parent is null)
+                    holder.Add(quote);
+            }
+            else
+                quote?.Parent?.Remove(quote);
+            toggle.Label = Head(opening);
+            toggle.Tooltip = Said(opening ? "link.talk.thought_hide" : "link.talk.thought_show");
+        }
+        StackPanel MakeQuote()
+        {
+            Vector4 band = Skin is { } skin ? skin.BorderColor with { W = 0.35f } : new Vector4(0.5f, 0.5f, 0.5f, 0.2f);
+            var made = new StackPanel { Fill = UIFill.Horizontal, Padding = new UIEdges(10, 5, 8, 6), Radius = 4, Color = band };
+            made.Add(new Label
+            {
+                Text = LinkTalkLiteral(thinking), Align = Origin.TopLeft, Wrap = true, Fill = UIFill.Horizontal, TextScale = 0.13f, Dim = true
+            });
+            return made;
+        }
+        toggle.OnPressed = () =>
+        {
+            bool opening = !linkTalkThoughtsOpen.Remove(id);
+            if (opening)
+                linkTalkThoughtsOpen.Add(id);
+            Lay(opening);
+        };
+        if (open)
+            Lay(true);
+        return holder;
     }
 
     // The font also reads $(...) as an icon, even in a label that doesn't read Markdown.
@@ -101,6 +179,20 @@ internal sealed partial class DawnScene
     private void HearLinkTalk(HexLinkTalk message)
     {
         linkTalkMessages.Add(message);
+        // Only the last ones are kept in memory (and on disk, HexLinkTalkHistory.MOST); the rows are made from what's here
+        if (linkTalkMessages.Count > HexLinkTalkHistory.MOST)
+            linkTalkMessages.RemoveRange(0, linkTalkMessages.Count - HexLinkTalkHistory.MOST);
+        LinkTalkSave();
+        LinkTalkNotice(message);
+        if (settings.LinkTalkOpenOnMessage && message.Sender.Id != LinkDevice?.Id && linkTalkPanel is { IsShownInHierarchy: false })
+        {
+            // Opened as its tab is, but without taking the focus off what is being typed
+            if (!body.Visible)
+                SwitchFace(HexFace.Dawn);
+            if (!right.Shown)
+                ToggleProperties();
+            linkTalkOpen = linkTalkExplicit = true;
+        }
         if (linkTalkRows is not { } rows)
             return;
         linkTalkEmpty!.Visible = false;
@@ -147,6 +239,7 @@ internal sealed partial class DawnScene
             return;
         HideLinkTalk();
         linkTalkMessages.Clear();
+        linkTalkThoughtsOpen.Clear();
         linkTalkUnread = 0;
         linkTalkEmpty!.Visible = true;
         linkTalkDraft!.Text = string.Empty;
@@ -158,7 +251,20 @@ internal sealed partial class DawnScene
     private void AddLinkTalkCommand(List<(string Text, Action Picked)> commands)
     {
         if (LinkPeers.Count > 0)
-            commands.Add((Said("link.talk.command"), ToggleLinkTalk));
+        {
+            commands.Add((Said("link.talk.command"), OpenLinkTalk));
+            AddLinkTalkShareCommands(commands);
+        }
+    }
+
+    /// <summary>The Link: Chat command: the Link Chat tab picked and its draft focused, never put away (the status bar item toggles).</summary>
+    private void OpenLinkTalk()
+    {
+        if (!body.Visible)
+            SwitchFace(HexFace.Dawn);
+        if (!right.Shown)
+            ToggleProperties();
+        linkTalkOpen = linkTalkExplicit = linkTalkFocus = true;
     }
 
     private void ToggleLinkTalk()
@@ -305,7 +411,27 @@ internal sealed partial class DawnScene
         pane.Size = new Vector2(width, MathF.Max(top - side.Min.Y - 10, 120));
         if (linkTalkDraft!.Parent is Panel composer)
             composer.Size = composer.Size with { X = width - 20 };
-        linkTalkPlaceholder!.Visible = linkTalkDraft.Text.Length == 0 && compositor.Focus != linkTalkDraft;
+        // Shown while the box is focused too, it goes with the first letter
+        linkTalkPlaceholder!.Visible = linkTalkDraft.Text.Length == 0;
+        if (linkTalkEmpty is { Visible: true } empty)
+        {
+            // What the empty chat says, with a first thing to do: say hello to a device, and ask the model when one answers here
+            string device = LinkPeers.Count > 0 ? LinkNameOf(LinkPeers[0].Device.Id, LinkPeers[0].Device.Name) : Said("link.talk.empty_device");
+            string said = Said("link.talk.empty") + "\n" + Said(MakeLinkAssistantOptions(settings) is not null ? "link.talk.empty_hint_ai" : "link.talk.empty_hint", ("device", device));
+            if (empty.Text != said)
+            {
+                empty.Text = said;
+                empty.Wrap = true;
+            }
+            empty.Size = new Vector2(MathF.Max(80, width - 48), 0);
+        }
+
+        // While this Hex's model answers in the chat, the empty box says how to ask it
+        string hint = MakeLinkAssistantOptions(settings) is { } assistant
+            ? Said("link.talk.placeholder_ai", ("model", assistant.Model))
+            : Said("link.talk.placeholder");
+        if (linkTalkPlaceholder.Text != hint)
+            linkTalkPlaceholder.Text = hint;
         linkTalkSend!.Enabled = !string.IsNullOrWhiteSpace(linkTalkDraft.Text);
         if (linkTalkFocus)
         {

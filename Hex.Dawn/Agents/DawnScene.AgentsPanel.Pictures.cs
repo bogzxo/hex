@@ -30,21 +30,21 @@ internal sealed partial class DawnScene
     private static partial Regex LinkedPicture();
 
     /// <summary>The pictures a row says, pasted ones by their path at the end of what was asked or linked ones in what was said.</summary>
-    private static List<string> PicturesIn(string text, bool asked)
+    private static IReadOnlyList<string> PicturesIn(string text, bool asked)
     {
-        var found = new List<string>();
-        if (text.Length == 0 || (!text.Contains("[Pasted image: ", StringComparison.Ordinal) && !text.Contains("![", StringComparison.Ordinal)))
-            return found;
+        if (text.Length == 0 || (asked ? !text.Contains("[Pasted image: ", StringComparison.Ordinal) : !text.Contains("![", StringComparison.Ordinal)))
+            return Array.Empty<string>();
+        List<string>? found = null;
         foreach (Match match in (asked ? PastedPicture() : LinkedPicture()).Matches(text))
         {
             string path = match.Groups["path"].Value.Trim();
             if (path.StartsWith("file:///", StringComparison.OrdinalIgnoreCase))
                 path = Uri.UnescapeDataString(path[8..]);
-            if (IsPicture(path) && Path.IsPathRooted(path) && !found.Contains(path))
-                found.Add(path);
+            if (IsPicture(path) && Path.IsPathRooted(path) && (found is null || !found.Contains(path)))
+                (found ??= []).Add(path);
         }
 
-        return found;
+        return found ?? (IReadOnlyList<string>)Array.Empty<string>();
     }
 
     // A picture's texture for the chat, loaded the first time and kept among the last few, null when it can't be read
@@ -163,6 +163,6 @@ internal sealed partial class DawnScene
         view.Focus();
         // The zoom said once it's laid out and its fitted size is known
         view.OnZoomed?.Invoke();
-        Engine.WindowManager.RequestFrames();
+        Engine.WindowManager.NoteChange();
     }
 }

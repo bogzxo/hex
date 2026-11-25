@@ -60,6 +60,40 @@ internal sealed partial class DawnScene
         });
         test.WaitFor(() => !scout!.Running && !agentsStarting.Contains(scout), 20.0f);
 
+        // A message of any kind starts a chat that isn't working, a stopped one too, one turn for the messages that arrived
+        // together (after the debounce), and the answer says so
+        string resumedFinished = string.Empty, resumedStopped = string.Empty;
+        int asksBefore = 0;
+        test.Run(() =>
+        {
+            scout!.Done();
+            asksBefore = scout.Entries.Count(entry => entry.Kind == HexAgentEntryKind.User);
+            resumedFinished = Deliver(scout, lead, "progress", "first of two", directive: false);
+            Deliver(scout, lead, "finding", "second of two", directive: false);
+        });
+        test.Check("noon mail turn: a progress message to a finished chat says it resumed it with the message", () =>
+            resumedFinished.Contains("resumed it with your message", StringComparison.Ordinal));
+        test.WaitFor(() => scout!.Entries.Count(entry => entry.Kind == HexAgentEntryKind.User) > asksBefore, 10.0f);
+        test.Check("noon mail turn: messages that came together start one turn with both", () =>
+        {
+            string asked = scout!.Entries.Last(entry => entry.Kind == HexAgentEntryKind.User).Text;
+            return asked.Contains("first of two", StringComparison.Ordinal) && asked.Contains("second of two", StringComparison.Ordinal)
+                && scout.Entries.Count(entry => entry.Kind == HexAgentEntryKind.User) == asksBefore + 1 && scout.UnreadMail().Length == 0;
+        });
+        test.WaitFor(() => !scout!.Running && !agentsStarting.Contains(scout), 20.0f);
+        test.Run(() =>
+        {
+            scout!.Done();
+            scout.Stopped = true;
+            asksBefore = scout.Entries.Count(entry => entry.Kind == HexAgentEntryKind.User);
+            resumedStopped = Deliver(scout, lead, "answer", "wake up after the stop", directive: false);
+        });
+        test.WaitFor(() => scout!.Entries.Count(entry => entry.Kind == HexAgentEntryKind.User) > asksBefore, 10.0f);
+        test.Check("noon mail turn: a stopped chat resumes on a message too", () =>
+            resumedStopped.Contains("resumed it with your message", StringComparison.Ordinal) && !scout!.Stopped
+            && scout.Entries.Last(entry => entry.Kind == HexAgentEntryKind.User).Text.Contains("wake up after the stop", StringComparison.Ordinal));
+        test.WaitFor(() => !scout!.Running && !agentsStarting.Contains(scout), 20.0f);
+
         test.Run(() =>
         {
             agentChats.Remove(lead!);

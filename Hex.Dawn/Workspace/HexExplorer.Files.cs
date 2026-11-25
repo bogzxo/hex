@@ -107,9 +107,12 @@ internal sealed partial class HexExplorer
 
     /* Files made, renamed and thrown away */
 
+    // Cached invalid filename characters so validation never allocates Path.GetInvalidFileNameChars() on every call
+    private static readonly System.Buffers.SearchValues<char> InvalidFileNameChars = System.Buffers.SearchValues.Create(Path.GetInvalidFileNameChars());
+
     // A name somebody typed for a file or a folder, nothing that climbs out of where it is made or names a drive
     private static bool IsPlainName(string name) =>
-        name.Length > 0 && name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 && name != "." && name != "..";
+        name.Length > 0 && !name.AsSpan().ContainsAny(InvalidFileNameChars) && name != "." && name != "..";
 
     /// <summary>A file or a folder shown in the machine's own file explorer, picked there, for whatever else shows files.</summary>
     internal void RevealInSystem(string path) => RevealInExplorer(path);
@@ -232,12 +235,11 @@ internal sealed partial class HexExplorer
         if (parts.Length == 0)
             return context.Strings.Said("explorer_files.name_empty");
 
-        char[] invalid = Path.GetInvalidFileNameChars();
         foreach (string part in parts)
         {
             if (part is "." or "..")
                 return context.Strings.Said("explorer_files.name_dots");
-            if (part.IndexOfAny(invalid) is >= 0 and int bad)
+            if (part.AsSpan().IndexOfAny(InvalidFileNameChars) is >= 0 and int bad)
                 return context.Strings.Said("explorer_files.name_bad_char", ("char", char.IsControl(part[bad]) ? $"U+{(int)part[bad]:X4}" : part[bad].ToString()));
         }
 
@@ -258,16 +260,39 @@ internal sealed partial class HexExplorer
         string? common = null;
         try
         {
-            common = Directory.EnumerateFiles(folder, "*", new EnumerationOptions { IgnoreInaccessible = true })
-                .Take(500)
-                .Where(file => !IsLeftover(file) && !Path.GetFileName(file).StartsWith('.'))
-                .Select(file => Path.GetExtension(file).ToLowerInvariant())
-                .Where(extension => extension.Length > 1)
-                .GroupBy(extension => extension)
-                .OrderByDescending(group => group.Count())
-                .ThenBy(group => group.Key, StringComparer.Ordinal)
-                .Select(group => group.Key)
-                .FirstOrDefault();
+            Dictionary<string, int>? counts = null;
+            int seen = 0;
+            foreach (string file in Directory.EnumerateFiles(folder, "*", new EnumerationOptions { IgnoreInaccessible = true }))
+            {
+                if (++seen > 500)
+                    break;
+                ReadOnlySpan<char> name = Path.GetFileName(file.AsSpan());
+                if (name.IsEmpty || name[0] == '.' || IsLeftover(file))
+                    continue;
+                ReadOnlySpan<char> ext = Path.GetExtension(name);
+                if (ext.Length <= 1)
+                    continue;
+
+                counts ??= new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                string key = ext.ToString();
+                counts[key] = counts.GetValueOrDefault(key) + 1;
+            }
+
+            if (counts is { Count: > 0 })
+            {
+                int bestCount = 0;
+                foreach (var (ext, count) in counts)
+                {
+                    if (count < bestCount)
+                        continue;
+                    string lower = ext.ToLowerInvariant();
+                    if (count > bestCount || common is null || string.CompareOrdinal(lower, common) < 0)
+                    {
+                        bestCount = count;
+                        common = lower;
+                    }
+                }
+            }
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -481,10 +506,23 @@ internal sealed partial class HexExplorer
     private string ShownFolder(string folder)
     {
         string full = Path.GetFullPath(folder);
-        string? root = workspace.Folders.FirstOrDefault(each => PlatformPaths.IsUnder(full, each) || PlatformPaths.Same(full, each));
-        string shown = root is null ? full.Replace('\\', '/') : PlatformPaths.Same(full, root)
-            ? Path.GetFileName(full.TrimEnd('/', '\\'))
-            : $"{Path.GetFileName(Path.GetFullPath(root).TrimEnd('/', '\\'))}/{RelativeOf(full)}";
+        string shown = full.Replace('\\', '/');
+        foreach (string root in workspace.Folders)
+        {
+            if (PlatformPaths.Same(full, root))
+            {
+                shown = Path.GetFileName(full.TrimEnd('/', '\\'));
+                break;
+            }
+            if (PlatformPaths.IsUnder(full, root))
+            {
+                string fullRoot = Path.GetFullPath(root);
+                string relative = Path.GetRelativePath(fullRoot, full).Replace('\\', '/');
+                shown = $"{Path.GetFileName(fullRoot.TrimEnd('/', '\\'))}/{relative}";
+                break;
+            }
+        }
+
         return HexText.MiddleOf(shown, 48);
     }
 
@@ -598,14 +636,24 @@ internal sealed partial class HexExplorer
         if (IsLeftover(path))
             return syntax.Comment;
 
-        path = CodeLanguages.WithoutBackupSuffix(path);
-        return Path.GetExtension(path).Equals(".hexspace", StringComparison.OrdinalIgnoreCase) ? syntax.Declaration : UIFileKinds.ColourOf(path, syntax);
+        string basePath = CodeLanguages.WithoutBackupSuffix(path);
+        return Path.GetExtension(basePath.AsSpan()).Equals(".hexspace", StringComparison.OrdinalIgnoreCase)
+            ? syntax.Declaration
+            : UIFileKinds.ColourOf(basePath, syntax);
     }
 
     /// <summary>Whether a file is what something left behind, a backup or a reject, by the end of its name.</summary>
-    internal static bool IsLeftover(string path) =>
-        Path.GetExtension(path).ToLowerInvariant() is ".orig" or ".bak" or ".rej" or ".tmp"
-        || !string.Equals(CodeLanguages.WithoutBackupSuffix(path), path, StringComparison.Ordinal);
+    internal static bool IsLeftover(string path)
+    {
+        ReadOnlySpan<char> extension = Path.GetExtension(path.AsSpan());
+        if (extension.Equals(".orig", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".bak", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".rej", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".tmp", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return !string.Equals(CodeLanguages.WithoutBackupSuffix(path), path, StringComparison.Ordinal);
+    }
 
     internal void PickFile(string path, bool isDirectory)
     {

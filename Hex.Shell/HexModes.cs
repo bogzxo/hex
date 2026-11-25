@@ -244,6 +244,29 @@ public static class HexModes
         }
     }
 
+    /// <summary>
+    /// Injectable restart launcher for unit and self tests. When set, <see cref="Restart"/> calls this instead of
+    /// spawning an external OS process.
+    /// </summary>
+    internal static Func<HexMode, string?, bool>? RestartLauncher { get; set; }
+
+    /// <summary>
+    /// Starts a fresh Hex process in <paramref name="mode"/> (preserving <paramref name="folder"/> when open) and
+    /// invokes <paramref name="closeWindow"/> when launch succeeds so the current process exits cleanly.
+    /// </summary>
+    public static bool Restart(HexMode mode, string? folder, Action closeWindow)
+    {
+        ArgumentNullException.ThrowIfNull(closeWindow);
+        bool started = RestartLauncher is { } launcher
+            ? launcher(mode, folder)
+            : Start(mode, folder);
+        if (!started)
+            return false;
+
+        closeWindow();
+        return true;
+    }
+
     /// <summary>Helper method to start a mode as a program of its own, Hex.exe with --dusk for the terminal.</summary>
     private static bool Start(HexMode mode, string? folder)
     {

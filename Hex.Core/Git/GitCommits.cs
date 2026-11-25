@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Hex.Core.Git;
 
 /// <summary>
@@ -6,11 +8,17 @@ namespace Hex.Core.Git;
 /// </summary>
 internal static class GitCommits
 {
+    private static readonly string[] LastMessageArguments = ["log", "-1", "--format=%B"];
+    private static readonly string[] AmendArguments = ["commit", "--amend", "--file=-", "--cleanup=whitespace"];
+    private static readonly string[] VerifyParentArguments = ["rev-parse", "--verify", "--quiet", "HEAD~1"];
+    private static readonly string[] UndoResetArguments = ["reset", "--soft", "HEAD~1"];
+    private static readonly string[] MergeMsgPathArguments = ["rev-parse", "--git-path", "MERGE_MSG"];
+
     /// <summary>The whole message of the commit HEAD is on, null in a repository nobody committed to yet.</summary>
     public static string? LastMessage(this GitRepository repository)
     {
-        GitResult result = GitProcess.Run(repository.Root, ["log", "-1", "--format=%B"]);
-        return result.Ok ? result.Output.TrimEnd() : null;
+        return GitProcess.Run(repository.Root, LastMessageArguments, static (exit, output, _) =>
+            exit == 0 ? output.TrimEnd().ToString() : null);
     }
 
     /// <summary>
@@ -19,9 +27,17 @@ internal static class GitCommits
     /// </summary>
     public static string? Amend(this GitRepository repository, string message)
     {
-        // Whitespace, the same as a commit, a Markdown heading isn't a comment
-        GitResult result = GitProcess.Run(repository.Root, ["commit", "--amend", "--file=-", "--cleanup=whitespace"], message);
-        return result.Ok ? null : Said(result);
+        GitRepository.InvalidateInFlight(repository.Root);
+        try
+        {
+            // Whitespace, the same as a commit, a Markdown heading isn't a comment
+            GitResult result = GitProcess.Run(repository.Root, AmendArguments, message);
+            return result.Ok ? null : Said(result);
+        }
+        finally
+        {
+            GitRepository.InvalidateInFlight(repository.Root);
+        }
     }
 
     /// <summary>
@@ -32,11 +48,19 @@ internal static class GitCommits
     {
         if (!repository.HasCommit())
             return "there's no commit to undo yet";
-        if (!GitProcess.Run(repository.Root, ["rev-parse", "--verify", "--quiet", "HEAD~1"]).Ok)
+        if (!GitProcess.Run(repository.Root, VerifyParentArguments, static (exit, _, _) => exit == 0))
             return "that's the first commit, there's nothing before it to go back to";
 
-        GitResult result = GitProcess.Run(repository.Root, ["reset", "--soft", "HEAD~1"]);
-        return result.Ok ? null : Said(result);
+        GitRepository.InvalidateInFlight(repository.Root);
+        try
+        {
+            GitResult result = GitProcess.Run(repository.Root, UndoResetArguments);
+            return result.Ok ? null : Said(result);
+        }
+        finally
+        {
+            GitRepository.InvalidateInFlight(repository.Root);
+        }
     }
 
     /// <summary>
@@ -45,19 +69,37 @@ internal static class GitCommits
     /// </summary>
     public static string? MergeMessage(this GitRepository repository)
     {
-        GitResult where = GitProcess.Run(repository.Root, ["rev-parse", "--git-path", "MERGE_MSG"]);
-        if (!where.Ok)
-            return null;
-
-        // Relative to the root unless it's in another folder altogether (a worktree's)
-        string path = Path.GetFullPath(Path.Combine(repository.Root, where.Output.Trim()));
-        if (!File.Exists(path))
+        string? path = GitProcess.Run(repository.Root, MergeMsgPathArguments, (exit, output, _) =>
+        {
+            if (exit != 0)
+                return null;
+            ReadOnlySpan<char> trimmed = output.Trim();
+            return trimmed.IsEmpty ? null : Path.GetFullPath(Path.Combine(repository.Root, trimmed.ToString()));
+        });
+        if (path is null || !File.Exists(path))
             return null;
 
         try
         {
-            IEnumerable<string> lines = File.ReadAllText(path).Replace("\r\n", "\n").Split('\n').Where(line => !line.StartsWith('#'));
-            return string.Join('\n', lines).Trim();
+            string raw = File.ReadAllText(path);
+            var builder = new StringBuilder(raw.Length);
+            ReadOnlySpan<char> remaining = raw.AsSpan();
+            bool first = true;
+            while (!remaining.IsEmpty)
+            {
+                int nl = remaining.IndexOf('\n');
+                ReadOnlySpan<char> line = nl < 0 ? remaining : remaining[..nl];
+                remaining = nl < 0 ? default : remaining[(nl + 1)..];
+                if (line.Length > 0 && line[^1] == '\r')
+                    line = line[..^1];
+                if (line.Length > 0 && line[0] == '#')
+                    continue;
+                if (!first)
+                    builder.Append('\n');
+                builder.Append(line);
+                first = false;
+            }
+            return builder.ToString().Trim();
         }
         catch (IOException)
         {
@@ -65,5 +107,5 @@ internal static class GitCommits
         }
     }
 
-    private static string Said(GitResult result) => (result.Error.Trim().Length > 0 ? result.Error : result.Output).Trim();
+    private static string Said(GitResult result) => GitProcess.FormatSaid(result.Output.AsSpan(), result.Error.AsSpan());
 }

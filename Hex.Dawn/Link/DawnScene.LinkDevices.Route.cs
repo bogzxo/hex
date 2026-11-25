@@ -6,21 +6,25 @@ namespace Hex.Dawn;
 internal sealed partial class DawnScene
 {
     internal static HexLinkEndpoint[] LinkDialRoutes(HexLinkKnown known, IReadOnlyList<HexLinkNearby> nearby,
-        IReadOnlyList<HexLinkEndpoint> remembered) =>
-        known.PreferredRoute is { } chosen ? [chosen] : LinkDeviceRoutes(known, nearby, remembered);
+        IReadOnlyList<HexLinkEndpoint> remembered, HexLinkEndpoint? lastLinked = null) =>
+        known.PreferredRoute is { } chosen ? [chosen] : LinkDeviceRoutes(known, nearby, remembered, lastLinked);
 
+    // The endpoint that last linked first, whether it's a LAN address or a VPN one (it worked, and each one tried before
+    // it that doesn't costs a wait), then the rest with the LAN's before the VPN's
     private static HexLinkEndpoint[] LinkDeviceRoutes(HexLinkKnown known, IReadOnlyList<HexLinkNearby> nearby,
-        IReadOnlyList<HexLinkEndpoint> remembered)
+        IReadOnlyList<HexLinkEndpoint> remembered, HexLinkEndpoint? lastLinked = null)
     {
         var endpoints = LinkAddressesOf(known, nearby, remembered)
             .Select(route => HexLinkRedial.Endpoint(route.Host, route.Port)).OfType<HexLinkEndpoint>();
         if (known.PreferredRoute is { } chosen)
             endpoints = endpoints.Append(chosen);
-        return [.. endpoints.Distinct().OrderBy(route => LinkRouteIsVpn(route.Host))];
+        if (lastLinked is { } worked)
+            endpoints = endpoints.Append(worked);
+        return [.. endpoints.Distinct().OrderBy(route => route != lastLinked).ThenBy(route => LinkRouteIsVpn(route.Host))];
     }
 
     private HexLinkEndpoint[] LinkDeviceRoutes(HexLinkKnown known) =>
-        LinkDeviceRoutes(known, LinkNearby, linkRedial.Addresses(known.Device.Id));
+        LinkDeviceRoutes(known, LinkNearby, linkRedial.Addresses(known.Device.Id), linkRedial.LastLinked(known.Device.Id));
 
     private static bool LinkRouteIsVpn(string address) => IPAddress.TryParse(address, out IPAddress? ip) && LinkIsVpn(ip);
 

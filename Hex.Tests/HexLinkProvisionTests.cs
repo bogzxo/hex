@@ -76,7 +76,8 @@ public sealed class HexLinkProvisionTests
         if (HexLinkGit.Why() is not null)
             return;
 
-        using var pair = await LinkedPair.Up(HexLinkRights.View | HexLinkRights.Edit);
+        // Both may edit: the joiner applies the host's later changes only while it lets the host edit there
+        using var pair = await LinkedPair.Up(HexLinkRights.View | HexLinkRights.Edit, HexLinkRights.View | HexLinkRights.Edit);
         string host = pair.A.Work, nested = Path.Combine(host, "nested");
         string moduleSource = Path.Combine(pair.A.Root, "sub-source");
         MakeRepo(host, "/nested/\nout/\n");

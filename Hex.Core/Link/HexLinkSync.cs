@@ -38,9 +38,11 @@ internal enum HexLinkSyncKeep
 /// <summary>
 /// A file both sides changed since they last agreed on it, or one deleted on one side and changed on the other. Its
 /// wire path, what happened in a few words, and where the other machine's version was put beside it (a wire path of
-/// this side's, null when there was nothing to put, a delete). Nothing of it moves until it's resolved.
+/// this side's, null when there was nothing to put, a delete). Nothing of it moves until it's resolved. Base is the hash
+/// of this side's version when both last agreed, kept so the merge editor can find the common base again (in
+/// <see cref="HexLinkMergeBases"/>) after the base has left the sync's own list, null when it wasn't known.
 /// </summary>
-internal sealed record HexLinkSyncConflict(string Path, string Kind, string? Copy, string? CopyHash)
+internal sealed record HexLinkSyncConflict(string Path, string Kind, string? Copy, string? CopyHash, string? Base = null)
 {
     public bool HasUnsavedChanges => Kind.StartsWith("unsaved changes", StringComparison.Ordinal);
 }
@@ -128,7 +130,16 @@ internal sealed partial class HexLinkSync : IDisposable
             packedWrites = new PackBatcher<PendingWrite>(WritePacked, each => HexLinkFilePack.WireCost(each.Entry.Path, each.Entry.Bytes.Length));
         tree = new HexLinkTree(folder, () => Excludes(), stateFolder, peer.Session.SupportsBulk);
         slug = HexLinkGit.Slug(peer.Device.Name);
-        StateFile = Path.GetFullPath(Path.Combine(stateFolder, StateName(peer.Device.Id, folder.Name)));
+        string stateName = StateName(peer.Device.Id, folder.Name);
+        StateFile = Path.GetFullPath(Path.Combine(stateFolder, stateName));
+        // One folder of bases for each device and folder, so one sync pruning what its own state no longer points at
+        // can't delete what another's still does
+        // and none at all when the state is kept inside the folder synced, where copies of its files would be listed and
+        // travel like any other; a merge there finds its base in memory or git as it always did
+        string basesFolder = Path.GetFullPath(Path.Combine(stateFolder, "merge-bases", Path.GetFileNameWithoutExtension(stateName)));
+        mergeBases = PlatformPaths.IsUnder(basesFolder, tree.Root) ? null : new HexLinkMergeBases(basesFolder);
+        string resolutionsFolder = Path.GetFullPath(Path.Combine(stateFolder, "resolutions", Path.GetFileNameWithoutExtension(stateName)));
+        resolutions = PlatformPaths.IsUnder(resolutionsFolder, tree.Root) ? null : new HexLinkResolutions(resolutionsFolder);
         ApplyLocal = HexLinkFiles.CompareAndReplace;
         ApplyStream = HexLinkFiles.CompareAndReplace;
         RenameLocal = (from, to, expected, cancel) => Task.Run(() => HexLinkTree.RenameCase(from, to, expected), cancel);
@@ -156,7 +167,14 @@ internal sealed partial class HexLinkSync : IDisposable
             await using var lease = await HexLinkPublicationFence.ForRoot(full).EnterLive(cancel);
             await EnsureLocalGitFollowFile(full, cancel);
             using var allowed = ReceiveLease(cancel);
-            return await value(full, wire, expected, bytes, allowed?.Token ?? cancel, executable);
+            try
+            {
+                return await value(full, wire, expected, bytes, allowed?.Token ?? cancel, executable);
+            }
+            finally
+            {
+                local?.Wrote(wire);
+            }
         };
     }
 
@@ -319,6 +337,8 @@ internal sealed partial class HexLinkSync : IDisposable
                 counts += $". {issue}";
             if (GitFollowIssue is { } follow)
                 counts += $". {follow}";
+            if (ReceiveBlocked && State is HexLinkSyncState.Idle or HexLinkSyncState.Syncing or HexLinkSyncState.PullOnly)
+                counts += $". You don't let {peer.Device.Name} edit here, its changes aren't applied";
             return State switch
             {
                 HexLinkSyncState.Comparing => $"Comparing {with}",
@@ -445,6 +465,7 @@ internal sealed partial class HexLinkSync : IDisposable
             await Task.Run(() => Load(mine, theirs, cancel), cancel);
             Begin(mine, theirs, watch, actual);
             watch = null;
+            StartDirectories(stopping.Token);
         }
         catch (Exception e) when (e is HexLinkException or IOException or UnauthorizedAccessException or OperationCanceledException or InvalidOperationException)
         {
@@ -539,9 +560,26 @@ internal sealed partial class HexLinkSync : IDisposable
             // What both sides have once it's done, null when neither has it; whichever way it goes it's written in the
             // receiver's line ends, those of the file it replaces there or what most files there use
             HexLinkSyncAgreed? agreed;
+            byte[]? settled = null;
             byte[]? mine = await ReadLocal(full, cancel);
+            // Both versions are kept so the resolve can be undone, see Undo: the losing one's bytes, and what this side's file is after
+            byte[]? lost = null;
+            string? resultHash = mine is null ? null : HexLinkFiles.Hash(mine);
+            bool recordable = true;
             if (keep == HexLinkSyncKeep.Mine)
             {
+                if (theirs?.Hash is not null)
+                {
+                    try
+                    {
+                        lost = (await Fetch(path, cancel)).Bytes;
+                    }
+                    catch (HexLinkException)
+                    {
+                        recordable = false;
+                    }
+                }
+
                 if (mine is null)
                 {
                     if (theirs?.Hash is { } there)
@@ -555,10 +593,11 @@ internal sealed partial class HexLinkSync : IDisposable
                     TextInfo info = TextOf(mine);
                     HexLinkEol eol = HexLinkEol.Unknown;
                     if (info.Norm is not null)
-                        eol = theirs?.Hash is not null ? TextOf((await Fetch(path, cancel)).Bytes).Eol : Most(here: false);
+                        eol = lost is not null ? TextOf(lost).Eol : HexLinkEol.Unknown;
                     byte[] sending = Converted(mine, info, eol);
                     await Asked(() => peer.Write(path, theirs?.Hash, sending, cancel), cancel);
                     agreed = AgreedOf(mine, sending);
+                    settled = mine;
                 }
 
                 Interlocked.Increment(ref sent);
@@ -571,15 +610,19 @@ internal sealed partial class HexLinkSync : IDisposable
                         return "The peer cannot confirm a working-tree deletion.";
                     if (mine is not null)
                         await ApplyLocal(full, path, HexLinkFiles.Hash(mine), null, cancel, null);
+                    resultHash = null;
                     agreed = null;
                 }
                 else
                 {
                     HexLinkFile file = await Fetch(path, cancel);
-                    HexLinkEol eol = mine is null ? Most(here: true) : TextOf(mine).Eol;
+                    HexLinkEol eol = mine is null ? HexLinkEol.Unknown : TextOf(mine).Eol;
                     byte[] written = Converted(file.Bytes, TextOf(file.Bytes), eol);
                     await ApplyLocal(full, path, mine is null ? null : HexLinkFiles.Hash(mine), written, cancel, null);
                     agreed = AgreedOf(written, file.Bytes);
+                    settled = written;
+                    lost = file.Bytes;
+                    resultHash = HexLinkFiles.Hash(written);
                 }
 
                 Interlocked.Increment(ref received);
@@ -594,6 +637,9 @@ internal sealed partial class HexLinkSync : IDisposable
                     SetBase(path, agreed);
             }
 
+            KeepBase(settled);
+            if (recordable)
+                resolutions?.Add(path, peer.Device.Name, peer.Device.Id, keep, mine, lost, resultHash);
             await DropCopy(conflict, cancel);
             Save();
             Notify();
@@ -601,7 +647,7 @@ internal sealed partial class HexLinkSync : IDisposable
         }
         catch (HexLinkException e) when (e.Code == HexLinkErrors.CONFLICT)
         {
-            return e.Message;
+            return OpenTabMarked(e);
         }
         catch (HexLinkException e)
         {
@@ -612,6 +658,12 @@ internal sealed partial class HexLinkSync : IDisposable
             return e.Message;
         }
     }
+
+    /// <summary>A refusal's words, with the shared-open marker when an open tab (shared or plain) is what refused, so a window can offer to close it.</summary>
+    internal static string OpenTabMarked(HexLinkException e) =>
+        e.Detail is System.Text.Json.Nodes.JsonObject detail && HexLinkData.Bool(detail, "editor_dirty") == true && !IsSharedOpenRefusal(e.Message)
+            ? e.Message + " " + SHARED_OPEN_MARKER
+            : e.Message;
 
     // The copy put beside a file in conflict deleted, when it's still what was put there
     private async Task DropCopy(HexLinkSyncConflict conflict, CancellationToken cancel)

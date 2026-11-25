@@ -12,14 +12,39 @@ internal sealed partial class HexExplorer
     private bool clippedCut;
 
     /// <summary>Whether there's anything to paste, something copied or cut that's still on the disk.</summary>
-    internal bool CanPaste => !transferring && clipped.Any(path => File.Exists(path) || Directory.Exists(path));
+    internal bool CanPaste
+    {
+        get
+        {
+            if (transferring || clipped.Count == 0)
+                return false;
+            for (int i = 0; i < clipped.Count; i++)
+            {
+                string path = clipped[i];
+                if (File.Exists(path) || Directory.Exists(path))
+                    return true;
+            }
+            return false;
+        }
+    }
     private bool transferring;
     private int clipVersion;
     internal Action<IReadOnlyList<string>>? PastedPaths { get; set; }
 
     /// <summary>Whether what's on the clipboard was cut, for the self test.</summary>
     internal bool ClippedCut => clippedCut && clipped.Count > 0;
-    internal bool IsCutPath(string path) => clippedCut && clipped.Any(from => PlatformPaths.Same(path, from) || PlatformPaths.IsUnder(path, from));
+    internal bool IsCutPath(string path)
+    {
+        if (!clippedCut || clipped.Count == 0)
+            return false;
+        for (int i = 0; i < clipped.Count; i++)
+        {
+            string from = clipped[i];
+            if (PlatformPaths.Same(path, from) || PlatformPaths.IsUnder(path, from))
+                return true;
+        }
+        return false;
+    }
     internal void CancelClip() { clipped.Clear(); clippedCut = false; clipVersion++; treeDirty = true; }
 
     /// <summary>Files and folders put on the clipboard to be copied where they're pasted.</summary>

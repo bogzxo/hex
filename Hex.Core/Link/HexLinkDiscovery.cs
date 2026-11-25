@@ -206,10 +206,38 @@ internal sealed class HexLinkDiscovery : IDisposable
         bool changed = false;
         lock (gate)
         {
-            foreach (string instance in heard.Where(pair => pair.Value.PtrUntil < now && pair.Value.SrvUntil < now).Select(pair => pair.Key).ToList())
-                changed |= heard.Remove(instance);
-            foreach (string host in hosts.Where(pair => pair.Value.Until < now).Select(pair => pair.Key).ToList())
-                hosts.Remove(host);
+            // Nothing heard, nothing allocated: the lists of what lapsed are only made when something has
+            if (heard.Count > 0)
+            {
+                List<string>? lapsed = null;
+                foreach (var (instance, entry) in heard)
+                {
+                    if (entry.PtrUntil < now && entry.SrvUntil < now)
+                        (lapsed ??= []).Add(instance);
+                }
+
+                if (lapsed is not null)
+                {
+                    foreach (string instance in lapsed)
+                        changed |= heard.Remove(instance);
+                }
+            }
+
+            if (hosts.Count > 0)
+            {
+                List<string>? lapsed = null;
+                foreach (var (host, entry) in hosts)
+                {
+                    if (entry.Until < now)
+                        (lapsed ??= []).Add(host);
+                }
+
+                if (lapsed is not null)
+                {
+                    foreach (string host in lapsed)
+                        hosts.Remove(host);
+                }
+            }
         }
 
         if (changed)

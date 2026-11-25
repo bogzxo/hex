@@ -177,7 +177,7 @@ internal sealed partial class DawnScene
                     streaming.ToolDone($"s{step}", true, $"{step} places in 3 files");
                 }
                 else
-                    streaming!.Say($"Streaming line {step}, with **some** words that wrap as the column is narrow enough.");
+                    streaming!.Say($"Streaming line {step}, with **some** words that wrap as the column is narrow enough.\n", append: true);
             });
         }
         test.Run(() => streaming?.Done());

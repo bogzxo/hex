@@ -31,8 +31,39 @@ internal sealed record HexAgentMail(long Seq, int? From, string FromName, string
 /// </summary>
 internal sealed class HexAgentEntry(HexAgentEntryKind kind, string text)
 {
+    private string? cachedText = text;
+    private System.Text.StringBuilder? textBuffer;
+
     public HexAgentEntryKind Kind { get; } = kind;
-    public string Text { get; set; } = text;
+
+    /// <summary>The entry's text. Materialised lazily when chunks are appended via <see cref="AppendText"/>.</summary>
+    public string Text
+    {
+        get => cachedText ??= textBuffer?.ToString() ?? string.Empty;
+        set
+        {
+            textBuffer = null;
+            cachedText = value;
+        }
+    }
+
+    /// <summary>Current text length without forcing <see cref="Text"/> materialisation while streaming.</summary>
+    public int TextLength => cachedText?.Length ?? textBuffer?.Length ?? 0;
+
+    /// <summary>Appends a streamed chunk without O(N^2) string copying; <see cref="Text"/> materialises on read.</summary>
+    internal void AppendText(string chunk)
+    {
+        if (chunk.Length == 0)
+            return;
+        if (textBuffer is null)
+        {
+            string initial = cachedText ?? string.Empty;
+            textBuffer = new System.Text.StringBuilder(Math.Max(64, initial.Length + chunk.Length));
+            textBuffer.Append(initial);
+        }
+        textBuffer.Append(chunk);
+        cachedText = null;
+    }
     public string? AskedText { get; init; }
     public string? ContextLocation { get; init; }
     public string? ToolId { get; init; }
@@ -114,6 +145,8 @@ internal sealed partial class HexAgentChat(int id, string agent)
     public const int MOST_ENTRIES = 200, SPILL_BATCH = 50;
 
     private readonly List<HexAgentEntry> entries = [];
+    private int pendingCount;
+    private bool failed;
 
     // The tools of the turn going on by their ids, the rows after the last thing asked, the latest of an id. Every tool an
     // agent starts, says is done or says a step of asks for its row by id, and looking back through the rows for it was
@@ -261,19 +294,7 @@ internal sealed partial class HexAgentChat(int id, string agent)
     public bool Stopped { get; set; }
 
     /// <summary>Whether something went wrong in the last turn, an error row since the last thing asked.</summary>
-    public bool Failed
-    {
-        get
-        {
-            for (int i = entries.Count - 1; i >= 0 && entries[i].Kind != HexAgentEntryKind.User; i--)
-            {
-                if (entries[i].Kind == HexAgentEntryKind.Error)
-                    return true;
-            }
-
-            return false;
-        }
-    }
+    public bool Failed => failed;
 
     /// <summary>The version of it somebody last had on screen, it's unread while it's moved on since and isn't running.</summary>
     public int Seen { get; set; }
@@ -428,8 +449,31 @@ internal sealed partial class HexAgentChat(int id, string agent)
         }
 
         IndexTurnTools();
+        RecomputeFlags();
         Version++;
         Seen = Version;
+    }
+
+    private void RecomputeFlags()
+    {
+        int pending = 0;
+        for (int i = 0; i < entries.Count; i++)
+        {
+            if (IsPending(entries[i]))
+                pending++;
+        }
+        pendingCount = pending;
+
+        bool turnFailed = false;
+        for (int i = entries.Count - 1; i >= 0 && entries[i].Kind != HexAgentEntryKind.User; i--)
+        {
+            if (entries[i].Kind == HexAgentEntryKind.Error)
+            {
+                turnFailed = true;
+                break;
+            }
+        }
+        failed = turnFailed;
     }
 
     /// <summary>
@@ -440,6 +484,7 @@ internal sealed partial class HexAgentChat(int id, string agent)
     public void Clear()
     {
         Restore(string.Empty, [], 0);
+        HexAgentReviews.Shared.Forget(Id);
         Plan = null;
         Session = null;
         Key = Guid.NewGuid().ToString("N");
@@ -453,8 +498,17 @@ internal sealed partial class HexAgentChat(int id, string agent)
     private HexAgentEntry Add(HexAgentEntry entry)
     {
         entries.Add(entry);
+        if (IsPending(entry))
+            pendingCount++;
+        if (entry.Kind == HexAgentEntryKind.Tool)
+            HexAgentReviews.Shared.Observe(Id, entry);
         if (entry.Kind == HexAgentEntryKind.User)
+        {
             turnTools.Clear();
+            failed = false;
+        }
+        else if (entry.Kind == HexAgentEntryKind.Error)
+            failed = true;
         else if (entry.Kind == HexAgentEntryKind.Tool && entry.ToolId is { } toolId)
             turnTools[toolId] = entry;
         if (entries.Count > MOST_ENTRIES + SPILL_BATCH)
@@ -474,6 +528,7 @@ internal sealed partial class HexAgentChat(int id, string agent)
                         turnTools.Remove(goneId);
                 }
 
+                RecomputeFlags();
                 Dropped += spill;
                 Spill?.Invoke(old);
             }
@@ -507,6 +562,15 @@ internal sealed partial class HexAgentChat(int id, string agent)
     public HexAgentEntry Steer(string prompt, string? askedText = null, string? contextLocation = null) =>
         Add(new HexAgentEntry(HexAgentEntryKind.User, prompt) { AskedText = askedText, ContextLocation = contextLocation, Queued = true });
 
+    /// <summary>A person's message to a working agent that isn't queued on Hex, kept as their row in the chat, said once.</summary>
+    public HexAgentEntry SayAsPerson(string text)
+    {
+        HexAgentEntry entry = Steer(text);
+        entry.Queued = false;
+        Touch(entry);
+        return entry;
+    }
+
     /// <summary>
     /// Something asked and still queued taken back out of the chat, to be written again, false when it's gone further. The
     /// rows are drawn again from the start after it, see <see cref="Reshaped"/>.
@@ -517,6 +581,7 @@ internal sealed partial class HexAgentChat(int id, string agent)
             return false;
         // What was asked taken out, the turn the rows say goes back to the one asked before it
         IndexTurnTools();
+        RecomputeFlags();
         Reshaped++;
         Version++;
         return true;
@@ -572,6 +637,7 @@ internal sealed partial class HexAgentChat(int id, string agent)
         if (approval.Kind != HexAgentEntryKind.Approval || approval.Answer is not { } answer)
             return false;
         approval.Answer = null;
+        pendingCount = Math.Max(0, pendingCount - 1);
         approval.State = allowed ? HexAgentToolState.Done : HexAgentToolState.Failed;
         approval.Ended = Environment.TickCount64;
         Touch(approval);
@@ -602,6 +668,7 @@ internal sealed partial class HexAgentChat(int id, string agent)
         if (question.Kind != HexAgentEntryKind.Question || question.Respond is not { } respond)
             return false;
         question.Respond = null;
+        pendingCount = Math.Max(0, pendingCount - 1);
         question.Output = answer;
         question.State = answer is null ? HexAgentToolState.Failed : HexAgentToolState.Done;
         question.Ended = Environment.TickCount64;
@@ -614,16 +681,7 @@ internal sealed partial class HexAgentChat(int id, string agent)
     public IEnumerable<HexAgentEntry> Pending => entries.Where(IsPending);
 
     /// <summary>Whether an approval or a question waits for the person, a plain look the panels take every tick.</summary>
-    public bool HasPending
-    {
-        get
-        {
-            foreach (HexAgentEntry entry in entries)
-                if (IsPending(entry))
-                    return true;
-            return false;
-        }
-    }
+    public bool HasPending => pendingCount > 0;
 
     /// <summary>The first of a kind of thing waiting for the person, an approval or a question, null for none.</summary>
     public HexAgentEntry? FirstPending(HexAgentEntryKind kind)
@@ -639,9 +697,22 @@ internal sealed partial class HexAgentChat(int id, string agent)
         (entry.Kind == HexAgentEntryKind.Approval && entry.Answer is not null) || (entry.Kind == HexAgentEntryKind.Question && entry.Respond is not null);
 
     /// <summary>What the agent said, a row of its own.</summary>
-    public HexAgentEntry Say(string text) => Add(new HexAgentEntry(HexAgentEntryKind.Text, text));
+    public HexAgentEntry Say(string text, bool append = false) => AddOrAppend(HexAgentEntryKind.Text, text, append);
 
-    public HexAgentEntry Think(string text) => Add(new HexAgentEntry(HexAgentEntryKind.Thinking, text));
+    /// <summary>What the agent thought; with <paramref name="append"/> a streamed piece goes on the row before when that is thinking too.</summary>
+    public HexAgentEntry Think(string text, bool append = false) => AddOrAppend(HexAgentEntryKind.Thinking, text, append);
+
+    // A streamed piece joins the last row when it is the same kind, so a turn's thinking is one block and not a row a token
+    private HexAgentEntry AddOrAppend(HexAgentEntryKind kind, string text, bool append)
+    {
+        if (append && entries.Count > 0 && entries[^1] is { } last && last.Kind == kind)
+        {
+            last.AppendText(text);
+            Touch(last);
+            return last;
+        }
+        return Add(new HexAgentEntry(kind, text));
+    }
 
     public HexAgentEntry Note(string text) => Add(new HexAgentEntry(HexAgentEntryKind.Note, WithoutEscapes(text)));
 
@@ -713,6 +784,7 @@ internal sealed partial class HexAgentChat(int id, string agent)
         tool.State = ok ? HexAgentToolState.Done : HexAgentToolState.Failed;
         tool.Output = output;
         tool.Ended = Environment.TickCount64;
+        HexAgentReviews.Shared.Told(Id, tool);
         tool.Version++;
         Version++;
         return found;

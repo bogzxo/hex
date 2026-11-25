@@ -49,7 +49,7 @@ public sealed class HexLightEffects
         if (Ripples && down && !downWas)
             lights.Ripple(pointer, accent with { W = 0.9f });
 
-        if (Trail && seen && Vector2.Distance(pointer, pointerWas) > TRAIL_SPEED)
+        if (Trail && seen && Vector2.DistanceSquared(pointer, pointerWas) > TRAIL_SPEED * TRAIL_SPEED)
             sparks.Emit(pointer, 1, accent, speed: 40.0f, life: 0.4f, size: 2.5f);
 
         pointerWas = pointer;

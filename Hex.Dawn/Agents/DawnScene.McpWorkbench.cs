@@ -89,7 +89,7 @@ internal sealed partial class DawnScene
     /// Agentic and the count of what the harness saved them. What a client outside finds code and drives the editor with
     /// is all still there.
     /// </summary>
-    internal List<HexMcpTool> McpToolList() => HexAi.Off
+    internal List<HexMcpTool> McpToolList() => !AgenticEnabled
         ? [.. new[] { ScreenTools(), EditorTools(), WorkbenchTools(), NotebookTools(), Behind(WorkspaceTools()), DevTools(), Behind(HarnessTools()),
             Alongside(Behind(FileTools())), Alongside(Behind(CodeTools())), GitDiffTools(), TerminalTools(), DebugTools() }.SelectMany(tools => tools).Where(tool => !AgentsOnly(tool.Meta.Name)), .. (LinkOn ? new[] { LinkHoldTool() } : [])]
         : [.. ScreenTools(), .. EditorTools(), .. WorkbenchTools(), .. NotebookTools(), .. AgentTools(),
@@ -246,7 +246,8 @@ internal sealed partial class DawnScene
     /// <summary>The settings an agent can read and change, the editor's, its text's and the terminal's. Not Windows's own.</summary>
     private List<ISettingsSource> McpSettingsSources()
     {
-        var sources = new List<ISettingsSource> { new EditorSource(this) };
+        // Every editor setting, Local AI's too: the window shows those as one row to the Local AI window, agents still read and set them
+        var sources = new List<ISettingsSource> { new EditorSource(this, all: true) };
         sources.AddRange(settingSources.Select(added => added.Source()));
         sources.Add(new TerminalSettingsSource(terminals, Hex.Shell.EditorSettingsCatalog.THEME));
         return sources;

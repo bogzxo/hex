@@ -174,7 +174,8 @@ public sealed class PredictionFormatTests
     {
         Assert.Null(PredictionFormats.Named("infer"));
         Assert.Equal("zeta2", PredictionFormats.For(PredictionTestKit.Options("zeta2") with { Model = "qwen" }).Name);
-        Assert.Equal(8, PredictionFormats.Names.Count);
+        Assert.Equal(9, PredictionFormats.Names.Count);
+        Assert.Equal("zeta21", PredictionFormats.For(PredictionTestKit.Options("zeta21")).Name);
     }
 
     // An answer for a small file whose whole text is the region

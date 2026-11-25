@@ -26,7 +26,70 @@ internal sealed partial class DawnScene
 
         TestMenuThroughPointer(test);
         TestTallMenu(test);
+        TestLowSubmenu(test);
+        TestStatusItemMenu(test);
         TestMenuKeys(test);
+    }
+
+    // The Explorer's menu opened low in the window with its Link submenu opened: the last row of the submenu ("Ask Beta to
+    // finish editing") was seen cut off at the window's bottom edge. Both lists and every row of the submenu stay inside
+    private void TestLowSubmenu(HexPointerScript test)
+    {
+        const string LAST = "Ask Beta to finish editing";
+        Menu? shown = null;
+        string linkTitle = Said("link.menu_title");
+        test.Run(() =>
+        {
+            shown = explorer.ExplorerMenu(new ExplorerEntry(dataFile, false, 1, false));
+            AddLinkMenu(shown, dataFile);
+            if (shown.Items.FirstOrDefault(item => item.Submenu is not null && item.Label == linkTitle) is not { Submenu: { } link })
+            {
+                link = new Menu(linkTitle);
+                shown.Add(new MenuItem { Label = linkTitle, Icon = "link", Submenu = link });
+            }
+
+            link.Add("Share my changes", () => { }, icon: "cloud-upload");
+            link.Add(LAST, () => { }, icon: "comment-discussion");
+            contextMenu = ContextMenu.ShowAt(chrome, chrome.ToWorld(new Vector2(chrome.Frame.Center.X, chrome.Frame.Min.Y + 160.0f)), shown);
+        });
+        test.Wait();
+        test.Run(() => contextMenu!.OpenSubmenuOf(linkTitle));
+        test.Settle(0.3f);
+        test.Check("menus: the Explorer's Link submenu opened low is whole inside the window, its last row inside it", () =>
+            contextMenu is { } open && open.OpenListBounds.Count() == 2 && open.OpenListBounds.All(list => Inside(list, chrome.Frame))
+            && open.ItemBounds(LAST) is { IsEmpty: false } last && Inside(last, open.OpenListBounds.Last()));
+        MenuShot(test, "low_link_submenu");
+        test.Run(() => chrome.Root.Children.OfType<ContextMenu>().FirstOrDefault()?.Close());
+        test.Wait();
+    }
+
+    // A right click on a status bar item with a menu opens it over the item, on the bar's top edge and inside the window
+    private void TestStatusItemMenu(HexPointerScript test)
+    {
+        StatusItem item = caretItem;
+        test.Run(() =>
+        {
+            item.ContextMenuBuilder = () =>
+            {
+                var menu = new Menu("status test");
+                menu.Add("One", () => { });
+                menu.Add("Two", () => { });
+                return menu;
+            };
+        });
+        test.Hover(() => chrome.ToWorld(statusBar.ItemBounds(item).Center));
+        test.Run(() => statusBar.OnContextMenu?.Invoke(statusBar.ItemBounds(item).Center));
+        test.Wait();
+        test.Check("menus: a right click on a status bar item opens its menu above the item, inside the window", () =>
+            chrome.Root.Children.OfType<ContextMenu>().FirstOrDefault() is { Showing: not null } open
+            && open.OpenListBounds.All(list => Inside(list, chrome.Frame) && list.Min.Y >= statusBar.Bounds.Max.Y - 0.5f));
+        MenuShot(test, "status_item_menu");
+        test.Run(() =>
+        {
+            chrome.Root.Children.OfType<ContextMenu>().FirstOrDefault()?.Close();
+            item.ContextMenuBuilder = null;
+        });
+        test.Wait();
     }
 
     // Every menu of the bar there is right now, and every menu inside one, held to the rows and rules a menu may have

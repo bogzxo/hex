@@ -15,34 +15,53 @@ internal sealed partial class DawnScene
     private HexDocument? markdownDocument;
     private int markdownVersion = -1;
     private float markdownDelay;
+    private bool markdownPreviewBuilt;
 
     internal static bool IsMarkdownFile(string? path) => path is not null && Path.GetExtension(path).ToLowerInvariant() is ".md" or ".markdown";
     private static bool IsMarkdown(HexDocument file) => file.IsText && file.Picture is null && file.DiffOf is null && IsMarkdownFile(file.Path);
-    private bool MarkdownShown => markdownPreview is { Visible: true };
+    private bool MarkdownShown => markdownPreviewBuilt && markdownPreview is { Visible: true };
 
     private void BuildMarkdownPreview()
     {
         markdownPreview = layout.Get<Panel>("markdown_preview");
         markdownPreview.Visible = false;
+        layout.Get<Button>("markdown_button").OnPressed = () => SwitchView(HexView.Markdown);
+    }
+
+    /// <summary>Builds the markdown preview scroll and page controls lazily on first Markdown preview open.</summary>
+    private void EnsureMarkdownPreview()
+    {
+        if (markdownPreviewBuilt)
+            return;
+        markdownPreviewBuilt = true;
+
         markdownScroll = markdownPreview.Add(new NotebookScrollPanel
         {
             Anchor = Origin.TopLeft, Pivot = Origin.TopLeft,
-            Zoom = delta => ZoomCode(delta > 0 ? CODE_ZOOM_STEP : 1 / CODE_ZOOM_STEP)
+            Zoom = steps => ZoomCode(CodeZoomFactor(steps), smooth: MathF.Abs(steps) < 1.0f),
+            Pinch = factor => ZoomCode(factor, smooth: true),
+            SmartZoom = SmartZoomCode
         });
         markdownWritten = markdownScroll.Add(new MarkdownPagePanel
         {
             Direction = UIDirection.Vertical, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft,
             Padding = new UIEdges(PAGE_INNER, 16 + 36, PAGE_INNER, 16 + 48), Spacing = 6
         });
-        layout.Get<Button>("markdown_button").OnPressed = () => SwitchView(HexView.Markdown);
     }
 
     private void ApplyMarkdownPreview()
     {
         bool show = document.View == HexView.Markdown && IsMarkdown(document);
+        if (show)
+        {
+            EnsureMarkdownPreview();
+            WarmMarkdownGrammarOnce();
+        }
         markdownPreview.Visible = show;
         layout.Get<Button>("markdown_button").Visible = IsMarkdown(document);
         layout.Get<Button>("markdown_button").Selected = show;
+        if (!markdownPreviewBuilt)
+            return;
         if (!show || markdownDocument != document)
         {
             var old = previewPictures;

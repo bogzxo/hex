@@ -58,8 +58,19 @@ internal sealed partial class DawnScene
         {
             lock (linkSyncGate)
             {
+                LinkSyncNamesCurrent();
                 return [.. linkSyncs.Values.OrderBy(entry => entry.DeviceName, StringComparer.OrdinalIgnoreCase).ThenBy(entry => entry.Folder, StringComparer.OrdinalIgnoreCase).Select(LinkSyncShownOf)];
             }
+        }
+    }
+
+    // What each device is called now (a rename is told to the link), under linkSyncGate: the name a sync was made with goes stale
+    private void LinkSyncNamesCurrent()
+    {
+        foreach (LinkSyncEntry entry in linkSyncs.Values)
+        {
+            if (link?.PeerOf(entry.DeviceId)?.Device.Name is { Length: > 0 } now)
+                entry.DeviceName = now;
         }
     }
 
@@ -80,6 +91,7 @@ internal sealed partial class DawnScene
             var all = new List<LinkConflictShown>();
             lock (linkSyncGate)
             {
+                LinkSyncNamesCurrent();
                 foreach (LinkSyncEntry entry in linkSyncs.Values)
                 {
                     if (entry.Sync is not { } sync)
@@ -281,11 +293,13 @@ internal sealed partial class DawnScene
         }
 
         LinkSyncRemember(deviceId, folder, on: false, stoppedBy: stoppedBy ?? Environment.UserName);
+        PostLink(LinkRemoteHoldsRebuild);
         bool remote = LinkStopBoundReplica(deviceId, folder);
         if (entry is not null)
             LinkReportSync(deviceId);
         if (entry?.GitCard is { } card)
             PostLink(card.Close);
+        PostLink(() => LinkCloseConflictCards(deviceId, folder, folder: true));
         LinkMoved();
         return entry is not null || remote;
     }
@@ -335,6 +349,14 @@ internal sealed partial class DawnScene
 
             linkSyncs.Clear();
         }
+
+        PostLink(() =>
+        {
+            foreach (UINotification card in linkConflictCards.Values)
+                card.Close();
+            linkConflictCards.Clear();
+        });
+        PostLink(LinkRemoteHoldsRebuild);
     }
 
     /* The choices kept */
@@ -535,6 +557,7 @@ internal sealed partial class DawnScene
     private void LinkSyncMoved(LinkSyncEntry entry)
     {
         linkDirty = true;
+        LinkRemoteHoldsRebuild();
         if (entry.Sync is not { } sync)
             return;
         lock (linkSyncGate)
@@ -562,15 +585,37 @@ internal sealed partial class DawnScene
             }
         }
 
+        var fresh = new List<HexLinkSyncConflict>();
         foreach (HexLinkSyncConflict conflict in sync.Conflicts)
         {
             if (entry.Announced.Add(conflict.Path + "\n" + conflict.Copy))
-                LinkSyncAnnounceConflict(entry, conflict);
+                fresh.Add(conflict);
         }
+
+        // Several at once are one card that opens the picker, one at a time each has its own
+        // and once there is a card for several, more that come are counted in it rather than stacked beside it
+        bool grouped = linkConflictCards.TryGetValue(entry.DeviceId + "\n" + LINK_CONFLICT_GROUP, out UINotification? group) && !group.Closed;
+        if (fresh.Count > 1 || grouped && fresh.Count > 0)
+            LinkSyncAnnounceConflicts(entry, fresh);
+        else if (fresh.Count == 1)
+            LinkSyncAnnounceConflict(entry, fresh[0]);
 
         // A conflict resolved (here or by both sides coming to the same thing) is said again if it comes back
         entry.Announced.RemoveWhere(said => !sync.Conflicts.Any(conflict => conflict.Path + "\n" + conflict.Copy == said));
+
+        // The card of a conflict that's settled goes with it, however it was settled
+        foreach (string said in linkConflictCards.Keys.Where(key => key.StartsWith(entry.DeviceId + "\n", StringComparison.Ordinal)
+            && (key == entry.DeviceId + "\n" + LINK_CONFLICT_GROUP ? sync.Conflicts.Count == 0
+                : !sync.Conflicts.Any(conflict => entry.DeviceId + "\n" + conflict.Path + "\n" + conflict.Copy == key))).ToArray())
+        {
+            linkConflictCards.Remove(said, out UINotification? settled);
+            settled?.Close();
+        }
+
+        LinkSyncCountGroup(entry, sync.Conflicts.Count);
     }
+
+    private readonly Dictionary<string, UINotification> linkConflictCards = [];
 
     // The two sides have different commits checked out. Offer a safe fast-forward to the host.
     private void LinkSyncAskGit(LinkSyncEntry entry, HexLinkSync sync)
@@ -596,25 +641,26 @@ internal sealed partial class DawnScene
     private void LinkSyncAnnounceConflict(LinkSyncEntry entry, HexLinkSyncConflict conflict)
     {
         string id = entry.DeviceId, path = conflict.Path;
+        string device = LinkNameOf(id, entry.DeviceName);
         string text = conflict.Copy is { } copy
-            ? Said("link.sync_conflict", ("path", path), ("device", entry.DeviceName), ("copy", copy[(copy.LastIndexOf('/') + 1)..]), ("kind", conflict.Kind))
-            : Said("link.sync_conflict_deleted", ("path", path), ("device", entry.DeviceName), ("kind", conflict.Kind));
+            ? Said("link.sync_conflict", ("name", Path.GetFileName(path)), ("device", device), ("copy", copy[(copy.LastIndexOf('/') + 1)..]))
+            : Said("link.sync_conflict_deleted", ("path", path), ("device", device), ("kind", conflict.Kind));
         UINotification? card = null;
         var buttons = new List<(string Label, Action Pressed)>();
-        if (conflict.Copy is not null)
-            buttons.Add(("Open merge editor", () => LinkOpenConflictMerge(id, path)));
-        buttons.Add((Said("link.sync_open_difference"), () => LinkOpenConflictDifference(id, path)));
+        // At most three: keep, use theirs, compare (the merge editor, or the difference where there's no copy to merge)
+        buttons.Add((Said("link.conflict_merge"), () => LinkOpenConflictMerge(id, path)));
         buttons.Add((Said("link.sync_keep_mine"), () =>
         {
             card?.Close();
             LinkResolveSaying(id, path, HexLinkSyncKeep.Mine);
         }));
-        buttons.Add((Said("link.sync_keep_theirs", ("device", entry.DeviceName)), () =>
+        buttons.Add((Said("link.sync_keep_theirs", ("device", device)), () =>
         {
             card?.Close();
             LinkResolveSaying(id, path, HexLinkSyncKeep.Theirs);
         }));
         card = toasts.Show(text, "warning", null, 0.0f, [.. buttons]);
+        linkConflictCards[id + "\n" + path + "\n" + conflict.Copy] = card;
         Note(text, error: false);
     }
 
@@ -628,22 +674,56 @@ internal sealed partial class DawnScene
     {
         if (LinkSyncOfPath(deviceId, path) is not { } sync)
             return Said("link.sync_none_for", ("path", path));
-        string? why = await sync.Resolve(path, keep);
+        CancellationToken cancel = linkCancel?.Token ?? default;
+
+        // A file open in a shared document is settled through it: the room refuses a write it hasn't saved itself, so the
+        // chosen side's text goes into the room and is saved there, and the sync then finds both sides agreeing
+        string? side = await LinkSharedOpen(path) ? await sync.ConflictSideText(path, keep, cancel) : null;
+        string? why = side is not null
+            ? await LinkSettleOn(sync, path, side, cancel, () => sync.Resolve(path, keep, cancel))
+            : await sync.Resolve(path, keep);
+        if (why is null)
+            PostLink(() => LinkCloseConflictCards(deviceId, path));
         linkDirty = true;
         LinkMoved();
         return why;
     }
 
+    // The "changed on both ... nothing was overwritten" cards of a path (or, with no path, of a device and folder prefix)
+    // closed however the conflict was settled: the card buttons, hex_link_sync resolve, the merge editor or a sync stopped
+    private void LinkCloseConflictCards(string deviceId, string pathOrFolder, bool folder = false)
+    {
+        string head = deviceId + "\n" + pathOrFolder + (folder ? "/" : "\n");
+        foreach (string key in linkConflictCards.Keys.Where(key => key.StartsWith(head, StringComparison.OrdinalIgnoreCase)).ToArray())
+        {
+            linkConflictCards.Remove(key, out UINotification? card);
+            card?.Close();
+        }
+    }
+
     // Resolved from a card, what came of it said
     private void LinkResolveSaying(string deviceId, string path, HexLinkSyncKeep keep) => _ = Task.Run(async () =>
     {
-        string? why = await LinkResolve(deviceId, path, keep);
+        string? why;
+        try
+        {
+            why = await LinkResolve(deviceId, path, keep);
+        }
+        catch (Exception e) when (e is IOException or HexLinkException or InvalidOperationException)
+        {
+            why = e.Message;
+        }
+
         PostLink(() =>
         {
             if (why is null)
-                Say(Said(keep == HexLinkSyncKeep.Mine ? "link.sync_resolved_mine" : "link.sync_resolved_theirs", ("path", path)));
+            {
+                string device = LinkSyncOfPath(deviceId, path) is { } synced ? LinkNameOf(deviceId, synced.Device.Name) : string.Empty;
+                LinkNotifyResolved(deviceId, path, Said(keep == HexLinkSyncKeep.Mine ? "link.sync_resolved_mine" : "link.sync_resolved_theirs",
+                    ("name", Path.GetFileName(path)), ("device", device)));
+            }
             else
-                Say(why, error: true);
+                LinkResolveRefused(deviceId, path, keep, why);
         });
     });
 
@@ -653,25 +733,11 @@ internal sealed partial class DawnScene
     /// </summary>
     internal bool LinkOpenConflictDifference(string deviceId, string path)
     {
-        if (LinkOpenMergePreview(deviceId, path)) return true;
-        if (LinkSyncOfPath(deviceId, path) is not { } sync || sync.Conflicts.FirstOrDefault(each => each.Path == path) is not { Copy: { } copy }
-            || linkServices?.Workspace.Folders is not { } folders)
+        // Never a diff or a marker file of its own: the one Link merge editor, which saves to the real file
+        if (LinkSyncOfPath(deviceId, path) is not { } sync || sync.Conflicts.All(each => each.Path != path))
             return false;
-        try
-        {
-            string mine = HexLinkFiles.Resolve(folders, path), theirs = HexLinkFiles.Resolve(folders, copy);
-            string mineText = Context.Documents.Find(mine) is { IsText: true } open && HasChanges(open)
-                ? open.Editor.Text
-                : File.Exists(mine) ? File.ReadAllText(mine) : string.Empty;
-            string theirText = File.Exists(theirs) ? File.ReadAllText(theirs) : string.Empty;
-            OpenDiff(mine, "link", Said("link.sync_difference_title", ("name", Path.GetFileName(mine)), ("device", sync.Device.Name)), GitDiffText.Of(theirText, mineText), -1);
-            return true;
-        }
-        catch (Exception e) when (e is HexLinkException or IOException or UnauthorizedAccessException)
-        {
-            Say(e.Message, error: true);
-            return false;
-        }
+        LinkOpenConflictMerge(deviceId, path);
+        return true;
     }
 }
 

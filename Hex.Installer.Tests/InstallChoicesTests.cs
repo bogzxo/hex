@@ -69,4 +69,76 @@ public sealed class InstallChoicesTests : IDisposable
         Assert.True(File.Exists(Path.Combine(apps, "hex-dawn.desktop")));
         Assert.False(File.Exists(Path.Combine(apps, "hex-dusk.desktop")));
     }
+
+    [Fact]
+    public void ModuleChoicesRoundTripAndDefaultMissingModulesToEnabled()
+    {
+        var defaults = new InstallChoices();
+        foreach (string id in InstallChoices.KnownModules)
+            Assert.True(defaults.IsModuleEnabled(id));
+
+        var custom = new InstallChoices(Modules: new Dictionary<string, bool>
+        {
+            ["notebooks"] = false,
+            ["designer"] = false
+        });
+        InstallChoices parsed = InstallChoices.FromJson(JsonNode.Parse(custom.ToJson().ToJsonString()));
+        Assert.Equal(custom, parsed);
+        Assert.False(parsed.IsModuleEnabled("notebooks"));
+        Assert.False(parsed.IsModuleEnabled("designer"));
+        Assert.True(parsed.IsModuleEnabled("link"));
+        Assert.True(parsed.IsModuleEnabled("local_ai"));
+        Assert.True(parsed.IsModuleEnabled("agentic"));
+
+        // Legacy manifest without "modules" defaults every module to enabled
+        InstallChoices legacy = InstallChoices.FromJson(JsonNode.Parse("{\"desktop_hex\":true}"));
+        Assert.Equal(new InstallChoices(), legacy);
+        Assert.Throws<InvalidOperationException>(() => InstallChoices.FromJson(JsonNode.Parse("{\"modules\":{\"notebooks\":\"nope\"}}")));
+    }
+
+    [Fact]
+    public void PrepareSkipsDeselectedModuleNativeFilesAndWritesFreshSettingsWithoutClobberingExisting()
+    {
+        string root = Path.Combine(folder, "hex-mod"), stage = root + ".stage", zip = Path.Combine(folder, "mod-release.zip");
+        using (var archive = ZipFile.Open(zip, ZipArchiveMode.Create))
+        {
+            foreach (string file in new[]
+            {
+                InstallPaths.Executable,
+                "installer/" + InstallPaths.InstallerExecutable,
+                "modules/Hex.Notebooks.Render.dll",
+                "modules/libSkiaSharp.dll",
+                "Assets/core.dat"
+            })
+            {
+                using var writer = new StreamWriter(archive.CreateEntry("Hex/" + file).Open());
+                writer.Write("payload");
+            }
+        }
+
+        var withoutNotebooks = new InstallChoices(Modules: new Dictionary<string, bool>
+        {
+            ["notebooks"] = false,
+            ["link"] = false
+        });
+        InstallTransaction.Prepare(zip, stage, root, "2.9.0", choices: withoutNotebooks);
+        InstallTransaction.Commit(stage, root, () => { });
+
+        Assert.True(File.Exists(Path.Combine(root, "Assets", "core.dat")));
+        Assert.False(File.Exists(Path.Combine(root, "modules", "Hex.Notebooks.Render.dll")));
+        Assert.False(File.Exists(Path.Combine(root, "modules", "libSkiaSharp.dll")));
+
+        string settingsFile = Path.Combine(root, "settings", "settings.hor");
+        Assert.True(File.Exists(settingsFile));
+        string settingsText = File.ReadAllText(settingsFile);
+        Assert.Contains("module_notebooks: false", settingsText);
+        Assert.Contains("module_link: false", settingsText);
+        Assert.DoesNotContain("module_designer", settingsText);
+
+        // Existing user settings.hor must never be overwritten on update
+        File.WriteAllText(settingsFile, "// user custom settings");
+        InstallTransaction.Prepare(zip, stage, root, "2.9.1", choices: withoutNotebooks);
+        InstallTransaction.Commit(stage, root, () => { });
+        Assert.Equal("// user custom settings", File.ReadAllText(settingsFile));
+    }
 }

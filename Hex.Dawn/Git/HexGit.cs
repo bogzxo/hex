@@ -12,8 +12,12 @@ internal sealed partial class HexGit
     // How long after the last change before git is asked again, a build writing a hundred files is one look
     private const float SETTLE = 0.4f;
 
-    // How often HEAD and the index are looked at for git having moved, a stat or two each
-    private const float LOOK_EVERY = 1.0f;
+    // How often HEAD and the index are looked at for git having moved, a stat or two each.
+    // Backs off when focused and quiet for a while, and further when the window is in the background.
+    private const float LOOK_ACTIVE = 1.0f;
+    private const float LOOK_IDLE = 3.0f;
+    private const float LOOK_UNFOCUSED = 8.0f;
+    private const int IDLE_AFTER_LOOKS = 15;
 
     private readonly DawnContext context;
 
@@ -23,6 +27,11 @@ internal sealed partial class HexGit
     private readonly Dictionary<string, Repository?> foundForPath = new(PlatformPaths.Comparer);
 
     private float lookIn;
+    private int unchangedLooks;
+    private bool wasFocused = true;
+
+    private static bool IsWindowFocused =>
+        Horizon.Engine.GameEngine.Instance?.WindowManager is not { IsFocused: false };
 
     /// <summary>Raised on the editor's thread when what git thinks of anything changed, for whatever shows it to draw again.</summary>
     public event Action? Changed;
@@ -56,6 +65,8 @@ internal sealed partial class HexGit
 
     private void WorkspaceFilesChanged(IReadOnlyList<(string Path, LanguageServerFileChange Change)> files)
     {
+        lookIn = 0.0f;
+        unchangedLooks = 0;
         foreach (var (path, change) in files)
         {
             RepositoryOf(path)?.Dirty();
@@ -70,7 +81,8 @@ internal sealed partial class HexGit
             return;
 
         GitProcess.SetEnabled(enable);
-        lookIn = 0;
+        lookIn = 0.0f;
+        unchangedLooks = 0;
         if (enable)
             StartFollowing();
         else
@@ -122,6 +134,8 @@ internal sealed partial class HexGit
     {
         if (!Enabled)
             return;
+        lookIn = 0.0f;
+        unchangedLooks = 0;
         ForgetNone();
         LookDown(again: true);
         foreach (Repository repository in repositories.Values)
@@ -129,7 +143,12 @@ internal sealed partial class HexGit
     }
 
     /// <summary>Has git asked again about the repository a path is in, after something Hex did to it (a save, a commit).</summary>
-    public void Refresh(string path) => RepositoryOf(path)?.Dirty(now: true);
+    public void Refresh(string path)
+    {
+        lookIn = 0.0f;
+        unchangedLooks = 0;
+        RepositoryOf(path)?.Dirty(now: true);
+    }
 
     /// <summary>Every tick, the repositories that changed asked about again once things settle, and git looked at for having moved.</summary>
     public void Update(float dt)
@@ -141,19 +160,38 @@ internal sealed partial class HexGit
         FollowOpenFile();
         UpdateLookDown(dt);
 
+        // Returning focus from an external terminal checks git immediately rather than waiting out the background interval
+        bool focused = IsWindowFocused;
+        if (focused && !wasFocused)
+        {
+            lookIn = 0.0f;
+            unchangedLooks = 0;
+        }
+        wasFocused = focused;
+
         if ((lookIn -= dt) <= 0.0f)
         {
-            lookIn = LOOK_EVERY;
+            bool moved = false;
 
             // A folder with no repository is looked at again, a git init after it was opened made one
-            ForgetNone(all: false);
+            moved |= ForgetNone(all: false);
+            int repoCount = repositories.Count;
             IReadOnlyList<string> roots = context.Workspace.Roots;
             for (int i = 0; i < roots.Count; i++)
                 RepositoryOf(roots[i]);
+            if (repositories.Count != repoCount)
+                moved = true;
             LookDown();
-            LookAtNewFolders();
+            moved |= LookAtNewFolders();
             foreach (Repository repository in repositories.Values)
-                repository.LookForMoves();
+                moved |= repository.LookForMoves();
+
+            if (moved)
+                unchangedLooks = 0;
+            else if (focused && unchangedLooks < IDLE_AFTER_LOOKS)
+                unchangedLooks++;
+
+            lookIn = !focused ? LOOK_UNFOCUSED : unchangedLooks >= IDLE_AFTER_LOOKS ? LOOK_IDLE : LOOK_ACTIVE;
 
             // The file on screen can be in another repository now, whose merge or rebase the menu follows
             FollowOperation();
@@ -180,7 +218,7 @@ internal sealed partial class HexGit
     /// second only the ones where a .git turned up are, which is all of them as far as anybody can tell, and none
     /// makes any garbage while nothing turns up.
     /// </summary>
-    private void ForgetNone(bool all = true)
+    private bool ForgetNone(bool all = true)
     {
         foreach (var (key, value) in foundFor)
             if (value is null && (all || GitTurnedUp(key))) forgetting.Add(key);
@@ -191,13 +229,14 @@ internal sealed partial class HexGit
         bool any = forgetting.Count > 0;
         forgetting.Clear();
         if (!all && !any)
-            return;
+            return false;
 
         foreach (var (key, value) in foundForPath)
             if (value is null) forgetting.Add(key);
         foreach (string key in forgetting)
             foundForPath.Remove(key);
         forgetting.Clear();
+        return any;
     }
 
     // Whether a .git is there now where there was none, in a folder that had no repository or one above it
@@ -314,7 +353,7 @@ internal sealed partial class HexGit
         /// HEAD, the index, the branch's own ref and the remote's, which a commit, a switch, a stage, a pull or a fetch in
         /// the terminal all touch. A fetch writes FETCH_HEAD and a push the upstream's ref, and a gc packs them into packed-refs.
         /// </summary>
-        public void LookForMoves()
+        public bool LookForMoves()
         {
             // Where the files are is worked out once (and the refs when the branch changes), every second it was a read of
             // the .git file and a handful of paths put together, garbage for a look that finds nothing most times
@@ -357,6 +396,7 @@ internal sealed partial class HexGit
 
             if (moved)
                 Dirty(now: true);
+            return moved;
         }
 
         public void Update(float dt)
@@ -370,7 +410,18 @@ internal sealed partial class HexGit
             owner.context.Work.InBackground("git status", () =>
             {
                 GitStatus? status = Git.Status();
-                bool changes = status?.Files.Values.Any(state => state.Change != GitChange.Ignored && (state.Staged || state.Unstaged)) == true;
+                bool changes = false;
+                if (status is not null)
+                {
+                    foreach (GitFileState state in status.Files.Values)
+                    {
+                        if (state.Change != GitChange.Ignored && (state.Staged || state.Unstaged))
+                        {
+                            changes = true;
+                            break;
+                        }
+                    }
+                }
                 return (Status: status, Changes: changes, Remote: Git.HasRemote(), Operation: Git.Operation());
             }, found =>
             {

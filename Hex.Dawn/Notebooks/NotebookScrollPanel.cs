@@ -42,13 +42,33 @@ internal sealed class NotebookScrollPanel : ScrollPanel
     }
 
     public Action<float>? Zoom { get; set; }
+
+    /// <summary>A pinch zooms by this factor, a smart zoom goes between the usual size and a bigger one.</summary>
+    public Action<float>? Pinch { get; set; }
+    public Action? SmartZoom { get; set; }
+
+    protected override bool OnMagnify(float amount)
+    {
+        if (Pinch is not { } pinch)
+            return false;
+        pinch(Horizon.Input.PreciseScroll.PinchFactor(amount));
+        return true;
+    }
+
+    protected override bool OnSmartMagnify()
+    {
+        if (SmartZoom is not { } smart)
+            return false;
+        smart();
+        return true;
+    }
     protected override bool UsesScrollSpeed => GameEngine.Instance?.Input.Keyboard.Primary != true;
 
     protected override bool OnScroll(float delta)
     {
         if (GameEngine.Instance?.Input.Keyboard.Primary == true && Zoom is { } zoom)
         {
-            zoom(delta);
+            zoom(Horizon.Input.PreciseScroll.ZoomSteps(delta, PreciseWheel));
             return true;
         }
         return base.OnScroll(delta);

@@ -35,7 +35,7 @@ internal sealed partial class DawnScene
                     if (!OpenText(copy, snapshot.Text))
                         throw new IOException(Said("link.doc_open_failed"));
                     linkDocument = new(document, peer, snapshot);
-                    linkPresenceDrawnKey = string.Empty;
+                    linkPresenceDrawnHash = null;
                     Say(Said("link.doc_joined", ("path", wire), ("device", peer.Device.Name)));
                 }
                 catch (Exception error) { Say(error.Message, error: true); }
@@ -52,8 +52,8 @@ internal sealed partial class DawnScene
         if (shared.Peer is null)
             linkServices?.Documents.Close(shared.Base.Path);
         linkDocument = null;
-        linkPresenceDrawnKey = string.Empty;
-        linkPresenceSent = string.Empty;
+        linkPresenceDrawnHash = null;
+        linkPresenceSent = false;
     }
 
     private void UpdateLinkDocument(float dt)

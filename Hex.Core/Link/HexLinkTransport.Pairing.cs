@@ -370,7 +370,15 @@ internal sealed partial class HexLinkTransport
             throw;
         }
         if (granted is null)
+        {
+            // Closing with the other side's answer still unread makes the socket reset, and a reset can throw away the deny
+            // that is on its way, so the other side saw a failure and not a decline. Reading what it said first lets both
+            // close cleanly.
+            try { await theirs.WaitAsync(TimeSpan.FromMilliseconds(500), ended.Token); }
+            catch (Exception read) when (read is IOException or SocketException or ObjectDisposedException or TimeoutException) { }
+
             return ("declined-here", HexLinkRights.None);
+        }
 
         return await theirs == "confirm" ? ("paired", granted.Value) : ("declined-there", HexLinkRights.None);
     }

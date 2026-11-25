@@ -1,5 +1,6 @@
 using System.Numerics;
 
+using Hex.Core.Modules;
 using Hex.Core.Notebooks;
 
 using Horizon.Rendering;
@@ -34,20 +35,34 @@ internal sealed partial class DawnScene
 
     // The notebook whose cells are on screen, null while none is
     private HexNotebook? notebookShown;
+    private bool notebookViewBuilt;
 
     /// <summary>Whether a file is a Jupyter notebook, by its name.</summary>
     internal static bool IsNotebookFile(string? path) => path is not null && path.EndsWith(".ipynb", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Whether a document is a notebook that can be shown as its cells (not a diff of one, not a picture).</summary>
-    private static bool IsNotebook(HexDocument of) => of.IsText && of.Picture is null && of.DiffOf is null && IsNotebookFile(of.Path);
+    /// <summary>Whether a document is a notebook that can be shown as its cells (not a diff of one, not a picture, and Notebooks module enabled).</summary>
+    private static bool IsNotebook(HexDocument of) => HexModules.IsEnabled(HexModuleId.Notebooks) && of.IsText && of.Picture is null && of.DiffOf is null && IsNotebookFile(of.Path);
 
     /// <summary>Whether the notebook view is what's on screen.</summary>
-    private bool NotebookShown => notebookShown is not null && notebookView.Visible;
+    private bool NotebookShown => notebookViewBuilt && notebookShown is not null && notebookView.Visible;
 
     private void BuildNotebookView()
     {
         notebookView = layout.Get<Panel>("notebook_view");
         notebookView.Visible = false;
+        Button notebookButton = layout.Get<Button>("notebook_button");
+        notebookButton.Visible = false;
+        if (HexModules.IsEnabled(HexModuleId.Notebooks))
+            notebookButton.OnPressed = () => SwitchView(HexView.Notebook);
+    }
+
+    /// <summary>Builds the notebook view's child controls and hooks lazily on first notebook view open.</summary>
+    private void EnsureNotebookView()
+    {
+        if (notebookViewBuilt || !HexModules.IsEnabled(HexModuleId.Notebooks))
+            return;
+        notebookViewBuilt = true;
+
         Engine.WindowManager.Exclusive += outputPicturesMade = _ => MakeOutputPictures();
 
         // The picture behind the code, behind the cells too, first so everything is drawn over it
@@ -55,7 +70,12 @@ internal sealed partial class DawnScene
         {
             Anchor = Origin.TopLeft,
             Pivot = Origin.TopLeft,
-            Position = new Vector2(0.0f, -NOTEBOOK_BAR)
+            Position = new Vector2(0.0f, -NOTEBOOK_BAR),
+            Picture = backdropPicture,
+            PictureScale = settings.BackdropScale,
+            PictureOffset = new Vector2(settings.BackdropAcross, settings.BackdropUp),
+            PictureStretch = settings.BackdropStretch,
+            PictureOpacity = settings.BackdropOpacity
         });
 
         notebookBar = notebookView.Add(new StackPanel
@@ -94,7 +114,9 @@ internal sealed partial class DawnScene
 
         notebookScroll = notebookView.Add(new NotebookScrollPanel
         {
-            Zoom = delta => ZoomCode(delta > 0 ? CODE_ZOOM_STEP : 1 / CODE_ZOOM_STEP),
+            Zoom = steps => ZoomCode(CodeZoomFactor(steps), smooth: MathF.Abs(steps) < 1.0f),
+            Pinch = factor => ZoomCode(factor, smooth: true),
+            SmartZoom = SmartZoomCode,
             Anchor = Origin.TopLeft,
             Pivot = Origin.TopLeft,
             Position = new Vector2(0.0f, -NOTEBOOK_BAR),
@@ -121,7 +143,6 @@ internal sealed partial class DawnScene
             Visible = false
         });
 
-        layout.Get<Button>("notebook_button").OnPressed = () => SwitchView(HexView.Notebook);
         documentClosed += CloseNotebook;
     }
 
@@ -245,6 +266,13 @@ internal sealed partial class DawnScene
     /// <summary>A notebook's view put up or taken down as ApplyView decides what's in the middle.</summary>
     private void ApplyNotebookView(bool shown)
     {
+        if (shown && !HexModules.IsEnabled(HexModuleId.Notebooks))
+            shown = false;
+        if (shown)
+        {
+            EnsureNotebookView();
+            WarmMarkdownGrammarOnce();
+        }
         notebookView.Visible = shown;
         HexNotebook? showing = shown ? NotebookOf(document) : null;
         if (showing != notebookShown)
@@ -252,7 +280,7 @@ internal sealed partial class DawnScene
             notebookShown = showing;
             if (showing is not null)
                 showing.Remake = true;
-            else
+            else if (notebookViewBuilt)
                 ClearCellViews();
         }
 
@@ -291,12 +319,16 @@ internal sealed partial class DawnScene
     /// </summary>
     private void UpdateNotebooks(float dt)
     {
-        UpdateHtmlExport();
-        foreach (HexNotebook notebook in notebooks.Values)
+        if (htmlExecution is not null || htmlExport is not null)
+            UpdateHtmlExport();
+        if (notebooks.Count > 0)
         {
-            TakeKernelEvents(notebook);
-            if (notebook.Changed && (notebook.WriteIn -= dt) <= 0.0f)
-                WriteNotebook(notebook);
+            foreach (HexNotebook notebook in notebooks.Values)
+            {
+                TakeKernelEvents(notebook);
+                if (notebook.Changed && (notebook.WriteIn -= dt) <= 0.0f)
+                    WriteNotebook(notebook);
+            }
         }
 
         if (notebookShown is not { } shown || !notebookView.Visible)

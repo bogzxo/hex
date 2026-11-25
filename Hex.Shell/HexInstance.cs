@@ -98,37 +98,102 @@ public sealed partial class HexInstance : IDisposable
     /// <summary>The next line another start of the mode said, false when there is none.</summary>
     public bool TryTake(out string line) => heard.TryDequeue(out line!);
 
-    private void Listen()
+    private void Listen() => Serve(pipe, line =>
     {
-        ClearStale(pipe);
-        while (!stop.IsCancellationRequested)
+        heard.Enqueue(line);
+        woken?.Invoke();
+    }, stop.Token);
+
+    /// <summary>Whether somebody listens on the pipe now.</summary>
+    public static bool IsAnswered(string pipeName)
+    {
+        try
         {
-            try
+            using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.Out);
+            client.Connect(150);
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Listens on a pipe and hands each line to <paramref name="onLine"/>, until <paramref name="token"/> is cancelled. Runs
+    /// on a thread of its own, and nothing it meets leaves it as a throw, which on such a thread takes the whole program down
+    /// (a macOS crash of Hex was the bind of the next server failing with "address already in use"). A bind that fails
+    /// is tried again after a wait, the stale socket file of a program that died removed; a pipe somebody else answers on
+    /// is theirs, and this one stops serving. <paramref name="onBound"/> is called when the pipe is bound.
+    /// </summary>
+    public static void Serve(string pipeName, Action<string> onLine, CancellationToken token, Action? onBound = null, PipeOptions options = PipeOptions.Asynchronous)
+    {
+        int failures = 0;
+        int wait = 100;
+        bool told = false;
+        try
+        {
+            ClearStale(pipeName);
+            while (!token.IsCancellationRequested)
             {
-                using var server = new NamedPipeServerStream(pipe, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-                server.WaitForConnectionAsync(stop.Token).GetAwaiter().GetResult();
-                using var reader = new StreamReader(server, Encoding.UTF8);
-                while (reader.ReadLine() is { } line)
+                NamedPipeServerStream server;
+                try
                 {
-                    heard.Enqueue(line);
-                    woken?.Invoke();
+                    server = new NamedPipeServerStream(pipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte, options);
+                }
+                catch (Exception e) when (e is not OperationCanceledException)
+                {
+                    // Address in use (a SocketException on Linux and macOS, an IOException on Windows) or no right to the pipe.
+                    // Somebody who answers has it and keeps it, otherwise a stale file is taken away and the bind tried again
+                    if (IsAnswered(pipeName) || e is UnauthorizedAccessException || ++failures > 8)
+                    {
+                        if (!told)
+                            Console.WriteLine($"[Hex] the pipe {pipeName} is not this program's to serve, {e.Message}");
+                        return;
+                    }
+
+                    if (!told)
+                        Console.WriteLine($"[Hex] the pipe {pipeName} could not be bound, trying again, {e.Message}");
+                    told = true;
+                    ClearStale(pipeName);
+                    if (token.WaitHandle.WaitOne(wait))
+                        return;
+                    wait = Math.Min(wait * 2, 2000);
+                    continue;
+                }
+
+                failures = 0;
+                wait = 100;
+                try
+                {
+                    using (server)
+                    {
+                        onBound?.Invoke();
+                        if (options.HasFlag(PipeOptions.Asynchronous))
+                            server.WaitForConnectionAsync(token).GetAwaiter().GetResult();
+                        else
+                            server.WaitForConnection();
+                        using var reader = new StreamReader(server, Encoding.UTF8);
+                        while (reader.ReadLine() is { } line)
+                            onLine(line);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (Exception e)
+                {
+                    // A client that went away mid line, a handler that threw. The next client is still waited for
+                    Console.WriteLine($"[Hex] the pipe {pipeName} dropped a client, {e.Message}");
+                    if (token.WaitHandle.WaitOne(50))
+                        return;
                 }
             }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-            catch (IOException)
-            {
-                // another of the mode has the pipe already
-                return;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                // another of the mode has it and runs as administrator, so this one can't even say hello down it. It
-                // carries on without a pipe rather than taking the whole window down with a throw nobody catches
-                return;
-            }
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"[Hex] the pipe {pipeName} stopped, {e.Message}");
         }
     }
 

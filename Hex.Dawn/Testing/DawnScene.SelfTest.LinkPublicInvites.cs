@@ -115,6 +115,12 @@ internal sealed partial class DawnScene
         test.WaitFor(() => linkPairingDialog is { IsOpen: true }, 8);
         test.Check("public invites: a private override still uses the verified invitation and no comparison code", () =>
             LinkPairingPending is { Invited: true, Code.Length: 0 } pending && pending.Other.Id == identity?.Id);
+        test.Run(() =>
+        {
+            if (linkPairingDialog is { IsOpen: true } open && Descendants(open).OfType<Button>().FirstOrDefault(button => button.Label == Said("link.devices_change")) is { } change)
+                change.OnPressed?.Invoke();
+        });
+        test.Settle(0.25f);
         Click(() => linkPairingDialog is { IsOpen: true } dialog
             ? Descendants(dialog).OfType<Button>().FirstOrDefault(button => button.Label == Said("link.devices_preset_viewer"))
             : null);

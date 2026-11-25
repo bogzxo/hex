@@ -231,6 +231,7 @@ internal sealed partial class HexTasks
     private void Ended(HexTask task, int exit, string said)
     {
         Exits[TabOf(task)] = exit;
+        MacDockState.NoteTaskEnded();
         runsGoing.Remove(TabOf(task));
         SelfBuildEnded(task, exit);
         int errors = context.Terminals.TerminalErrors;

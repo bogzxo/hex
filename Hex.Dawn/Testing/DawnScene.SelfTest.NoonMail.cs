@@ -221,9 +221,12 @@ internal sealed partial class DawnScene
         test.Run(() => waiting = McpTools.CallAs("hex_agent_wait",
             new JsonObject { ["mode"] = "all", ["messages"] = false, ["timeout"] = 30d }, CancellationToken.None, lead!.Id));
         test.WaitFor(() => AgentWaiting(lead!), 5.0f);
-        test.Run(() => Deliver(lead!, scout, "question", "which tests should I run?", directive: false));
+        test.Run(() => Deliver(lead!, scout, "question", "a question that must not wake it", directive: false));
+        test.Settle(0.35f);
+        test.Check("noon mail: a question alone leaves a messages=false wait running", () => waiting is { IsCompleted: false });
+        test.Run(() => Deliver(lead!, scout, "blocked", "which tests should I run?", directive: false));
         test.WaitFor(() => waiting?.IsCompleted == true, 5.0f);
-        test.Check("noon mail: an addressed question wakes an all wait without repeating read messages", () =>
+        test.Check("noon mail: a blocker wakes an all wait without repeating read messages", () =>
             waiting is { IsCompletedSuccessfully: true, Result.IsError: false } && scout is { Running: true }
             && waiting.Result.AllText().Contains("which tests should I run?", StringComparison.Ordinal)
             && !waiting.Result.AllText().Contains("please read the tests first", StringComparison.Ordinal));

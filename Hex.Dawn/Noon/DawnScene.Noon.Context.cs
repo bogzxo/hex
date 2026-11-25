@@ -17,7 +17,7 @@ internal sealed partial class DawnScene
     // What the agent picked is, who it works with, the messages between them, the tools it reached for and the files it touched
     private void DrawNoonContext()
     {
-        if (!noonContext.Visible)
+        if (!noonBuilt || !noonContext.Visible)
             return;
 
         HexAgentChat? chat = agentChat;
@@ -72,15 +72,26 @@ internal sealed partial class DawnScene
         {
             if (chat is not null && noonClock is not null)
             {
-                string clock = ClockLine(chat);
-                if (noonClock.Text != clock)
-                    noonClock.Text = clock;
+                var clockKey = (chat.Id, chat.Running, chat.RunGoing, chat.Running ? (int)chat.TurnSeconds : (int)Math.Round(chat.TurnSeconds * 10.0));
+                if (clockKey != noonClockDrawn)
+                {
+                    noonClockDrawn = clockKey;
+                    string clock = ClockLine(chat);
+                    if (noonClock.Text != clock)
+                        noonClock.Text = clock;
+                }
             }
             return;
         }
         noonContextDrawn = (shape, version, now);
         noonContextDrawnWide = noonContextWide;
+        noonClockDrawn = default;
+        RebuildNoonContext(chat);
+    }
 
+    // Slow path extracted so Roslyn never hoists a closure display class onto the idle DrawNoonContext fast path
+    private void RebuildNoonContext(HexAgentChat? chat)
+    {
         ClearRows(noonContextRows);
         if (chat is null)
         {
@@ -213,25 +224,36 @@ internal sealed partial class DawnScene
 
         // The tools it reached for, Hex's harness against the shell, and the files it touched
         // The files newest first, the last FILES_KEPT of them, a long chat's hundreds never all gone through or drawn
-        var tools = new Dictionary<string, int>();
-        var files = new List<string>();
+        noonContextTools.Clear();
+        noonContextFiles.Clear();
         for (int i = chat.Entries.Count - 1; i >= 0; i--)
         {
             HexAgentEntry entry = chat.Entries[i];
             if (entry.Kind != HexAgentEntryKind.Tool)
                 continue;
             string tool = ToolTitle(entry.ToolName ?? "tool");
-            tools[tool] = tools.GetValueOrDefault(tool) + 1;
-            if (files.Count < FILES_KEPT && FileOfCall(entry) is { } file && !files.Contains(file))
-                files.Add(file);
+            noonContextTools[tool] = noonContextTools.GetValueOrDefault(tool) + 1;
+            if (noonContextFiles.Count < FILES_KEPT && FileOfCall(entry) is { } file && !noonContextFiles.Contains(file))
+                noonContextFiles.Add(file);
         }
 
-        if (tools.Count > 0)
+        if (noonContextTools.Count > 0)
         {
-            int harness = tools.Where(pair => pair.Key.StartsWith("hex_", StringComparison.Ordinal)).Sum(pair => pair.Value);
-            ContextSection(Said("noon.tools", ("harness", harness.ToString()), ("all", tools.Values.Sum().ToString())));
-            foreach (var (tool, count) in tools.OrderByDescending(pair => pair.Value).Take(10))
+            int harness = 0, totalCalls = 0;
+            noonContextToolTop.Clear();
+            foreach (var pair in noonContextTools)
             {
+                totalCalls += pair.Value;
+                if (pair.Key.StartsWith("hex_", StringComparison.Ordinal))
+                    harness += pair.Value;
+                noonContextToolTop.Add((pair.Key, pair.Value));
+            }
+            noonContextToolTop.Sort(static (a, b) => b.Count.CompareTo(a.Count));
+            ContextSection(Said("noon.tools", ("harness", harness.ToString()), ("all", totalCalls.ToString())));
+            int take = Math.Min(10, noonContextToolTop.Count);
+            for (int t = 0; t < take; t++)
+            {
+                var (tool, count) = noonContextToolTop[t];
                 Label row = ContextLine(ToolIcon(tool), tool);
                 if (HexAgentRows.ToolColour(tool, Skin?.Palette) is { } ink)
                     row.Text = $"[color:{HexColour(ink)}]$({ToolIcon(tool)}) {UIRichText.Literal(tool)}[/color]";
@@ -246,14 +268,16 @@ internal sealed partial class DawnScene
             }
         }
 
-        if (files.Count > 0)
+        if (noonContextFiles.Count > 0)
         {
             ContextSection(Said("noon.files"));
             string? folder = explorer.workspace.Folders.FirstOrDefault();
             // Each file by its name first and the folder it's in after it, the full path in the tooltip
             var rows = new List<(string Path, string Shown)>();
-            foreach (string file in files.Take(noonFilesAll ? FILES_KEPT : FILES_SHOWN))
+            int showFiles = Math.Min(noonContextFiles.Count, noonFilesAll ? FILES_KEPT : FILES_SHOWN);
+            for (int f = 0; f < showFiles; f++)
             {
+                string file = noonContextFiles[f];
                 string path = Path.IsPathRooted(file) || folder is null ? file : Path.Combine(folder, file);
                 rows.Add((path, folder is not null && path.StartsWith(folder, StringComparison.OrdinalIgnoreCase) ? Path.GetRelativePath(folder, path) : file));
             }
@@ -285,9 +309,9 @@ internal sealed partial class DawnScene
                 });
             }
 
-            if (files.Count > FILES_SHOWN)
+            if (noonContextFiles.Count > FILES_SHOWN)
                 ContextLink(noonFilesAll ? "chevron-up" : "chevron-down",
-                    noonFilesAll ? Said("noon.files_fewer") : Said("noon.files_more", ("count", (files.Count - FILES_SHOWN).ToString(System.Globalization.CultureInfo.InvariantCulture))), () =>
+                    noonFilesAll ? Said("noon.files_fewer") : Said("noon.files_more", ("count", (noonContextFiles.Count - FILES_SHOWN).ToString(System.Globalization.CultureInfo.InvariantCulture))), () =>
                     {
                         noonFilesAll = !noonFilesAll;
                         noonContextDrawn = CONTEXT_NOT_DRAWN;
@@ -397,9 +421,15 @@ internal sealed partial class DawnScene
 
     private static void ClearRows(UIComponent rows)
     {
-        foreach (UIComponent row in rows.Children.ToArray())
-            rows.Remove(row);
+        for (int i = rows.Children.Count - 1; i >= 0; i--)
+            rows.Remove(rows.Children[i]);
     }
+
+    // Reusable scratch collections for DrawNoonContext to avoid per-switch Dictionary/List/LINQ allocations
+    private readonly Dictionary<string, int> noonContextTools = [];
+    private readonly List<(string Tool, int Count)> noonContextToolTop = [];
+    private readonly List<string> noonContextFiles = [];
+    private (int ChatId, bool Running, bool RunGoing, int TimeKey) noonClockDrawn;
 
     private void ContextSection(string title) =>
         noonContextRows.Add(new Panel { Fill = UIFill.Horizontal, Padding = new UIEdges(0, 8, 0, 0), Color = Vector4.Zero })

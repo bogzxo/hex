@@ -26,13 +26,47 @@ internal sealed partial class DawnScene
     private const float CODE_ZOOM_STEP = 1.1f;
     private const float MIN_CODE_ZOOM = 0.5f, MAX_CODE_ZOOM = 3.0f;
 
-    /// <summary>Makes the code bigger or smaller by a factor, in every file that is open, 0 for the size it comes at.</summary>
-    private void ZoomCode(float factor)
-    {
-        float zoom = factor <= 0.0f ? 1.0f : Math.Clamp(settings.CodeZoom * factor, MIN_CODE_ZOOM, MAX_CODE_ZOOM);
+    /// <summary>The size a smart zoom (two finger double tap) goes to from the usual one.</summary>
+    private const float SMART_CODE_ZOOM = 1.6f;
 
-        // Close enough to the size it comes at is that size, a few steps in and out land back on it
-        if (MathF.Abs(zoom - 1.0f) < 0.02f) zoom = 1.0f;
+    /// <summary>
+    /// The factor of a Ctrl+wheel turn of <paramref name="steps"/> steps of a wheel (a notch is one, the fraction of one a
+    /// trackpad's pixels are), the zoom of a trackpad going smoothly.
+    /// </summary>
+    private static float CodeZoomFactor(float steps) => Horizon.Input.PreciseScroll.ZoomFactor(steps, CODE_ZOOM_STEP);
+
+    /// <summary>A smart zoom, the code at the usual size goes to a bigger one and from any other back to the usual.</summary>
+    private void SmartZoomCode() => ZoomCode(Horizon.Input.PreciseScroll.SmartZoomTarget(settings.CodeZoom, 1.0f, SMART_CODE_ZOOM) / settings.CodeZoom);
+
+    // Where a trackpad's zoom really is, before it's drawn to a quarter, null when the last zoom wasn't one
+    private float? smoothCodeZoom;
+
+    // How near a quarter a smooth zoom is held on it, a share of the zoom
+    private const float CODE_ZOOM_HOLD = 0.025f;
+
+    /// <summary>A smooth zoom near a quarter (100%, 125%, 150%...) is that quarter, a gentle catch as it passes.</summary>
+    private static float CodeZoomHeld(float zoom)
+    {
+        float quarter = MathF.Round(zoom * 4.0f) / 4.0f;
+        return MathF.Abs(zoom - quarter) < CODE_ZOOM_HOLD * zoom ? quarter : zoom;
+    }
+
+    /// <summary>Makes the code bigger or smaller by a factor, in every file that is open, 0 for the size it comes at.</summary>
+    private void ZoomCode(float factor, bool smooth = false, bool quiet = false)
+    {
+        // A trackpad's smooth zoom goes on from where the fingers have it, not from where it was held: it's drawn to every
+        // quarter (100%, 125%...) as it passes, and from the held one each small step would never get away again
+        if (!smooth || smoothCodeZoom is not { } from || CodeZoomHeld(from) != settings.CodeZoom)
+            from = settings.CodeZoom;
+
+        float zoom = factor <= 0.0f ? 1.0f : Math.Clamp(from * factor, MIN_CODE_ZOOM, MAX_CODE_ZOOM);
+        smoothCodeZoom = smooth && factor > 0.0f ? zoom : null;
+        if (smooth)
+            zoom = CodeZoomHeld(zoom);
+
+        // Close enough to the size it comes at is that size, a few steps in and out land back on it. Not for a trackpad's
+        // smooth zoom, whose steps are smaller than that and would never leave it
+        if (!smooth && MathF.Abs(zoom - 1.0f) < 0.02f) zoom = 1.0f;
 
         if (settings.CodeZoom == zoom) return;
         if (NotebookShown)
@@ -45,7 +79,8 @@ internal sealed partial class DawnScene
             cell.Editor.TextScale = CODE_TEXT * zoom;
 
         QueueZoomSettings();
-        Say(Said("chrome.code_zoom", ("percent", (zoom * 100.0f).ToString("0"))));
+        if (!quiet)
+            Say(Said("chrome.code_zoom", ("percent", (zoom * 100.0f).ToString("0"))));
     }
 
     /// <summary>

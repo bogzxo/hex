@@ -24,6 +24,7 @@ internal sealed partial class DawnScene
     private IEnumerable<HexMcpTool> LinkTools() =>
     [
         LinkAuthorityTool(),
+        LinkPortsTool(),
         LinkRouteTool(),
         LinkPublishTool(),
         LinkWorktreeGateTool(),
@@ -53,13 +54,14 @@ internal sealed partial class DawnScene
                 ("sync", McpSchema.Flag("Sync the folder it runs in first (hex_link_sync start, then flush), so it works on the code as it is here."))], "device", "prompt")),
             null, RunAway: LinkSpawnTool, NeedsEditor: false, TakesCaller: true),
         new(new McpTool("hex_link_sync", "Keep a folder the same on another machine",
-            "Keep a workspace folder the same here and on another linked machine that has the same folder (the same repository) open, both ways, a file saved on one written on the other within a moment. start turns it on (and waits for the first comparison), flush returns once everything saved here is there, so you can then tell an agent there to build or test (hex_link_spawn, or hex_link_call with hex_agent_send) and what it changes comes back the same way. status lists every sync, its counts, its conflicts and the files that don't travel; resolve settles a file both sides changed (keep mine or theirs); stop turns it off. The pinned authority can start or resume its pair by calling this tool directly on the replica with Steer. Ignored files stay local. Bulk peers sync files up to 4 GiB. The JSON path has an 8 MiB limit.",
+            "Keep a workspace folder the same here and on another linked machine that has the same folder (the same repository) open, both ways, a file saved on one written on the other within a moment. start turns it on (and waits for the first comparison), flush returns once everything saved here is there, so you can then tell an agent there to build or test (hex_link_spawn, or hex_link_call with hex_agent_send) and what it changes comes back the same way. status lists every sync, its counts, its conflicts and the files that don't travel; resolve settles a file both sides changed (keep mine or theirs) and keeps the version it set aside; resolutions lists the settled conflicts that can still be undone (the last 50, for 7 days); undo {id} brings the set-aside version back here as an ordinary local change that syncs, or answers needs_merge without writing when the file changed since (then the merge editor opens with the three versions); stop turns it off. The pinned authority can start or resume its pair by calling this tool directly on the replica with Steer. Ignored files stay local. Bulk peers sync files up to 4 GiB. The JSON path has an 8 MiB limit.",
             McpSchema.Object([
                 ("device", McpSchema.String("The device, its name or the start of its id.")),
-                ("action", McpSchema.OneOf("What to do, status by default.", "status", "start", "stop", "flush", "resolve", "align")),
-                ("folder", McpSchema.String("The workspace folder by its name, the first one by default.")),
+                ("action", McpSchema.OneOf("What to do, status by default.", "status", "start", "stop", "flush", "resolve", "align", "resolutions", "undo")),
+                ("folder", McpSchema.String("The workspace folder by its name. By default the one already synced with that device, else a shared folder, else the workspace's first.")),
                 ("path", McpSchema.String("For resolve, the file in conflict as status names it (folder/relative/path).")),
                 ("keep", McpSchema.OneOf("For resolve, whose version stays.", "mine", "theirs")),
+                ("id", McpSchema.String("For undo, the id of a resolution as resolutions lists it.")),
                 ("force", McpSchema.Flag("For start, go on when the two have different commits checked out."))], "device")),
             null, RunAway: LinkSyncTool, NeedsEditor: false),
         new(new McpTool("hex_link_provision", "Get or share a linked workspace",
@@ -154,7 +156,17 @@ internal sealed partial class DawnScene
     }
 
     // Rights as the tools say them
-    private static string LinkRightsWords(HexLinkRights rights) => rights == HexLinkRights.None ? "nothing" : string.Join(", ", HexLinkTrust.RightsNames(rights));
+    internal static string LinkRightsWords(HexLinkRights rights) => rights == HexLinkRights.None ? "nothing" : string.Join(", ", HexLinkTrust.RightsNames(rights).Select(name => name switch
+    {
+        "view" => "view files",
+        "steer" => "use AI agents",
+        "edit" => "edit files",
+        "predict" => "use AI completions",
+        "manage" => "manage agents",
+        "ports" => "open shared ports",
+        "ai" => "use AI models",
+        _ => name
+    }));
 
     private async Task<McpToolResult> LinkCallTool(JsonObject args, CancellationToken cancel)
     {
@@ -288,7 +300,7 @@ internal sealed partial class DawnScene
             return McpToolResult.Text(LinkSyncStatusSaid(null));
         if (LinkPeerOf(links!.Peers, args.String("device") ?? string.Empty, out string? wrong) is not { } peer)
             return McpToolResult.Error(wrong!);
-        string? folder = args.String("folder") is { Length: > 0 } named ? named.Trim().Trim('/') : linkServices?.Workspace.Folders.FirstOrDefault()?.Name;
+        string? folder = args.String("folder") is { Length: > 0 } named ? named.Trim().Trim('/') : LinkSyncDefaultFolder(peer, action);
         if (folder is null && action is not "status")
             return McpToolResult.Error("This workspace has no folder open to sync.");
 
@@ -343,10 +355,49 @@ internal sealed partial class DawnScene
                     ? McpToolResult.Error(why)
                     : McpToolResult.Text($"{path} settled, {(keep == HexLinkSyncKeep.Mine ? "this machine's" : peer.Device.Name + "'s")} version on both, the copy beside it gone.");
             }
+            case "resolutions":
+            {
+                var settled = LinkResolutionList(peer.Device.Id, folder);
+                if (settled.Count == 0)
+                    return McpToolResult.Text($"No settled conflict with {peer.Device.Name} can be undone.");
+                var said = new StringBuilder();
+                foreach (var (_, record) in settled)
+                    said.Append("- ").Append(record.Id).Append(' ').Append(record.Path).Append(", kept ").Append(record.Keep == HexLinkSyncKeep.Mine ? "mine" : "theirs")
+                        .Append(", ").Append(record.At.ToString("u", System.Globalization.CultureInfo.InvariantCulture)).Append('\n');
+                said.Append("Undo one with hex_link_sync undo {device, id}.");
+                return McpToolResult.Text(said.ToString());
+            }
+            case "undo":
+            {
+                string id = (args.String("id") ?? string.Empty).Trim();
+                if (id.Length == 0)
+                    return McpToolResult.Error("Say the id of the resolution, as hex_link_sync resolutions lists it.");
+                HexLinkUndoResult undone = await LinkUndo(id, peer.Device.Id);
+                if (undone.Status == HexLinkUndoStatus.NeedsMerge)
+                    LinkUndoSaying(id, peer.Device.Id);
+                string word = $"{undone.Word}: {undone.Message}";
+                return undone.Status == HexLinkUndoStatus.Refused ? McpToolResult.Error(word) : McpToolResult.Text(word);
+            }
             default:
-                return McpToolResult.Error("action is one of status, start, stop, flush and resolve.");
+                return McpToolResult.Error("action is one of status, start, stop, flush, resolve, align, resolutions and undo.");
         }
     }
+
+    // The folder a sync action means when none is named: the one synced with this device (or, to start one, a shared
+    // folder), and the workspace's first folder only when nothing is shared
+    private string? LinkSyncDefaultFolder(HexLinkPeer peer, string action)
+    {
+        if (linkServices is not { } services)
+            return null;
+        string[] withDevice = [.. LinkSyncs.Where(sync => sync.DeviceId == peer.Device.Id && sync.State != HexLinkSyncState.Off).Select(sync => sync.Folder)
+            .Concat(peer.RemoteSyncReport.Select(report => report.Folder))];
+        return LinkDefaultSyncFolder(services.Workspace, withDevice, action == "start" ? LinkSharedFolders(services) : []);
+    }
+
+    internal static string? LinkDefaultSyncFolder(HexLinkWorkspace workspace, IReadOnlyList<string> syncedWithDevice, IReadOnlyList<HexLinkFolder> shared) =>
+        workspace.Folders.FirstOrDefault(folder => syncedWithDevice.Contains(folder.Name, PlatformPaths.Comparer))?.Name
+        ?? shared.FirstOrDefault()?.Name
+        ?? workspace.Folders.FirstOrDefault()?.Name;
 
     // Whether an agent started there runs in the synced folder, said so an agent knows where its work lands
     private static string LinkSpawnWhere(HexLinkPeer peer, string folder) =>

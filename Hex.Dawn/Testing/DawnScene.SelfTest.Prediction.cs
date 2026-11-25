@@ -115,8 +115,15 @@ internal sealed partial class DawnScene
             QuietCompletion();
         });
         test.Settle(0.5f);
-        test.Check("prediction: a disabled editor has no prediction engine, editor callbacks or status item", () =>
-            predictionSession is null && code.OnPredictionEnded is null && (predictionItem is null || predictionItem.IsVisible?.Invoke() == false));
+        test.Check("prediction: switched off, no prediction engine or editor callbacks, only the dim off item to switch them on", () =>
+            predictionSession is null && code.OnPredictionEnded is null
+            && (predictionItem is null || predictionItemState is PredictionItemState.Hidden or PredictionItemState.Off));
+        test.Check("prediction: with no AI at all, not even the off item", () =>
+        {
+            if (!HexAi.Off)
+                return true; // the off mode can't be flipped here, UpdatePredictions hides the item then
+            return predictionItem is null || predictionItem.IsVisible?.Invoke() == false;
+        });
 
         test.Run(TogglePredictions);
         test.Wait();
@@ -397,6 +404,11 @@ internal sealed partial class DawnScene
             Save();
             CloseNow();
             server.Dispose();
+
+            // The failures this run made on purpose (a dead port, a refused key, no model) put error cards up, which stay
+            // until closed and would sit over the inspector for the suites after
+            foreach (UINotification card in toasts.Cards.ToArray())
+                card.Close();
         });
         test.Wait();
     }

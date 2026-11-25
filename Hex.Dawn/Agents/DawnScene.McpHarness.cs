@@ -199,10 +199,25 @@ internal sealed partial class DawnScene
     /// Every few seconds while there's an index, the open files whose servers say what they declare asked for it, once
     /// each time a file's saved as something new. A file with changes that aren't saved isn't, it isn't what's on disk.
     /// </summary>
+    private bool HarnessRootsAre(List<string> folders)
+    {
+        // Compared in place every frame, no enumerators made for it
+        string[] roots = harnessRoots;
+        if (roots.Length != folders.Count)
+            return false;
+        for (int i = 0; i < roots.Length; i++)
+        {
+            if (roots[i] != folders[i])
+                return false;
+        }
+
+        return true;
+    }
+
     private void UpdateHarness(float dt)
     {
         // A folder added to the workspace is the index's from now on, not from the next time something asks for the folders
-        if (harness is not null && !explorer.workspace.IsEmpty && !harnessRoots.SequenceEqual(explorer.workspace.Folders))
+        if (harness is not null && !explorer.workspace.IsEmpty && !HarnessRootsAre(explorer.workspace.Folders))
             harnessRoots = [.. explorer.workspace.Folders];
         if (harness is null || (harnessSymbolsWait -= dt) > 0.0f)
             return;

@@ -61,7 +61,7 @@ internal sealed partial class DawnScene
         {
             Open(file);
             heldTab = document;
-            command = McpTools.Call("hex_run_command", new JsonObject { ["name"] = "Hex Link: Hold changes to this file" }, CancellationToken.None);
+            command = McpTools.Call("hex_run_command", new JsonObject { ["name"] = "Link: Hold Changes to This File" }, CancellationToken.None);
         });
         Check("the palette command holds the file and shows the held tooltip", () =>
             command is { IsCompletedSuccessfully: true, Result.IsError: false } &&
@@ -94,7 +94,7 @@ internal sealed partial class DawnScene
             LinkHeldFile(file) is { HasIncoming: true } && ReadLinkTestFile(file) == updated, 15);
         test.Run(() => command = McpTools.Call("hex_run_command", new JsonObject
         {
-            ["name"] = "Hex Link: Submit held changes…",
+            ["name"] = "Link: Submit Held Changes…",
         }, CancellationToken.None));
         Check("the Submit held changes palette command previews the conflict", () =>
             command is { IsCompletedSuccessfully: true, Result.IsError: false } && Choice("Submit held changes") is not null, 8);
@@ -118,7 +118,7 @@ internal sealed partial class DawnScene
             Open(file);
             var menu = new Menu("test_hold_again");
             AddLinkHoldMenu(menu, file);
-            menu.Items.Single(item => item.Label == "Hold changes").OnPicked?.Invoke();
+            menu.Items.Single(item => item.Label == "Keep my changes to myself").OnPicked?.Invoke();
         });
         Check("a new hold starts from the submitted version", () => LinkHeldFile(file) is not null, 8);
         test.Run(() =>
@@ -186,8 +186,9 @@ internal sealed partial class DawnScene
 
         void ResolveByTyping(string old, string text)
         {
-            int line = Enumerable.Range(0, code.Document.LineCount).First(i => code.Document.LineAt(i) == old);
-            code.Document.Select(new(line, 0), new(line, old.Length));
+            // The unresolved conflict shows its base text with a header bar over it, so type over its first line
+            int line = code.LensesAbove.First(lens => lens.Text.EndsWith("unresolved", StringComparison.Ordinal)).Line;
+            code.Document.Select(new(line, 0), new(line, code.Document.LineAt(line).Length));
             code.Document.Insert(text);
         }
 

@@ -41,15 +41,6 @@ internal sealed partial class DawnScene
             test.Wait();
         }
 
-        void Type(string text)
-        {
-            foreach (char each in text)
-            {
-                string typed = each.ToString();
-                test.Run(() => Engine.Input.Post(Horizon.Input.InputEvent.Typed(typed)));
-                test.Wait();
-            }
-        }
 
         // The file on screen given new text and the caret put somewhere in it
         void Start(string text, int line, int column)

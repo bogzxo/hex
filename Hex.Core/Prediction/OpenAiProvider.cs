@@ -23,8 +23,27 @@ internal sealed class OpenAiProvider(HttpClient http, Uri api, string model, str
     /// <summary>How long between pieces once the first has come.</summary>
     internal TimeSpan Gap { get; init; } = PredictionHttp.FirstPiece;
 
+    /// <summary>The model's parameters the settings tune. The completions API takes temperature and top_p of them.</summary>
+    internal PredictionTuning Tuning { get; init; } = PredictionTuning.Usual;
+
+    /// <summary>
+    /// Asks llama-server to keep the prompt's start in its cache (cache_prompt) so that the next request, which shares
+    /// most of it, only reads what changed. Sent only to a llama.cpp server: others may refuse a field they don't know.
+    /// </summary>
+    internal bool CachePrompt { get; init; }
+
+    /// <summary>The llama-server slot (id_slot) to use, -1 for any; sent only with <see cref="CachePrompt"/>.</summary>
+    internal int Slot { get; init; } = -1;
+
     public async IAsyncEnumerable<string> Complete(PredictionWireRequest request, [EnumeratorCancellation] CancellationToken cancel)
     {
+        if (request.Turns is { Count: > 0 } turns)
+        {
+            await foreach (string piece in Chat(turns, request.MaxTokens, cancel).WithCancellation(cancel).ConfigureAwait(false))
+                yield return piece;
+            yield break;
+        }
+
         using var message = new HttpRequestMessage(HttpMethod.Post, api)
         {
             Content = PredictionHttp.Json(writer => Body(writer, request)),
@@ -38,47 +57,57 @@ internal sealed class OpenAiProvider(HttpClient http, Uri api, string model, str
         TimeSpan wait = FirstPiece;
 
         using HttpResponseMessage response = await PredictionHttp.Send(http, message, deadline, cancel, api, key).ConfigureAwait(false);
-        using StreamReader reader = await PredictionHttp.Reader(response, deadline, cancel, api).ConfigureAwait(false);
+        using WireLines reader = await PredictionHttp.Reader(response, deadline, cancel, api).ConfigureAwait(false);
 
-        while (await PredictionHttp.Line(reader, deadline, wait, cancel, api).ConfigureAwait(false) is { } line)
+        // A thinking model's <think> block, which some servers leave in the text, is never the answer
+        var filter = new ThinkFilter();
+        while (await PredictionHttp.Line(reader, deadline, wait, cancel, api).ConfigureAwait(false))
         {
             wait = Gap;
 
             // Server-sent events: data lines matter, blank lines, comments and other fields don't
-            if (!line.StartsWith("data:", StringComparison.Ordinal))
+            if (!WireLines.Data(reader.Current, out ReadOnlyMemory<byte> data))
                 continue;
-            string data = line.AsSpan(5).Trim().ToString();
-            if (data.Length == 0)
-                continue;
-            if (data == "[DONE]")
-                yield break;
-
-            string? piece = null;
-            bool finished;
-            using (JsonDocument document = PredictionHttp.Parse(data, api))
+            if (WireLines.IsDone(data))
             {
-                JsonElement root = document.RootElement;
-                if (PredictionHttp.Error(root) is { } error)
-                    throw PredictionHttp.Failed(error, api, key);
-
-                finished = false;
-                if (root.TryGetProperty("choices", out JsonElement choices) && choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0)
-                {
-                    JsonElement choice = choices[0];
-                    if (choice.TryGetProperty("text", out JsonElement text) && text.ValueKind == JsonValueKind.String)
-                        piece = text.GetString();
-                    finished = choice.TryGetProperty("finish_reason", out JsonElement reason) && reason.ValueKind == JsonValueKind.String;
-                }
+                if (filter.End() is { Length: > 0 } rest)
+                    yield return rest;
+                yield break;
             }
 
-            if (!string.IsNullOrEmpty(piece))
-                yield return piece;
-            if (finished)
+            WireChunk chunk = WireChunk.Read(data.Span, WireShape.OpenAiText, api);
+            if (chunk.Error is { } error)
+                throw PredictionHttp.Failed(error, api, key);
+
+            string answer = filter.Feed(chunk.Text ?? string.Empty);
+            if (chunk.Finished && filter.End() is { Length: > 0 } tail)
+                answer += tail;
+            if (answer.Length > 0)
+                yield return answer;
+            if (chunk.Finished)
                 yield break;
         }
     }
 
-    // {model, prompt, max_tokens, temperature, stop, stream}, with the suffix when there is one
+    // A chat format's request: /v1/chat/completions, streamed, thinking off, the answer's pieces without what the model
+    // thinks. Leaving the loop early disposes the stream, which closes the connection
+    private async IAsyncEnumerable<string> Chat(IReadOnlyList<ChatTurn> turns, int maxTokens, [EnumeratorCancellation] CancellationToken cancel)
+    {
+        var chat = new OpenAiChat(http, OpenAiChat.Url(api.ToString()) ?? api, model, key)
+        {
+            Tuning = Tuning with { Thinking = PredictionTuning.THINK_OFF },
+            MaxTokens = maxTokens,
+            CachePrompt = CachePrompt,
+            Slot = Slot,
+        };
+        await foreach (ChatPiece piece in chat.Stream(turns, cancel).WithCancellation(cancel).ConfigureAwait(false))
+        {
+            if (!piece.Thinking)
+                yield return piece.Text;
+        }
+    }
+
+    // {model, prompt, max_tokens, temperature, top_p, stop, stream}, with the suffix when there is one
     private void Body(Utf8JsonWriter writer, PredictionWireRequest request)
     {
         writer.WriteStartObject();
@@ -87,7 +116,9 @@ internal sealed class OpenAiProvider(HttpClient http, Uri api, string model, str
         if (request.Suffix is not null)
             writer.WriteString("suffix", request.Suffix);
         writer.WriteNumber("max_tokens", request.MaxTokens);
-        writer.WriteNumber("temperature", 0);
+        writer.WriteNumber("temperature", Tuning.Temperature);
+        if (Tuning.TopP > 0)
+            writer.WriteNumber("top_p", Tuning.TopP);
         if (request.Stop.Length > 0)
         {
             writer.WriteStartArray("stop");
@@ -96,6 +127,12 @@ internal sealed class OpenAiProvider(HttpClient http, Uri api, string model, str
             writer.WriteEndArray();
         }
         writer.WriteBoolean("stream", true);
+        if (CachePrompt)
+        {
+            writer.WriteBoolean("cache_prompt", true);
+            if (Slot >= 0)
+                writer.WriteNumber("id_slot", Slot);
+        }
         writer.WriteEndObject();
     }
 }

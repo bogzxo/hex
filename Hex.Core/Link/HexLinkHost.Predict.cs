@@ -42,13 +42,24 @@ internal sealed partial class HexLinkHost
     // What hello and link/serves say this machine does for the device
     private JsonArray Serves()
     {
-        bool serves = ServesPredictions;
-        Volatile.Write(ref servesSaid, serves ? 1 : 0);
+        int serves = ServesMask();
+        Volatile.Write(ref servesSaid, serves);
         return ServesJson(serves);
     }
 
+    // What this machine does for the device as bits: 1 predictions, 2 AI
+    private int ServesMask() => (ServesPredictions ? 1 : 0) | (ServesAi ? 2 : 0);
+
     // Said as a node each, JsonArray's generic Add would reach for the serializer
-    private static JsonArray ServesJson(bool serves) => serves ? new JsonArray((JsonNode)"predictions") : new JsonArray();
+    private static JsonArray ServesJson(int serves)
+    {
+        var said = new JsonArray();
+        if ((serves & 1) != 0)
+            said.Add((JsonNode)"predictions");
+        if ((serves & 2) != 0)
+            said.Add((JsonNode)"ai");
+        return said;
+    }
 
     /// <summary>
     /// Whether this machine would serve the device may have changed (its rights, or the share setting or the model
@@ -56,11 +67,13 @@ internal sealed partial class HexLinkHost
     /// </summary>
     public void ServesMoved()
     {
-        bool serves = ServesPredictions;
-        if (!serves)
+        int serves = ServesMask();
+        if ((serves & 1) == 0)
             StopPredicting();
+        if ((serves & 2) == 0)
+            StopAi();
 
-        if (Interlocked.Exchange(ref servesSaid, serves ? 1 : 0) != (serves ? 1 : 0))
+        if (Interlocked.Exchange(ref servesSaid, serves) != serves)
             session.TellLatest("link/serves", new JsonObject { ["serves"] = ServesJson(serves) });
     }
 

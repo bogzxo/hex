@@ -4,6 +4,9 @@ Hex asks a model what comes next as the code is typed, the rest of the line or t
 one, and shows it as faint text at the caret or as a small diff over the lines it would change. Tab takes it. Hex runs
 no model itself: the user points it at a provider, an API URL, a key, a model name and what kind of server it is.
 
+See also `docs/next-edit-plan.md` (jumps, history, strategy per model, its Status section lists the keys) and
+`docs/ai-edit-plan.md` (AI Edit, Ctrl+I).
+
 Branch `feat/edit-prediction` in `hex` and in the engine. Checked against the code on 2026-11-21; file and line
 references are to `development` at `590eb42` (hex) and `68b7e11` (engine).
 

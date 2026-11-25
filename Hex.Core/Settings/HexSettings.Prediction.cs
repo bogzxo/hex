@@ -34,6 +34,10 @@ internal sealed partial class HexSettings
     public string EditPredictionsInvocation = "after_typing";
     public bool PredictionShortcutOnly => EditPredictionsInvocation == "shortcut";
 
+    /// <summary>How a prediction is shown, Zed's edit_predictions_mode: eager draws it inline, subtle marks it at the caret and shows it while Alt is held.</summary>
+    public string EditPredictionsMode = "eager";
+    public bool PredictionSubtle => EditPredictionsMode == "subtle";
+
     /// <summary>What kind of server is asked: ollama for Ollama's own API, openai for any server with OpenAI's completions, link for the device Hex Link is attached to.</summary>
     public string EditPredictionsProvider = "ollama";
 
@@ -45,6 +49,9 @@ internal sealed partial class HexSettings
 
     /// <summary>How the prompt is written for the model: infer works it out from the model's name, the rest name a family.</summary>
     public string EditPredictionsPromptFormat = "infer";
+
+    /// <summary>What kind of model it is: auto works it out from its name and what the server says of it, or edit_model, fim, instruct, fim_instruct.</summary>
+    public string EditPredictionsKind = "auto";
 
     /// <summary>The most tokens a model writes for one prediction.</summary>
     public int EditPredictionsMaxTokens = 256;
@@ -69,6 +76,43 @@ internal sealed partial class HexSettings
 
     /// <summary>Whether the terminal's command line gets ghost text predictions too (never at a prompt for a password). Off until the user switches it on; needs edit_predictions on.</summary>
     public bool EditPredictionsTerminal;
+
+    /// <summary>The system prompt the model is given, empty for none: Link Chat's answers always, predictions only where the prompt goes through the model's template.</summary>
+    public string EditPredictionsSystemPrompt = string.Empty;
+
+    /// <summary>The model's temperature, 0 to 2. 0 as it comes, so a prediction is the same each time.</summary>
+    public float EditPredictionsTemperature;
+
+    /// <summary>Nucleus sampling, 0 to 1, 0 for the model's own.</summary>
+    public float EditPredictionsTopP;
+
+    /// <summary>How many of the likeliest tokens are picked from, 0 for the model's own.</summary>
+    public int EditPredictionsTopK;
+
+    /// <summary>The context window in tokens, Ollama's num_ctx, 0 for the server's own.</summary>
+    public int EditPredictionsContext;
+
+    /// <summary>How much repeating is held back, 0 for the model's own.</summary>
+    public float EditPredictionsRepeatPenalty;
+
+    /// <summary>Whether the model thinks before Link Chat's answers: model (its own), off, on, low, medium or high. Predictions never think.</summary>
+    public string EditPredictionsThinking = PredictionTuning.THINK_MODEL;
+
+    /// <summary>
+    /// Whether this Hex's model answers the questions put to it in Hex Link's chat (@ai ...), for everyone in the session.
+    /// Always the model picked for code, one model in the card's memory. Off until the user switches it on.
+    /// </summary>
+    public bool EditPredictionsLinkChat;
+
+    /// <summary>Whether a rename typed is followed: the other occurrences of the old name are offered as jumps (docs/next-edit-plan.md). On as it comes.</summary>
+    public bool EditPredictionsRenames = true;
+
+    /// <summary>Whether the model is asked for edits away from the caret (jumps). On as it comes.</summary>
+    public bool EditPredictionsFar = true;
+
+    /// <summary>The tuning the settings make, held to its ends.</summary>
+    public PredictionTuning EditPredictionsTuning => new PredictionTuning(EditPredictionsTemperature, EditPredictionsTopP, EditPredictionsTopK,
+        EditPredictionsContext, EditPredictionsRepeatPenalty, EditPredictionsThinking).Clamped();
 
     /// <summary>Whether the notice of what is sent and where was given, the first time predictions were switched on. Given once.</summary>
     public bool EditPredictionsNoticeDone;
@@ -142,14 +186,17 @@ internal sealed partial class HexSettings
     [
         Flag("edit_predictions", settings => settings.EditPredictions, (settings, value) => settings.EditPredictions = value),
         Choice("edit_predictions_invocation", settings => settings.EditPredictionsInvocation, (settings, value) => settings.EditPredictionsInvocation = value, "after_typing", "shortcut"),
-        Choice("edit_predictions_provider", settings => settings.EditPredictionsProvider, (settings, value) => settings.EditPredictionsProvider = value, "ollama", "openai", "link"),
+        Choice("edit_predictions_mode", settings => settings.EditPredictionsMode, (settings, value) => settings.EditPredictionsMode = value, "eager", "subtle"),
+        Choice("edit_predictions_provider", settings => settings.EditPredictionsProvider, (settings, value) => settings.EditPredictionsProvider = value, "ollama", "openai", LLAMACPP, "link"),
         Text("edit_predictions_api_url", settings => settings.EditPredictionsApiUrl, (settings, value) => settings.EditPredictionsApiUrl = value.Trim()),
         Special("edit_predictions_api_key",
             (settings, values) => settings.ReadApiKey(values),
             (settings, written) => written.Add("edit_predictions_api_key", settings.ApiKeyOnDisk())),
         Text("edit_predictions_model", settings => settings.EditPredictionsModel, (settings, value) => settings.EditPredictionsModel = value.Trim()),
         Choice("edit_predictions_prompt_format", settings => settings.EditPredictionsPromptFormat, (settings, value) => settings.EditPredictionsPromptFormat = value,
-            "infer", "zeta2", "qwen", "code_llama", "star_coder", "deepseek_coder", "code_gemma", "codestral"),
+            "infer", "zeta21", "zeta2", "qwen", "code_llama", "star_coder", "deepseek_coder", "code_gemma", "codestral"),
+        Choice("edit_predictions_kind", settings => settings.EditPredictionsKind, (settings, value) => settings.EditPredictionsKind = value,
+            "auto", "edit_model", "fim", "instruct", "fim_instruct"),
         Whole("edit_predictions_max_tokens", settings => settings.EditPredictionsMaxTokens, (settings, value) => settings.EditPredictionsMaxTokens = value, 16.0f, 2048.0f),
         Whole("edit_predictions_debounce", settings => settings.EditPredictionsDebounce, (settings, value) => settings.EditPredictionsDebounce = value, 0.0f, 2000.0f),
         Special("edit_predictions_disabled_languages",
@@ -167,6 +214,16 @@ internal sealed partial class HexSettings
         Flag("edit_predictions_workspace", settings => settings.EditPredictionsWorkspace, (settings, value) => settings.EditPredictionsWorkspace = value),
         Flag("edit_predictions_share", settings => settings.EditPredictionsShare, (settings, value) => settings.EditPredictionsShare = value),
         Flag("edit_predictions_terminal", settings => settings.EditPredictionsTerminal, (settings, value) => settings.EditPredictionsTerminal = value),
+        Flag("edit_predictions_renames", settings => settings.EditPredictionsRenames, (settings, value) => settings.EditPredictionsRenames = value),
+        Flag("edit_predictions_far", settings => settings.EditPredictionsFar, (settings, value) => settings.EditPredictionsFar = value),
+        Text("edit_predictions_system_prompt", settings => settings.EditPredictionsSystemPrompt, (settings, value) => settings.EditPredictionsSystemPrompt = value.Trim()),
+        Number("edit_predictions_temperature", settings => settings.EditPredictionsTemperature, (settings, value) => settings.EditPredictionsTemperature = value, 0.0f, 2.0f),
+        Number("edit_predictions_top_p", settings => settings.EditPredictionsTopP, (settings, value) => settings.EditPredictionsTopP = value, 0.0f, 1.0f),
+        Whole("edit_predictions_top_k", settings => settings.EditPredictionsTopK, (settings, value) => settings.EditPredictionsTopK = value, 0.0f, 200.0f),
+        Whole("edit_predictions_context", settings => settings.EditPredictionsContext, (settings, value) => settings.EditPredictionsContext = value, 0.0f, 262144.0f),
+        Number("edit_predictions_repeat_penalty", settings => settings.EditPredictionsRepeatPenalty, (settings, value) => settings.EditPredictionsRepeatPenalty = value, 0.0f, 2.0f),
+        Choice("edit_predictions_thinking", settings => settings.EditPredictionsThinking, (settings, value) => settings.EditPredictionsThinking = value, PredictionTuning.Thinkings),
+        Flag("edit_predictions_link_chat", settings => settings.EditPredictionsLinkChat, (settings, value) => settings.EditPredictionsLinkChat = value),
         Flag("edit_predictions_notice_done", settings => settings.EditPredictionsNoticeDone, (settings, value) => settings.EditPredictionsNoticeDone = value)
     ];
 }

@@ -1,3 +1,20 @@
+# Hex 3.5.0 Dexamphetamine
+
+## Scrolling and zoom
+
+- The trackpad scrolls by the pixel on a Mac, with a glide after a flick that slows the way Safari's does and a rubber band at the ends that holds while your fingers are on it and springs back when they lift. Horizontal scrolling goes the right way.
+- A scroller inside another (a code block in a chat) hands the scroll on once it reaches its end, and a bounce off one end no longer catches the next scroll as a stretch at the other.
+- Pinch and Cmd+wheel zoom keep the middle of the code view in place, go smoothly with a gentle catch at every 25%, and wrapped code zooms in one piece. Line numbers stop growing at 150%.
+
+## macOS
+
+- In full screen the traffic lights stay on Hex's title bar, and the bar is as tall as the system's, which slides down over it.
+- Shortcuts written Ctrl mean Command everywhere, and a drag copies with Option, as in Finder.
+
+## Performance
+
+- Hex uses far less CPU and power while agents work. When the screen changes with nobody touching it, it updates 24 times a second rather than 120, labels and buttons that haven't changed aren't drawn again, and spinners and pulses step 12 times a second and stop when Hex isn't the front window. Input, scrolling and animations still run at full speed.
+
 # Hex 3.4.7
 
 ## macOS

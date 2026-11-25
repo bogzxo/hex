@@ -2,7 +2,7 @@ using Hex.Core;
 
 namespace Hex.Tests;
 
-/// <summary>The recent edits sent with a prompt: one event for typing in one place, six at most, a file's gone when it closes.</summary>
+/// <summary>The recent edits sent with a prompt: one event for typing in one place, twelve at most, a file's gone when it closes.</summary>
 public sealed class PredictionHistoryTests
 {
     private static string File(int changed, string with) =>
@@ -48,8 +48,8 @@ public sealed class PredictionHistoryTests
         }
 
         IReadOnlyList<PredictionEvent> events = history.Events("a.cs");
-        Assert.Equal(6, events.Count);
-        Assert.Contains("+changed2", events[0].Diff);
+        Assert.Equal(8, events.Count);
+        Assert.Contains("+changed0", events[0].Diff);
         Assert.Contains("+changed7", events[^1].Diff);
     }
 
@@ -86,12 +86,128 @@ public sealed class PredictionHistoryTests
     }
 
     [Fact]
-    public void A_change_over_1500_bytes_isnt_kept()
+    public void A_change_over_1500_bytes_is_trimmed_not_dropped()
     {
         var history = new PredictionHistory();
         history.Note("a.cs", "x\n");
-        history.Note("a.cs", new string('y', 2000) + "\n");
+        history.Note("a.cs", new string('y', 3000) + "\n");
 
-        Assert.Empty(history.Events("a.cs"));
+        PredictionEvent change = Assert.Single(history.Events("a.cs"));
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(change.Diff) <= PredictionHistory.MOST_BYTES);
+        Assert.Contains("+yyyy", change.Diff);
+    }
+
+    [Fact]
+    public void Changes_on_lines_10_and_80_are_two_hunks_and_both_are_kept()
+    {
+        string before = File(-1, "");
+        string[] lines = before.Split('\n');
+        lines[10] = "RENAMED10";
+        lines[80] = "RENAMED80";
+        string after = string.Join('\n', lines);
+
+        List<PredictionHistory.Hunk> hunks = PredictionHistory.Diffed(before, after);
+        Assert.Equal(2, hunks.Count);
+
+        var history = new PredictionHistory();
+        history.Note("a.cs", before);
+        history.Note("a.cs", after);
+        PredictionEvent change = Assert.Single(history.Events("a.cs"));
+        Assert.Contains("+RENAMED10\n", change.Diff);
+        Assert.Contains("+RENAMED80\n", change.Diff);
+        Assert.Equal(2, change.Diff.Split("@@ -").Length - 1);
+        Assert.DoesNotContain("line40", change.Diff);
+    }
+
+    [Fact]
+    public void An_event_over_budget_keeps_the_hunks_nearest_the_caret()
+    {
+        string before = File(-1, "");
+        string[] lines = before.Split('\n');
+        lines[10] = "A10" + new string('a', 1000);
+        lines[80] = "B80" + new string('b', 1000);
+        string after = string.Join('\n', lines);
+
+        var history = new PredictionHistory();
+        history.Note("a.cs", before);
+        history.Note("a.cs", after, caretLine: 80);
+
+        PredictionEvent change = Assert.Single(history.Events("a.cs"));
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(change.Diff) <= PredictionHistory.MOST_BYTES);
+        Assert.Contains("+B80", change.Diff);
+        Assert.DoesNotContain("+A10", change.Diff);
+    }
+
+    [Fact]
+    public async Task Every_edit_is_noted_soon_without_a_prediction_asked_for()
+    {
+        var history = new PredictionHistory();
+        history.NoteSoon("a.cs", 1, ["one", "two"]);
+        history.NoteSoon("a.cs", 2, ["one", "TWO"]);
+        await history.Drained;
+        history.NoteSoon("a.cs", 3, ["ONE", "TWO"], 0);
+        history.Flush();
+
+        IReadOnlyList<PredictionEvent> events = history.Events("a.cs");
+        Assert.NotEmpty(events);
+        Assert.Contains("+ONE", events[^1].Diff);
+    }
+
+    [Fact]
+    public async Task Noting_soon_keeps_each_files_order_and_forgets_closed_files()
+    {
+        var history = new PredictionHistory();
+        history.NoteSoon("a.cs", 1, ["a"]);
+        history.NoteSoon("b.cs", 1, ["b"]);
+        await history.Drained;
+        history.NoteSoon("a.cs", 2, ["A"]);
+        history.NoteSoon("b.cs", 2, ["B"]);
+        history.NoteSoon("a.cs", 1, ["stale"]);
+        await history.Drained;
+
+        Assert.Equal(["a.cs", "b.cs"], history.Events("b.cs").Select(e => e.Path));
+        Assert.DoesNotContain(history.Events("a.cs"), e => e.Diff.Contains("stale"));
+
+        history.NoteSoon("a.cs", 3, ["AA"]);
+        history.Closed("a.cs");
+        await history.Drained;
+        Assert.Equal(["b.cs"], history.Events("b.cs").Select(e => e.Path));
+        Assert.DoesNotContain(history.Events("c.cs"), e => e.Path == "a.cs");
+    }
+
+    [Fact]
+    public void Twelve_events_are_kept_and_accepted_ones_are_tagged()
+    {
+        var history = new PredictionHistory();
+        string text = string.Join('\n', Enumerable.Range(0, 300).Select(i => "line" + i)) + "\n";
+        history.Note("a.cs", text);
+        for (int i = 0; i < 14; i++)
+        {
+            string[] lines = text.Split('\n');
+            lines[i * 20] = "changed" + i;
+            text = string.Join('\n', lines);
+            history.Note("a.cs", text);
+        }
+        IReadOnlyList<PredictionEvent> events = history.Events("a.cs");
+        Assert.Equal(12, events.Count);
+        Assert.All(events, e => Assert.False(e.Predicted));
+        Assert.Contains("+changed13", events[^1].Diff);
+
+        history.Accepted("a.cs", text, text.Replace("line299", "line299!"));
+        Assert.True(history.Events("a.cs")[^1].Predicted);
+    }
+
+    [Fact]
+    public void A_long_file_is_kept_packed_and_still_diffs()
+    {
+        var history = new PredictionHistory();
+        string text = string.Join('\n', Enumerable.Range(0, 6000).Select(i => "int value" + i + " = " + i + ";"));
+        history.Note("big.cs", text);
+        history.Note("big.cs", text.Replace("value3000 = 3000", "value3000 = 1", StringComparison.Ordinal));
+        history.Note("big.cs", text.Replace("value3000 = 3000", "value3000 = 12", StringComparison.Ordinal));
+
+        PredictionEvent only = Assert.Single(history.Events("big.cs"));
+        Assert.Contains("-int value3000 = 3000;", only.Diff);
+        Assert.Contains("+int value3000 = 12;", only.Diff);
     }
 }

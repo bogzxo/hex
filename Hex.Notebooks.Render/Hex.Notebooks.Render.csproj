@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Optional Notebooks rendering module (SkiaSharp, Svg.Skia, CSharpMath). Published as a NativeAOT shared library
+       (NativeLib=Shared) in Release so Hex never links or loads SkiaSharp unless the Notebooks module is enabled. -->
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <OutputType>Library</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>true</IsAotCompatible>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <PublishAot>true</PublishAot>
+    <NativeLib>Shared</NativeLib>
+    <SelfContained>true</SelfContained>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
+  </PropertyGroup>
+
+  <UsingTask TaskName="NotebooksAddToPath" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Directory ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        string path = System.Environment.GetEnvironmentVariable("PATH") ?? "";
+        if (System.IO.Directory.Exists(Directory) && path.IndexOf(Directory, System.StringComparison.OrdinalIgnoreCase) < 0)
+            System.Environment.SetEnvironmentVariable("PATH", Directory + ";" + path);
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="FindNotebooksNativeToolchain" BeforeTargets="SetupOSSpecificProps" Condition="'$(OS)' == 'Windows_NT' and '$(PublishAot)' == 'true'">
+    <NotebooksAddToPath Directory="$(MSBuildProgramFiles32)\Microsoft Visual Studio\Installer" />
+  </Target>
+
+  <Target Name="LeaveTheSymbols" AfterTargets="ComputeResolvedFilesToPublishList" Condition="'$(Configuration)' == 'Release'">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Extension)' == '.pdb'" />
+    </ItemGroup>
+  </Target>
+
+  <ItemGroup>
+    <PackageReference Include="Svg.Skia" Version="5.2.3" />
+    <PackageReference Include="CSharpMath.SkiaSharp" Version="1.0.0-pre.2" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.148.0" />
+  </ItemGroup>
+
+</Project>

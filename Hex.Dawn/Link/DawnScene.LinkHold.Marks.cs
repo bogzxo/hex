@@ -9,24 +9,46 @@ internal sealed partial class DawnScene
 
     private void LinkHoldExplorerMark(UITreeItem row, string path)
     {
+        // The tips of an earlier mark come off first, this device's and a peer's (it is the end of the tooltip, the peer's
+        // after this device's, so cutting at the first of them takes both)
         int previous = row.Tooltip.IndexOf("\n" + HELD_TIP, StringComparison.Ordinal);
+        int peers = LinkHeldByTipStem() is { Length: > 0 } stem ? row.Tooltip.IndexOf("\n" + stem, StringComparison.Ordinal) : -1;
+        if (peers >= 0 && (previous < 0 || peers < previous))
+            previous = peers;
         if (previous >= 0)
             row.Tooltip = row.Tooltip[..previous];
-        if (LinkHeldFile(path) is not { } held)
+
+        LinkRemoteHolder? holder = LinkRemoteHolderOf(path);
+        HexLinkHold? held = LinkHeldFile(path);
+        if (held is null && holder is null)
             return;
         row.Badge = row.Badge.Length > 0 ? row.Badge + " · H" : "H";
         row.BadgeColor = HeldColor;
-        row.Tooltip = (row.Tooltip.Length > 0 ? row.Tooltip : path) + "\n" + LinkHoldTip(held);
+        row.Tooltip = (row.Tooltip.Length > 0 ? row.Tooltip : path) + (held is null ? "" : "\n" + LinkHoldTip(held))
+            + (holder is null ? "" : "\n" + LinkHeldByTip(holder));
     }
 
     private void LinkHoldTabMark(HexDocument shown, StripTab tab)
     {
-        if (LinkHeldFile(shown.Path) is not { } held)
+        HexLinkHold? held = LinkHeldFile(shown.Path);
+        LinkRemoteHolder? holder = LinkRemoteHolderOf(shown.Path);
+        if (held is null && holder is null)
             return;
         tab.Icon = "pin";
         tab.IconColor = HeldColor;
-        tab.Tooltip += "\n" + LinkHoldTip(held);
+        if (held is not null)
+            tab.Tooltip += "\n" + LinkHoldTip(held);
+        if (holder is not null)
+            tab.Tooltip += "\n" + LinkHeldByTip(holder);
     }
+
+    // What a peer's hold means to whoever sees it: the peer's edits to the file stay on its machine until it lets go,
+    // and this device's go to the peer as an offer it takes when it likes
+    private string LinkHeldByTip(LinkRemoteHolder holder) => Said("link.held_by", ("device", holder.Name));
+
+    // The start of that tip before the device's name, to find it again in a tooltip that is made again (empty when a
+    // language puts the name first, and then the tip is not cut off, it only shows twice)
+    private string LinkHeldByTipStem() => Said("link.held_by", ("device", "\u0001")) is var tip && tip.IndexOf('\u0001') is > 0 and var at ? tip[..at] : string.Empty;
 
     private System.Numerics.Vector4 HeldColor => Skin?.Palette.Link ?? WarningColor;
 
@@ -68,6 +90,7 @@ internal sealed partial class DawnScene
         if (!ReferenceEquals(linkServices, owner))
             return;
 
+        LinkUpdateExplorerPresence();
         DecorateRows();
         tabsDirty = linkDirty = true;
         LinkMoved();

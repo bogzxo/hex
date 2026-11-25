@@ -24,9 +24,12 @@ internal sealed partial class HexLanguages
         highlightOwner = owner;
         highlightRequested = highlightAnswered = null;
         highlighted = [];
-        if (server is not null) document.Editor.OccurrenceSource = caret => ServerHighlights(document, caret);
+        if (server is not null) AttachDocumentHighlights(document);
         document.Editor.RefreshOccurrences();
     }
+
+    private void AttachDocumentHighlights(HexDocument document) =>
+        document.Editor.OccurrenceSource = caret => ServerHighlights(document, caret);
 
     private IReadOnlyList<UICodeOccurrence>? ServerHighlights(HexDocument document, UITextPosition caret)
     {

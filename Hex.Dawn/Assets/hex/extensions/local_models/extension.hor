@@ -1,0 +1,187 @@
+// The local model as an agent system of Hex's, beside Claude Code, Codex and Antigravity: Mellum, Qwen or whatever the
+// llama.cpp server Hex runs (or Ollama) has, working in the folder through Hex's own tools, offline. From the Agents panel
+// it runs Hex itself as `Hex --local-agent`, which keeps the conversation and the loop (model, tool calls, results), JSON
+// lines both ways: what's asked a {type:message} line on its stdin, and every step it takes a line on its stdout, read into
+// the panel's rows. Nothing is written to the folder, the hex tools are reached through the editor that has it open.
+let extension = {
+    name: "Local",
+    description: "Your local model (llama.cpp or Ollama) as an agent in the Agents panel, working in the folder through Hex's tools, offline.",
+    version: "1.0.0",
+    author: "bogz"
+};
+
+// What it's told as it connects, after what Hex tells every agent
+let instructions = "Find code through Hex before reading whole files. hex_map once to see the workspace, hex_symbols for where something is declared, hex_search for text, hex_refs for where a name is used, hex_skim for what files are, hex_read with a symbol to read one method or class instead of the file. hex_terminal_run runs a command and waits for it.";
+
+// What the Agents panel offers over its box. The models are the ones Hex says it has (Hex --local-agent --models) once it
+// has said them, the others written here are what there is until then
+let options = [
+    { id: "model", title: "Model", icon: "sparkle", choices: [{ value: "", label: "Default model" }] },
+    { id: "approvals", title: "Approvals", icon: "shield", choices: [
+        { value: "edits", label: "Edits allowed" }, { value: "ask", label: "Ask first" }, { value: "all", label: "Anything" }] },
+    { id: "think", title: "Thinking", icon: "lightbulb", choices: [
+        { value: "model", label: "Model's default" }, { value: "on", label: "Think" }, { value: "off", label: "Don't think" }] },
+    { id: "profile", title: "Profile", icon: "wrench", choices: [
+        { value: "write", label: "Write (all tools)" }, { value: "ask", label: "Ask (read-only)" }, { value: "minimal", label: "Minimal (no tools)" }] }
+];
+
+// The models Hex said, for the picker, and the hex object the run's callbacks aren't handed
+let listed = [];
+let hex_of = { hex: null };
+
+func on_start(hex) {
+    hex_of.hex = hex;
+    if (hex.agent == null) {
+        hex.say("needs a Hex with the agent harness (hex.agent)");
+        return;
+    }
+    say_who(hex);
+    ask_models(hex);
+}
+
+func on_workspace_changed(hex) { ask_models(hex); }
+
+// The models a chat may pick, asked of Hex itself: llama.cpp's installed chat models, Ollama's with tools
+func ask_models(hex) {
+    if (hex.program_output == null || hex.executable == null) return;
+    hex.program_output(hex.executable, ["--local-agent", "--models"], (hex, said) => {
+        let found = models_of(hex, said);
+        if (len(found) == 0) return;
+        listed = found;
+        say_who(hex);
+    });
+}
+
+// The models out of what --models printed, a JSON array on a line of its own, the lines that aren't one left out
+func models_of(hex, said) {
+    let found = [];
+    if (said == null) return found;
+    for (line in said.split("\n")) {
+        let text = line.trim();
+        if (!text.starts_with("[")) continue;
+        let parsed = hex.json_parse(text);
+        if (typeof(parsed) != "list") continue;
+        for (each in parsed) {
+            if (each?.model == null) continue;
+            found.push({ value: each.model, label: each.title ?? each.model });
+        }
+        return found;
+    }
+    return found;
+}
+
+// The options with the models Hex said in place of the default alone, the first of them being what "default" means
+func options_now() {
+    let choices = [{ value: "", label: "Default model" }];
+    for (each in listed) choices.push(each);
+    let now = [{ id: "model", title: "Model", icon: "sparkle", choices: choices }];
+    for (each in options) if (each.id != "model") now.push(each);
+    return now;
+}
+
+// Tells the harness who Local is and how to run it, again when the models change
+func say_who(hex) {
+    hex.agent({
+        id: "local",
+        name: "Local",
+        // A green of its own, the deeper on a light theme
+        colour: "#5BB974",
+        colour_light: "#2F8F4E",
+        clients: ["hex-local"],
+        budget: 6000,
+        instructions: instructions,
+        run: {
+            program: hex.executable,
+            icon: "cpu",
+            install: "Hex starts itself for this, nothing to install. Set up a local model first: llama.cpp: Set Up… or pick one in Settings → AI.",
+            stdin: true,
+            options: options_now(),
+            arguments: (prompt, chat) => arguments_for(hex, chat),
+            message: (text, chat) => message_of(text),
+            // Stop ends its turn; Hex --local-agent leaves, the conversation kept to go on from when asked again
+            stop: chat => stop_of(chat),
+            on_event: (chat, event) => heard(chat, event)
+        }
+    });
+}
+
+// A turn's message as a line of Hex --local-agent's stdin
+func message_of(text) {
+    return { type: "message", text: text };
+}
+
+func stop_of(chat) {
+    return { type: "stop" };
+}
+
+// An option of the chat's when it was started with one, the default otherwise
+func option(chat, id, fallback) {
+    let picked = chat.option(id);
+    return picked == null ? fallback : picked;
+}
+
+// What Hex is run with for a run of turns: the folder, the chat, the file with the chat's picks (written afresh each run)
+// and the session to go on from
+func arguments_for(hex, chat) {
+    let folders = hex.workspace();
+    let file = hex.temp + "/local-agent-" + chat.id + ".json";
+    hex.json_set(file, ["model"], option(chat, "model", ""));
+    hex.json_set(file, ["approvals"], option(chat, "approvals", "edits"));
+    hex.json_set(file, ["think"], option(chat, "think", "model"));
+    hex.json_set(file, ["profile"], option(chat, "profile", "write"));
+    let arguments = ["--local-agent"];
+    if (len(folders) > 0) {
+        arguments.push("--folder");
+        arguments.push(folders[0]);
+    }
+    arguments.push("--agent-chat");
+    arguments.push("" + chat.id);
+    arguments.push("--options");
+    arguments.push(file);
+    let session = chat.session();
+    if (session != null) {
+        arguments.push("--resume");
+        arguments.push(session);
+    }
+    return arguments;
+}
+
+// A line of Hex --local-agent's stdout, what it says on the panel's rows
+func heard(chat, event) {
+    let kind = event.type;
+    // Streamed pieces: true appends to the row before when it is the same kind
+    if (kind == "text") chat.text(event.text ?? "", true);
+    else if (kind == "thinking") chat.thinking(event.text ?? "", true);
+    else if (kind == "tool") chat.tool(event.id, event.name, event.input ?? {});
+    else if (kind == "tool_done") chat.tool_done(event.id, !(event.error ?? false), event.output ?? "");
+    else if (kind == "usage") chat.usage({ input: event.prompt ?? 0, output: event.output ?? 0, context: event.context ?? 0, context_limit: event.window ?? 0 });
+    else if (kind == "session") chat.session(event.id);
+    else if (kind == "note") chat.note(event.text ?? "");
+    else if (kind == "compacted") chat.text(event.text ?? "Context compacted", false);
+    else if (kind == "error") chat.error(event.text ?? "");
+    else if (kind == "done") chat.done();
+    else if (kind == "approval") asked_leave(chat, event);
+}
+
+// A tool asked leave for, answered on its stdin. A Hex with no cards to ask on lets it through
+func asked_leave(chat, event) {
+    if (chat.approval == null) {
+        leave_given(chat, event.id, true);
+        return;
+    }
+    let detail = text_of(event.input);
+    chat.approval(event.text ?? ((event.tool ?? "tool") + " wants to run"), detail, allowed => leave_given(chat, event.id, allowed));
+}
+
+func leave_given(chat, id, allowed) {
+    chat.write({ type: "approval", id: id, allow: allowed });
+}
+
+// What a tool is about to be given, the command or file or query that says most, else the arguments written out
+func text_of(input) {
+    if (input == null) return "";
+    if (typeof(input) == "text") return input;
+    let what = input.command ?? input.path ?? input.file_path ?? input.symbol ?? input.query ?? input.pattern;
+    if (typeof(what) == "text") return what;
+    return text(input);
+}

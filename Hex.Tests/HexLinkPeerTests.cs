@@ -292,7 +292,7 @@ public sealed class HexLinkPeerTests
         HexAgentChat mirror = await pair.PeerA.OpenChat(9);
         HexAgentEntry approval = mirror.FirstPending(HexAgentEntryKind.Approval)!;
         HexAgentEntry question = mirror.FirstPending(HexAgentEntryKind.Question)!;
-        Assert.Equal(["main", "development"], question.Choices);
+        Assert.Equal(["main", "development"], question.Choices!);
         Assert.Equal(1, question.Recommended);
         Assert.NotNull(question.Deadline);
 

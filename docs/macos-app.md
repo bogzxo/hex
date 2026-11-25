@@ -65,13 +65,23 @@ and arranges the result:
 Hex.app/Contents/Info.plist                 made from scripts/macos/Info.plist.in (version from Directory.Build.props)
 Hex.app/Contents/MacOS/Hex                  the program
 Hex.app/Contents/MacOS/*.dylib              SDL, MoltenVK, Skia, glfw, slang, HarfBuzz, oniguruma: the program loads these by name from its own folder
+Hex.app/Contents/MacOS/modules/*.dylib      optional NativeAOT module shared libraries (e.g. libHex.Notebooks.Render.dylib), loaded lazily via HexNativeModule
 Hex.app/Contents/Resources/Hex.icns         from Assets/hex_icon.png
 Hex.app/Contents/Resources/Assets, shaders  what Hex ships
 ```
 
+Optional NativeAOT module libraries live in `Contents/MacOS/modules/` rather than `Contents/Resources/` because macOS code signing and Apple Notarization require Mach-O binaries to reside inside `Contents/MacOS/` (or `Contents/Frameworks/`), never in `Resources/`. `make-app.sh` signs every `.dylib` in `Contents/MacOS/` and `Contents/MacOS/modules/` individually before signing `Contents/MacOS/Hex` and finally `Hex.app`, so `codesign --verify --deep --strict` and notarization succeed cleanly.
+
 In a bundle, `HexBundle.Inside` is true and `HexHost.ProgramFolder` is `Contents/Resources`: Hex reads what it ships from there
 and writes nothing there (a signed bundle that changes fails `codesign --verify` and macOS then calls it damaged). The
 rest of the engine already knew the layout (`PlatformPaths.Program`).
+
+## Native macOS integration
+
+* **Native Finder panels (`NSOpenPanel` / `NSSavePanel`)**: Opening files, choosing folders, and saving files use macOS's native Finder panels via `IPlatformDialogs` (`MacDialogs`) and `HexDialogs` when `dialogs.native` is enabled (macOS default on), with `UTType` extension filters and fallback to the in-app `UIFileBrowser`.
+* **Native IME composition & Emoji picker (`⌃⌘Space`)**: `SdlTextEditing` captures `SDL_TEXTEDITING`, `SDL_TEXTEDITING_EXT`, and full UTF-8 `SDL_TEXTINPUT` commits (delivering multi-code-unit emoji and CJK/dead-key compositions intact without UTF-16 surrogate splitting) and positions the macOS candidate window at the caret via `SDL_SetTextInputRect`.
+* **macOS system monospace fonts**: `GlyphOutlines` supports TrueType collections (`.ttc`, e.g. `Menlo.ttc`) alongside `.ttf`/`.otf`, and `HexCodeEditing.Font` surfaces macOS system monospace fonts (`SF Mono`, `Menlo`, `Monaco`) in the code font picker.
+* **ProMotion 120 Hz & automatic Low Power Mode**: The display host queries `NSScreen.maximumFramesPerSecond` so ProMotion displays pace up to 120 Hz while 60 Hz external monitors cap cleanly at 60 Hz. `PlatformPower` / `DesktopPower` observes macOS Low Power Mode (`NSProcessInfoPowerStateDidChangeNotification`) and automatically throttles background/calm frame pacing to conserve battery while Low Power Mode is active.
 
 ### What Info.plist asks for
 

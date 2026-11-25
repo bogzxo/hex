@@ -9,6 +9,7 @@ internal sealed partial class DawnScene
     private const float BACKUP_EVERY = 2.0f;
 
     private HexBackups? backups;
+    private string? backupFolder;
     private float backupWait = BACKUP_EVERY;
 
     // What every document was the last time it was looked over (its layout as last noted, the version of its code), so
@@ -20,7 +21,7 @@ internal sealed partial class DawnScene
 
     // The self test keeps its backups apart, or a run of it would leave things to bring back for the next real start.
     // The data folder next to Hex.exe, or the user's state folder for a Hex that can't write where it is
-    private string BackupFolder => options.SelfTest
+    private string BackupFolder => backupFolder ??= options.SelfTest
         ? Path.Combine(Path.GetTempPath(), "Hex", "self test backups")
         : Path.Combine(Horizon.Core.Platform.PlatformPaths.State("Hex"), "backups");
 
@@ -32,8 +33,10 @@ internal sealed partial class DawnScene
             return;
         backupWait = BACKUP_EVERY;
 
-        foreach (var open in documents)
+        for (int i = 0; i < documents.Count; i++)
         {
+            HexDocument open = documents[i];
+
             // what the disk had for a file, opened to compare, isn't anybody's work
             if (open.Path is { } path && path.StartsWith(CompareFolder, PlatformPaths.Comparison))
                 continue;
@@ -50,8 +53,8 @@ internal sealed partial class DawnScene
             bool changed = open.IsText ? HasChanges(open) : open.Modified || open.CodeEdited;
             if (changed)
                 Backups.Keep(open.Path, open.Name, open.IsText || open.CodeEdited ? open.Editor.Text : open.GenerateCode());
-            else if (Backups.Has(open.Path, open.Name))
-                Backups.Drop(open.Path, open.Name);
+            else if (backups is not null && backups.Has(open.Path, open.Name))
+                backups.Drop(open.Path, open.Name);
         }
     }
 
@@ -62,14 +65,16 @@ internal sealed partial class DawnScene
     private void DropSavedBackup(HexDocument saved)
     {
         backupSeen.Remove(saved);
-        Backups.Drop(saved.Path, saved.Name);
+        if (backups is not null || Directory.Exists(BackupFolder))
+            Backups.Drop(saved.Path, saved.Name);
     }
 
     /// <summary>A document's backup let go of, it was closed and what it had was saved or thrown away.</summary>
     private void DropBackup(HexDocument closing)
     {
         backupSeen.Remove(closing);
-        Backups.Drop(closing.Path, closing.Name);
+        if (backups is not null || Directory.Exists(BackupFolder))
+            Backups.Drop(closing.Path, closing.Name);
     }
 
     /// <summary>
@@ -78,6 +83,9 @@ internal sealed partial class DawnScene
     /// </summary>
     private void RestoreBackups()
     {
+        if (backups is null && !Directory.Exists(BackupFolder))
+            return;
+
         List<HexBackups.Found> found = Backups.All();
         if (found.Count == 0)
             return;

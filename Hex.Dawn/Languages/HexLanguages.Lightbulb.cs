@@ -88,9 +88,14 @@ internal sealed partial class HexLanguages
 
         if (!Serves(of, "codeActionProvider", out LanguageServer server, out string path))
             return (-1, false);
+        AskLightbulb(server, path, line, editor.Document.LineAt(line).Length, key);
+        return (-1, false);
+    }
+
+    private void AskLightbulb(LanguageServer server, string path, int line, int length, LightbulbKey key)
+    {
         Keep(key, null);
         LightbulbAsks++;
-        int length = editor.Document.LineAt(line).Length;
         When(server.Actions(path, line, 0, line, length), [], actions =>
         {
             bool fixes = false, pick = false;
@@ -101,7 +106,6 @@ internal sealed partial class HexLanguages
             }
             Keep(key, (fixes || pick, pick));
         });
-        return (-1, false);
     }
 
     // An answer kept, the oldest let go of past the most kept

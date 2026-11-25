@@ -23,6 +23,9 @@ internal static class HexLinkErrors
     // A prediction this machine's model couldn't make, or doesn't share (data.status says how, in a word)
     public const int PREDICTION_FAILED = -32006;
 
+    // A chat completion this machine's model couldn't make, or doesn't serve (data.status says how, in a word)
+    public const int AI_FAILED = -32008;
+
     // The authority paused shared editing for a file it holds. Peers can still edit their local file.
     public const int DOCUMENT_HELD = -32007;
 
@@ -43,7 +46,7 @@ internal sealed class HexLinkException(int code, string message, JsonNode? detai
 
     /// <summary>A right the asker hasn't got, which its data names so the other side can say what's missing.</summary>
     public static HexLinkException NotAllowed(string needs, string? why = null) =>
-        new(HexLinkErrors.NOT_ALLOWED, why ?? $"This device may not do that here, it needs {needs}.", new JsonObject { ["needs"] = needs });
+        new(HexLinkErrors.NOT_ALLOWED, why ?? $"This device may not do that here, it needs \"{HexLinkData.Readable(needs)}\".", new JsonObject { ["needs"] = needs });
 
     public static HexLinkException Invalid(string why) => new(HexLinkErrors.INVALID_PARAMS, why);
 
@@ -234,10 +237,18 @@ internal sealed partial class HexLinkSession : IDisposable
     }
 
     private static bool IsLegacyStreamNotice(string method) =>
-        method is "git/chunk" or "git/done" or "predict/chunk" or "predict/done";
+        method is "git/chunk" or "git/done" or "predict/chunk" or "predict/done" or "ai/chunk" or "ai/done";
+
+    /// <summary>The notice a device sends when its person cut the link by hand: the other end doesn't dial it again until it connects.</summary>
+    public const string BYE = "link/bye";
+
+    private int byeHeard;
+
+    /// <summary>Whether the other end said, before it closed, that its person cut this link and it is not to be dialled again.</summary>
+    public bool PeerSaidBye => Volatile.Read(ref byeHeard) != 0;
 
     private static bool IsControl(string method) =>
-        method is "link/ping" or "link/rights" or "predict/cancel" or "git/cancel" or "link/bulk/open" or "link/bulk/complete";
+        method is "link/ping" or BYE or "link/rights" or "predict/cancel" or "ai/cancel" or "git/cancel" or "link/bulk/open" or "link/bulk/complete";
 
     /// <summary>Closes the link, saying why. The asks still waiting fail, <see cref="Closed"/> is called once.</summary>
     public void Close(string why)
@@ -337,6 +348,13 @@ internal sealed partial class HexLinkSession : IDisposable
             }
 
             JsonObject parameters = message["params"] as JsonObject ?? [];
+            if (id is null && method == BYE)
+            {
+                // Read here, not in the queue: the close that follows it may stop the queue before it is taken
+                Volatile.Write(ref byeHeard, 1);
+                return;
+            }
+
             if (id is null)
             {
                 await ReceiveNotice(method, parameters, line.Length);

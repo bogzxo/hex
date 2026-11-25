@@ -80,21 +80,134 @@ internal sealed partial class HexCodeIndex
         }
     }
 
-    /// <summary>Somebody starts watching, the folders looked at every couple of seconds from now on until they stop.</summary>
+    // How long a burst of file events is let settle before the one look that answers it
+    private const int SETTLE_MS = 300;
+
+    // How often the watchers are checked on while nothing happens: a folder added to the workspace is watched, and a
+    // watcher that overflowed or failed has the folders looked at in full, the only time they're walked unasked
+    private const int FALLBACK_MS = 3 * 60 * 1000;
+
+    private readonly Lock watchLock = new();
+    private readonly List<FileSystemWatcher> watchers_ = [];
+    private string[] watchedRoots = [];
+    private Timer? settle;
+    private int dirty;
+    private int watcherFailed;
+
+    /// <summary>Somebody starts watching, the folders' own file events telling when to look until they stop.</summary>
     public void Watch()
     {
-        if (Interlocked.Increment(ref watchers) == 1)
-            watching = new Timer(_ => { try { Look(); } catch (Exception) { } }, null, StaleAfter, StaleAfter);
+        if (Interlocked.Increment(ref watchers) != 1)
+            return;
+
+        lock (watchLock)
+        {
+            settle = new Timer(_ => Settled(), null, Timeout.Infinite, Timeout.Infinite);
+            watching = new Timer(_ => Fallback(), null, FALLBACK_MS, FALLBACK_MS);
+            Rewatch();
+        }
     }
 
-    /// <summary>Somebody stops watching, the looking stopped once nobody is.</summary>
+    /// <summary>Somebody stops watching, the watching stopped once nobody is.</summary>
     public void Unwatch()
     {
         if (Interlocked.Decrement(ref watchers) <= 0)
         {
             watchers = 0;
-            watching?.Dispose();
-            watching = null;
+            lock (watchLock)
+            {
+                watching?.Dispose();
+                watching = null;
+                settle?.Dispose();
+                settle = null;
+                foreach (FileSystemWatcher watcher in watchers_)
+                    watcher.Dispose();
+                watchers_.Clear();
+                watchedRoots = [];
+            }
         }
+    }
+
+    // A watcher for each folder of the workspace now, those of before let go. Under watchLock
+    private void Rewatch()
+    {
+        string[] now;
+        try { now = [.. roots().Select(root => Path.GetFullPath(root).TrimEnd('\\', '/'))]; }
+        catch (Exception) { return; }
+
+        foreach (FileSystemWatcher watcher in watchers_)
+            watcher.Dispose();
+        watchers_.Clear();
+        watchedRoots = now;
+        Volatile.Write(ref watcherFailed, 0);
+        foreach (string root in now)
+        {
+            if (!Directory.Exists(root))
+                continue;
+            try
+            {
+                var watcher = new FileSystemWatcher(root)
+                {
+                    IncludeSubdirectories = true,
+                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite | NotifyFilters.Size,
+                    InternalBufferSize = 64 * 1024,
+                };
+                watcher.Changed += Event;
+                watcher.Created += Event;
+                watcher.Deleted += Event;
+                watcher.Renamed += Event;
+                watcher.Error += (_, _) => { Volatile.Write(ref watcherFailed, 1); Arm(); };
+                watcher.EnableRaisingEvents = true;
+                watchers_.Add(watcher);
+            }
+            catch (Exception)
+            {
+                Volatile.Write(ref watcherFailed, 1);
+            }
+        }
+    }
+
+    // A file event, git's own churn left out, starts (or restarts) the settling that ends in one look
+    private void Event(object sender, FileSystemEventArgs e)
+    {
+        if (e.FullPath.Contains(@"\.git\", StringComparison.Ordinal) || e.FullPath.Contains("/.git/", StringComparison.Ordinal))
+            return;
+        Arm();
+    }
+
+    private void Arm()
+    {
+        Volatile.Write(ref dirty, 1);
+        try { settle?.Change(SETTLE_MS, Timeout.Infinite); } catch (ObjectDisposedException) { }
+    }
+
+    private void Settled()
+    {
+        if (Interlocked.Exchange(ref dirty, 0) == 0)
+            return;
+        try { Look(force: true); } catch (Exception) { }
+    }
+
+    // The slow check: folders added to or taken out of the workspace are watched or let go, and after an error the walk
+    // is made in full
+    private void Fallback()
+    {
+        try
+        {
+            bool failed = Volatile.Read(ref watcherFailed) == 1;
+            string[] now = [.. roots().Select(root => Path.GetFullPath(root).TrimEnd('\\', '/'))];
+            bool moved = !now.SequenceEqual(watchedRoots, StringComparer.OrdinalIgnoreCase);
+            if (moved || failed)
+            {
+                lock (watchLock)
+                {
+                    if (watching is not null)
+                        Rewatch();
+                }
+
+                Look(force: true);
+            }
+        }
+        catch (Exception) { }
     }
 }

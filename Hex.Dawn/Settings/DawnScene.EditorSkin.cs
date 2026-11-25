@@ -36,8 +36,11 @@ internal sealed partial class DawnScene
         settings.EditorSkin = skin?.Name ?? TOOL_SKIN_NAME;
         settings.EditorTheme = theme ?? skin?.UsualTheme ?? string.Empty;
 
+        // Following the system, the theme shown is the system's mode of the one picked, the settings keeping the pick
+        string? drawn = ThemeShown(skin?.Name ?? TOOL_SKIN_NAME, settings.EditorTheme) is { Length: > 0 } followed && followed != settings.EditorTheme && skin?.Has(followed) == true ? followed : theme;
+
         // Noon on screen wears the theme's Noon accent where the skin has one, the settings keeping Dawn's
-        string? shown = Face == Hex.Shell.HexFace.Noon && NoonThemeOf(skin, settings.EditorTheme) is { } noon ? noon : theme;
+        string? shown = Face == Hex.Shell.HexFace.Noon && drawn is not null && NoonThemeOf(skin, drawn) is { } noon ? noon : drawn;
         if (skin is null)
             compositor.SetSkin(TOOL_SKIN_DIRECTORY, TOOL_SKIN, shown);
         else
@@ -65,7 +68,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private void UseFaceTheme()
     {
-        if (NoonThemeOf(UISkins.Find(settings.EditorSkin), settings.EditorTheme) is not null)
+        if (NoonThemeOf(UISkins.Find(settings.EditorSkin), ThemeShown(settings.EditorSkin, settings.EditorTheme)) is not null)
             UseEditorSkin(settings.EditorSkin, settings.EditorTheme, save: false);
     }
 

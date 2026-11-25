@@ -4,7 +4,7 @@ internal sealed partial class DawnScene
 {
     private HexSettings? zoomSettingsPending;
     private float zoomSettingsWait;
-    private const float ZOOM_SAVE_DELAY = 0.5f;
+    private const float ZOOM_SAVE_DELAY = 0.3f;
 
     private void QueueZoomSettings()
     {
@@ -38,20 +38,73 @@ internal sealed partial class DawnScene
     {
         if (agentFolderPending && (agentFolderWait -= dt) <= 0)
             FlushAgentFolder();
-        if (zoomSettingsPending is not null && (zoomSettingsWait -= dt) <= 0)
-            FlushZoomSettings();
+        if (zoomSettingsPending is not null)
+        {
+            // Counted down by frames, and the engine may be asleep while nothing else moves.
+            // Hold off composing/reading settings.hor while the pointer is held down on a slider drag.
+            Horizon.Engine.GameEngine.Instance?.WindowManager.RequestFrames();
+            if (compositor?.Pointer.Down == true)
+                zoomSettingsWait = MathF.Max(zoomSettingsWait, 0.05f);
+            else if ((zoomSettingsWait -= dt) <= 0)
+                WriteSettings(report: true, background: true);
+        }
+
+        // A write on the pool is over: what it couldn't do is said here, on the editor's thread
+        if (settingsWriteDone && Volatile.Read(ref settingsWritesOpen) == 0)
+        {
+            settingsWriteDone = false;
+            if (Interlocked.Exchange(ref settingsWriteProblem, null) is { } problem)
+                Say(problem, error: true);
+            if (settingsWatched is { } watched && settingsProblems.ContainsKey(watched))
+                CheckSettingsFiles();
+        }
     }
 
-    private void FlushZoomSettings(bool report = true)
+    // The settings queued (see QueueZoomSettings) are written here. The text is made on the editor's thread, which owns the
+    // settings, and the disk (a flush to it and a replace of the file, tens of milliseconds on some machines) is waited for on
+    // the pool; a flush from a closing or a resting editor waits for it instead
+    private Task settingsWrites = Task.CompletedTask;
+    private int settingsWritesOpen;
+    private string? settingsWriteProblem;
+    private volatile bool settingsWriteDone;
+
+    // Whether settings are on their way to the file, so a change of the file seen now is Hex's own and not somebody's
+    private bool SettingsBeingKept => zoomSettingsPending is not null || Volatile.Read(ref settingsWritesOpen) > 0;
+
+    private void FlushZoomSettings(bool report = true) => WriteSettings(report, background: false);
+
+    private void WriteSettings(bool report, bool background)
     {
         if (zoomSettingsPending is not { } pending) return;
         zoomSettingsPending = null;
-        if (pending.Save() is { } problem)
+        if (pending.Compose() is not { } text) return;
+
+        // What the file will say, so the watch doesn't read Hex's own write back in
+        if (ReferenceEquals(pending, settings) && settingsWatched is not null)
+            settingsKnown = text;
+
+        if (background)
+        {
+            Interlocked.Increment(ref settingsWritesOpen);
+            settingsWrites = settingsWrites.ContinueWith(_ =>
+            {
+                if (pending.Write(text) is { } failed)
+                    Interlocked.Exchange(ref settingsWriteProblem, failed);
+                settingsWriteDone = true;
+                Interlocked.Decrement(ref settingsWritesOpen);
+                Horizon.Engine.GameEngine.Instance?.WindowManager.Wake();
+            }, TaskScheduler.Default);
+            return;
+        }
+
+        settingsWrites.Wait();
+        if (pending.Write(text) is { } problem)
         {
             if (report) Say(problem, error: true);
             else HexLogLine(problem);
         }
-        else if (ReferenceEquals(pending, settings)) KnowSettingsFile();
+        else if (ReferenceEquals(pending, settings) && settingsWatched is { } watched && settingsProblems.ContainsKey(watched))
+            CheckSettingsFiles();
     }
 
     protected override void DisposeOther()
@@ -68,6 +121,8 @@ internal sealed partial class DawnScene
         extensions?.StopWatching();
         StopRemote();
         _ = linkPortMapping?.SetPort(0);
+        // The llama-server Hex started goes with it, its memory and the card let go
+        ShutDownLlamaServer();
         base.DisposeOther();
     }
 }

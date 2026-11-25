@@ -35,6 +35,38 @@ public sealed class HexLinkHoldSyncTests
     private const string Shared = "incoming from the other device\n";
 
     [Fact]
+    public void Shared_folders_are_the_synced_or_holding_ones_never_just_the_first()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"hex-shared-{Guid.NewGuid():N}");
+        try
+        {
+            var first = new HexLinkFolder("FreshImageDemo", Directory.CreateDirectory(Path.Combine(root, "first")).FullName);
+            var second = new HexLinkFolder("Shared", Directory.CreateDirectory(Path.Combine(root, "second")).FullName);
+            var workspace = new HexLinkWorkspace("Test", [first, second], []);
+            var store = new HexLinkHoldStore(second, Path.Combine(root, "sync"));
+
+            // Nothing synced or held: nothing is shared, the callers fall back to the first folder
+            Assert.Empty(Hex.Dawn.DawnScene.LinkSharedFolders(workspace, _ => null, []));
+            Assert.Equal("FreshImageDemo", Hex.Dawn.DawnScene.LinkDefaultSyncFolder(workspace, [], []));
+
+            // The second folder is synced: it is the shared one, and the sync's default
+            var synced = Hex.Dawn.DawnScene.LinkSharedFolders(workspace, _ => null, ["shared"]);
+            Assert.Equal("Shared", Assert.Single(synced).Name);
+            Assert.Equal("Shared", Hex.Dawn.DawnScene.LinkDefaultSyncFolder(workspace, ["Shared"], synced));
+            Assert.Equal("Shared", Hex.Dawn.DawnScene.LinkDefaultSyncFolder(workspace, [], synced));
+
+            // A folder with a held file is shared too, so hold list covers it
+            store.Hold("Shared/a.txt", Bytes("x"), HexLinkHoldBaseSource.Agreed);
+            var held = Hex.Dawn.DawnScene.LinkSharedFolders(workspace, folder => folder.Name == "Shared" ? store : null, []);
+            Assert.Equal("Shared", Assert.Single(held).Name);
+
+            // Both: both are listed
+            Assert.Equal(2, Hex.Dawn.DawnScene.LinkSharedFolders(workspace, folder => folder.Name == "Shared" ? store : null, ["FreshImageDemo"]).Count);
+        }
+        finally { try { Directory.Delete(root, true); } catch (IOException) { } }
+    }
+
+    [Fact]
     public async Task Remote_hex_read_uses_shared_text_and_symbols_for_a_held_file()
     {
         using var pair = await LinkedPair.Up(Edit, Edit);
@@ -243,6 +275,32 @@ public sealed class HexLinkHoldSyncTests
         Assert.True(holds.Get(Wire)!.IncomingDeleted);
         Assert.Equal(Private, File.ReadAllText(Local(pair.A)));
         Assert.Empty(sync.Conflicts);
+    }
+
+    [Fact]
+    public async Task The_peer_of_a_holder_knows_the_file_is_held_until_it_is_released()
+    {
+        using var pair = await LinkedPair.Up(Edit, Edit);
+        Both(pair, Baseline);
+        HexLinkHoldStore holds = EnableHolds(pair.A);
+        using var sync = Sync(pair.B, pair.PeerA);
+        await Ready(sync);
+        Assert.Empty(sync.RemoteHeldPaths);
+        Assert.False(sync.IsRemoteHeld(Wire));
+        int version = sync.RemoteHoldsVersion;
+
+        holds.Hold(Wire, Bytes(Baseline), HexLinkHoldBaseSource.Agreed);
+        await Flush(sync);
+        await Until(() => sync.IsRemoteHeld(Wire), sync);
+        Assert.Equal(Wire, Assert.Single(sync.RemoteHeldPaths));
+        Assert.True(sync.RemoteHoldsVersion > version);
+        version = sync.RemoteHoldsVersion;
+
+        holds.Release(Wire);
+        await Flush(sync);
+        await Until(() => !sync.IsRemoteHeld(Wire), sync);
+        Assert.Empty(sync.RemoteHeldPaths);
+        Assert.True(sync.RemoteHoldsVersion > version);
     }
 
     [Fact]

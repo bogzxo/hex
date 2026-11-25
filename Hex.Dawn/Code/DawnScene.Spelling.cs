@@ -71,7 +71,11 @@ internal sealed partial class DawnScene
             return;
         }
 
-        string? markdown = mode == SpellingMode.Markdown ? text.Text : null;
+        StartSpellingCheck(editor, prior, first, last, mode == SpellingMode.Markdown ? text.Text : null);
+    }
+
+    private void StartSpellingCheck(CodeEditor editor, SpellingTarget prior, int first, int last, string? markdown)
+    {
         SpellingLine[] snapshot = markdown is null ? SpellingLines(prior) : [];
         var work = new CancellationTokenSource();
         spellingWork = work;

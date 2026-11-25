@@ -14,7 +14,7 @@ internal sealed partial class DawnScene
     private const long LINK_ENDED_SHOWN_MS = 2500;
 
     // The switches of the dialog up, the line that says why it ended and when it closes by itself after that
-    private ToggleButton? linkPairView, linkPairSteer, linkPairEdit, linkPairPredict;
+    private ToggleButton? linkPairView, linkPairSteer, linkPairEdit, linkPairPredict, linkPairPorts, linkPairAi;
     private Label? linkPairEnded;
     private long linkPairCloseAt;
 
@@ -22,11 +22,18 @@ internal sealed partial class DawnScene
     internal static string LinkCodeGrouped(string code) => code.Length == 6 ? $"{code[..3]} {code[3..]}" : code;
 
     /// <summary>What's ticked in the pairing dialog, nothing when it isn't up. For the self test and the Pair button.</summary>
-    internal HexLinkRights LinkPairTicked =>
-        (linkPairView?.State == true ? HexLinkRights.View : HexLinkRights.None)
-        | (linkPairSteer?.State == true ? HexLinkRights.Steer : HexLinkRights.None)
-        | (linkPairEdit?.State == true ? HexLinkRights.Edit : HexLinkRights.None)
-        | (linkPairPredict?.State == true ? HexLinkRights.Predict : HexLinkRights.None);
+    internal HexLinkRights LinkPairTicked => LinkPairRights(
+        linkPairView?.State == true, linkPairSteer?.State == true, linkPairEdit?.State == true,
+        linkPairPredict?.State == true, linkPairPorts?.State == true, linkPairAi?.State == true);
+
+    /// <summary>The rights the pairing dialog's switches make, every one of them (view, steer, edit, completions, ports, AI models).</summary>
+    internal static HexLinkRights LinkPairRights(bool view, bool steer, bool edit, bool predict, bool ports, bool ai) =>
+        (view ? HexLinkRights.View : HexLinkRights.None)
+        | (steer ? HexLinkRights.Steer : HexLinkRights.None)
+        | (edit ? HexLinkRights.Edit : HexLinkRights.None)
+        | (predict ? HexLinkRights.Predict : HexLinkRights.None)
+        | (ports ? HexLinkRights.Ports : HexLinkRights.None)
+        | (ai ? HexLinkRights.Ai : HexLinkRights.None);
 
     /// <summary>A pairing asked about with the dialog, one up already for another pairing declined and closed first.</summary>
     private void ShowLinkPairing(LinkPairingAsk ask)
@@ -41,7 +48,7 @@ internal sealed partial class DawnScene
         linkDirty = true;
         linkPairCloseAt = 0;
 
-        string device = HexLinkNames.Clean(ask.Other.Name) ?? ask.Other.Fingerprint;
+        string device = LinkDeviceLabel(ask.Other);
         UIDialog dialog = UIDialog.Show(chrome, Said("link.pair_dialog_title", ("device", device)), string.Empty,
             new DialogChoice(Said("link.pair_go"), () =>
             {
@@ -67,32 +74,33 @@ internal sealed partial class DawnScene
         body.Size = new Vector2(wide, 0);
         body.Spacing = 7;
 
-        // Who it is, and where
-        body.Add(new Label
-        {
-            Text = Said(ask.Host ? "link.pair_who_host" : "link.pair_who_joiner", ("device", $"[b]{UIRichText.Literal(device)}[/b]"), ("address", UIRichText.Literal(ask.Address))),
-            Wrap = true, Size = new Vector2(wide, 0), Align = Origin.TopLeft, Anchor = Origin.Left
-        });
-        body.Add(new Label { Text = Said("link.pair_fingerprint", ("fingerprint", ask.Other.Fingerprint)), TextScale = LINK_SMALL, Dim = true, Align = Origin.Left, Anchor = Origin.Left, Pivot = Origin.Left });
-
+        LinkTakeBodyScale();
+        linkGrantChoicesOpen = false;
         if (ask.Invited)
             body.Add(LinkLine(Said("link.devices_invite_verified")));
         else
         {
             var codeRow = body.Add(new Panel { Size = new Vector2(wide, 64), Anchor = Origin.Left, Color = (Skin?.Palette.Field ?? new Vector4(0, 0, 0, 0.3f)) with { W = 0.5f }, Radius = 8, Outline = Skin?.BorderColor ?? Vector4.Zero });
             codeRow.Add(new Label { Text = $"[b]{LinkCodeGrouped(ask.Code)}[/b]", TextScale = LINK_CODE_SCALE, Anchor = Origin.Center, Pivot = Origin.Center, Tooltip = Said("link.pair_code_tip") });
-            body.Add(new Label { Text = Said("link.pair_check"), Wrap = true, Size = new Vector2(wide, 0), Align = Origin.TopLeft, Anchor = Origin.Left });
+            body.Add(new Label { Text = UIRichText.Literal(Said("link.pair_check_digits", ("device", device))), TextScale = LINK_TEXT, Wrap = true, Size = new Vector2(wide, 0), Align = Origin.TopLeft, Anchor = Origin.Left });
         }
 
-        body.Add(new Label { Text = $"[b]{UIRichText.Literal(Said("link.pair_grant", ("device", device)))}[/b]", Wrap = true, Size = new Vector2(wide, 0), Align = Origin.TopLeft, Anchor = Origin.Left });
+        // What it may do in one sentence, the choices behind Change; where it is and its id behind Details
         ToggleButton[] toggles = LinkGrantControls(body, ask.Preset ?? HexLinkPreset.Custom, ask.InitialRights,
             (_, rights) => dialog.Buttons[0].Enabled = ask.CanApprove(rights) && !ask.IsDecided,
             showBoth: true, hostOffer: ask.Host ? null : ask.Terms?.HostGrants, allowNone: ask.CanApproveNone,
-            partnerName: device, requested: ask.Host ? ask.Terms?.HostRequests : null);
+            partnerName: device, requested: ask.Host ? ask.Terms?.HostRequests : null, collapse: true);
+        var details = body.Add(new StackPanel { Spacing = 2, Fill = UIFill.Horizontal, Visible = false });
+        details.Add(LinkLine(Said("link.pair_fingerprint", ("fingerprint", ask.Other.Fingerprint))));
+        details.Add(LinkLine(ask.Address));
+        Button detailsButton = LinkActionRow(body).Add(LinkButton(Said("link.devices_details"), string.Empty, () => { }));
+        detailsButton.OnPressed = () => details.Visible = !details.Visible;
         linkPairView = toggles[0];
         linkPairSteer = toggles[1];
         linkPairEdit = toggles[2];
         linkPairPredict = toggles[3];
+        linkPairPorts = toggles[4];
+        linkPairAi = toggles[5];
         linkPairEnded = body.Add(new Label { Text = string.Empty, Wrap = true, Size = new Vector2(wide, 0), Align = Origin.TopLeft, Anchor = Origin.Left, Visible = false });
         dialog.Buttons[0].Enabled = ask.CanApprove(ask.InitialRights);
         dialog.Closed = () =>

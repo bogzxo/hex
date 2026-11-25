@@ -25,7 +25,8 @@ internal sealed partial class DawnScene
     partial void LinkDeviceRedial(string deviceId, ref LinkDeviceConnection? state)
     {
         if (LinkRedialState(deviceId) is { } reported)
-            state = new LinkDeviceConnection(reported.Status == HexLinkRedialStatus.Connecting, reported.RetryAtUtc, reported.LastFailure);
+            state = new LinkDeviceConnection(reported.Status == HexLinkRedialStatus.Connecting, reported.RetryAtUtc, reported.LastFailure,
+                Detail: reported.Detail, Route: reported.Route, Reconnecting: HexLinkRedialState.IsReconnecting(reported, LinkHeldOff(deviceId)));
     }
 
     partial void LinkDeviceIdentityRecovery(ref string? reason, ref string? label, ref Action? recovery)

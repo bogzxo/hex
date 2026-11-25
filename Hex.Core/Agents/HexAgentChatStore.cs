@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Hex.Core;
@@ -102,11 +103,198 @@ internal static class HexAgentChatStore
             State = Enum.TryParse(entry["state"]?.GetValue<string>(), out HexAgentToolState state) ? state : HexAgentToolState.Done,
             Progress = entry["progress"]?.GetValue<string>(),
             Steps = entry["steps"]?.GetValue<int>() ?? 0,
-            Checkpoints = entry["checkpoints"] is JsonArray taken
-                ? [.. taken.OfType<JsonObject>().Select(each => (Top: each["top"]?.GetValue<string>() ?? string.Empty, Tree: each["tree"]?.GetValue<string>() ?? string.Empty))
-                    .Where(each => each.Top.Length > 0 && each.Tree.Length > 0)]
-                : null
+            Checkpoints = ReadCheckpoints(entry["checkpoints"] as JsonArray)
         };
+    }
+
+    private static List<(string Top, string Tree)>? ReadCheckpoints(JsonArray? taken)
+    {
+        if (taken is not { Count: > 0 })
+            return null;
+
+        List<(string Top, string Tree)>? list = null;
+        foreach (JsonNode? item in taken)
+        {
+            if (item is not JsonObject each)
+                continue;
+            string top = each["top"]?.GetValue<string>() ?? string.Empty;
+            string tree = each["tree"]?.GetValue<string>() ?? string.Empty;
+            if (top.Length > 0 && tree.Length > 0)
+                (list ??= new List<(string, string)>(taken.Count)).Add((top, tree));
+        }
+
+        return list;
+    }
+
+    /// <summary>Reads a saved chat directly from UTF-8 JSON on disk via JsonDocument to avoid intermediate string and JsonNode DOM allocations.</summary>
+    public static HexAgentChat? ReadFile(string path)
+    {
+        using FileStream stream = File.OpenRead(path);
+        using JsonDocument document = JsonDocument.Parse(stream);
+        return Read(document.RootElement);
+    }
+
+    /// <summary>A chat as it was written, not running. Null for something that isn't one.</summary>
+    public static HexAgentChat? Read(JsonElement said)
+    {
+        if (said.ValueKind != JsonValueKind.Object
+            || !TryGetInt32(said, "id", out int id)
+            || GetString(said, "agent") is not { } agent)
+            return null;
+
+        var chat = new HexAgentChat(id, agent)
+        {
+            Parent = TryGetInt32(said, "parent", out int parent) ? parent : null,
+            Depth = TryGetInt32(said, "depth", out int depth) ? depth : 0,
+            Name = GetString(said, "name"),
+            Session = GetString(said, "session"),
+            Model = GetString(said, "model"),
+            InputTokens = TryGetInt64(said, "input_tokens", out long inputTokens) ? inputTokens : 0,
+            OutputTokens = TryGetInt64(said, "output_tokens", out long outputTokens) ? outputTokens : 0,
+            Cost = TryGetDouble(said, "cost", out double cost) ? cost : 0,
+            ContextUsed = TryGetInt64(said, "context", out long contextUsed) ? contextUsed : 0,
+            ContextLimit = TryGetInt64(said, "context_limit", out long contextLimit) ? contextLimit : 0,
+            CacheRead = TryGetInt64(said, "cache_read", out long cacheRead) ? cacheRead : 0,
+            Stopped = TryGetBool(said, "stopped", out bool stopped) && stopped
+        };
+
+        if (said.TryGetProperty("link_starter", out JsonElement starterProp) && starterProp.ValueKind == JsonValueKind.Object)
+            chat.LinkStarter = HexLinkAgentStarter.Read(JsonNode.Parse(starterProp.GetRawText()) as JsonObject);
+        chat.LinkDevice = GetString(said, "link_device") is { Length: 64 } startedBy ? startedBy : chat.LinkStarter?.Device;
+
+        if (said.TryGetProperty("link_children", out JsonElement childrenProp) && childrenProp.ValueKind == JsonValueKind.Array)
+        {
+            int count = 0;
+            foreach (JsonElement child in childrenProp.EnumerateArray())
+            {
+                if (++count > 128)
+                    break;
+                if (child.ValueKind == JsonValueKind.Object
+                    && HexLinkAgentStarter.Read(JsonNode.Parse(child.GetRawText()) as JsonObject) is { } address)
+                    chat.LinkChildren.Add(new HexLinkAgentChild(address));
+            }
+        }
+
+        // Chats kept before there was settling were in the Finished group once read back, as they still are
+        chat.RestoreSettled(!TryGetBool(said, "settled", out bool settled) || settled);
+
+        if (GetString(said, "linkDraft") is { } savedDraft && Guid.TryParseExact(savedDraft, "N", out Guid draftId))
+            chat.LinkDraft = draftId;
+
+        if (said.TryGetProperty("options", out JsonElement optionsProp) && optionsProp.ValueKind == JsonValueKind.Object)
+        {
+            foreach (JsonProperty opt in optionsProp.EnumerateObject())
+            {
+                if (opt.Value.ValueKind == JsonValueKind.String && opt.Value.GetString() is { } chosen)
+                    chat.Options[opt.Name] = chosen;
+            }
+        }
+
+        List<HexAgentEntry> rows;
+        if (said.TryGetProperty("rows", out JsonElement rowsProp) && rowsProp.ValueKind == JsonValueKind.Array)
+        {
+            rows = new List<HexAgentEntry>(rowsProp.GetArrayLength());
+            foreach (JsonElement row in rowsProp.EnumerateArray())
+            {
+                if (EntryOf(row) is { } entry)
+                    rows.Add(entry);
+            }
+        }
+        else
+        {
+            rows = [];
+        }
+
+        // The same key, so the rows it sent to its file before are still its own, and how many of them there were
+        if (GetString(said, "key") is { Length: > 0 } fileKey)
+            chat.Key = fileKey;
+        if (said.TryGetProperty("plan", out JsonElement planProp) && planProp.ValueKind == JsonValueKind.Object
+            && JsonNode.Parse(planProp.GetRawText()) is JsonObject plan)
+            chat.SetPlan(HexAgentPlan.FromJson(plan));
+        chat.Restore(GetString(said, "title") ?? string.Empty, rows, TryGetInt32(said, "dropped", out int dropped) ? dropped : 0);
+        return chat;
+    }
+
+    private static HexAgentEntry? EntryOf(JsonElement entry)
+    {
+        if (entry.ValueKind != JsonValueKind.Object
+            || !Enum.TryParse(GetString(entry, "kind"), out HexAgentEntryKind kind))
+            return null;
+
+        long now = Environment.TickCount64;
+        long took = (long)((TryGetDouble(entry, "seconds", out double seconds) ? seconds : 0) * 1000);
+
+        List<(string Top, string Tree)>? checkpoints = null;
+        if (entry.TryGetProperty("checkpoints", out JsonElement takenProp) && takenProp.ValueKind == JsonValueKind.Array)
+        {
+            int len = takenProp.GetArrayLength();
+            if (len > 0)
+            {
+                foreach (JsonElement each in takenProp.EnumerateArray())
+                {
+                    if (each.ValueKind != JsonValueKind.Object)
+                        continue;
+                    string top = GetString(each, "top") ?? string.Empty;
+                    string tree = GetString(each, "tree") ?? string.Empty;
+                    if (top.Length > 0 && tree.Length > 0)
+                        (checkpoints ??= new List<(string, string)>(len)).Add((top, tree));
+                }
+            }
+        }
+
+        return new HexAgentEntry(kind, GetString(entry, "text") ?? string.Empty)
+        {
+            Started = now - took,
+            Ended = now,
+            AskedText = GetString(entry, "asked"),
+            ContextLocation = GetString(entry, "at"),
+            ToolId = GetString(entry, "tool_id"),
+            ToolName = GetString(entry, "tool"),
+            Input = GetString(entry, "input"),
+            Output = GetString(entry, "output"),
+            State = Enum.TryParse(GetString(entry, "state"), out HexAgentToolState state) ? state : HexAgentToolState.Done,
+            Progress = GetString(entry, "progress"),
+            Steps = TryGetInt32(entry, "steps", out int steps) ? steps : 0,
+            Checkpoints = checkpoints
+        };
+    }
+
+    private static string? GetString(JsonElement obj, string name) =>
+        obj.TryGetProperty(name, out JsonElement prop) && prop.ValueKind == JsonValueKind.String ? prop.GetString() : null;
+
+    private static bool TryGetInt32(JsonElement obj, string name, out int value)
+    {
+        if (obj.TryGetProperty(name, out JsonElement prop) && prop.ValueKind == JsonValueKind.Number && prop.TryGetInt32(out value))
+            return true;
+        value = 0;
+        return false;
+    }
+
+    private static bool TryGetInt64(JsonElement obj, string name, out long value)
+    {
+        if (obj.TryGetProperty(name, out JsonElement prop) && prop.ValueKind == JsonValueKind.Number && prop.TryGetInt64(out value))
+            return true;
+        value = 0;
+        return false;
+    }
+
+    private static bool TryGetDouble(JsonElement obj, string name, out double value)
+    {
+        if (obj.TryGetProperty(name, out JsonElement prop) && prop.ValueKind == JsonValueKind.Number && prop.TryGetDouble(out value))
+            return true;
+        value = 0;
+        return false;
+    }
+
+    private static bool TryGetBool(JsonElement obj, string name, out bool value)
+    {
+        if (obj.TryGetProperty(name, out JsonElement prop))
+        {
+            if (prop.ValueKind == JsonValueKind.True) { value = true; return true; }
+            if (prop.ValueKind == JsonValueKind.False) { value = false; return true; }
+        }
+        value = false;
+        return false;
     }
 
     /// <summary>A chat as it was written, not running. Null for something that isn't one.</summary>
@@ -150,11 +338,15 @@ internal static class HexAgentChatStore
             }
         }
 
-        var rows = new List<HexAgentEntry>();
-        foreach (JsonNode? row in said["rows"] as JsonArray ?? [])
+        JsonArray? rowArray = said["rows"] as JsonArray;
+        var rows = rowArray is { Count: > 0 } ? new List<HexAgentEntry>(rowArray.Count) : [];
+        if (rowArray is not null)
         {
-            if (EntryOf(row) is { } entry)
-                rows.Add(entry);
+            foreach (JsonNode? row in rowArray)
+            {
+                if (EntryOf(row) is { } entry)
+                    rows.Add(entry);
+            }
         }
 
         // The same key, so the rows it sent to its file before are still its own, and how many of them there were

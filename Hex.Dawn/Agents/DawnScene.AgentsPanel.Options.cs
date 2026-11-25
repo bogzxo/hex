@@ -118,6 +118,15 @@ internal sealed partial class DawnScene
     /// starts (Claude Code's handshake) and the menu made with the old ones kept them. Read the way OptionsOf reads them,
     /// nothing made.
     /// </summary>
+    private static long MixRuntimeValue(long key, IRuntimeValue? value) => value switch
+    {
+        null or NullValue => key * 1_000_003 + 7,
+        StringValue s => key * 1_000_003 + string.GetHashCode(s.Value, StringComparison.Ordinal),
+        BooleanValue b => key * 1_000_003 + (b.Value ? 13 : 17),
+        NumberValue n => key * 1_000_003 + n.Value.GetHashCode(),
+        _ => key * 1_000_003 + string.GetHashCode(Values.Text(value), StringComparison.Ordinal)
+    };
+
     private long AgentOptionsKey(string? agent, HexExtension? extension, bool compact)
     {
         static long Mix(long key, string? text) => key * 1_000_003 + (text is null ? 7 : string.GetHashCode(text, StringComparison.Ordinal));
@@ -129,16 +138,22 @@ internal sealed partial class DawnScene
         if (agent is null || !extensions.AgentRuns.TryGetValue(agent, out var run) || !run.Run.Properties.TryGetValue("options", out IRuntimeValue? listed) || listed is not ListValue list)
             return key;
 
-        foreach (IRuntimeValue item in list.Items)
+        for (int i = 0; i < list.Items.Count; i++)
         {
-            if (item is not ObjectValue option || HexExtensions.Text(option, "id") is not { } id || !option.Properties.TryGetValue("choices", out IRuntimeValue? choices) || choices is not ListValue each)
+            if (list.Items[i] is not ObjectValue option || HexExtensions.Text(option, "id") is not { } id || !option.Properties.TryGetValue("choices", out IRuntimeValue? choices) || choices is not ListValue each)
                 continue;
-            key = Mix(Mix(key, id), extension is null ? string.Empty : AgentOptionValue(extension, id));
-            foreach (IRuntimeValue choice in each.Items)
+            key = Mix(key, id);
+            if (extension is null)
+                key = Mix(key, string.Empty);
+            else if (agentChat?.Options.TryGetValue(id, out string? overrideVal) == true)
+                key = Mix(key, overrideVal);
+            else
+                key = MixRuntimeValue(key, extensions.SettingOf(extension, id));
+            for (int j = 0; j < each.Items.Count; j++)
             {
-                if (choice is not ObjectValue made)
+                if (each.Items[j] is not ObjectValue made)
                     continue;
-                key = Mix(Mix(key, Values.Text(made.Properties.GetValueOrDefault("value") ?? Values.Null)), HexExtensions.Text(made, "label"));
+                key = Mix(MixRuntimeValue(key, made.Properties.GetValueOrDefault("value")), HexExtensions.Text(made, "label"));
             }
         }
 
@@ -168,6 +183,12 @@ internal sealed partial class DawnScene
         if (agentsOptionsDrawn.Length > 0 && said == agentsOptionsKey) return;
         agentsOptionsDrawn = "drawn";
         agentsOptionsKey = said;
+        RebuildAgentOptions(agent, extension, compact);
+    }
+
+    // Slow path extracted so Roslyn never hoists closure display classes onto the idle fast path
+    private void RebuildAgentOptions(string? agent, HexExtension? extension, bool compact)
+    {
         List<AgentOption> options = OptionsOf(agent);
         string file = document?.Path is { } path && document.IsText ? Path.GetFileName(path) : string.Empty;
         Empty(agentsOptions);
@@ -332,8 +353,8 @@ internal sealed partial class DawnScene
     /// </summary>
     private string WithPlaces(string text)
     {
-        // Words with nothing a place could start with are as they are, nothing split, matched or joined for them
-        if (text.AsSpan().IndexOfAny(PlaceMarks) < 0)
+        // Every path:line replacement requires a colon followed by a line number digit; skip splitting and regex work otherwise.
+        if (!HasColonDigit(text))
             return text;
 
         var lines = text.Split('\n');
@@ -372,6 +393,23 @@ internal sealed partial class DawnScene
 
     // What every match of PlaceInText has in it, a link's bracket, a backtick or the colon before a line
     private static readonly System.Buffers.SearchValues<char> PlaceMarks = System.Buffers.SearchValues.Create("[`:");
+
+    /// <summary>Returns true if <paramref name="text"/> contains a colon immediately followed by an ASCII digit.</summary>
+    internal static bool HasColonDigit(ReadOnlySpan<char> text)
+    {
+        int offset = 0;
+        while (offset < text.Length - 1)
+        {
+            int rel = text[offset..].IndexOf(':');
+            if (rel < 0)
+                return false;
+            int next = offset + rel + 1;
+            if (next < text.Length && char.IsAsciiDigit(text[next]))
+                return true;
+            offset = next;
+        }
+        return false;
+    }
 
     /// <summary>The last thing asked of the chat on screen asked again, as it was asked.</summary>
     private void RetryAgent()

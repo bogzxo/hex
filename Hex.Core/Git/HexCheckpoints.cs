@@ -16,13 +16,33 @@ internal static class HexCheckpoints
     /// <summary>The tree of a folder's repository as it is now, null when it isn't one or git couldn't.</summary>
     public static string? Take(string folder)
     {
-        GitResult inside = GitProcess.Run(folder, ["rev-parse", "--show-toplevel", "--git-path", "index"]);
-        if (!inside.Ok)
+        var (top, indexPath) = GitProcess.Run(folder, ["rev-parse", "--show-toplevel", "--git-path", "index"], (exit, output, _) =>
+        {
+            if (exit != 0)
+                return ((string?)null, (string?)null);
+            string? first = null, second = null;
+            ReadOnlySpan<char> remaining = output;
+            while (!remaining.IsEmpty)
+            {
+                int nl = remaining.IndexOf('\n');
+                ReadOnlySpan<char> line = nl < 0 ? remaining : remaining[..nl];
+                remaining = nl < 0 ? default : remaining[(nl + 1)..];
+                line = line.Trim();
+                if (line.IsEmpty)
+                    continue;
+                if (first is null)
+                    first = line.ToString();
+                else
+                {
+                    second = line.ToString();
+                    break;
+                }
+            }
+            return (first, second);
+        });
+        if (top is null || indexPath is null)
             return null;
-        string[] said = inside.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (said.Length < 2)
-            return null;
-        string top = said[0], index = Path.IsPathRooted(said[1]) ? said[1] : Path.Combine(folder, said[1]);
+        string index = Path.IsPathRooted(indexPath) ? indexPath : Path.Combine(folder, indexPath);
 
         string copy = Path.Combine(Path.GetTempPath(), $"hex-checkpoint-{Guid.NewGuid():N}.index");
         try
@@ -32,15 +52,21 @@ internal static class HexCheckpoints
             var own = new Dictionary<string, string> { ["GIT_INDEX_FILE"] = copy };
             // A first add of a big working copy with untracked build output takes longer than git's usual patience, and
             // killed halfway the turn had no checkpoint at all
-            if (!GitProcess.Run(top, ["add", "-A", "--", "."], patience: TAKE_PATIENCE, environment: own).Ok)
+            if (!GitProcess.Run(top, ["add", "-A", "--", "."], static (exit, _, _) => exit == 0, patience: TAKE_PATIENCE, environment: own))
                 return null;
-            GitResult tree = GitProcess.Run(top, ["write-tree"], patience: TAKE_PATIENCE, environment: own);
-            if (!tree.Ok || tree.Output.Trim() is not { Length: 40 or 64 } hash)
+            string? hash = GitProcess.Run(top, ["write-tree"], static (exit, output, _) =>
+            {
+                if (exit != 0)
+                    return null;
+                ReadOnlySpan<char> trimmed = output.Trim();
+                return trimmed.Length is 40 or 64 ? trimmed.ToString() : null;
+            }, patience: TAKE_PATIENCE, environment: own);
+            if (hash is null)
                 return null;
 
             // Pinned by a ref of its own, nothing else points at the tree and git's tidying would let it go after a couple
             // of weeks, leaving a chat read back then with nothing to put back from
-            GitProcess.Run(top, ["update-ref", PIN + hash, hash]);
+            GitProcess.Run(top, ["update-ref", PIN + hash, hash], static (exit, _, _) => exit == 0);
             return hash;
         }
         catch (Exception)
@@ -140,31 +166,42 @@ internal static class HexCheckpoints
     {
         string inTree = InTree(top, path);
         // The checkpoint itself still there first, gone (git let it go, or git failed) nothing is touched
-        GitResult kind = GitProcess.Run(top, ["cat-file", "-t", tree]);
-        if (!kind.Ok || kind.Output.Trim() != "tree")
-            return kind.Ok ? "the checkpoint isn't there any more" : kind.Why;
+        string? missingTree = GitProcess.Run(top, ["cat-file", "-t", tree], static (exit, output, error) =>
+            exit == 0
+                ? (output.Trim().SequenceEqual("tree") ? null : "the checkpoint isn't there any more")
+                : GitProcess.FormatWhy(output, error));
+        if (missingTree is not null)
+            return missingTree;
 
-        if (!GitProcess.Run(top, ["cat-file", "-e", $"{tree}:{inTree}"]).Ok)
+        GitRepository.InvalidateInFlight(top);
+        try
         {
-            // Not in the checkpoint is only "made in the turn" for a file git would have taken in. One it ignores (a .env,
-            // local settings) or one in a repository of its own below this one was never in it, and was deleted as new
-            if (GitProcess.Run(top, ["check-ignore", "-q", "--", inTree]).Ok)
-                return "git ignores it, so the checkpoint never had it";
-            if (TopOf(path) is { } own && !PlatformPaths.Comparer.Equals(own, Path.GetFullPath(top)))
-                return "it's in a repository of its own, which the checkpoint doesn't have";
-            try
+            if (!GitProcess.Run(top, ["cat-file", "-e", $"{tree}:{inTree}"], static (exit, _, _) => exit == 0))
             {
-                if (File.Exists(path))
-                    File.Delete(path);
-                return null;
+                // Not in the checkpoint is only "made in the turn" for a file git would have taken in. One it ignores (a .env,
+                // local settings) or one in a repository of its own below this one was never in it, and was deleted as new
+                if (GitProcess.Run(top, ["check-ignore", "-q", "--", inTree], static (exit, _, _) => exit == 0))
+                    return "git ignores it, so the checkpoint never had it";
+                if (TopOf(path) is { } own && !PlatformPaths.Comparer.Equals(own, Path.GetFullPath(top)))
+                    return "it's in a repository of its own, which the checkpoint doesn't have";
+                try
+                {
+                    if (File.Exists(path))
+                        File.Delete(path);
+                    return null;
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    return e.Message;
+                }
             }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-            {
-                return e.Message;
-            }
-        }
 
-        GitResult put = GitProcess.Run(top, ["restore", $"--source={tree}", "--worktree", "--", inTree]);
-        return put.Ok ? null : put.Why;
+            GitResult put = GitProcess.Run(top, ["restore", $"--source={tree}", "--worktree", "--", inTree]);
+            return put.Ok ? null : put.Why;
+        }
+        finally
+        {
+            GitRepository.InvalidateInFlight(top);
+        }
     }
 }

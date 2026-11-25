@@ -6,14 +6,54 @@ namespace Hex.Dawn;
 
 internal sealed partial class DawnScene
 {
+    private (float Left, float Right, bool RightShown)? sidesBeforeNarrowing;
+
+    /// <summary>
+    /// A big screen at 200% still leaves the editor wider than the widths its layout changes at (the tabs stacking, the find
+    /// bar going compact), so a test that is about those drags the sides out to where the middle is narrow, as a small
+    /// window's would be, and puts them back after (on false). A room under 1000 units is narrow already.
+    /// </summary>
+    /// <param name="room">The window's width in the units it is laid out in at the interface size the test is at.</param>
+    private void NarrowEditor(bool on, float room)
+    {
+        if (!on)
+        {
+            if (sidesBeforeNarrowing is not { } before)
+                return;
+
+            sidesBeforeNarrowing = null;
+            right.Show(before.RightShown, instantly: true);
+            settings.LeftWidth = before.Left;
+            settings.RightWidth = before.Right;
+            return;
+        }
+
+        if (room < 1000.0f || sidesBeforeNarrowing is not null)
+            return;
+
+        sidesBeforeNarrowing = (settings.LeftWidth, settings.RightWidth, right.Shown);
+        right.Show(true, instantly: true);
+        settings.LeftWidth = MathF.Floor(room * 0.36f);
+        settings.RightWidth = MAX_SIDE;
+    }
+
     private void TestUx(HexPointerScript test)
     {
         OnCode(test, dataFile);
         float scale = compositor.Scale;
         float keptLeft = settings.LeftWidth;
         float keptRight = settings.RightWidth;
+        float fullWidth = 0.0f; // the width is read when the test runs, not when it's queued
         float wideSideWidth = 0;
         HexDocument? overflowPicked = null;
+
+        void WidenSides(bool on)
+        {
+            // The window's width in units of the interface size now, not what it was laid out at a moment ago
+            NarrowEditor(on, fullWidth * scale / compositor.Scale);
+            keptLeft = settings.LeftWidth;
+            keptRight = settings.RightWidth;
+        }
         test.Check("ux: panel navigation is aligned left", () => bottom.HeaderAlign == Origin.Left);
         test.Check("ux: mode switch sits immediately beside the window controls", () =>
             modeToggle.Parent is { } modes && MathF.Abs(modes.Bounds.Max.X - ((TitleBar)top).ButtonBounds(0).Min.X) < 1);
@@ -21,8 +61,9 @@ internal sealed partial class DawnScene
         test.Check("ux: returning from the other mode restores the sidebar's input", () => compositor.Focus == sideTree);
         test.Run(() =>
         {
+            fullWidth = chrome.Root.Bounds.Width;
             code.Focus();
-            for (int i = 0; i < 12; i++)
+            for (int i = 0, crowd = Math.Max(12, (int)(chrome.Root.Bounds.Width / 100.0f)); i < crowd; i++) // enough to crowd the strip however wide the window is
             {
                 string path = Path.Combine(testFolder, $"ux-document-{i}.txt");
                 File.WriteAllText(path, "one\ntwo\n");
@@ -40,7 +81,7 @@ internal sealed partial class DawnScene
         test.Run(() => textDialog?.Cancel());
         test.Wait();
         test.Check("ux: dismissing the editor list returns input to the editor", () => compositor.Focus == code);
-        test.Run(() => { wideSideWidth = fittedLeft; SetInterfaceSize(2.0f, remember: false); });
+        test.Run(() => { wideSideWidth = fittedLeft; SetInterfaceSize(2.0f, remember: false); WidenSides(true); });
         test.Settle(0.2f);
         test.Check("ux: the title bar, its menus and the faces grow with the interface size like every other word", () =>
             !((TitleBar)top).PixelSized && menu.TextScale == MENU_TEXT && modeToggle.LabelScale == 0.14f
@@ -86,16 +127,16 @@ internal sealed partial class DawnScene
             Enumerable.Range(0, docTabs.Tabs.Count).Any(i => MathF.Abs(docTabs.TabBounds(i).Min.X - docTabs.Bounds.Min.X) <= 1));
         test.Run(() => Shot("ux-narrow-editor"));
         test.Settle(0.5f);
-        test.Run(() => SetInterfaceSize(scale, remember: false));
+        test.Run(() => { WidenSides(false); SetInterfaceSize(scale, remember: false); });
         test.Settle(0.2f);
         test.Check("ux: widening retains the overflow selection and editor focus", () => document == overflowPicked && compositor.Focus == code);
         test.Check("ux: widening restores the sidebar preference", () => MathF.Abs(fittedLeft - wideSideWidth) <= 1);
-        test.Run(() => SetInterfaceSize(2.0f, remember: false));
+        test.Run(() => { SetInterfaceSize(2.0f, remember: false); WidenSides(true); });
         test.Settle(0.2f);
         test.Check("ux: narrowing again retains the overflow selection and editor focus", () => document == overflowPicked && compositor.Focus == code
             && docTabs.TabBounds(docTabs.Selected).Min.X >= docTabs.Bounds.Min.X - 1
             && docTabs.TabBounds(docTabs.Selected).Max.X <= docTabs.Bounds.Max.X + 1);
-        test.Run(() => { SetInterfaceSize(scale, remember: false); CloseAll(); });
+        test.Run(() => { WidenSides(false); SetInterfaceSize(scale, remember: false); CloseAll(); });
         test.Settle(0.2f);
         test.Run(() => Shot("ux-editor"));
         test.Settle(0.1f);

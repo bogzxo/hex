@@ -34,14 +34,22 @@ internal static class PredictionSettings
     /// <summary>Which provider is asked: <c>ollama</c>, <c>openai</c> or <c>link</c>.</summary>
     public static string Provider(HexSettings settings) => settings.EditPredictionsProvider;
 
-    /// <summary>The server's URL as the user gave it, trimmed. The provider adds its own path to it.</summary>
-    public static string ApiUrl(HexSettings settings) => settings.EditPredictionsApiUrl;
+    /// <summary>
+    /// The server's URL: as the user gave it, trimmed (the provider adds its own path to it), or for llama.cpp the
+    /// completions of the llama-server Hex runs, on this machine at its port.
+    /// </summary>
+    public static string ApiUrl(HexSettings settings) =>
+        settings.EditPredictionsProvider == HexSettings.LLAMACPP ? LlamaCppServerArgs.CompletionsUrl(settings.LlamaCppPort) : settings.EditPredictionsApiUrl;
 
-    /// <summary>The model's name as the server knows it, empty for none set.</summary>
-    public static string Model(HexSettings settings) => settings.EditPredictionsModel;
+    /// <summary>The model's name as the server knows it, empty for none set; for llama.cpp the name Hex starts it with.</summary>
+    public static string Model(HexSettings settings) =>
+        settings.EditPredictionsProvider == HexSettings.LLAMACPP ? (settings.LlamaCppConfig?.Alias ?? string.Empty) : settings.EditPredictionsModel;
 
     /// <summary>The prompt format: <c>infer</c> (from the model's name), or <c>zeta2</c>, <c>qwen</c>, <c>code_llama</c>, <c>star_coder</c>, <c>deepseek_coder</c>, <c>code_gemma</c>, <c>codestral</c>.</summary>
     public static string PromptFormat(HexSettings settings) => settings.EditPredictionsPromptFormat;
+
+    /// <summary>The kind of model: <c>auto</c> (from its name and the server), <c>edit_model</c>, <c>fim</c>, <c>instruct</c> or <c>fim_instruct</c>.</summary>
+    public static string Kind(HexSettings settings) => settings.EditPredictionsKind;
 
     /// <summary>The most tokens one prediction may have, 16 to 2048.</summary>
     public static int MaxTokens(HexSettings settings) => settings.EditPredictionsMaxTokens;
@@ -63,11 +71,16 @@ internal static class PredictionSettings
     public static bool ApiKeyUnreadable(HexSettings settings) => settings.EditPredictionsApiKeyUnreadable;
 
     /// <summary>
-    /// Whether a provider is set up enough to be asked: a URL and a model, or Hex Link, whose device has its own. Whether
-    /// a device is attached is Hex Link's to say.
+    /// Whether a provider is set up enough to be asked: a URL and a model, Hex Link, whose device has its own, or llama.cpp
+    /// with a llama-server and a model to run. Whether a device is attached is Hex Link's to say, whether the server is up
+    /// the server's.
     /// </summary>
-    public static bool Configured(HexSettings settings) =>
-        settings.EditPredictionsProvider == "link" || (settings.EditPredictionsApiUrl.Length > 0 && settings.EditPredictionsModel.Length > 0);
+    public static bool Configured(HexSettings settings) => settings.EditPredictionsProvider switch
+    {
+        "link" => true,
+        HexSettings.LLAMACPP => settings.LlamaCppConfig is not null,
+        _ => settings.EditPredictionsApiUrl.Length > 0 && settings.EditPredictionsModel.Length > 0,
+    };
 
     /// <summary>
     /// The URL to have after the provider is changed: Ollama's own address becomes its OpenAI completions when the

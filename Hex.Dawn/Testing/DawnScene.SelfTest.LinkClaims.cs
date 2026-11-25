@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Hex.Core.Git;
+using Hex.Core.Merge;
 
 namespace Hex.Dawn;
 
@@ -142,16 +143,17 @@ internal sealed partial class DawnScene
         {
             if (reconnect is not null)
                 LinkOpenConflictDifference(reconnect.Device.Id, wire);
-            UpdateConflicts(now: true);
         });
-        test.Check("link-claims: the overlap preview uses one native diff3 conflict", () =>
-            linkMergeDrafts.ContainsKey(document) && HasConflicts() && conflicts.Count == 1);
+        test.WaitFor(() => document.Merge is { Session.LinkDevice: not null }, 10.0f);
+        test.Check("link-claims: the overlap opens the Link merge editor with one conflict and no preview file", () =>
+            document.Merge is { UnresolvedCount: 1 } && !documents.Any(tab => tab.Path?.Contains("merge-previews", StringComparison.Ordinal) == true));
         test.Run(() =>
         {
-            if (!linkMergeDrafts.TryGetValue(document, out LinkMergeDraft? draft) || !HasConflicts())
+            if (document.Merge is not { } merge)
                 return;
-            SettleConflict(GitConflictPick.Incoming);
-            LinkPublishMerge(document, draft);
+            merge.Go(1);
+            merge.AcceptCurrent(MergeChoice.Theirs);
+            CompleteMergeEditor(document);
         });
         const string resolved = "A\nb\nc\nd\ntheirs\nf\ng\nh\nI\n";
         test.WaitFor(() => ReadProvisionTestFile(Path.Combine(remote, "overlap.txt")) == resolved, 25.0f);

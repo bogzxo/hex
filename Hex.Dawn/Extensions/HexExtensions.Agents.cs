@@ -114,8 +114,8 @@ internal sealed partial class HexExtensions
         string command = System.Environment.ProcessPath ?? Path.Combine(Hex.Core.HexHost.ProgramFolder, "Hex.exe");
         // When Hex was started with dotnet, its entry assembly must come before the MCP arguments.
         if (string.Equals(Path.GetFileNameWithoutExtension(command), "dotnet", StringComparison.OrdinalIgnoreCase)
-            && System.Reflection.Assembly.GetEntryAssembly()?.Location is { Length: > 0 } assembly)
-            arguments = [assembly, .. arguments];
+            && System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name is { Length: > 0 } entry)
+            arguments = [Path.Combine(AppContext.BaseDirectory, entry + ".dll"), .. arguments];
 
         return Natives.Object(("command", new StringValue(command)), ("args", Natives.List(arguments)));
     }

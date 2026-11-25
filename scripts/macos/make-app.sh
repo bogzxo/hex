@@ -114,6 +114,21 @@ publish() {
     rm -rf "$dest"
     dotnet publish "$project" -c Release -r "osx-$rid" ${props[@]+"${props[@]}"} ${extra[@]+"${extra[@]}"} -o "$dest" \
         -p:DebugType=none -p:DebugSymbols=false
+
+    local notebooks_proj="$repo/Hex.Notebooks.Render/Hex.Notebooks.Render.csproj"
+    if [ -f "$notebooks_proj" ]; then
+        echo "== dotnet publish Hex.Notebooks.Render $rid"
+        dotnet publish "$notebooks_proj" -c Release -r "osx-$rid" ${props[@]+"${props[@]}"} -o "$dest/modules" \
+            -p:DebugType=none -p:DebugSymbols=false
+        rm -rf "$dest"/modules/*.pdb "$dest"/modules/*.dSYM
+        for modlib in "$dest"/modules/*.dylib; do
+            [ -e "$modlib" ] || continue
+            local modbase="$(basename "$modlib")"
+            if [ -f "$dest/$modbase" ]; then
+                rm -f "$modlib"
+            fi
+        done
+    fi
 }
 
 archs=("$arch"); [ "$arch" = "universal" ] && archs=(arm64 x64)
@@ -140,6 +155,31 @@ for path in "$first"/*; do
                 cp "$path" "$stage/code/$name"
             fi ;;
         *.pdb|*.dSYM) ;;
+        modules)
+            if [ -d "$path" ]; then
+                for modpath in "$path"/*; do
+                    [ -e "$modpath" ] || continue
+                    modname="$(basename "$modpath")"
+                    case "$modname" in
+                        *.dylib)
+                            mkdir -p "$stage/code/modules"
+                            if [ "$arch" = "universal" ]; then
+                                other="$work/publish-${archs[1]}/modules/$modname"
+                                if [ -f "$other" ] && ! lipo -info "$modpath" 2>/dev/null | grep -q "Architectures in the fat file"; then
+                                    lipo -create "$modpath" "$other" -output "$stage/code/modules/$modname" 2>/dev/null || cp "$modpath" "$stage/code/modules/$modname"
+                                else
+                                    cp "$modpath" "$stage/code/modules/$modname"
+                                fi
+                            else
+                                cp "$modpath" "$stage/code/modules/$modname"
+                            fi ;;
+                        *.pdb|*.dSYM) ;;
+                        *)
+                            mkdir -p "$stage/resources/modules"
+                            cp -R "$modpath" "$stage/resources/modules/$modname" ;;
+                    esac
+                done
+            fi ;;
         *) cp -R "$path" "$stage/resources/$name" ;;
     esac
 done
@@ -182,6 +222,7 @@ sign() {
     fi
 }
 echo "== signing ($identity)"
+for lib in "$app"/Contents/MacOS/modules/*.dylib; do [ -e "$lib" ] && sign "$lib"; done
 for lib in "$app"/Contents/MacOS/*.dylib; do [ -e "$lib" ] && sign "$lib"; done
 sign "$app/Contents/MacOS/Hex"
 sign "$app"

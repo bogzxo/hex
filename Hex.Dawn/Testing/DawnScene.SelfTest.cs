@@ -52,7 +52,7 @@ internal sealed partial class DawnScene
         return null;
     }
 
-    /// <summary>Everything inside of a component, all the way down.</summary>
+    /// <summary>Everything inside of a component, all the way down (including virtualized off-screen rows of a <see cref="Horizon.UI.Components.SettingsPage"/>).</summary>
     private static IEnumerable<UIComponent> Descendants(UIComponent of)
     {
         foreach (UIComponent child in of.Children)
@@ -60,6 +60,19 @@ internal sealed partial class DawnScene
             yield return child;
             foreach (UIComponent inside in Descendants(child))
                 yield return inside;
+        }
+
+        if (of is Horizon.UI.Components.SettingsPage page)
+        {
+            foreach (UIComponent item in page.RowItems)
+            {
+                if (item.Parent is null)
+                {
+                    yield return item;
+                    foreach (UIComponent inside in Descendants(item))
+                        yield return inside;
+                }
+            }
         }
     }
 
@@ -209,6 +222,7 @@ internal sealed partial class DawnScene
         ("noon-keys", "Agentic's keys round the fleet, up to the starter, to the next that wants looking at, back to Dawn, and none of them in Dawn", TestNoonKeys),
         ("noon-columns", "Agentic's fleet and Details dragged by their lines, held between their least and most, kept, put back by a double click, the fleet put away past its least", TestNoonColumns),
         ("noon-looks", "Agentic in every look Hex comes with at 100, 150 and 200%, its Noon theme on where the look has one and gone after", TestNoonLooks),
+        ("gestures", "a trackpad's pixel scrolling, pinch and smart zoom reaching the code editor through the compositor", TestGestures),
         ("scrollbars", "default scrollbar track clicks and thumb dragging without activating rows", TestScrollbars),
         ("file-icons", "file-type font glyphs, extension matching and unknown-file fallbacks", TestFileIcons),
         ("tree-looks", "the explorer and a file's Properties in every look Hex comes with at 100, 150 and 200%, several picked, a folder and no workspace", TestTreeLooks),
@@ -325,6 +339,7 @@ internal sealed partial class DawnScene
         ("solstice", "the Solstice looks, flush panes on the window's tone, Dawn's orange accent, and the welcome page with what's new", TestSolstice),
         ("settings-look", "the settings in every look at 100, 150 and 200%: the window, a search, a changed setting, the looks, the keyboard shortcuts and a language server's settings", TestSettingsLook),
         (DawnProgram.NO_AI_SUITE, "No AI, a run without the agents: no Agentic, Agents view, menu, commands, agent systems, agents' ticks or MCP tools about agents. Only when named, the run is without them", TestNoAi),
+        ("modules", "optional modules in Editor · Modules toggled live, lazy stage/notebook/noon activation, and clean restore", TestModules),
         ("ticks", "what the editor does every tick as a list of named steps, the parts among them, in the order that matters", TestTicks),
         ("triple-click", "two presses on a word in the code pick the word and a third picks its line", TestTripleClick),
         ("window-click", "a press on a window of the editor leaves it where it is", TestWindowClick),
@@ -550,6 +565,7 @@ internal sealed partial class DawnScene
         ("link-nearby", "Hex Link's discovery on the real LAN, run on two machines at once: Link up with link_discoverable on, passing once another Hex is heard", TestLinkNearby),
         ("link-ui", "Hex Link's window, the pairing dialog, a linked device's section in the fleet, its chat on screen and steered, Runs on and Forget, driven by the pointer against a second Hex", TestLinkUi),
         ("link-chats", "Linked chat groups, saved folds, keyboard actions, offline devices, layout and fleet redraw timing", TestLinkChats),
+        ("link-idle", "what Link costs on and idle: bytes per tick, what the Devices window leaves after closing, a chat of 600 messages", TestLinkIdle),
         ("garbage", "what sweeping the pointer over the designer and the code allocates", test =>
         {
             // The first hover over a word makes what's kept for every hover after (the docs of the library), the first

@@ -33,24 +33,42 @@ internal sealed partial class DawnScene
 
     private void TickLinkWorkspaceOffers()
     {
-        if (linkWorkspaceOffers.Count == 0 || chrome.Root.Children.OfType<UIDialog>().Any(dialog => dialog.IsOpen))
+        if (linkWorkspaceOffers.Count == 0)
             return;
 
         foreach (LinkWorkspaceOffer offer in linkWorkspaceOffers.Values)
         {
             if (offer.Presented || !CanGetLinkOffer(LinkPeerOf(offer.Device.Id)))
                 continue;
+            // Only an offer that could be said looks at the dialogs, so a tick with nothing to say makes nothing
+            if (AnyDialogOpen())
+                return;
 
+            // Said in a card that goes by itself, never a dialog that blocks: the folder chooser opens when Get is pressed,
+            // here or on the device's card
             offer.Presented = true;
-            UIDialog.Show(chrome, UIRichText.Literal(LinkWorkspaceOfferTitle(offer)), Said("link.devices_workspace_offer_details"),
-                new DialogChoice(Said("link.devices_workspace_offer_get"), () => GetLinkOfferedWorkspace(offer)),
-                new DialogChoice(Said("link.devices_workspace_offer_later")));
+            Notify(LinkWorkspaceOfferTitle(offer), false, (Said("link.devices_offer_get", ("workspace", offer.Name)), () => GetLinkOfferedWorkspace(offer)));
             break;
         }
     }
 
-    private string LinkWorkspaceOfferTitle(LinkWorkspaceOffer offer) => Said("link.devices_workspace_offer",
+    private bool AnyDialogOpen()
+    {
+        foreach (var child in chrome.Root.Children)
+        {
+            if (child is UIDialog { IsOpen: true })
+                return true;
+        }
+
+        return false;
+    }
+
+    private string LinkWorkspaceOfferTitle(LinkWorkspaceOffer offer) => Said("link.devices_offer_row",
         ("device", LinkNameOf(offer.Device.Id, offer.Device.Name)), ("workspace", offer.Name));
+
+    /// <summary>Whether a folder of the offered workspace's name is open here already.</summary>
+    private bool LinkHasFolderNamed(string name) =>
+        explorer.workspace.Folders.Any(folder => string.Equals(Path.GetFileName(folder.TrimEnd('/', '\\')), name, StringComparison.OrdinalIgnoreCase));
 
     private void LinkGetWorkspaceInto(string deviceId, string deviceName, string destination, Action? received = null)
     {
@@ -86,13 +104,19 @@ internal sealed partial class DawnScene
             return;
         }
 
-        Context.Windows.ChooseFolder(destination => LinkGetWorkspaceInto(id, offer.Device.Name, destination, () =>
+        Context.Windows.ChooseFolder(destination =>
+        {
+            // A folder is chosen: the person is getting the workspace, the window is put away
+            if (destination.Length > 0)
+                CloseLinkWindow();
+            LinkGetWorkspaceInto(id, offer.Device.Name, destination, () =>
         {
             if (ReferenceEquals(linkWorkspaceOffers.GetValueOrDefault(id), offer))
             {
                 linkWorkspaceOffers.Remove(id);
                 linkWindowStale = true;
             }
-        }));
+        });
+        });
     }
 }

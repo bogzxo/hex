@@ -229,21 +229,6 @@ internal sealed partial class DawnScene
             });
     }
 
-    /// <summary>A fetch from a device into the repository of a workspace folder, with a card, what came said.</summary>
-    private void LinkFetchFrom(string deviceId, string folder)
-    {
-        string? repository = linkServices?.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, folder)) is { } local
-            ? LinkLocalRepositories.FirstOrDefault(each => PlatformPaths.IsUnder(local.Path, each.Path) || PlatformPaths.Same(local.Path, each.Path))?.Path
-            : null;
-        if (repository is null)
-        {
-            Say(Said("link.fetch_no_repository", ("folder", folder)), error: true);
-            return;
-        }
-
-        LinkFetchInto(deviceId, repository);
-    }
-
     private void LinkFetchInto(string deviceId, string repository)
     {
         string device = link?.PeerOf(deviceId)?.Device.Name ?? deviceId;

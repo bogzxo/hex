@@ -30,6 +30,9 @@ internal sealed record HexDocFileBasis(string? Text, Encoding Encoding, bool CrL
 {
     public string? Expected => KnownHash ?? (Text is null ? null : HexLinkFiles.Hash(Bytes(Text)));
 
+    /// <summary>The file's text for an edited (LF) text: each unchanged line keeps its own ending, new ones take a neighbour's.</summary>
+    public string Render(string text) => DocumentFile.WithLineEndings(text, Text, CrLf, CrLf);
+
     public byte[] Bytes(string text)
     {
         ReadOnlySpan<byte> bom = Encoding.Preamble;
@@ -106,7 +109,7 @@ internal sealed partial class HexLinkDocumentRoom
                 basis = fileBasis ?? throw HexLinkException.NotFound("The shared document has no file to save.");
             }
 
-            string raw = DocumentFile.WithLineEndings(text, basis.Text, basis.CrLf, basis.CrLf);
+            string raw = basis.Render(text);
             byte[] bytes = basis.Bytes(raw);
             string? expected = basis.Expected;
             string textHash = HexDocSaved.TextDigest(text);

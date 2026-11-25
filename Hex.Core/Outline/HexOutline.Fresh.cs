@@ -7,7 +7,7 @@ internal static partial class HexOutline
     /// <summary>The outline of a file's text by its path's extension, nothing kept, safe on any thread.</summary>
     public static List<OutlineEntry> Fresh(string text, string path)
     {
-        string extension = Path.GetExtension(path).ToLowerInvariant();
+        string extension = HexIndexedFile.InternExtension(path);
         return extension == ".hor" ? OutlineOf(text) : OutlineOfOther(text, extension);
     }
 }

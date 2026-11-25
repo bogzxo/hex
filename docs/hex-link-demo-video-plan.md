@@ -124,7 +124,7 @@ The centre of the video, and the longest scene.
 - Neo finishes the method. The squiggles clear. He runs "Submit held changes".
 - The submit dialog lists the file: part merges cleanly, one block needs the merge editor.
 - Zoom into the merge editor in Neo's window: Mine, Result, Theirs, the clashing lines outlined, "1 of 1 conflicts left".
-- The cursor presses "Accept both". The counter reaches 0. The cursor presses "Complete merge".
+- The cursor presses "Use both". The counter reaches 0. The cursor presses "Save merged file".
 - Wide shot: the merged file arrives in Charles's and John's windows. Charles presses build: it passes.
 - Caption: "When it does collide, you choose. One click."
 

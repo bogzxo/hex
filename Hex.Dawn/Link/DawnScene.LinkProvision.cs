@@ -147,7 +147,8 @@ internal sealed partial class DawnScene
     private void SendLinkWorkspaceOffer(string deviceId)
     {
         string device = link?.PeerOf(deviceId)?.Device.Name ?? deviceId;
-        Context.Work.Start($"link-offer-workspace-{deviceId}", Said("link.provision.share_title", ("device", device)),
+        // Named as the sentence it ends as, the card says it while it goes and when it's done, not as a command
+        Context.Work.Start($"link-offer-workspace-{deviceId}", Said("link.provision.share_work", ("device", device)),
             async work =>
             {
                 if (await LinkShareWorkspace(deviceId, work.Token) is { } why)
@@ -158,8 +159,8 @@ internal sealed partial class DawnScene
                 if (done.State == WorkState.Failed)
                     Say(Said("link.provision.failed", ("why", done.Error ?? string.Empty)), error: true);
                 else if (done.State == WorkState.Succeeded)
-                    Say(Said("link.provision.offer_sent", ("device", device)));
-            });
+                    NotifyDone(Said("link.provision.offer_sent", ("device", device)));
+            }, seen: false);
     }
 
     private void LinkWorkspaceOffered(HexLinkDevice device, string workspace) => QueueLinkWorkspaceOffer(device, workspace);

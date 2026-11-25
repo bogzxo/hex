@@ -82,6 +82,38 @@ internal static class PredictionDiff
         return edit.End == lineEnd && edit.Text.AsSpan().StartsWith(text.AsSpan(caret, lineEnd - caret), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The edits with the caret line's indentation not written twice: when the caret sits after only whitespace on its
+    /// line and the edit there starts with that same whitespace, the whitespace is taken off the edit.
+    /// </summary>
+    public static IReadOnlyList<PredictionEdit> WithoutRepeatedIndent(IReadOnlyList<PredictionEdit> edits, string region, int regionStart, int caret, ref int? caretAfter)
+    {
+        int rel = caret - regionStart;
+        if (rel <= 0 || rel > region.Length)
+            return edits;
+        int lineStart = region.LastIndexOf('\n', rel - 1) + 1;
+        string prefix = region[lineStart..rel];
+        if (prefix.Length == 0 || !prefix.AsSpan().IsWhiteSpace() || prefix.Contains('\n'))
+            return edits;
+
+        for (int i = 0; i < edits.Count; i++)
+        {
+            PredictionEdit edit = edits[i];
+            if (edit.Start != caret || !edit.Text.StartsWith(prefix, StringComparison.Ordinal))
+                continue;
+            var changed = new List<PredictionEdit>(edits);
+            string text = edit.Text[prefix.Length..];
+            if (text.Length == 0 && edit.End == edit.Start)
+                changed.RemoveAt(i);
+            else
+                changed[i] = new PredictionEdit(edit.Start, edit.End, text);
+            if (caretAfter is { } after && after > caret)
+                caretAfter = Math.Max(caret, after - prefix.Length);
+            return changed;
+        }
+        return edits;
+    }
+
     // Where each line starts, and one more for where the text ends
     private static int[] Starts(string[] lines)
     {

@@ -6,10 +6,77 @@ namespace Hex.Core.Git;
 /// </summary>
 internal sealed partial class GitRepository
 {
+    private static readonly string[] StatusArguments = ["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=all", "--ignored=matching"];
+    private static readonly string[] BranchesArguments = ["for-each-ref", "--sort=-committerdate", "--format=%(HEAD)%00%(refname)%00%(refname:short)%00%(upstream:short)%00%(committerdate:relative)%00%(subject)", "refs/heads", "refs/remotes"];
+    private static readonly string[] RemoteArguments = ["remote"];
+    private static readonly string[] HasCommitArguments = ["rev-parse", "--verify", "--quiet", "HEAD"];
+    private static readonly string[] StageCommand = ["add", "--all", "--"];
+    private static readonly string[] UnstageRestoreCommand = ["restore", "--staged", "--"];
+    private static readonly string[] UnstageRemoveCommand = ["rm", "--cached", "-r", "-q", "--"];
+    private static readonly string[] DiscardCommand = ["restore", "--worktree", "--"];
+    private static readonly string[] CommitArguments = ["commit", "--file=-", "--cleanup=whitespace"];
+    private static readonly string[] FetchArguments = ["fetch", "--all", "--prune", "--quiet"];
+    private static readonly string[] PushQuietArguments = ["push", "--quiet"];
+
+    // Coalesce concurrent in-flight read-only status/branch queries on the same repository root without caching completed results.
+    private static readonly Lock InFlightGate = new();
+    private static readonly Dictionary<string, Task<GitStatus?>> InFlightStatus = new(PlatformPaths.Comparer);
+    private static readonly Dictionary<string, Task<IReadOnlyList<GitBranch>>> InFlightBranches = new(PlatformPaths.Comparer);
+
     /// <summary>The folder the working tree starts in, the one with .git in it.</summary>
     public string Root { get; }
 
     private GitRepository(string root) => Root = root;
+
+    /// <summary>
+    /// Detaches any in-flight read-only status or branch queries for <paramref name="root"/> so callers polling during
+    /// or after a write or index mutation never join a pre-mutation query.
+    /// </summary>
+    internal static void InvalidateInFlight(string root)
+    {
+        lock (InFlightGate)
+        {
+            InFlightStatus.Remove(root);
+            InFlightBranches.Remove(root);
+        }
+    }
+
+    internal static T RunCoalesced<T>(Dictionary<string, Task<T>> table, string root, Func<T> execute)
+    {
+        Task<T>? existing;
+        TaskCompletionSource<T>? leader = null;
+        lock (InFlightGate)
+        {
+            if (!table.TryGetValue(root, out existing))
+            {
+                leader = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+                table[root] = leader.Task;
+            }
+        }
+
+        if (existing is not null)
+            return existing.GetAwaiter().GetResult();
+
+        try
+        {
+            T result = execute();
+            leader!.TrySetResult(result);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            leader!.TrySetException(ex);
+            throw;
+        }
+        finally
+        {
+            lock (InFlightGate)
+            {
+                if (table.TryGetValue(root, out Task<T>? current) && ReferenceEquals(current, leader!.Task))
+                    table.Remove(root);
+            }
+        }
+    }
 
     /// <summary>
     /// The repository a path is in, the nearest folder up from it with a .git (a folder, or a file in a submodule or a
@@ -37,8 +104,8 @@ internal sealed partial class GitRepository
     /// <summary>The repository as it is now, null if git wouldn't say.</summary>
     public GitStatus? Status()
     {
-        GitResult result = GitProcess.Run(Root, ["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=all", "--ignored=matching"]);
-        return result.Ok ? GitStatus.Parse(Root, result.Output) : null;
+        return RunCoalesced(InFlightStatus, Root, () =>
+            GitProcess.Run(Root, StatusArguments, (exit, output, _) => exit == 0 ? GitStatus.Parse(Root, output) : null));
     }
 
     /// <summary>
@@ -64,58 +131,85 @@ internal sealed partial class GitRepository
     /// </summary>
     public IReadOnlyList<GitBlameLine> Blame(string path, string text)
     {
-        GitResult result = GitProcess.Run(Root, ["blame", "--porcelain", "--contents", "-", "--", Relative(path)], text);
-        return result.Ok ? GitBlame.Parse(result.Output) : [];
+        return GitProcess.Run(
+            Root,
+            ["blame", "--porcelain", "--contents", "-", "--", Relative(path)],
+            static (exit, output, _) => exit == 0 ? GitBlame.Parse(output) : [],
+            text);
     }
 
     /// <summary>Every branch here and on the remotes, the one checked out first.</summary>
     public IReadOnlyList<GitBranch> Branches()
     {
-        GitResult result = GitProcess.Run(Root, ["for-each-ref", "--sort=-committerdate", "--format=%(HEAD)%00%(refname)%00%(refname:short)%00%(upstream:short)%00%(committerdate:relative)%00%(subject)", "refs/heads", "refs/remotes"]);
-        return result.Ok ? GitBranch.Parse(result.Output) : [];
+        return RunCoalesced(InFlightBranches, Root, () =>
+            GitProcess.Run(Root, BranchesArguments, static (exit, output, _) => exit == 0 ? GitBranch.Parse(output) : []));
     }
 
     /// <summary>Checks a branch out, a remote one as a local branch following it. All of what git said when it went wrong, null when it didn't.</summary>
     public string? Switch(GitBranch branch)
     {
-        GitResult result = branch.Remote
-            ? GitProcess.Run(Root, ["switch", "--track", branch.Name])
-            : GitProcess.Run(Root, ["switch", branch.Name]);
-        return result.Ok ? null : Said(result);
+        InvalidateInFlight(Root);
+        try
+        {
+            GitResult result = branch.Remote
+                ? GitProcess.Run(Root, ["switch", "--track", branch.Name])
+                : GitProcess.Run(Root, ["switch", branch.Name]);
+            return result.Ok ? null : Said(result);
+        }
+        finally
+        {
+            InvalidateInFlight(Root);
+        }
     }
 
     /// <summary>Makes a branch where HEAD is and checks it out. All of what git said when it went wrong, null when it didn't.</summary>
     public string? CreateBranch(string name)
     {
-        GitResult result = GitProcess.Run(Root, ["switch", "-c", name]);
-        return result.Ok ? null : Said(result);
+        InvalidateInFlight(Root);
+        try
+        {
+            GitResult result = GitProcess.Run(Root, ["switch", "-c", name]);
+            return result.Ok ? null : Said(result);
+        }
+        finally
+        {
+            InvalidateInFlight(Root);
+        }
     }
 
     /* Changes, staged, unstaged, thrown away and committed */
 
     /// <summary>Stages files, all of what's changed in them (a deleted one's deletion). What git said when it went wrong, null when it didn't.</summary>
-    public string? Stage(IReadOnlyList<string> paths) => Each(paths, ["add", "--all", "--"]);
+    public string? Stage(IReadOnlyList<string> paths) => Each(paths, StageCommand);
 
     /// <summary>
     /// Takes files out of what the next commit takes, back to the last commit's, what's in the working tree left as it is.
     /// In a repository with no commit yet there's nothing to go back to, so they're taken out of the index altogether.
     /// </summary>
     public string? Unstage(IReadOnlyList<string> paths) => HasCommit()
-        ? Each(paths, ["restore", "--staged", "--"])
-        : Each(paths, ["rm", "--cached", "-r", "-q", "--"]);
+        ? Each(paths, UnstageRestoreCommand)
+        : Each(paths, UnstageRemoveCommand);
 
     /// <summary>
     /// Throws away what's changed in files and not staged, back to what the index has. Only for files git knows, a new file
     /// nobody added is the caller's to throw away (to the trash, not gone for good).
     /// </summary>
-    public string? Discard(IReadOnlyList<string> paths) => Each(paths, ["restore", "--worktree", "--"]);
+    public string? Discard(IReadOnlyList<string> paths) => Each(paths, DiscardCommand);
 
     /// <summary>Commits what's staged with a message, which can be more than one line. What git said when it went wrong (a hook said no), null when it didn't.</summary>
     public string? Commit(string message)
     {
-        // Whitespace only, not strip, which takes lines starting with a # for comments, a Markdown heading among them
-        GitResult result = GitProcess.Run(Root, ["commit", "--file=-", "--cleanup=whitespace"], message);
-        return result.Ok ? null : Said(result);
+        InvalidateInFlight(Root);
+        try
+        {
+            // Whitespace only, not strip, which takes lines starting with a # for comments, a Markdown heading among them
+            GitResult result = GitProcess.Run(Root, CommitArguments, message);
+            return result.Ok ? null : Said(result);
+        }
+        finally
+        {
+            InvalidateInFlight(Root);
+        }
     }
 
     /// <summary>
@@ -125,17 +219,38 @@ internal sealed partial class GitRepository
     /// </summary>
     public string? StageText(string path, string text)
     {
-        string relative = Relative(path);
-        GitResult hashed = GitProcess.Run(Root, ["hash-object", "-w", "--stdin", $"--path={relative}"], text);
-        if (!hashed.Ok)
-            return Said(hashed);
+        InvalidateInFlight(Root);
+        try
+        {
+            string relative = Relative(path);
+            (bool ok, string value) hashed = GitProcess.Run(
+                Root,
+                ["hash-object", "-w", "--stdin", $"--path={relative}"],
+                static (exit, output, error) => exit == 0 ? (true, output.Trim().ToString()) : (false, GitProcess.FormatSaid(output, error)),
+                text);
+            if (!hashed.ok)
+                return hashed.value;
 
-        // The file's mode as the index has it (an executable script stays one), a plain file's for one it hasn't got
-        GitResult listed = GitProcess.Run(Root, ["ls-files", "-s", "--", relative]);
-        string mode = listed.Ok && listed.Output.Split(' ', 2)[0] is { Length: 6 } known ? known : "100644";
+            // The file's mode as the index has it (an executable script stays one), a plain file's for one it hasn't got
+            string mode = GitProcess.Run(
+                Root,
+                ["ls-files", "-s", "--", relative],
+                static (exit, output, _) =>
+                {
+                    if (exit != 0)
+                        return "100644";
+                    int space = output.IndexOf(' ');
+                    ReadOnlySpan<char> modeSpan = space >= 0 ? output[..space] : output;
+                    return modeSpan.Length == 6 ? modeSpan.ToString() : "100644";
+                });
 
-        GitResult updated = GitProcess.Run(Root, ["update-index", "--add", "--cacheinfo", $"{mode},{hashed.Output.Trim()},{relative}"]);
-        return updated.Ok ? null : Said(updated);
+            GitResult updated = GitProcess.Run(Root, ["update-index", "--add", "--cacheinfo", $"{mode},{hashed.value},{relative}"]);
+            return updated.Ok ? null : Said(updated);
+        }
+        finally
+        {
+            InvalidateInFlight(Root);
+        }
     }
 
     /* A file's history */
@@ -146,23 +261,89 @@ internal sealed partial class GitRepository
     /// </summary>
     public IReadOnlyList<GitCommitOfFile> FileLog(string path, int most = 200)
     {
-        GitResult result = GitProcess.Run(Root, ["log", "--follow", $"--max-count={most}", "--format=%x01%H%x00%an%x00%at%x00%s", "--name-only", "--", Relative(path)]);
-        if (!result.Ok)
-            return [];
+        return GitProcess.Run(
+            Root,
+            ["log", "--follow", $"--max-count={most}", "--format=%x01%H%x00%an%x00%at%x00%s", "--name-only", "--", Relative(path)],
+            static (exit, output, _) => exit == 0 ? ParseFileLog(output) : []);
+    }
 
+    internal static IReadOnlyList<GitCommitOfFile> ParseFileLog(ReadOnlySpan<char> remaining)
+    {
         var commits = new List<GitCommitOfFile>();
-        foreach (string record in result.Output.Split('\u0001', StringSplitOptions.RemoveEmptyEntries))
+        while (!remaining.IsEmpty)
         {
-            string[] lines = record.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            string[] fields = lines[0].Split('\0');
-            if (fields.Length < 4 || lines.Length < 2)
+            int cut = remaining.IndexOf('\u0001');
+            ReadOnlySpan<char> record;
+            if (cut < 0)
+            {
+                record = remaining;
+                remaining = default;
+            }
+            else
+            {
+                record = remaining[..cut];
+                remaining = remaining[(cut + 1)..];
+            }
+
+            if (record.IsEmpty)
                 continue;
 
-            long.TryParse(fields[2], out long seconds);
-            commits.Add(new GitCommitOfFile(fields[0], fields[1], DateTimeOffset.FromUnixTimeSeconds(seconds).ToLocalTime(), fields[3], lines[1].Trim()));
+            ReadOnlySpan<char> header = NextNonEmptyLine(ref record);
+            ReadOnlySpan<char> fileLine = NextNonEmptyLine(ref record);
+            if (header.IsEmpty || fileLine.IsEmpty)
+                continue;
+
+            if (!TrySplitFourNul(header, out ReadOnlySpan<char> hash, out ReadOnlySpan<char> author, out ReadOnlySpan<char> time, out ReadOnlySpan<char> subject))
+                continue;
+
+            long.TryParse(time, System.Globalization.CultureInfo.InvariantCulture, out long seconds);
+            commits.Add(new GitCommitOfFile(hash.ToString(), author.ToString(), DateTimeOffset.FromUnixTimeSeconds(seconds).ToLocalTime(), subject.ToString(), fileLine.Trim().ToString()));
         }
 
+        commits.TrimExcess();
         return commits;
+    }
+
+    private static ReadOnlySpan<char> NextNonEmptyLine(ref ReadOnlySpan<char> span)
+    {
+        while (!span.IsEmpty)
+        {
+            int nl = span.IndexOf('\n');
+            ReadOnlySpan<char> line;
+            if (nl < 0)
+            {
+                line = span;
+                span = default;
+            }
+            else
+            {
+                line = span[..nl];
+                span = span[(nl + 1)..];
+            }
+
+            if (!line.IsEmpty)
+                return line;
+        }
+        return default;
+    }
+
+    private static bool TrySplitFourNul(ReadOnlySpan<char> line, out ReadOnlySpan<char> f0, out ReadOnlySpan<char> f1, out ReadOnlySpan<char> f2, out ReadOnlySpan<char> f3)
+    {
+        int n0 = line.IndexOf('\0');
+        if (n0 < 0) { f0 = f1 = f2 = f3 = default; return false; }
+        f0 = line[..n0];
+        ReadOnlySpan<char> r1 = line[(n0 + 1)..];
+        int n1 = r1.IndexOf('\0');
+        if (n1 < 0) { f1 = f2 = f3 = default; return false; }
+        f1 = r1[..n1];
+        ReadOnlySpan<char> r2 = r1[(n1 + 1)..];
+        int n2 = r2.IndexOf('\0');
+        if (n2 < 0) { f2 = f3 = default; return false; }
+        f2 = r2[..n2];
+        ReadOnlySpan<char> r3 = r2[(n2 + 1)..];
+        int n3 = r3.IndexOf('\0');
+        f3 = n3 >= 0 ? r3[..n3] : r3;
+        return true;
     }
 
     /// <summary>A file as it was in a commit by the path it had there (from <see cref="FileLog"/>), null where it wasn't.</summary>
@@ -192,12 +373,13 @@ internal sealed partial class GitRepository
     /// <summary>The name of the folder a clone of an address goes in, the last part of it without .git, the way git names it.</summary>
     public static string CloneName(string url)
     {
-        string last = url.Trim().TrimEnd('/', '\\');
+        ReadOnlySpan<char> last = url.AsSpan().Trim().TrimEnd("/\\");
         int cut = Math.Max(last.LastIndexOf('/'), Math.Max(last.LastIndexOf('\\'), last.LastIndexOf(':')));
-        last = last[(cut + 1)..];
+        if (cut >= 0)
+            last = last[(cut + 1)..];
         if (last.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
             last = last[..^4];
-        return last.Length > 0 ? last : "repository";
+        return last.Length > 0 ? last.ToString() : "repository";
     }
 
     /* The remotes, fetched, pulled and pushed */
@@ -206,7 +388,7 @@ internal sealed partial class GitRepository
     private static readonly TimeSpan Network = TimeSpan.FromMinutes(5);
 
     /// <summary>Whether the repository has a remote at all, nothing to fetch from or push to without one.</summary>
-    public bool HasRemote() => GitProcess.Run(Root, ["remote"]).Output.Trim().Length > 0;
+    public bool HasRemote() => GitProcess.Run(Root, RemoteArguments, static (_, output, _) => !output.Trim().IsEmpty);
 
     /// <summary>What the remotes have that this hasn't, fetched without touching a branch. What git said when it went wrong, null when it didn't.</summary>
     public string? Fetch() => Fetch(unattended: false);
@@ -216,8 +398,16 @@ internal sealed partial class GitRepository
 
     private string? Fetch(bool unattended)
     {
-        GitResult result = GitProcess.Run(Root, ["fetch", "--all", "--prune", "--quiet"], patience: Network, unattended: unattended);
-        return result.Ok ? null : Said(result);
+        InvalidateInFlight(Root);
+        try
+        {
+            GitResult result = GitProcess.Run(Root, FetchArguments, patience: Network, unattended: unattended);
+            return result.Ok ? null : Said(result);
+        }
+        finally
+        {
+            InvalidateInFlight(Root);
+        }
     }
 
     /// <summary>
@@ -226,9 +416,17 @@ internal sealed partial class GitRepository
     /// </summary>
     public string? Pull(string mode = "default")
     {
-        string[] arguments = PullFlag(mode) is { } flag ? ["pull", "--quiet", flag] : ["pull", "--quiet"];
-        GitResult result = GitProcess.Run(Root, arguments, patience: Network);
-        return result.Ok ? null : Said(result);
+        InvalidateInFlight(Root);
+        try
+        {
+            string[] arguments = PullFlag(mode) is { } flag ? ["pull", "--quiet", flag] : ["pull", "--quiet"];
+            GitResult result = GitProcess.Run(Root, arguments, patience: Network);
+            return result.Ok ? null : Said(result);
+        }
+        finally
+        {
+            InvalidateInFlight(Root);
+        }
     }
 
     /// <summary>What git pull is told for a mode, --no-rebase, --rebase or --ff-only, null for leaving it to git config.</summary>
@@ -246,38 +444,61 @@ internal sealed partial class GitRepository
     /// </summary>
     public string? Push(string branch, bool hasUpstream)
     {
-        if (hasUpstream)
+        InvalidateInFlight(Root);
+        try
         {
-            GitResult pushed = GitProcess.Run(Root, ["push", "--quiet"], patience: Network);
-            return pushed.Ok ? null : Said(pushed);
-        }
+            if (hasUpstream)
+            {
+                GitResult pushed = GitProcess.Run(Root, PushQuietArguments, patience: Network);
+                return pushed.Ok ? null : Said(pushed);
+            }
 
-        string remote = GitProcess.Run(Root, ["remote"]).Output.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim() ?? "origin";
-        GitResult published = GitProcess.Run(Root, ["push", "--quiet", "--set-upstream", remote, branch], patience: Network);
-        return published.Ok ? null : Said(published);
+            string remote = GitProcess.Run(Root, RemoteArguments, static (_, output, _) =>
+            {
+                ReadOnlySpan<char> remotes = output;
+                ReadOnlySpan<char> firstRemote = NextNonEmptyLine(ref remotes).Trim();
+                return firstRemote.IsEmpty ? "origin" : firstRemote.ToString();
+            });
+            GitResult published = GitProcess.Run(Root, ["push", "--quiet", "--set-upstream", remote, branch], patience: Network);
+            return published.Ok ? null : Said(published);
+        }
+        finally
+        {
+            InvalidateInFlight(Root);
+        }
     }
 
     /// <summary>Whether HEAD is on a commit, false in a repository nobody committed to yet.</summary>
-    public bool HasCommit() => GitProcess.Run(Root, ["rev-parse", "--verify", "--quiet", "HEAD"]).Ok;
+    public bool HasCommit() => GitProcess.Run(Root, HasCommitArguments, static (exit, _, _) => exit == 0);
 
     // Runs a command on some paths, as many at a time as fit on a command line
     private string? Each(IReadOnlyList<string> paths, string[] command)
     {
-        const int AT_ONCE = 200;
-        for (int at = 0; at < paths.Count; at += AT_ONCE)
+        InvalidateInFlight(Root);
+        try
         {
-            var arguments = new List<string>(command);
-            for (int i = at; i < Math.Min(paths.Count, at + AT_ONCE); i++)
-                arguments.Add(Relative(paths[i]));
+            const int AT_ONCE = 200;
+            for (int at = 0; at < paths.Count; at += AT_ONCE)
+            {
+                int batch = Math.Min(paths.Count - at, AT_ONCE);
+                var arguments = new List<string>(command.Length + batch);
+                arguments.AddRange(command);
+                for (int i = at; i < at + batch; i++)
+                    arguments.Add(Relative(paths[i]));
 
-            GitResult result = GitProcess.Run(Root, arguments);
-            if (!result.Ok)
-                return Said(result);
+                GitResult result = GitProcess.Run(Root, arguments);
+                if (!result.Ok)
+                    return Said(result);
+            }
+
+            return null;
         }
-
-        return null;
+        finally
+        {
+            InvalidateInFlight(Root);
+        }
     }
 
     // Everything git said about something that failed, its errors or failing that what it wrote out
-    private static string Said(GitResult result) => (result.Error.Trim().Length > 0 ? result.Error : result.Output).Trim();
+    private static string Said(GitResult result) => GitProcess.FormatSaid(result.Output.AsSpan(), result.Error.AsSpan());
 }

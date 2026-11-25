@@ -200,6 +200,10 @@ internal sealed class HexLinkTrust
             yield return "predict";
         if (rights.HasFlag(HexLinkRights.Manage))
             yield return "manage";
+        if (rights.HasFlag(HexLinkRights.Ports))
+            yield return "ports";
+        if (rights.HasFlag(HexLinkRights.Ai))
+            yield return "ai";
     }
 
     /// <summary>Rights from those words, the ones it doesn't know left out.</summary>
@@ -215,6 +219,8 @@ internal sealed class HexLinkTrust
                 "edit" => HexLinkRights.Edit,
                 "predict" => HexLinkRights.Predict,
                 "manage" => HexLinkRights.Manage,
+                "ports" => HexLinkRights.Ports,
+                "ai" => HexLinkRights.Ai,
                 _ => HexLinkRights.None
             };
         }

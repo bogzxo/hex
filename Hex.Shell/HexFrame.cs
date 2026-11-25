@@ -1,6 +1,7 @@
 using System.Numerics;
 
 using Hex.Core;
+using Horizon.Engine;
 
 using Horizon.UI;
 using Horizon.UI.Components;
@@ -79,11 +80,11 @@ internal sealed class HexFrame
     /// <summary>Whether the lights are on at all, the effects at subtle or all.</summary>
     public static bool EffectsOn(HexSettings settings) => settings.Effects is "subtle" or "all";
 
-    /// <summary>The glass of the popups as the four sliders of the settings make it.</summary>
-    public static UIGlass PopupGlass(HexSettings settings) => HexGlass.Popup(settings.GlassBlur, settings.GlassClarity, settings.GlassRim, settings.GlassBend);
+    /// <summary>The glass of the popups as the sliders of the settings make it.</summary>
+    public static UIGlass PopupGlass(HexSettings settings) => HexGlass.Popup(settings.GlassBlur, settings.GlassClarity, settings.GlassBend);
 
-    /// <summary>The quieter glass of the sides out of the same four.</summary>
-    public static UIGlass SideGlass(HexSettings settings) => HexGlass.Side(settings.GlassBlur, settings.GlassClarity, settings.GlassRim, settings.GlassBend);
+    /// <summary>The quieter glass of the sides out of the same sliders.</summary>
+    public static UIGlass SideGlass(HexSettings settings) => HexGlass.Side(settings.GlassBlur, settings.GlassClarity, settings.GlassBend);
 
     /// <summary>The lights and the sparks, in a module of their own made now, so over whatever the scene has made.</summary>
     public void BuildEffects()
@@ -111,6 +112,10 @@ internal sealed class HexFrame
         compositor.AnimationSpeed = animationSpeed;
         compositor.ScrollSpeed = settings.ScrollSpeed;
         compositor.MiddleScrollSpeed = settings.MiddleScrollSpeed;
+
+        // How soon the screen shows what a hand did is the window's, both modes are drawn in the one
+        if (GameEngine.Instance?.WindowManager is { } window)
+            window.LowLatency = settings.LowLatency;
 
         lightEffects.CaretGlow = settings.EffectCaretGlow;
         lightEffects.Spotlight = settings.EffectSpotlight;

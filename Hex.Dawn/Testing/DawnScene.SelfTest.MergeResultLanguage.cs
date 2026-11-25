@@ -63,7 +63,7 @@ internal sealed partial class DawnScene
         test.WaitFor(() => HasDiagnostic(result, "complete_result_name"), 15);
         test.Check("merge-result-lsp: a fresh Result gets diagnostics from its own new text", () =>
             HasDiagnostic(result, "complete_result_name") && !HasDiagnostic(result, "cancel_result_name"));
-        test.Click(() => Center(Descendants(merge.Root).OfType<Button>().FirstOrDefault(button => button.Label == "Complete merge")));
+        test.Click(() => Center(Descendants(merge.Root).OfType<Button>().FirstOrDefault(button => button.Label.StartsWith("Save merged file", StringComparison.Ordinal))));
         test.WaitFor(() => !documents.Contains(result), 8);
         test.Check("merge-result-lsp: Complete delivers Result bytes and detaches its server", () =>
             completed is not null && Encoding.UTF8.GetString(completed) == completeText
@@ -84,7 +84,7 @@ internal sealed partial class DawnScene
         bool HasDiagnostic(HexDocument tab, string name) =>
             languages.ServerDiagnosticsOf(tab)?.Any(item => item.Message.Contains(name, StringComparison.Ordinal)) == true;
 
-        Button? DiscardButton() => chrome.Dialog?.Buttons.FirstOrDefault(button => button.Label == "Discard resolutions");
+        Button? DiscardButton() => chrome.Dialog?.Buttons.FirstOrDefault(button => button.Label == "Close without saving");
 
         static Vector2 Center(Button? button) => button?.Module is { } module ? module.ToWorld(button.Bounds.Center) : Vector2.Zero;
     }

@@ -102,6 +102,25 @@ internal sealed partial class DawnScene
         test.Check("link-files: the choice is kept for when B links again", () =>
             LinkSyncChosen(peerId ?? string.Empty).Contains(LINK_SYNC_FOLDER));
 
+        // Empty folders travel too: made on either side, then removed
+        test.Run(() =>
+        {
+            Directory.CreateDirectory(Path.Combine(mine, "empty-from-a", "inner"));
+            Directory.CreateDirectory(Path.Combine(theirs, "empty-from-b"));
+        });
+        test.WaitFor(() => Directory.Exists(Path.Combine(theirs, "empty-from-a", "inner")) && Directory.Exists(Path.Combine(mine, "empty-from-b")), 30.0f);
+        test.Check("link-files: an empty folder made on either side appears on the other", () =>
+            Directory.Exists(Path.Combine(theirs, "empty-from-a", "inner")) && Directory.Exists(Path.Combine(mine, "empty-from-b")));
+        test.WaitFor(() => Sync() is { } sync && File.Exists(sync.StateFile + ".dirs") && File.ReadAllText(sync.StateFile + ".dirs").Contains("empty-from-b"), 20.0f);
+        test.Run(() =>
+        {
+            Directory.Delete(Path.Combine(mine, "empty-from-a", "inner"));
+            Directory.Delete(Path.Combine(mine, "empty-from-a"));
+        });
+        test.WaitFor(() => !Directory.Exists(Path.Combine(theirs, "empty-from-a")), 30.0f);
+        test.Check("link-files: an empty folder deleted here is deleted on B and not made again", () =>
+            !Directory.Exists(Path.Combine(theirs, "empty-from-a")) && !Directory.Exists(Path.Combine(mine, "empty-from-a")));
+
         // A save in A's editor arrives on B's disk
         string shared = Path.Combine(mine, "src", "shared.txt"), sharedThere = Path.Combine(theirs, "src", "shared.txt");
         HexDocument? tab = null;
@@ -182,7 +201,7 @@ internal sealed partial class DawnScene
         string readme = Path.Combine(mine, "README.md");
         test.Run(() =>
         {
-            linkPresenceDrawnKey = string.Empty;
+            linkPresenceDrawnHash = null;
             _ = peer?.Write($"{LINK_PEER_FOLDER}/{LINK_FLAG_PRESENCE}", null, [1]);
         });
         test.WaitFor(() => peerId is not null && LinkPresence.TryGetValue(peerId, out LinkPresenceSeen? seen) && seen.Presence?.File == $"{LINK_SYNC_FOLDER}/README.md", 20.0f);

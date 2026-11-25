@@ -258,7 +258,8 @@ internal sealed class HexLinkClaimExchange(IHexLinkServices services)
                     changed = true;
                 }
             }
-            if (Interlocked.CompareExchange(ref sending, 1, 0) == 0)
+            // Nobody to send to and nothing waiting: no pool task twice a second for nothing
+            if ((routes.Count > 0 || pending.Count > 0) && Interlocked.CompareExchange(ref sending, 1, 0) == 0)
                 _ = Task.Run(() => Send(now));
         }
         return changed;

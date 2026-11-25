@@ -14,6 +14,16 @@ public sealed class DocumentFileTests : IDisposable
     public void Mixed_endings_follow_preserved_and_edited_lines(string edited, string expected) =>
         Assert.Equal(expected, DocumentFile.WithLineEndings(edited, "a\r\nb\nc\r\n", true, true));
 
+    [Theory]
+    [InlineData("a\r\nb\nc\r\nd\n", "a\nb\nnew\nc\nd\n", "a\r\nb\nnew\nc\r\nd\n")]
+    [InlineData("a\r\nb\nc\r\nd\n", "a\nb\nc\nd\nlast\n", "a\r\nb\nc\r\nd\nlast\n")]
+    [InlineData("a\r\nb\nc\r\nd\n", "first\na\nb\nc\nd\n", "first\r\na\r\nb\nc\r\nd\n")]
+    [InlineData("a\r\nb\r\nc\r\n", "a\nX\nY\nc\n", "a\r\nX\r\nY\r\nc\r\n")]
+    [InlineData("a\nb\nc\n", "a\nX\nY\nc\n", "a\nX\nY\nc\n")]
+    [InlineData("a\r\nb\nc\n", "a\nb\nx\ny\nc\n", "a\r\nb\nx\ny\nc\n")]
+    public void Inserted_lines_take_a_neighbours_ending_and_uniform_files_stay_uniform(string original, string edited, string expected) =>
+        Assert.Equal(expected, DocumentFile.WithLineEndings(edited, original, original.Contains("\r\n"), original.Contains("\r\n")));
+
     [Fact]
     public void Explicit_line_ending_conversion_overrides_preservation() =>
         Assert.Equal("a\nb\nc\n", DocumentFile.WithLineEndings("a\nb\nc\n", "a\r\nb\nc\r\n", false, true));

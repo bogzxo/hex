@@ -23,15 +23,7 @@ internal static class PredictionHttp
     private const int MOST_MESSAGE = 200;
 
     /// <summary>A JSON body written by <paramref name="write"/>.</summary>
-    public static ByteArrayContent Json(Action<Utf8JsonWriter> write)
-    {
-        var buffer = new ArrayBufferWriter<byte>(1024);
-        using (var writer = new Utf8JsonWriter(buffer))
-            write(writer);
-        var content = new ByteArrayContent(buffer.WrittenSpan.ToArray());
-        content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-        return content;
-    }
+    public static HttpContent Json(Action<Utf8JsonWriter> write) => PooledJsonContent.Of(write);
 
     /// <summary>
     /// Sends the request and hands back the response once its headers are in, or throws what went wrong. The deadline
@@ -78,13 +70,13 @@ internal static class PredictionHttp
         }
     }
 
-    /// <summary>The response's body as text to read a line at a time.</summary>
-    public static async Task<StreamReader> Reader(HttpResponseMessage response, CancellationTokenSource deadline, CancellationToken cancel, Uri api)
+    /// <summary>The response's body to read a line at a time, as bytes.</summary>
+    public static async Task<WireLines> Reader(HttpResponseMessage response, CancellationTokenSource deadline, CancellationToken cancel, Uri api)
     {
         try
         {
             Stream stream = await response.Content.ReadAsStreamAsync(deadline.Token).ConfigureAwait(false);
-            return new StreamReader(stream, System.Text.Encoding.UTF8, false, 4096);
+            return new WireLines(stream);
         }
         catch (OperationCanceledException) when (!cancel.IsCancellationRequested)
         {
@@ -96,13 +88,18 @@ internal static class PredictionHttp
         }
     }
 
-    /// <summary>The next line of the answer, null at its end, each line given <paramref name="wait"/> to come.</summary>
-    public static async Task<string?> Line(StreamReader reader, CancellationTokenSource deadline, TimeSpan wait, CancellationToken cancel, Uri api)
+    /// <summary>
+    /// The next line of the answer, in <see cref="WireLines.Current"/>; false at its end. A line already read waits for
+    /// nothing, one still to come is given <paramref name="wait"/>.
+    /// </summary>
+    public static async ValueTask<bool> Line(WireLines reader, CancellationTokenSource deadline, TimeSpan wait, CancellationToken cancel, Uri api)
     {
+        if (reader.TryNext())
+            return true;
         try
         {
             deadline.CancelAfter(wait);
-            return await reader.ReadLineAsync(deadline.Token).ConfigureAwait(false);
+            return await reader.More(deadline.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!cancel.IsCancellationRequested)
         {
@@ -116,6 +113,19 @@ internal static class PredictionHttp
 
     /// <summary>A line of the answer as JSON, or a bad answer when it isn't.</summary>
     public static JsonDocument Parse(string line, Uri api)
+    {
+        try
+        {
+            return JsonDocument.Parse(line);
+        }
+        catch (JsonException)
+        {
+            throw new PredictionException(PredictionStatus.BadAnswer, $"{Host(api)} answered with something that isn't JSON.");
+        }
+    }
+
+    /// <summary>A line of the answer, as bytes, as JSON, or a bad answer when it isn't.</summary>
+    public static JsonDocument Parse(ReadOnlyMemory<byte> line, Uri api)
     {
         try
         {
@@ -178,7 +188,9 @@ internal static class PredictionHttp
             return new PredictionException(PredictionStatus.NoSuchModel,
                 message.Length > 0 ? $"{host} has no such model: {message}" : $"{host} has no such model, or no such address ({(int)code}).");
         if (code == HttpStatusCode.OK)
-            return new PredictionException(PredictionStatus.BadAnswer, $"{host} stopped with an error: {message}");
+            // The address of a loopback (a link's AI is served from one) says nothing to the person, the message does
+            return new PredictionException(PredictionStatus.BadAnswer,
+                api.IsLoopback && message.Length > 0 ? message : $"{host} stopped with an error: {message}");
         return new PredictionException(PredictionStatus.BadAnswer,
             message.Length > 0 ? $"{host} answered {(int)code}: {message}" : $"{host} answered {(int)code}.");
     }

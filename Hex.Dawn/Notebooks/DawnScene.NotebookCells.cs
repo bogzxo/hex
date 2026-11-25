@@ -259,7 +259,9 @@ internal sealed partial class DawnScene
     private void PrepareCellEditor(HexNotebook notebook, NotebookCellEditor editor, NotebookCell cell)
     {
         editor.TextScale = CODE_TEXT * settings.CodeZoom;
-        editor.OnZoom = delta => ZoomCode(delta > 0 ? CODE_ZOOM_STEP : 1 / CODE_ZOOM_STEP);
+        editor.OnZoom = steps => ZoomCode(CodeZoomFactor(steps), smooth: MathF.Abs(steps) < 1.0f);
+        editor.OnPinch = factor => ZoomCode(factor, smooth: true);
+        editor.OnSmartZoom = SmartZoomCode;
         editor.Font = codeEditing.codeFont;
         editor.Padding = new UIEdges(6.0f, 5.0f, 6.0f, 5.0f);
         editor.LineNumbers = false;

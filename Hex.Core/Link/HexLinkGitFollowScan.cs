@@ -46,6 +46,15 @@ internal sealed class HexLinkGitFollowScan(string root)
         }
     }
 
+    /// <summary>The checkout's git directory and the common one a worktree shares (the same when it has none), once a read has located them.</summary>
+    internal string[] GitDirectories()
+    {
+        lock (gate)
+            return locations is { } found
+                ? found.GitDirectory.Equals(found.CommonDirectory, PlatformPaths.Comparison) ? [found.GitDirectory] : [found.GitDirectory, found.CommonDirectory]
+                : [];
+    }
+
     internal async Task<HexLinkHeadTip?> ReadStable(CancellationToken cancel)
     {
         if (Read(cancel) is { } tip)

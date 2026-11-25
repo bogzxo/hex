@@ -122,6 +122,8 @@ internal sealed partial class HexDesigner
 
     // Where the pointer was last said to be, in whole units of the layout, null for off the canvas
     private (int X, int Y)? coordsShown;
+    private readonly Dictionary<(int X, int Y), string> coordsCache = [];
+    private const int MAX_COORDS_CACHE = 512;
 
     /// <summary>Says where the pointer is in the layout, made into text only when it has moved a whole unit.</summary>
     private void ShowCoords(bool over, Vector2 at)
@@ -131,7 +133,20 @@ internal sealed partial class HexDesigner
             return;
 
         coordsShown = now;
-        coordsItem.Text = now is var (x, y) ? $"$(location) {x}, {y}" : string.Empty;
+        if (now is not var (x, y))
+        {
+            coordsItem.Text = string.Empty;
+            return;
+        }
+
+        if (!coordsCache.TryGetValue((x, y), out string? text))
+        {
+            if (coordsCache.Count >= MAX_COORDS_CACHE)
+                coordsCache.Clear();
+            coordsCache[(x, y)] = text = $"$(location) {x}, {y}";
+        }
+
+        coordsItem.Text = text;
     }
 
     /// <summary>

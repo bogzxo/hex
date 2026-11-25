@@ -22,12 +22,15 @@ internal sealed record HexHubRow(int Id, string Shown, string Agent, string? Mod
     /// <summary>Its messages not read yet, read off any thread by the number the chat has read up to.</summary>
     public HexAgentMail[] Unread => [.. Mail.Where(message => message.Seq > Chat.MailSeen)];
 
-    /// <summary>Returns the whole unread batch when the wait ends or mail wakes it, with the person's messages first.</summary>
+    /// <summary>
+    /// Returns the whole unread batch when the wait ends or mail wakes it, with the person's messages first. A wait told
+    /// not to wake on mail (messages=false) is woken only by the person, an instruction or a blocker.
+    /// </summary>
     public HexAgentMail[] UnreadForWait(bool wakesOnMail, bool finished)
     {
         HexAgentMail[] unread = Unread;
         if (!finished && !wakesOnMail &&
-            !unread.Any(message => message.FromPerson || message.Kind is "question" or "blocked"))
+            !unread.Any(message => message.FromPerson || message.Directive || message.Kind is "instruction" or "blocked"))
             return [];
 
         // OrderBy is stable. Both the person's messages and the other messages stay in arrival order.

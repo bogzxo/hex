@@ -61,16 +61,28 @@ internal sealed class FimFormat : IPredictionFormat
     {
         string text = input.Text;
         int caret = input.Caret;
-        if (caret < 0 || caret > text.Length || InWord(text, caret) || HasTokens(text))
+        if (caret < 0 || caret > text.Length || HasTokens(text))
             return null;
 
-        int lineEnd = text.IndexOf('\n', caret);
+        // Inside a word nothing is asked, except where the word is the old name of a rename being followed: the word is
+        // taken out, and what the model writes in its place has to be the new name
+        int anchor = caret, tail = caret;
+        string? expect = null;
+        if (InWord(text, caret))
+        {
+            if (input.Rename is not { } rename || !WordAt(text, caret, out anchor, out tail) || text[anchor..tail] != rename.OldName
+                || rename.NewName.Length == 0)
+                return null;
+            expect = rename.NewName;
+        }
+
+        int lineEnd = text.IndexOf('\n', tail);
         if (lineEnd < 0)
             lineEnd = text.Length;
-        bool midLine = !text.AsSpan(caret, lineEnd - caret).IsWhiteSpace();
+        bool midLine = !text.AsSpan(tail, lineEnd - tail).IsWhiteSpace();
 
-        int start = Before(text, caret), end = After(text, caret, lineEnd);
-        string before = text[start..caret], after = text[caret..end];
+        int start = Before(text, anchor), end = After(text, tail, lineEnd);
+        string before = text[start..anchor], after = text[tail..end];
         if (input.Notebook is { } notebook)
         {
             if (start == 0 && notebook.Before.Length > 0 && !HasTokens(notebook.Before))
@@ -81,17 +93,28 @@ internal sealed class FimFormat : IPredictionFormat
             if (end == text.Length && notebook.After.Length > 0 && !HasTokens(notebook.After))
             {
                 after += "\n\n" + notebook.After;
-                after = after[..After(after, 0, lineEnd - caret)];
+                after = after[..After(after, 0, lineEnd - tail)];
             }
         }
-        before = Comment(input.Language, input.Path) + before;
+
+        // The recent edits as comments before the path's, where the language has comments
+        string history = Marker(input.Language) is { } marker
+            ? PredictionEventText.Comments(input.Events, input.Rename, input.Path, marker, PredictionEventText.FIM_TOKENS)
+            : "";
+        if (HasTokens(history))
+            history = "";
+        before = history + Comment(input.Language, input.Path) + before;
         string written = suffixFirst ? suffix + after + prefix + before + middle : prefix + before + suffix + after + middle;
 
         // In the middle of a line only the rest of the line is wanted
         string[] stop = midLine ? ["\n", .. stops] : stops;
         int most = Math.Max(1, midLine ? Math.Min(maxTokens, MOST_IN_LINE) : maxTokens);
+        if (expect is not null)
+            most = Math.Max(1, Math.Min(most, MOST_IN_LINE / 4));
         var request = new PredictionWireRequest(written, null, most, stop, Name);
-        return new PredictionPrompt(request, caret, caret, "", caret);
+        return expect is null
+            ? new PredictionPrompt(request, caret, caret, "", caret)
+            : new PredictionPrompt(request, anchor, tail, text[anchor..tail], anchor, expect);
     }
 
     public PredictionParsed Parse(PredictionPrompt prompt, string output, bool complete)
@@ -109,6 +132,9 @@ internal sealed class FimFormat : IPredictionFormat
                 cut = true;
             }
         }
+
+        if (prompt.Expect is { } expect)
+            return Renamed(prompt, expect, answer, cut || complete);
 
         var (before, after) = Sides(prompt.Request.Prompt);
         int restEnd = after.IndexOf('\n');
@@ -137,9 +163,39 @@ internal sealed class FimFormat : IPredictionFormat
             return PredictionParsed.Unsettled;
 
         string insertion = Unrepeated(answer.TrimEnd(), rest);
+
+        // The caret after only the line's indentation: an answer that writes it again doesn't double it
+        string lineBefore = before[(before.LastIndexOf('\n') + 1)..];
+        if (lineBefore.Length > 0 && lineBefore.AsSpan().IsWhiteSpace() && insertion.StartsWith(lineBefore, StringComparison.Ordinal))
+            insertion = insertion[lineBefore.Length..];
         if (insertion.AsSpan().IsWhiteSpace())
             return PredictionParsed.Nothing;
         return new PredictionParsed([new PredictionEdit(prompt.Caret, prompt.Caret, insertion)], prompt.Caret + insertion.Length, true);
+    }
+
+    // A rename's answer: its first word has to be the new name, and then it replaces the old word where the caret was
+    private static PredictionParsed Renamed(PredictionPrompt prompt, string expect, string answer, bool ended)
+    {
+        int length = 0;
+        while (length < answer.Length && Word(answer[length]))
+            length++;
+        if (!ended && length == answer.Length)
+            return PredictionParsed.Unsettled;
+        if (answer[..length] != expect)
+            return PredictionParsed.Nothing;
+        return new PredictionParsed([new PredictionEdit(prompt.RegionStart, prompt.RegionEnd, expect)], prompt.RegionStart + expect.Length, true);
+    }
+
+    // The word the offset is inside, where it starts and ends
+    private static bool WordAt(string text, int at, out int start, out int end)
+    {
+        start = at;
+        end = at;
+        while (start > 0 && Word(text[start - 1]))
+            start--;
+        while (end < text.Length && Word(text[end]))
+            end++;
+        return end > start;
     }
 
     /// <summary>The answer with what it repeats of the text after the caret on its line taken off its end.</summary>
@@ -263,9 +319,12 @@ internal sealed class FimFormat : IPredictionFormat
     }
 
     // The file's path as a comment line, where the language has line comments
-    private static string Comment(string language, string path)
-    {
-        string? marker = language.ToLowerInvariant() switch
+    private static string Comment(string language, string path) =>
+        Marker(language) is { } marker ? marker + " " + path.Replace('\\', '/') + "\n" : "";
+
+    // The language's line comment marker, null where it has none
+    private static string? Marker(string language) =>
+        language.ToLowerInvariant() switch
         {
             "csharp" or "c" or "cpp" or "objective-c" or "objective-cpp" or "java" or "javascript" or "javascriptreact" or "typescript"
                 or "typescriptreact" or "go" or "rust" or "swift" or "kotlin" or "dart" or "scala" or "php" or "fsharp" or "hidl" or "hlsl"
@@ -275,6 +334,4 @@ internal sealed class FimFormat : IPredictionFormat
             "lua" or "sql" or "haskell" or "elm" => "--",
             _ => null,
         };
-        return marker is null ? "" : marker + " " + path.Replace('\\', '/') + "\n";
-    }
 }

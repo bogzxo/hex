@@ -67,6 +67,7 @@ internal sealed partial class DuskScene
     private int sparkedColumn = -1, sparkedRow = -1;
     private TerminalView? finishedIn;
     private int finishedSeen;
+    private bool effectsPaused;
 
     private bool EffectsOn => HexFrame.EffectsOn(shared);
 
@@ -105,6 +106,22 @@ internal sealed partial class DuskScene
     /// <summary>Every tick, sparks off the cursor as it moves along a prompt, and a burst for a long command that went well.</summary>
     private void UpdateEffects()
     {
+        // Pause ambient lights and sparks while the window is unfocused or minimized so the GPU stays asleep on battery.
+        // Self-tests keep effects active even if another desktop window currently holds focus.
+        bool windowActive = options.SelfTest || (Engine.WindowManager.IsFocused && !Engine.WindowManager.IsMinimized);
+        if (!windowActive)
+        {
+            if (!effectsPaused)
+            {
+                effectsPaused = true;
+                frame.Lights?.Clear();
+                frame.Sparks?.Clear();
+                sparkedIn = finishedIn = null;
+            }
+            return;
+        }
+        effectsPaused = false;
+
         // The light, the cursor's glow while a terminal has the keyboard and the pointer's, whenever the effects are on
         if (EffectsOn)
         {

@@ -39,6 +39,29 @@ internal sealed partial class DawnScene
             && local.DeviceId.Equals(self, StringComparison.OrdinalIgnoreCase);
     }
 
+    private HashSet<string> linkEmptyAsked { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.OrdinalIgnoreCase)); }
+
+    internal static bool LinkFolderIsEmpty(string path)
+    {
+        try { return Directory.Exists(path) && !Directory.EnumerateFileSystemEntries(path).Any(); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
+    }
+
+    // "Get <device>'s ws here?": once a session for each device and folder, the answer Not now leaving the folder alone
+    private void LinkAskGetEmptyFolder(HexLinkPeer peer, HexLinkFolder folder)
+    {
+        if (peer.IsClosed || !linkEmptyAsked.Add(peer.Device.Id + "/" + folder.Name))
+            return;
+        string device = LinkDeviceLabel(peer.Device), go = Said("link.provision.get_empty_go");
+        Context.Windows.Ask(Said("link.provision.get_empty_title", ("device", device), ("folder", folder.Name)),
+            Said("link.provision.get_empty_text", ("device", device), ("folder", folder.Name)),
+            [Said("link.provision.get_empty_later"), go], answer =>
+            {
+                if (answer == go)
+                    LinkGetWorkspaceInto(peer.Device.Id, device, folder.Path);
+            });
+    }
+
     // A matching workspace folder starts on connect unless the person turned it off. The sync still checks Git identity.
     private void LinkSyncStartSharedFolders(HexLinkPeer peer, bool boundOnly = false)
     {
@@ -52,7 +75,11 @@ internal sealed partial class DawnScene
                     ? pin == remote.Authority && pin.DeviceId == peer.Device.Id
                     : elected && !peer.ChosenSyncFolders.Contains(local.Name, PlatformPaths.Comparer))))
             .Select(local => local.Name)];
-        if (common.Length == 0)
+        // An empty folder of the same name gets the question whichever device is the elected owner of the sync
+        string[] sameName = boundOnly || !HexLinkAllowed.Has(peer.Granted, HexLinkRights.View) ? [] : [.. services.Workspace.Folders
+            .Where(local => local.Authority is null && peer.Workspace.Folders.Any(remote => PlatformPaths.Comparer.Equals(local.Name, remote.Name)))
+            .Select(local => local.Name)];
+        if (common.Length == 0 && sameName.Length == 0)
             return;
 
         _ = Task.Run(async () =>
@@ -63,11 +90,21 @@ internal sealed partial class DawnScene
             var disabled = new HashSet<string>(choices
                 .Where(choice => HexLinkData.String(choice, "device", 200) == peer.Device.Id && HexLinkData.Bool(choice, "enabled") == false)
                 .Select(choice => HexLinkData.String(choice, "folder", 200) ?? string.Empty), PlatformPaths.Comparer);
+            foreach (string name in sameName.Where(name => !chosen.Contains(name) && !disabled.Contains(name)))
+                if (services.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, name)) is { } empty && LinkFolderIsEmpty(empty.Path))
+                    PostLink(() => LinkAskGetEmptyFolder(peer, empty));
             int available = Math.Max(0, HexLinkHost.MOST_TREES - chosen.Count);
             foreach (string folder in common.Where(folder => !chosen.Contains(folder) && !disabled.Contains(folder)).Take(available))
             {
                 if (peer.IsClosed)
                     break;
+                if (services.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, folder)) is { Authority: null } empty
+                    && LinkFolderIsEmpty(empty.Path))
+                {
+                    // An empty folder that only shares a name is not a copy of the other device's: ask before filling it.
+                    PostLink(() => LinkAskGetEmptyFolder(peer, empty));
+                    continue;
+                }
                 try
                 {
                     await LinkSyncStart(peer.Device.Id, folder, remember: false, automatic: true);
@@ -96,7 +133,7 @@ internal sealed partial class DawnScene
         {
             if (!HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))
                 continue;
-            string device = peer.Device.Name;
+            string device = LinkDeviceLabel(peer.Device);
             commands.Add((Said("link.command_sync", ("device", device)), () => LinkSyncCommand(peer)));
             foreach (LinkSyncShown sync in LinkSyncs.Where(each => each.DeviceId == peer.Device.Id && each.State != HexLinkSyncState.Off))
                 commands.Add((Said("link.command_sync_stop", ("folder", sync.Folder), ("device", device)), () => LinkSyncStop(sync.DeviceId, sync.Folder)));

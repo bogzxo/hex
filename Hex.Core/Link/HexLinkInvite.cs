@@ -79,9 +79,32 @@ internal sealed class HexLinkInvite
         return PublicPrefix + Base64Url.EncodeToString(bytes[..offset]);
     }
 
+    /// <summary>
+    /// A token as it was pasted: the whitespace and newlines around it (and any a chat or an email wrapped it with) taken
+    /// out, as a token has none of its own.
+    /// </summary>
+    public static string Clean(string? text) => string.IsNullOrEmpty(text) ? string.Empty
+        : string.Concat(text.Where(c => !char.IsWhiteSpace(c) && c != '​' && c != '﻿'));
+
+    /// <summary>
+    /// Why a pasted text isn't a usable token, in a word: <c>expired</c>, <c>version</c> (a token of another kind),
+    /// <c>cut_off</c> (too short to be whole), <c>invalid</c> for anything else, null when it reads and hasn't expired.
+    /// </summary>
+    public static string? Problem(string? text)
+    {
+        string clean = Clean(text);
+        if (TryParse(clean, out HexLinkInvite? read) && read is not null)
+            return read.Until <= DateTimeOffset.UtcNow ? "expired" : null;
+        if (clean.StartsWith("hex-link:", StringComparison.OrdinalIgnoreCase) &&
+            !clean.StartsWith(Prefix, StringComparison.Ordinal) && !clean.StartsWith(PublicPrefix, StringComparison.Ordinal))
+            return "version";
+        return clean.Length < Prefix.Length + HeaderSize * 4 / 3 ? "cut_off" : "invalid";
+    }
+
     public static bool TryParse(string text, out HexLinkInvite? invite)
     {
         invite = null;
+        text = Clean(text);
         bool hasPublic = text.StartsWith(PublicPrefix, StringComparison.Ordinal);
         int maxLength = hasPublic ? MaxTokenLength : Prefix.Length + 282;
         if (text.Length > maxLength || (!hasPublic && !text.StartsWith(Prefix, StringComparison.Ordinal)))

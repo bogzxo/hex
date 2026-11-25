@@ -30,8 +30,42 @@ internal sealed partial class DawnScene
     /// <summary>The devices linked now, each the other machine as this one sees it (its fleet, chats, files and tools).</summary>
     internal IReadOnlyList<HexLinkPeer> LinkPeers => link?.Peers ?? [];
 
-    /// <summary>The Hexes heard on the LAN, this one left out.</summary>
-    internal IReadOnlyList<HexLinkNearby> LinkNearby => linkDiscovery?.Found ?? [];
+    /// <summary>The Hexes heard on the LAN, this one left out, and the ones found on a tailnet (DawnScene.LinkTailscale).</summary>
+    internal IReadOnlyList<HexLinkNearby> LinkNearby => LinkNearbyAll();
+
+    // Every device this one can currently name: itself, the paired ones, the linked ones and the Hexes heard nearby
+    private IEnumerable<(string? Name, string Id)> LinkNamedDevices(bool nearby = true)
+    {
+        if (LinkDevice is { } me)
+            yield return (me.Name, me.Id);
+        foreach (HexLinkKnown known in LinkKnown)
+            yield return (known.Device.Name, known.Device.Id);
+        foreach (HexLinkPeer peer in LinkPeers)
+            yield return (peer.Device.Name, peer.Device.Id);
+        if (!nearby)
+            yield break;
+        foreach (HexLinkNearby heard in LinkNearby)
+            yield return (heard.Name, heard.Id8);
+    }
+
+    /// <summary>A device's name as it is now (a rename is followed), with a short id tail where another device goes by the same name.</summary>
+    internal string LinkDeviceLabel(string id, string? lastName = null, bool nearby = true)
+    {
+        HexLinkDevice? now = LinkPeerOf(id)?.Device ?? LinkKnown.FirstOrDefault(each => each.Device.Id.Equals(id, StringComparison.OrdinalIgnoreCase))?.Device;
+        string? shown = linkTrust?.Find(id)?.Shown;
+        return HexLinkNames.Distinct(shown is { Length: > 0 } ? shown : now?.Name ?? lastName, now?.Id ?? id, LinkNamedDevices(nearby));
+    }
+
+    internal string LinkDeviceLabel(HexLinkDevice device) => LinkDeviceLabel(device.Id, device.Name);
+
+    /// <summary>A Nearby row's name, with its id tail when two heard (or paired) devices share it, the port when it has no id.</summary>
+    internal string LinkNearbyLabel(HexLinkNearby heard)
+    {
+        string label = HexLinkNames.Distinct(heard.Name, heard.Id8, LinkNamedDevices());
+        if (heard.Id8.Length == 0 && LinkNearby.Count(each => each != heard && string.Equals(each.Name, heard.Name, StringComparison.OrdinalIgnoreCase)) > 0)
+            label += $" · :{heard.Port}";
+        return label;
+    }
 
     /// <summary>Why the LAN can't be looked at, null when it can or Link is off.</summary>
     internal string? LinkNearbyOff => linkDiscovery?.Off;
@@ -59,6 +93,9 @@ internal sealed partial class DawnScene
     /// <summary>Whether a known device is one the person cut, which isn't dialled again until they connect it by hand.</summary>
     internal bool LinkHeldOff(string id) => linkHeldOff.Contains(id);
 
+    /// <summary>The name of the device that cut the link by hand when it was the other one, null when it was cut here or isn't cut.</summary>
+    internal string? LinkHeldOffBy(string id) => linkHeldOffBy.GetValueOrDefault(id);
+
     /// <summary>
     /// Opens the pairing window: for the next five minutes (or <paramref name="window"/>) one unknown device may pair,
     /// and the person is asked about it (<see cref="LinkPairingPending"/>, and the pairing dialog, DawnScene.LinkPairing).
@@ -84,7 +121,7 @@ internal sealed partial class DawnScene
     private HexLinkPairingTerms LinkInvitationTerms()
     {
         LinkInviteOptions chosen = linkInviteOptions;
-        return new HexLinkPairingTerms(chosen.Preset, chosen.Rights, LinkPresetRequest(chosen.Preset), linkAutoShareAvailable && chosen.Share);
+        return new HexLinkPairingTerms(chosen.Preset, chosen.Rights, LinkPresetRequest(chosen.Preset, chosen.Rights), linkAutoShareAvailable && chosen.Share);
     }
 
     /// <summary>Closes the pairing window, a pairing already under way going on to its end.</summary>
@@ -145,8 +182,9 @@ internal sealed partial class DawnScene
         if (linkManualDials.Remove(id, out LinkDeviceConnection? connecting))
             connecting.Attempt?.Cancel();
         linkHeldOff.Add(id);
+        linkHeldOffBy.Remove(id);
         linkDirty = true;
-        return link?.Remove(id, "it was disconnected here") == true;
+        return link?.Remove(id, "it was disconnected here", bye: true) == true;
     }
 
     /// <summary>A device forgotten: its pin gone, its link cut the same moment, and it can't link again without pairing.</summary>
@@ -205,8 +243,7 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>What a device is shown as here: the person's name for it, else its own (cleaned), else the start of its id.</summary>
-    internal string LinkNameOf(string id, string? said = null) =>
-        linkTrust?.Find(id)?.Shown is { Length: > 0 } shown ? shown : HexLinkNames.Clean(said) ?? (id.Length > 8 ? id[..8] : id);
+    internal string LinkNameOf(string id, string? said = null) => LinkDeviceLabel(id, said, nearby: false);
 
     /* Pairing, asking the person */
 

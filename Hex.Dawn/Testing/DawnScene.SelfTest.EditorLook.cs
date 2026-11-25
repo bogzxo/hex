@@ -90,6 +90,8 @@ internal sealed partial class DawnScene
                     code.Breakpoints = new HashSet<int> { EDITOR_LOOK_MIDDLE - 1 };
                     code.LineChanges = [new(EDITOR_LOOK_MIDDLE - 3, 1, UILineChangeKind.Modified), new(EDITOR_LOOK_MIDDLE + 5, 2, UILineChangeKind.Added), new(EDITOR_LOOK_MIDDLE + 8, 0, UILineChangeKind.Deleted)];
                 });
+                // The tabs are made over the updates after the opens, slower under load, so wait for them rather than a time
+                test.WaitFor(() => docTabs.Tabs.Count == 3 && docTabs.Selected == 2 && docTabs.Tabs[0].Pinned, 10.0f);
                 ShotNow(tag + "-code");
                 test.Check($"editor look: {tag} the tabs fit their strip and the code is under them", () =>
                     docTabs.Tabs.Count == 3 && docTabs.Selected == 2 && code.CodeBounds.Width > 100.0f);

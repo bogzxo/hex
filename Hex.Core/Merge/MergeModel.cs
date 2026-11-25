@@ -36,10 +36,12 @@ internal sealed record MergeOriginals(string[]? Base, string[] Mine, string[] Th
 internal sealed class MergeModel
 {
     private readonly string encoding;
+    private readonly string? originalText;
 
     private MergeModel(IReadOnlyList<MergeRegion> regions, string lineEnding, bool finalNewline, string encoding,
-        MergeBinarySides? binarySides = null, MergeOriginals? originals = null)
+        MergeBinarySides? binarySides = null, MergeOriginals? originals = null, string? originalText = null)
     {
+        this.originalText = originalText;
         Regions = regions;
         LineEnding = lineEnding;
         HasFinalNewline = finalNewline;
@@ -83,7 +85,7 @@ internal sealed class MergeModel
             regions = ShowCleanChanges(regions, baseLines);
         MergeOriginals? sources = HexLinkFiles.Decode(theirs) is { } incoming
             ? new(baseLines, Lines(original.Text), Lines(incoming.Text)) : null;
-        return new(regions, Ending(original.Text), EndsWithNewline(original.Text), original.Encoding, originals: sources);
+        return new(regions, Ending(original.Text), EndsWithNewline(original.Text), original.Encoding, originals: sources, originalText: original.Text);
     }
 
     public static MergeModel FromTwo(byte[] mine, byte[] theirs)
@@ -91,13 +93,29 @@ internal sealed class MergeModel
         if (HexLinkFiles.Decode(mine) is not { } local || HexLinkFiles.Decode(theirs) is not { } remote)
             return Binary([], mine, theirs);
         string[] ours = Lines(local.Text), other = Lines(remote.Text);
-        return new([new MergeRegion.Conflict(null, ours, other,
-            ["<<<<<<< Mine", .. ours, "=======", .. other, ">>>>>>> Theirs"])],
-            Ending(local.Text), EndsWithNewline(local.Text), local.Encoding, originals: new(null, ours, other));
+
+        // With no base to say who changed what, the two files are compared with each other: the lines they share are clean
+        // and every place they differ is a conflict of its own, not the whole of both files as one.
+        var regions = new List<MergeRegion>();
+        int at = 0;
+        foreach (GitHunk hunk in GitLineDiff.Diff(ours, other))
+        {
+            if (at < hunk.OldStart)
+                regions.Add(new MergeRegion.Clean(ours[at..hunk.OldStart]));
+            string[] mineLines = ours[hunk.OldStart..(hunk.OldStart + hunk.OldCount)];
+            string[] theirsLines = other[hunk.NewStart..(hunk.NewStart + hunk.NewCount)];
+            regions.Add(new MergeRegion.Conflict(null, mineLines, theirsLines,
+                ["<<<<<<< Mine", .. mineLines, "=======", .. theirsLines, ">>>>>>> Theirs"]));
+            at = hunk.OldStart + hunk.OldCount;
+        }
+
+        if (at < ours.Length || regions.Count == 0)
+            regions.Add(new MergeRegion.Clean(ours[at..]));
+        return new(regions, Ending(local.Text), EndsWithNewline(local.Text), local.Encoding, originals: new(null, ours, other), originalText: local.Text);
     }
 
     public static MergeModel FromMarkers(string text, string encoding = "utf-8") =>
-        new(RegionsFromMarkers(text), Ending(text), EndsWithNewline(text), encoding);
+        new(RegionsFromMarkers(text), Ending(text), EndsWithNewline(text), encoding, originalText: text);
 
     public static MergeModel Binary(byte[] @base, byte[] mine, byte[] theirs) =>
         new([], "\n", false, "utf-8", new(@base, mine, theirs));
@@ -119,9 +137,13 @@ internal sealed class MergeModel
 
     public byte[] EncodeResult(string edited)
     {
-        string text = edited.ReplaceLineEndings(LineEnding);
+        string text = edited.ReplaceLineEndings("\n");
         if (text.Length > 0 && HasFinalNewline != EndsWithNewline(text))
-            text = HasFinalNewline ? text + LineEnding : text[..^LineEnding.Length];
+            text = HasFinalNewline ? text + "\n" : text[..^1];
+        // A file that mixed CRLF and LF keeps each line's own ending, new lines take a neighbour's.
+        text = originalText is { } original && original.Contains("\r\n", StringComparison.Ordinal)
+            ? DocumentFile.WithLineEndings(text, original, true, true)
+            : text.ReplaceLineEndings(LineEnding);
         return HexLinkFiles.Encode(text, encoding)
             ?? throw new InvalidOperationException($"The merge encoding '{encoding}' is unsupported.");
     }

@@ -3,11 +3,7 @@
 
 let link_talk = compositor.panel({ clip: true, radius: 6 });
 
-let link_talk_title = compositor.label({
-    parent: link_talk, anchor: "top_left", pivot: "top_left", pos: vec(12, -12),
-    text: "@link.talk.title", bold: true
-});
-
+// The panel has no heading of its own: the Link Chat tab above it says what it is
 let link_talk_close = compositor.button({
     parent: link_talk, anchor: "top_right", pivot: "top_right", pos: vec(-7, -7), size: vec(26, 26),
     icon: "close", style: "button_flat", animated: false, tooltip: "@link.talk.close"

@@ -241,10 +241,12 @@ public sealed class HexLinkGitTests
                 changes.Enqueue(change);
         });
 
-        Assert.Equal(Head(nested), manifest.NestedHeads!["nested"]);
+        string listed = $"nested heads {string.Join(", ", manifest.NestedHeads?.Keys ?? [])}; files {string.Join(", ", manifest.Files.Select(file => file.Path))}; issues {string.Join(", ", manifest.GitIssues?.Select(issue => $"{issue.Key}: {issue.Value}") ?? [])}";
+        Assert.True(manifest.NestedHeads is not null && manifest.NestedHeads.ContainsKey("nested") && manifest.NestedHeads.ContainsKey("nested/lib/module"), listed);
+        Assert.Equal(Head(nested), manifest.NestedHeads["nested"]);
         Assert.Equal(Head(submodule), manifest.NestedHeads["nested/lib/module"]);
-        Assert.Contains(manifest.Files, file => file.Path == "work/nested/tracked.txt");
-        Assert.Contains(manifest.Files, file => file.Path == "work/nested/lib/module/new.txt");
+        Assert.True(manifest.Files.Any(file => file.Path == "work/nested/tracked.txt"), listed);
+        Assert.True(manifest.Files.Any(file => file.Path == "work/nested/lib/module/new.txt"), listed);
         Assert.DoesNotContain(manifest.Files, file => file.Path.Contains("/out/") || file.Path.EndsWith("/.git"));
         Assert.Null(HexLinkTree.CommitsDiffer(manifest, HexLinkTree.Of(HexLinkTree.Json(manifest))));
 
@@ -253,13 +255,73 @@ public sealed class HexLinkGitTests
         Assert.Equal(["nested/lib/module/out/build.txt"], tree.Ignored(["nested/tracked.txt", "nested/lib/module/new.txt", "nested/lib/module/out/build.txt"]));
 
         File.WriteAllText(Path.Combine(submodule, "later.txt"), "live\n");
-        Assert.True(Eventually(() => changes.Any(change => change.Path == "work/nested/lib/module/later.txt")));
+        Assert.True(Eventually(() => changes.Any(change => change.Path == "work/nested/lib/module/later.txt")),
+            $"No change for work/nested/lib/module/later.txt (the root is {root}, its links resolved {HexLinkTree.RealPath(root)}). Heard: {string.Join(", ", changes.Select(change => change.Path))}");
         Assert.DoesNotContain(changes, change => change.Path.Contains("/out/"));
 
         Git(nested, "commit", "--allow-empty", "-qm", "Nested head changed");
         HexLinkManifest moved = await pair.PeerA.Manifest("work");
         Assert.Equal(manifest.Head, moved.Head);
         Assert.StartsWith("nested is at ", HexLinkTree.CommitsDiffer(manifest, moved));
+
+        // Right after a scan, a commit in the nested checkout (the watcher leaves .git alone) is seen by the next one, not a reused snapshot
+        for (int round = 0; round < 3; round++)
+        {
+            HexLinkManifest before = await pair.PeerA.Manifest("work");
+            Git(nested, "commit", "--allow-empty", "-qm", $"Again {round}");
+            HexLinkManifest after = await pair.PeerA.Manifest("work");
+            Assert.Equal(Head(nested), after.NestedHeads!["nested"]);
+            Assert.NotEqual(before.NestedHeads!["nested"], after.NestedHeads["nested"]);
+        }
+    }
+
+    [Fact]
+    public void Canonicalise_resolves_ancestor_links_and_links_inside_link_targets()
+    {
+        string top = Path.GetPathRoot(Path.GetTempPath())!;
+        string P(params string[] parts) => Path.Combine([top, .. parts]);
+        // var -> private/var (relative), work/alias -> ../var/data (through the first link), loop -> loop
+        var links = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [P("var")] = Path.Combine("private", "var"),
+            [P("private", "var", "work", "alias")] = Path.Combine("..", "data"),
+            [P("loop")] = P("loop"),
+        };
+        string? Link(string path) => links.GetValueOrDefault(path);
+
+        Assert.Equal(P("private", "var", "x", "y"), HexLinkTree.Canonicalise(P("var", "x", "y"), Link), ignoreCase: true);
+        Assert.Equal(P("private", "var", "data", "f"), HexLinkTree.Canonicalise(P("var", "work", "alias", "f"), Link), ignoreCase: true);
+        Assert.Equal(P("plain", "missing", "a"), HexLinkTree.Canonicalise(P("plain", "missing", "a"), Link), ignoreCase: true);
+        Assert.Null(HexLinkTree.Canonicalise(P("loop", "a"), Link));
+    }
+
+    [Fact]
+    public void A_path_through_a_link_resolves_to_where_the_watcher_may_spell_it()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "hex-real-" + Guid.NewGuid().ToString("N")[..8]);
+        string real = Path.Combine(folder, "real"), alias = Path.Combine(folder, "alias");
+        Directory.CreateDirectory(Path.Combine(real, "inner"));
+        try
+        {
+            try
+            {
+                Directory.CreateSymbolicLink(alias, real);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                return; // Windows without Developer Mode
+            }
+
+            string through = Path.Combine(alias, "inner");
+            string? resolved = HexLinkTree.RealPath(through);
+            Assert.NotNull(resolved);
+            Assert.Equal(Path.Combine(HexLinkTree.RealPath(folder)!, "real", "inner"), resolved, ignoreCase: !OperatingSystem.IsLinux());
+            Assert.Equal("a/b.txt", HexLinkTree.RelativeTo(real, Path.Combine(real, "a", "b.txt")));
+        }
+        finally
+        {
+            Directory.Delete(folder, true);
+        }
     }
 
     [Fact]

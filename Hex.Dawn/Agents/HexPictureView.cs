@@ -97,11 +97,29 @@ internal sealed class HexPictureView : UIComponent
         OnZoomed?.Invoke();
     }
 
+    protected override bool OnMagnify(float amount)
+    {
+        Vector2? pointer = Module is { } module ? module.ToLocal(module.Compositor.Pointer.Position) : null;
+        ZoomBy(Horizon.Input.PreciseScroll.PinchFactor(amount), pointer is { } at && Bounds.Contains(at) ? at : null);
+        return true;
+    }
+
+    // Smart zoom goes between what fits and a pixel for a pixel, round the pointer's picture
+    protected override bool OnSmartMagnify()
+    {
+        if (Zoom > 0.0f && MathF.Abs(Zoom - 1.0f) < 0.01f)
+            Fit();
+        else
+            Actual();
+        return true;
+    }
+
     protected override bool OnScroll(float delta)
     {
         // Round the pointer, the way a picture viewer zooms
         Vector2? pointer = Module is { } module ? module.ToLocal(module.Compositor.Pointer.Position) : null;
-        ZoomBy(delta > 0 ? STEP : 1.0f / STEP, pointer is { } at && Bounds.Contains(at) ? at : null);
+        // A trackpad's fractions of a notch zoom by that fraction of a step, not a whole step for each of them
+        ZoomBy(PreciseWheel ? MathF.Pow(STEP, delta) : delta > 0 ? STEP : 1.0f / STEP, pointer is { } at && Bounds.Contains(at) ? at : null);
         return true;
     }
 

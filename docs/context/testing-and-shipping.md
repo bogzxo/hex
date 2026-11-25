@@ -138,6 +138,10 @@ stdout/stderr, keeps only `[Hex self-test]` lines and returns: `<suites>: <last 
 (lines beginning `FAIL` or `step threw`). Error result when exit code != 0 or on timeout (process tree killed). Because it launches the running exe, it is only as good as
 that exe's location (see 3.4).
 
+### What `HEX_HOME` isolates
+
+`HEX_HOME` moves the settings folder (`hex_settings.hor`, `keys.hor`, the saved session and its tabs, `mcp/` discovery files, `plugins/`) and the data folder (`<home>/data`: agent chats, agent temp and scratch, the harness cache, `link-ai/loopback.json`). It does **not** isolate: the `agent_data_folder` setting when it is an absolute path (a settings file copied from another Hex still points at that Hex's agent folder), the legacy `settings` folder beside the program (a copy of `bin` carries the original's `settings/` with it), a workspace's own `.hex/` folder in the opened folder, `HEX_REMOTE_PIPE` and the Link port (set both per instance). A private instance launched from a copy of `bin` can therefore see the original's session or agent files unless the copy's `settings/` and `data/` folders are deleted first, or `agent_data_folder` is cleared in its own home.
+
 ### Hex Link suites
 
 Run these from the build output of a disposable checkout. Give each process a fresh `HEX_HOME` and a unique `HEX_REMOTE_PIPE`, set `HORIZON_AUDIO=off`, and use `--exit`. The local suites start their own peers over IPv4 loopback and skip LAN discovery. Keep the engine and HIDL project references pointed at the matching checkout when building. See the [Wave 2 evidence and rerun commands](../hex-link-test-evidence.md).

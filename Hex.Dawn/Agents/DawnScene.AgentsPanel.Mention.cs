@@ -32,6 +32,8 @@ internal sealed partial class DawnScene
         if (compositor.Focus != agentsInput)
             return null;
         int line = agentsInput.Document.Caret.Line, column = agentsInput.Document.Caret.Column;
+        if (column <= 0)
+            return null;
         string text = agentsInput.Document.LineAt(line);
         if (column > text.Length)
             return null;
@@ -51,6 +53,12 @@ internal sealed partial class DawnScene
         if (key == agentsMentionFor)
             return;
         agentsMentionFor = key;
+        RebuildAgentMention(mention);
+    }
+
+    // Slow path extracted so Roslyn never hoists closure display classes onto the per-tick idle fast path
+    private void RebuildAgentMention((int Line, int Start, string Typed)? mention)
+    {
         if (agentsMention is not null)
         {
             agentsMention.Parent?.Remove(agentsMention);

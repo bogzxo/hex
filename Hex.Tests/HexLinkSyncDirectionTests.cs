@@ -55,6 +55,87 @@ public sealed partial class HexLinkSyncTests
     }
 
     [Fact]
+    public async Task Revoking_Edit_stops_that_devices_saves_landing_here_and_this_devices_still_go_there()
+    {
+        using var pair = await LinkedPair.Up(EDIT, EDIT);
+        using HexLinkSync onA = SyncOf(pair);
+        using HexLinkSync onB = SyncOfB(pair);
+        await Task.WhenAll(onA.Start(), onB.Start());
+        Put(pair.A, "first.txt", "before");
+        Assert.True(await Until(() => Get(pair.B, "first.txt") == "before"), onA.Summary + " / " + onB.Summary);
+
+        // B takes Edit away from A: what A saves must stop landing on B, what B saves must still land on A
+        pair.AOnB = HexLinkRights.View;
+        pair.LinkB.RightsMoved(DeviceA.Id);
+        onB.RefreshReceiveRights();
+        Assert.True(await Until(() => onA.State == HexLinkSyncState.PullOnly), onA.Summary);
+        Assert.Contains("Laptop", onA.Why);
+        Assert.True(onB.ReceiveBlocked);
+        Assert.Contains("Desk", onB.Summary);
+
+        Put(pair.A, "from-a.txt", "A saved");
+        Put(pair.A, "first.txt", "A edited");
+        Put(pair.B, "from-b.txt", "B saved");
+        Assert.True(await Until(() => Get(pair.A, "from-b.txt") == "B saved"), onA.Summary + " / " + onB.Summary);
+        await Task.WhenAll(Settled(onA), Settled(onB));
+        await Task.Delay(500);
+        Assert.False(Has(pair.B, "from-a.txt"));
+        Assert.Equal("before", Get(pair.B, "first.txt"));
+
+        // Given back, what A saved meanwhile arrives
+        pair.AOnB = EDIT;
+        pair.LinkB.RightsMoved(DeviceA.Id);
+        onB.RefreshReceiveRights();
+        Assert.True(await Until(() => Get(pair.B, "from-a.txt") == "A saved" && Get(pair.B, "first.txt") == "A edited"),
+            onA.Summary + " / " + onB.Summary);
+    }
+
+    [Fact]
+    public async Task Revoking_Edit_the_other_way_stops_that_devices_saves_landing_there()
+    {
+        using var pair = await LinkedPair.Up(EDIT, EDIT);
+        using HexLinkSync onA = SyncOf(pair);
+        using HexLinkSync onB = SyncOfB(pair);
+        await Task.WhenAll(onA.Start(), onB.Start());
+
+        // A takes Edit away from B
+        pair.BOnA = HexLinkRights.View;
+        pair.LinkA.RightsMoved(DeviceB.Id);
+        onA.RefreshReceiveRights();
+        Assert.True(await Until(() => onB.State == HexLinkSyncState.PullOnly), onB.Summary);
+        Assert.Contains("Desk", onB.Why);
+
+        Put(pair.B, "from-b.txt", "B saved");
+        Put(pair.A, "from-a.txt", "A saved");
+        Assert.True(await Until(() => Get(pair.B, "from-a.txt") == "A saved"), onA.Summary + " / " + onB.Summary);
+        await Task.WhenAll(Settled(onA), Settled(onB));
+        await Task.Delay(500);
+        Assert.False(Has(pair.A, "from-b.txt"));
+    }
+
+    [Fact]
+    public void A_refusal_for_a_file_open_in_a_shared_document_carries_a_stable_marker_and_says_what_to_do()
+    {
+        string said = HexLinkSync.SharedOpenRefusal("ws/src/main.py");
+        Assert.True(HexLinkSync.IsSharedOpenRefusal(said));
+        Assert.Contains("Close its tab", said);
+        Assert.Contains("ws/src/main.py", said);
+        Assert.False(HexLinkSync.IsSharedOpenRefusal("ws/src/main.py has unsaved changes in the editor."));
+        Assert.False(HexLinkSync.IsSharedOpenRefusal(null));
+    }
+
+    [Fact]
+    public void A_refusal_caused_by_an_open_tab_carries_the_marker_and_one_for_anything_else_does_not()
+    {
+        var open = new HexLinkException(HexLinkErrors.CONFLICT, "ws/a.txt has unsaved changes in the editor.", new JsonObject { ["editor_dirty"] = true });
+        Assert.True(HexLinkSync.IsSharedOpenRefusal(HexLinkSync.OpenTabMarked(open)));
+        var shared = new HexLinkException(HexLinkErrors.CONFLICT, HexLinkSync.SharedOpenRefusal("ws/a.txt"), new JsonObject { ["editor_dirty"] = true });
+        Assert.Equal(shared.Message, HexLinkSync.OpenTabMarked(shared));
+        var other = new HexLinkException(HexLinkErrors.CONFLICT, "ws/a.txt changed since it was read.");
+        Assert.False(HexLinkSync.IsSharedOpenRefusal(HexLinkSync.OpenTabMarked(other)));
+    }
+
+    [Fact]
     public async Task Activation_requires_view_and_a_direct_link()
     {
         using var pair = await LinkedPair.Up(HexLinkRights.None, EDIT);

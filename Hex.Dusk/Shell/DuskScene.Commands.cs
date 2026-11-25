@@ -30,7 +30,7 @@ internal sealed partial class DuskScene
         // below while it owns input, so returning to the terminal cannot replay a shortcut.
         for (UIComponent? at = compositor.Focus; at is not null && !typing; at = at.Parent)
             typing = at == settingsView?.Window;
-        bool control = keyboard.Control, shift = keyboard.Shift, alt = keyboard.Alt;
+        bool control = keyboard.Primary, shift = keyboard.Shift, alt = keyboard.Alt;
 
         var all = host.Commands.All;
         for (int i = 0; i < all.Count; i++)

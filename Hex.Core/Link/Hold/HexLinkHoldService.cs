@@ -25,6 +25,8 @@ internal sealed class HexLinkHoldService(HexLinkFolder folder, HexLinkHoldStore 
     private readonly SemaphoreSlim operations = new(1, 1);
     private readonly Lock pendingGate = new();
     private readonly Dictionary<string, PendingMerge> pending = new(PlatformPaths.Comparer);
+    // Paths a resolved submit merge sent since the last submit, for the next submit (which finds nothing held) to report
+    private readonly List<string> settled = [];
 
     private sealed class PendingMerge(IReadOnlyList<HexLinkHoldPlanEntry> plan, bool update, bool? check)
     {
@@ -70,6 +72,18 @@ internal sealed class HexLinkHoldService(HexLinkFolder folder, HexLinkHoldStore 
         try
         {
             IReadOnlyList<HexLinkHold> entries = Entries(paths);
+            if (entries.Count == 0)
+            {
+                // Nothing is held: what a merge resolved a moment ago was submitted by that, say so rather than an empty list
+                lock (pendingGate)
+                {
+                    string[] done = [.. settled];
+                    settled.Clear();
+                    return new(done, []);
+                }
+            }
+            lock (pendingGate)
+                settled.Clear();
             await PrepareFiles(entries, cancel);
             IReadOnlyList<HexLinkHoldPlanEntry> plan = await BuildPlan(entries, cancel);
             var conflicts = plan.Where(entry => entry.RequiresResolution).ToArray();
@@ -221,7 +235,14 @@ internal sealed class HexLinkHoldService(HexLinkFolder folder, HexLinkHoldStore 
                     : entry)];
                 HexLinkHoldOperation result = await Install(ready, batch.Update, checkOverride ?? batch.Check, cancel);
                 if (result.Passed)
+                {
                     Forget(batch);
+                    if (!batch.Update)
+                        lock (pendingGate)
+                            foreach (string settledPath in result.Paths)
+                                if (!settled.Contains(settledPath, PlatformPaths.Comparer))
+                                    settled.Add(settledPath);
+                }
                 return result;
             }
             catch
@@ -334,7 +355,8 @@ internal sealed class HexLinkHoldService(HexLinkFolder folder, HexLinkHoldStore 
                 plan.Add(Conflict(HexLinkHoldOutcome.DeleteConflict, MergeModel.Binary(basis ?? [], mine ?? [], theirs ?? [])));
             else
             {
-                MergeModel model = await MergeModel.FromThree(basis ?? [], mine, theirs, cancel);
+                // With no base, merging against an empty one would make both whole files added, so they are compared as they are
+                MergeModel model = basis is null ? MergeModel.FromTwo(mine, theirs) : await MergeModel.FromThree(basis, mine, theirs, cancel);
                 if (model.IsBinary)
                     plan.Add(Conflict(HexLinkHoldOutcome.Binary, model));
                 else if (model.ConflictCount > 0)

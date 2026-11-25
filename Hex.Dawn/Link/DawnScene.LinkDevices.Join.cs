@@ -16,7 +16,7 @@ internal sealed partial class DawnScene
     private sealed record LinkInviteOptions(HexLinkPreset Preset, HexLinkRights Rights, bool Share);
     private LinkInviteOptions linkInviteOptions
     {
-        get => LazyInitializer.EnsureInitialized(ref field, static () => new(HexLinkPreset.Collaborator, LinkPresetRights(HexLinkPreset.Collaborator), true));
+        get => LazyInitializer.EnsureInitialized(ref field, () => new(HexLinkPreset.Collaborator, LinkInviteDefaultRights(), true));
         set => Volatile.Write(ref field, value);
     }
     private HexLinkPreset linkInvitePreset => linkInviteOptions.Preset;
@@ -33,7 +33,7 @@ internal sealed partial class DawnScene
     private string? linkJoinMessage, linkInviteError;
     private string linkJoinTyped = string.Empty, linkJoinRouteTyped = string.Empty, linkInviteRouteTyped = string.Empty;
     private long linkInviteCopiedUntil;
-    private bool linkAutoShareAvailable;
+    private bool linkAutoShareAvailable, linkInviteAddressesShown;
     private string? linkShareAfterPairing;
     private (string Id, long Until)? linkShareAfterConnected;
 
@@ -50,9 +50,9 @@ internal sealed partial class DawnScene
         if (LinkPeerOf(pending.Id) is null)
             return;
         linkShareAfterConnected = null;
-        Action? share = null, get = null;
-        LinkDeviceProvisionActions(pending.Id, ref share, ref get);
-        share?.Invoke();
+        // The share that was asked for with the invitation goes as it is: the question about build folders is asked when a
+        // sync of a folder is started from the window, not over the window the person has just paired in
+        SendLinkWorkspaceOffer(pending.Id);
     }
 
     private void ShowLinkDevicePage(LinkDevicePage page)
@@ -68,6 +68,7 @@ internal sealed partial class DawnScene
             : UIDialog.Show(chrome, title, string.Empty, new DialogChoice(Said("link.pair_cancel")));
         linkOnboardingDialog = dialog;
         linkDevicePage = page;
+        linkGrantChoicesOpen = linkInviteAddressesShown = false;
         dialog.Body.Size = new Vector2(Math.Clamp(chrome.Root.Bounds.Width - 80, 350, 460), 0);
         dialog.Body.Spacing = 7;
         dialog.Closed = () =>
@@ -93,7 +94,7 @@ internal sealed partial class DawnScene
             LinkCanAutoShare(ref linkAutoShareAvailable);
             if (LinkOn && LinkPort != 0 && LinkPairingUntil is null)
             {
-                linkInviteOptions = new(HexLinkPreset.Collaborator, LinkPresetRights(HexLinkPreset.Collaborator), true);
+                linkInviteOptions = new(HexLinkPreset.Collaborator, LinkInviteDefaultRights(), true);
                 LinkCreateInvite();
             }
         }
@@ -230,7 +231,7 @@ internal sealed partial class DawnScene
             }
 
             // One: what the other device may do here, decided before it arrives
-            body.Add(LinkStep(1, Said("link.devices_invite_step_grant")));
+            body.Add(LinkHeading(Said("link.devices_invite_step_grant")));
             LinkGrantControls(body, linkInvitePreset, linkInviteRights, (preset, rights) =>
             {
                 linkInviteOptions = linkInviteOptions with
@@ -239,7 +240,17 @@ internal sealed partial class DawnScene
                 };
                 if (linkInviteShare is not null)
                     linkInviteShare.State = linkAutoShareAvailable && linkInviteOptions.Share;
-            }, showBoth: true);
+                // The last choice of the agents tick under Work together is what the next invite starts from
+                if (preset == HexLinkPreset.Collaborator)
+                {
+                    string kept = (rights & HexLinkRights.Steer) != 0 ? "use_agents" : "work_together";
+                    if (settings.LinkInviteRights != kept)
+                    {
+                        settings.LinkInviteRights = kept;
+                        SaveSettings();
+                    }
+                }
+            }, showBoth: true, collapse: true, agentsTick: true);
             ToggleButton share = linkInviteShare = body.Add(new ToggleButton(Said("link.devices_auto_share"), linkAutoShareAvailable && linkInviteOptions.Share)
             {
                 Enabled = linkAutoShareAvailable, Anchor = Origin.Left, Pivot = Origin.Left, LabelScale = LINK_TEXT,
@@ -251,12 +262,21 @@ internal sealed partial class DawnScene
 
             // Two: the two ways across, both open at once. Picked under Nearby it pairs by the six digits, with the
             // invite it pairs by the invite, and whichever comes first is the invitation's one device
-            body.Add(LinkStep(2, Said("link.devices_invite_step_connect")));
+            body.Add(LinkHeading(Said("link.devices_invite_step_connect")));
             string name = HexLinkNames.Clean(LinkDevice?.Name) ?? string.Empty;
             body.Add(LinkLine(Said("link.devices_invite_way_nearby", ("name", name))));
             body.Add(LinkLine(Said("link.devices_invite_way_token")));
             DrawInviteToken(body, token);
-            DrawInviteAddresses(body, token);
+            // The raw addresses are for somebody typing one in, behind a button for them
+            StackPanel addresses = body.Add(new StackPanel { Spacing = 4, Fill = UIFill.Horizontal, Visible = linkInviteAddressesShown });
+            DrawInviteAddresses(addresses, token);
+            Button show = LinkActionRow(body).Add(LinkButton(Said(linkInviteAddressesShown ? "link.devices_hide_addresses" : "link.devices_show_addresses"), string.Empty, () => { }));
+            show.OnPressed = () =>
+            {
+                linkInviteAddressesShown = !linkInviteAddressesShown;
+                addresses.Visible = linkInviteAddressesShown;
+                show.Label = Said(linkInviteAddressesShown ? "link.devices_hide_addresses" : "link.devices_show_addresses");
+            };
             DrawInviteRoute(body, token);
             if (linkInviteError is not null)
                 body.Add(LinkLine(linkInviteError));
@@ -294,14 +314,6 @@ internal sealed partial class DawnScene
     private static Label LinkCountdown() =>
         new() { TextScale = LINK_TEXT, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left, Size = new Vector2(110, LINK_ROW) };
 
-    // A numbered step of a guided dialog: its number in a badge, then what to do in it
-    private static StackPanel LinkStep(int number, string text)
-    {
-        var row = new StackPanel { Direction = UIDirection.Horizontal, Spacing = 8.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, LINK_ROW), Padding = new UIEdges(0, 6, 0, 0) };
-        row.Add(new Badge { Text = number.ToString(CultureInfo.InvariantCulture), TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left });
-        row.Add(new Label { Text = $"[b]{UIRichText.Literal(text)}[/b]", TextScale = LINK_HEADING, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left });
-        return row;
-    }
 
     private void LinkStartAddressPairing()
     {
@@ -337,16 +349,25 @@ internal sealed partial class DawnScene
     {
         if (linkCopyInvite is null)
             return;
-        string label = Said(System.Environment.TickCount64 < linkInviteCopiedUntil ? "link.devices_copied" : "link.devices_copy_invite");
+        // The words are looked up when the state moves (copied, back to Copy), not every frame
+        bool copied = System.Environment.TickCount64 < linkInviteCopiedUntil;
+        if (linkInviteCopyShown == copied && ReferenceEquals(linkInviteCopyFor, linkCopyInvite))
+            return;
+        linkInviteCopyShown = copied;
+        linkInviteCopyFor = linkCopyInvite;
+        string label = Said(copied ? "link.devices_copied" : "link.devices_copy_invite");
         if (linkCopyInvite.Label != label)
             linkCopyInvite.Label = label;
     }
+
+    private bool? linkInviteCopyShown;
+    private Button? linkInviteCopyFor;
 
     private void BuildLinkJoin(StackPanel body)
     {
         // One: a device on this network is picked from the list. Two: anything else is pasted or typed
         linkWindowNearby = body.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 5 });
-        body.Add(LinkStep(2, Said("link.devices_join_step_typed")));
+        body.Add(LinkHeading(Said("link.devices_join_step_typed")));
         StackPanel row = LinkActionRow(body);
         linkJoinField = row.Add(new Panel
         {
@@ -407,12 +428,21 @@ internal sealed partial class DawnScene
         if (!LinkOn || linkJoining || linkJoinError || linkAddressBox is null)
             return;
         string text = linkAddressBox.Text.Trim();
+        if (StartsWithInvite(text))
+            text = HexLinkInvite.Clean(text);
         linkJoinTyped = text;
         if (StartsWithInvite(text))
         {
-            if (!HexLinkInvite.TryParse(text, out HexLinkInvite? parsed) || parsed is null)
+            string? problem = HexLinkInvite.Problem(text);
+            if (problem is not null || !HexLinkInvite.TryParse(text, out HexLinkInvite? parsed) || parsed is null)
             {
-                LinkSetJoinMessage(Said("link.devices_bad_invite"), error: true);
+                LinkSetJoinMessage(Said(problem switch
+                {
+                    "expired" => "link.devices_invite_expired_join",
+                    "version" => "link.devices_invite_version",
+                    "cut_off" => "link.devices_invite_cut_off",
+                    _ => "link.devices_bad_invite"
+                }), error: true);
                 return;
             }
 

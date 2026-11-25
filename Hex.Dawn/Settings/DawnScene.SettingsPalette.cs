@@ -17,6 +17,10 @@ internal sealed partial class DawnScene
             (Said("settings_palette.open_workspace_file"), OpenWorkspaceSettingsFile),
             (Said("settings_palette.show_modified"), ShowModifiedSettings),
             (Said("settings_palette.arrange_backdrop"), ArrangeBackdrop),
+            (Said("llamacpp.command_setup"), OpenLocalAiSetup),
+            (Said("local_ai.command_settings"), () => OpenLocalAiWindow("overview")),
+            (Said("llamacpp.command_start"), () => StartLlamaServer()),
+            (Said("llamacpp.command_stop"), StopLlamaServer),
             (Said("settings_import.palette_user"), ImportVsCodeSettings),
             (Said("settings_import.palette_workspace"), ImportVsCodeWorkspaceSettings)
         };

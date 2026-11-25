@@ -1,5 +1,6 @@
 using System.Numerics;
 
+using Hex.Core.Modules;
 using Hex.Shell;
 
 using Horizon.Core.Tweening;
@@ -60,6 +61,14 @@ internal sealed partial class DawnScene
             return;
         }
 
+        if (face == HexFace.Noon && !HexModules.IsEnabled(HexModuleId.Agentic))
+            return;
+        if (face == HexFace.Noon)
+        {
+            WarmMarkdownGrammarOnce();
+            EnsureNoon();
+        }
+
         if (face == Face || FaceTransition() is not { } fade)
         {
             ShowFace(face);
@@ -72,7 +81,11 @@ internal sealed partial class DawnScene
             ShowFace(face);
             ArriveFace(from, face);
         });
-        Engine.WindowManager.RequestFrames();
+        float smoothTime = MotionFor(FACE_TIME);
+        if (smoothTime > 0.0f)
+            Engine.WindowManager.RequestSmooth(smoothTime);
+        else
+            Engine.WindowManager.RequestFrames();
     }
 
     // Where a face is on the switch, left to right
@@ -100,9 +113,11 @@ internal sealed partial class DawnScene
         if (modeToggle?.Parent is not StackPanel row)
             return;
 
-        foreach (UIComponent child in row.Children)
+        // By index, a foreach over IReadOnlyList boxes the list's enumerator every tick
+        IReadOnlyList<UIComponent> children = row.Children;
+        for (int i = 0; i < children.Count; i++)
         {
-            if (child is Button { IsHovered: true, Selected: false } button && FaceLabelled(button.Label) is { } hovered)
+            if (children[i] is Button { IsHovered: true, Selected: false } button && FaceLabelled(button.Label) is { } hovered)
             {
                 WarmFace(hovered);
                 return;
@@ -111,7 +126,7 @@ internal sealed partial class DawnScene
 
         // Ctrl+Alt+Shift, the start of both of the switch's keys (D and N)
         var keys = Engine.Input.Keyboard;
-        if (keys.Control && keys.Alt && keys.Shift)
+        if (keys.Primary && keys.Alt && keys.Shift)
         {
             WarmFace(Face == HexFace.Noon ? HexFace.Dawn : HexFace.Noon);
             WarmFace(HexFace.Dusk);
@@ -142,7 +157,10 @@ internal sealed partial class DawnScene
             return;
         }
 
-        if (face != HexFace.Noon || Face == HexFace.Noon || HexAi.Off || noonView is null)
+        if (face != HexFace.Noon || Face == HexFace.Noon || !HexModules.IsEnabled(HexModuleId.Agentic))
+            return;
+        EnsureNoon();
+        if (noonView is null)
             return;
 
         UISkinChoice? skin = UISkins.Find(settings.EditorSkin);

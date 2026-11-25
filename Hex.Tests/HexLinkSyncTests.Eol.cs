@@ -175,20 +175,27 @@ public sealed partial class HexLinkSyncTests
     }
 
     [Fact]
-    public async Task A_new_file_takes_the_line_ends_most_files_have_on_the_receiving_side()
+    public async Task A_new_file_arrives_byte_for_byte_whatever_line_ends_most_files_have_on_the_receiving_side()
     {
         using var pair = await LinkedPair.Up(EDIT, EDIT);
         CrlfAgainstLf(pair);
         using HexLinkSync sync = SyncOf(pair);
         await sync.Start();
         await Settled(sync);
+        int eolBefore = sync.EolOnly;
 
+        // A is a CRLF checkout (core.autocrlf): an LF file new on B, a script among them, stays LF there
         Put(pair.B, "new/from-mac.cs", Lines("\n", "made", "on the Mac"));
-        Assert.True(await Until(() => Get(pair.A, "new/from-mac.cs") == Lines("\r\n", "made", "on the Mac")), Said(sync));
+        Put(pair.B, "new/run.sh", Lines("\n", "#!/bin/sh", "echo hi"));
+        Assert.True(await Until(() => Get(pair.A, "new/from-mac.cs") == Lines("\n", "made", "on the Mac")
+            && Get(pair.A, "new/run.sh") == Lines("\n", "#!/bin/sh", "echo hi")), Said(sync));
+        Assert.Equal(Encoding.UTF8.GetBytes(Lines("\n", "#!/bin/sh", "echo hi")), File.ReadAllBytes(Path.Combine(pair.A.Work, "new/run.sh")));
         Put(pair.A, "new/from-pc.cs", Lines("\r\n", "made", "on the PC"));
-        Assert.True(await Until(() => Get(pair.B, "new/from-pc.cs") == Lines("\n", "made", "on the PC")), Said(sync));
+        Assert.True(await Until(() => Get(pair.B, "new/from-pc.cs") == Lines("\r\n", "made", "on the PC")), Said(sync));
         await Settled(sync);
         Assert.Empty(sync.Conflicts);
+        // Identical bytes are no line-end difference to count
+        Assert.Equal(eolBefore, sync.EolOnly);
     }
 
     [Fact]

@@ -1,5 +1,7 @@
 using System.Numerics;
 
+using Hex.Core.Modules;
+
 using Horizon.UI;
 using Horizon.UI.Components;
 using Horizon.UI.Skinning;
@@ -138,13 +140,18 @@ internal sealed partial class DawnScene
         UpdateNativeFolding();
         UpdateReferenceLenses();
         UpdateSemantics();
-        if (predictionSession is not null || settings.EditPredictions && !HexAi.Off)
+        if (HexModules.IsEnabled(HexModuleId.LocalAi))
+        {
+            UpdateAiEdit();
             UpdatePredictions();
+            UpdateLlamaServer();
+        }
 
         // An error stays until it's pressed or something else is said, gone after ten seconds like the rest nobody saw it
         if (messageItem.Text.Length > 0 && !saidError && System.Environment.TickCount64 - saidAt > SAID_FOR)
         {
             messageItem.Text = string.Empty;
+            messageItem.Tooltip = string.Empty;
             messageItem.Color = null;
         }
 
@@ -178,7 +185,9 @@ internal sealed partial class DawnScene
                 selectionItem.Text = selected > 0 ? Said("status_bar.selection", ("count", selected.ToString())) : string.Empty;
             }
 
-            endingsItem.Text = document.CrLf ? "CRLF" : "LF";
+            string endings = document.CrLf ? "CRLF" : "LF";
+            if (!ReferenceEquals(endingsItem.Text, endings))
+                endingsItem.Text = endings;
 
             // Spaces 2 or Tab Size 4, the file's own as the settings, its .editorconfig or how it was indented made it
             (bool Tabs, int Size) indent = (code.Document.Indent.StartsWith('\t'), code.TabSize);

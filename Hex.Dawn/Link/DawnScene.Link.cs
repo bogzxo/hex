@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Net.NetworkInformation;
 
+using Hex.Core.Modules;
+
 using Horizon.UI.Components;
 
 namespace Hex.Dawn;
@@ -55,6 +57,8 @@ internal sealed partial class DawnScene
     // aren't dialled again until they're connected by hand or Hex starts again
     private HexLinkRedial linkRedial { get => LazyInitializer.EnsureInitialized(ref field, static () => new()); }
     private HashSet<string> linkDialling { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.OrdinalIgnoreCase)); }
+    // Those among them the other device cut (it said so before it closed), by the name it had
+    private Dictionary<string, string> linkHeldOffBy { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.OrdinalIgnoreCase)); }
     private HashSet<string> linkHeldOff { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.OrdinalIgnoreCase)); }
     private Dictionary<string, string> linkNearbyAddresses { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.OrdinalIgnoreCase)); }
     private volatile IReadOnlyList<string> linkListenAddresses = [];
@@ -73,23 +77,33 @@ internal sealed partial class DawnScene
     // Where each device's person is, the latest said, by device id, for the UI to draw
     private Dictionary<string, LinkPresenceSeen> linkPresence { get => LazyInitializer.EnsureInitialized(ref field, static () => new(StringComparer.OrdinalIgnoreCase)); }
 
+    // Moves with every change to linkPresence (made, replaced, removed, cleared), so what is drawn from it is looked at only when it moved
+    private int linkPresenceVersion;
+
     // The pairing waiting on the person here, and the dialog asking them
     private LinkPairingAsk? linkPairingPending;
     private UIDialog? linkPairingDialog;
 
-    /// <summary>The status bar's item and Link itself, when the settings or the command line say so.</summary>
+    /// <summary>The status bar's item and Link itself, when the Link module and the settings or command line say so.</summary>
     private void BuildLink()
     {
+        if (!HexModules.IsEnabled(HexModuleId.Link))
+            return;
         BuildLinkUi();
         if (LinkWanted)
             StartLink();
     }
 
     /// <summary>
-    /// Whether Link should be up, the setting or --link, never for a run of checks. A self test goes by --link alone,
+    /// Whether Link should be up, the Link module plus setting or --link, never for a run of checks. A self test goes by --link alone,
     /// the link suites put it up themselves with folders and a port of their own.
     /// </summary>
-    private bool LinkWanted => ((settings.Link && !options.SelfTest) || options.Link) && options.Check.Length == 0;
+    private bool LinkWanted => HexModules.IsEnabled(HexModuleId.Link)
+        && ((settings.Link && !options.SelfTest) || (options.Link && !linkFlagTurnedOff))
+        && options.Check.Length == 0;
+
+    // Link switched off by hand while the --link flag had it on: the flag no longer holds it up, until it's switched on again
+    private bool linkFlagTurnedOff;
 
     /// <summary>
     /// Link put up or taken down to match the settings, as a row changes or the file is read again; the name and
@@ -97,6 +111,12 @@ internal sealed partial class DawnScene
     /// </summary>
     internal void ApplyLink(bool restart = false)
     {
+        if (!HexModules.IsEnabled(HexModuleId.Link))
+        {
+            if (linkTransport is not null)
+                StopLink();
+            return;
+        }
         if (linkByTest)
         {
             if (linkTransport is not null)
@@ -107,8 +127,8 @@ internal sealed partial class DawnScene
 
         if (LinkWanted && linkTransport is null)
         {
-            if (StartLink())
-                OfferLinkIgnoreFiles(explorer.workspace.Folders);
+            // Asked at the first share or sync of a folder (see OfferLinkIgnoreFiles' callers), not as Link starts
+            StartLink();
         }
         else if (!LinkWanted && linkTransport is not null)
         {
@@ -148,7 +168,19 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>What this device is called, the link_name setting or the machine's name.</summary>
-    private string LinkNameWanted => HexLinkNames.Clean(settings.LinkName) ?? HexLinkNames.Clean(System.Environment.MachineName) ?? "Hex";
+    private string LinkNameWanted => HexLinkNames.Clean(settings.LinkName) ?? DefaultLinkName(settings.LinkPort);
+
+    /// <summary>
+    /// The machine's name, with the port after it when the port isn't the usual one: two Hexes on one machine have two
+    /// ports, so that is what tells them apart in a list.
+    /// </summary>
+    internal static string DefaultLinkName(int port)
+    {
+        string machine = HexLinkNames.Clean(System.Environment.MachineName) ?? "Hex";
+        return port is > 0 && port != HexSettings.DefaultLinkPort
+            ? HexLinkNames.Clean($"{machine} :{port}") ?? machine
+            : machine;
+    }
 
     public HexLinkIdentityFailure? LinkIdentityFailure { get; private set; }
 
@@ -189,6 +221,8 @@ internal sealed partial class DawnScene
     /// <param name="loopbackOnly">Bind to IPv4 loopback and skip LAN discovery for local-only self-tests.</param>
     internal bool StartLink(int? port = null, string? home = null, bool? discover = null, bool loopbackOnly = false)
     {
+        if (!HexModules.IsEnabled(HexModuleId.Link))
+            return false;
         if (linkTransport is not null)
             return true;
         if (linkOwner is not null && linkOwner != this)
@@ -207,6 +241,7 @@ internal sealed partial class DawnScene
             linkTrust = new HexLinkTrust(keys);
             linkRedial.Open(keys, linkTrust.Known.Select(known => known.Device.Id).ToArray());
             linkServices = new LinkServices(this);
+                linkServices.Ports.Changed += () => linkWindowStale = true;
             int unpinned = linkServices.FolderAuthorities.MigrateLegacy(
                 LinkReadProvisionedFolders().Select(binding => (binding.Folder, binding.DeviceId)));
             if (unpinned > 0)
@@ -215,14 +250,24 @@ internal sealed partial class DawnScene
             var started = new HexLink(linkServices)
             {
                 Changed = LinkMoved,
-                Closed = (device, why) => PostLink(() => LinkClosed(device, why))
+                Closed = (device, why) => PostLink(() => LinkClosed(device, why)),
+                ByeHeard = device => PostLink(() =>
+                {
+                    // Cut by hand over there: not dialled again until it connects, and the card says who cut it
+                    linkHeldOff.Add(device.Id);
+                    linkHeldOffBy[device.Id] = device.Name;
+                    linkRedial.Soon(device.Id);
+                    linkDirty = true;
+                })
             };
             started.TalkHeard += message => PostLink(() =>
             {
                 if (link == started)
                     HearLinkTalk(message);
             });
+            StartLinkAssistant(started);
             link = started;
+            LinkTalkRestore();
             linkTransport = new HexLinkTransport(linkIdentity, linkTrust)
             {
                 AllowPublic = settings.LinkAllowPublic,
@@ -256,6 +301,7 @@ internal sealed partial class DawnScene
             {
                 linkItem = statusBar.Add("$(link)", right: true, pressed: ShowLinkWindow, tooltip: Said("link.status_tip_none"));
                 linkItem.IsVisible = () => linkTransport is not null;
+                linkItem.ContextMenuBuilder = LinkStatusMenu;
             }
             if (linkEditorNotices is null)
                 BuildLinkEditorNotices();
@@ -307,11 +353,14 @@ internal sealed partial class DawnScene
             linkDiscovery.Dispose();
             linkDiscovery = null;
         }
+        LinkTailnetStop();
 
         // What's shared over the links let go of before they go (DawnScene.LinkSync, LinkFiles, LinkPresence)
         LinkLiveStopAll();
         LinkDocumentStop();
         LinkShareStopAll();
+        StopLinkAssistant();
+        LinkTalkFlush();
         link?.Dispose();
         link = null;
         ResetLinkTalk();
@@ -339,8 +388,15 @@ internal sealed partial class DawnScene
         linkDialling.Clear();
         linkNearbyAddresses.Clear();
         linkPresence.Clear();
+        linkPresenceVersion++;
         LinkUpdateExplorerPresence();
         linkChatVersions.Clear();
+
+        // What Link kept per file or folder goes with it: the MCP edit stamps and the private-worktree followers with their timers
+        linkMcpEdits.Clear();
+        foreach (HexLinkCoalesce follower in privateFollow.Values)
+            follower.Dispose();
+        privateFollow.Clear();
         linkByTest = false;
         linkDirty = true;
     }
@@ -349,6 +405,7 @@ internal sealed partial class DawnScene
     {
         try
         {
+            LinkTalkFlush();
             linkTransport?.Stop();
             linkPortMapping?.SetPort(0).Wait(TimeSpan.FromSeconds(2));
         }
@@ -397,6 +454,8 @@ internal sealed partial class DawnScene
     /// </summary>
     private void UpdateLink(float dt)
     {
+        if (!HexModules.IsEnabled(HexModuleId.Link))
+            return;
         if (LinkOn || linkWindow is not null || linkDirty || pendingLinkPosts is { IsEmpty: false })
             PumpLink(dt);
     }
@@ -441,11 +500,22 @@ internal sealed partial class DawnScene
         if (linkTransport is not null && (linkLookWait -= dt) <= 0.0f)
         {
             linkLookWait = LINK_LOOK_EVERY;
-            LinkRedialDue();
+
+            // A second that took far longer was the machine asleep: whatever was waiting for its minute is tried now, the
+            // links it had having died with the network it woke up on
+            DateTime ticked = DateTime.UtcNow;
+            bool woke = ticked - linkTickedAt > HexLinkRedial.SLEPT;
+            linkTickedAt = ticked;
+            if (woke)
+                LinkRedialNow();
+            else
+                LinkRedialDue();
+            LinkTailnetLook();
             linkGitWait -= LINK_LOOK_EVERY;
             LinkLookAtWorkspace(force: linkGitWait <= 0.0f);
             ApplyLinkPredictions();
             LinkPredictLookServing();
+            LinkAiLookServing();
             CheckLinkHoldAge();
         }
 
@@ -454,6 +524,7 @@ internal sealed partial class DawnScene
             linkDirty = false;
             CaptureLinkChatDevices(LinkPeers);
             LinkPredictLookSource();
+            LinkAiLookSource();
             LinkRedraw();
         }
     }
@@ -473,8 +544,8 @@ internal sealed partial class DawnScene
             string who = peers.Count switch
             {
                 0 => string.Empty,
-                1 => " " + OneLine(LinkNameOf(peers[0].Device.Id, peers[0].Device.Name), 18),
-                _ => " " + Said("link.status_count", ("count", peers.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)))
+                1 => " " + Said("link.status_linked", ("what", OneLine(LinkNameOf(peers[0].Device.Id, peers[0].Device.Name), 18))),
+                _ => " " + Said("link.status_linked", ("what", Said("link.status_count", ("count", peers.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)))))
             };
             string need = needing > 0 ? " · " + Said("link.status_conflicts", ("count", needing.ToString(System.Globalization.CultureInfo.InvariantCulture))) : string.Empty;
             linkItem.Text = glyph + who + need;
@@ -529,7 +600,10 @@ internal sealed partial class DawnScene
         if (peer.IsClosed)
             return;
         linkRedial.Soon(peer.Device.Id);
+        linkGitWait = 0.0f;
+        linkClaimWait = 0.0f;
         linkHeldOff.Remove(peer.Device.Id);
+        linkHeldOffBy.Remove(peer.Device.Id);
         // Its name as it says it kept as its own (the person's name for it, if any, still wins), and kept as it changes
         linkTrust?.Seen(peer.Device.Id, peer.Device, string.Empty);
         RememberLinkAddresses(peer);
@@ -543,10 +617,19 @@ internal sealed partial class DawnScene
             LinkPinSyncedFolders(peer);
         });
         LinkAcceptRemotePauses(peer);
+        HexLinkRights lastGranted = peer.Granted;
         peer.RightsChanged += () =>
         {
             if (LinkPeerOf(peer.Device.Id) == peer)
                 LinkSyncRightsChangedLocally(peer);
+            // This may come off the link's thread, the notice and what it was before are the editor's
+            PostLink(() =>
+            {
+                HexLinkRights was = lastGranted;
+                lastGranted = peer.Granted;
+                if (LinkPeerOf(peer.Device.Id) == peer)
+                    LinkRightsGrantedMoved(peer, was);
+            });
         };
         peer.ViewRestored += () => PostLink(() =>
         {
@@ -585,6 +668,14 @@ internal sealed partial class DawnScene
             return;
         HexLinkConnection connection = peer.Session.Connection;
         HexLinkEndpoint? reached = connection.Dialled ? HexLinkRedial.Endpoint(connection.Address, known.Port) : null;
+        // The endpoint this link is through leads next time: the one dialled, or for a link the device made the address it
+        // dialled from with the port it listens on (the first it advertises), which is the way it reached this machine
+        // and so very likely the way back
+        HexLinkEndpoint? worked = reached ?? (peer.RedialAddresses is [var from, ..]
+            && System.Net.IPAddress.TryParse(connection.Address, out var observed)
+            && from.Host == HexLinkAddresses.Show(observed) ? from : null);
+        if (worked is { } through)
+            linkRedial.Linked(peer.Device.Id, through);
         linkRedial.Remember(peer.Device.Id, peer.RedialAddresses, reached);
         linkDirty = true;
     }
@@ -594,22 +685,55 @@ internal sealed partial class DawnScene
         IReadOnlyList<string> current = HexLinkRedial.LocalAddresses(loopbackOnly: false);
         PostLink(() =>
         {
-            if (!linkListeningForAddressChanges || linkServices is not { } services || linkListenAddresses.SequenceEqual(current))
+            if (!linkListeningForAddressChanges || linkListenAddresses.SequenceEqual(current))
                 return;
             linkListenAddresses = current;
-            foreach (HexLinkPeer peer in LinkPeers)
-                peer.Session.TellLatest("link/addresses", services.RedialAdvertisement());
+            linkTailnet?.Refresh();
+            if (linkServices is { } services)
+            {
+                foreach (HexLinkPeer peer in LinkPeers)
+                    peer.Session.TellLatest("link/addresses", services.RedialAdvertisement());
+            }
+
+            // A different network (Wi-Fi changed, Tailscale came back) may make a device reachable that wasn't a minute
+            // ago, so the ones waiting out their backoff are tried now rather than when it's up
+            LinkRedialNow();
         });
+    }
+
+    private DateTime linkTickedAt = DateTime.UtcNow;
+
+    /// <summary>Every known device that isn't linked, or held off by the person, dialled now whatever it was waiting for.</summary>
+    private void LinkRedialNow()
+    {
+        if (linkTrust is null || link is null)
+            return;
+        foreach (HexLinkKnown known in linkTrust.Known)
+        {
+            string id = known.Device.Id;
+            if (!linkHeldOff.Contains(id) && link.PeerOf(id) is null)
+                linkRedial.Soon(id);
+        }
+
+        LinkRedialDue();
     }
 
     // A link gone, said unless Link itself was turned off
     private void LinkClosed(HexLinkDevice device, string why)
     {
         if (linkPresence.Remove(device.Id))
+        {
+            linkPresenceVersion++;
             LinkUpdateExplorerPresence();
+        }
         linkDirty = true;
         if (linkTransport is null)
             return;
+
+        // A known device that dropped (the machine slept, the network changed) and wasn't cut by the person is got back at
+        // once, and shown as being reconnected rather than offline until it's linked or refuses
+        if (linkTrust?.Find(device.Id) is not null && !linkHeldOff.Contains(device.Id) && link?.PeerOf(device.Id) is null)
+            linkRedial.Dropped(device.Id);
         Say(Said("link.disconnected", ("device", LinkNameOf(device.Id, device.Name)), ("why", why)));
     }
 
@@ -641,10 +765,10 @@ internal sealed partial class DawnScene
             if (linkDialling.Contains(id) || linkHeldOff.Contains(id) || linkManualDials.GetValueOrDefault(id)?.Connecting == true || link.PeerOf(id) is not null || transport.LinkTo(id) is not null || !linkRedial.Due(id, now))
                 continue;
 
-            HexLinkEndpoint[] tries = LinkDialRoutes(known, nearby, linkRedial.Addresses(id));
+            HexLinkEndpoint[] tries = LinkDialRoutes(known, nearby, linkRedial.Addresses(id), linkRedial.LastLinked(id));
             if (tries.Length == 0)
             {
-                linkRedial.Failed(id, now, "No listening address is known for this device.");
+                linkRedial.Failed(id, now, "no_address", "No listening address is known for this device.");
                 linkDirty = true;
                 continue;
             }
@@ -660,9 +784,11 @@ internal sealed partial class DawnScene
                 {
                     if (stop.IsCancellationRequested || linkTrust?.Find(id)?.PreferredRoute != known.PreferredRoute)
                         break;
+                    PostLink(() => linkRedial.Trying(id, new HexLinkEndpoint(host, port)));
                     try
                     {
-                        HexLinkConnection connection = await transport.Dial(host, port, id, stop);
+                        // A short connect, so a dead address ahead of the live one costs seconds and not the handshake's ten
+                        HexLinkConnection connection = await transport.Dial(host, port, id, stop, HexLinkRedial.CONNECT);
                         HexLinkPeer? peer = await LinkAdd(connection);
                         PostLink(() =>
                         {
@@ -670,7 +796,9 @@ internal sealed partial class DawnScene
                                 return;
                             linkDialling.Remove(id);
                             if (peer is null)
-                                linkRedial.Failed(id, DateTime.UtcNow, "The device connected, then Link could not say hello.");
+                                linkRedial.Failed(id, DateTime.UtcNow, "hello", "The device connected, then Link could not say hello.");
+                            else if (HexLinkRedial.Endpoint(connection.Address, port) is { } worked)
+                                linkRedial.Linked(id, worked);
                             linkDirty = true;
                         });
                         return;
@@ -684,7 +812,7 @@ internal sealed partial class DawnScene
                                 return;
                             linkDialling.Remove(id);
                             if (link?.PeerOf(id) is null)
-                                linkRedial.Failed(id, DateTime.UtcNow, e.Message);
+                                linkRedial.Failed(id, DateTime.UtcNow, "busy", e.Message);
                             linkDirty = true;
                         });
                         return;
@@ -703,7 +831,7 @@ internal sealed partial class DawnScene
                         return;
                     linkDialling.Remove(id);
                     if (linkTrust?.Find(id)?.PreferredRoute == known.PreferredRoute)
-                        linkRedial.Failed(id, DateTime.UtcNow, detail ?? said);
+                        linkRedial.Failed(id, DateTime.UtcNow, said, detail);
                     linkDirty = true;
                     LinkRedialRefused?.Invoke(id, said);
                 });
@@ -759,6 +887,8 @@ internal sealed partial class DawnScene
                 Console.WriteLine($"[Hex] Link can't look for Hexes on the LAN, {off}");
         }
 
+        LinkTailnetStart();
+
         if (settings.LinkDiscoverable && HexHost.Listens && linkTransport.Port > 0)
             linkDiscovery.Announce(linkIdentity.Name, linkIdentity.Id, linkTransport.Port);
         else
@@ -800,6 +930,11 @@ internal sealed partial class DawnScene
         if (linkServices is not { } services)
             return;
         string[] folders = [.. explorer.workspace.Folders, .. linkTestExtraFolders];
+
+        // The repositories are asked again only while somebody is linked to see them: git is not spawned for an idle, unlinked Link
+        // (a device linking sets the wait to nothing, so its first look is the next tick)
+        if (force && LinkPeers.Count == 0)
+            force = false;
         if (!force && folders.SequenceEqual(linkFoldersSeen, PlatformPaths.Comparer))
             return;
         if (linkWorkspaceAsking)

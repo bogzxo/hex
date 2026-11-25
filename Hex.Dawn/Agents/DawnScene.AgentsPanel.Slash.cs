@@ -57,26 +57,42 @@ internal sealed partial class DawnScene
                 inside |= ReferenceEquals(over, popup);
             if (inside) agentsInput.Focus();
         }
-        string text = agentsInput.Text;
         // The /word the caret is in, anywhere in what's written: it only came up while the box held nothing else
         SlashTyped? slashed = compositor.Focus == agentsInput ? SlashAtCaret() : null;
+        if (slashed is null && agentsSlashDismissed.Length == 0 && agentsSlashFor.Length == 0)
+            return;
+        string text = agentsInput.Text;
         bool typing = slashed is not null;
         if (text != agentsSlashDismissed)
             agentsSlashDismissed = string.Empty;
         typing &= text != agentsSlashDismissed;
-        var matches = typing ? HexAgentCommand.Matching(SlashCommandsOf(AgentFor(agentChat)), slashed!.Value.Typed) : [];
+        if (!typing)
+        {
+            if (agentsSlashFor.Length == 0)
+                return;
+            agentsSlashFor = string.Empty;
+            agentsSlash?.Parent?.Remove(agentsSlash);
+            agentsSlash = null;
+            agentsSlashRows.Clear();
+            agentsSlashSelected = 0;
+            return;
+        }
+        var matches = HexAgentCommand.Matching(SlashCommandsOf(AgentFor(agentChat)), slashed!.Value.Typed);
         float room = MathF.Max(0, agentsView.Bounds.Height - agentsComposeTall - 12);
-        string key = typing
-            ? $"{AgentFor(agentChat)}|{text}|{slashed}|{agentsComposeTall}|{agentsView.Bounds.Width}|{room}|{string.Join("\n", matches)}"
-            : string.Empty;
+        string key = $"{AgentFor(agentChat)}|{text}|{slashed}|{agentsComposeTall}|{agentsView.Bounds.Width}|{room}|{string.Join("\n", matches)}";
         if (key == agentsSlashFor)
             return;
         agentsSlashFor = key;
+        RebuildAgentSlash(matches, room);
+    }
+
+    private void RebuildAgentSlash(List<HexAgentCommand> matches, float room)
+    {
         agentsSlash?.Parent?.Remove(agentsSlash);
         agentsSlash = null;
         agentsSlashRows.Clear();
         agentsSlashSelected = 0;
-        if (!typing || matches.Count == 0 || room < SLASH_ROW)
+        if (matches.Count == 0 || room < SLASH_ROW)
             return;
 
         float height = matches.Sum(command => command.About.Length > 0 ? SLASH_DESCRIPTION_ROW : SLASH_ROW) + 8;
@@ -124,6 +140,8 @@ internal sealed partial class DawnScene
     private SlashTyped? SlashAtCaret()
     {
         UITextPosition caret = agentsInput.Document.Caret;
+        if (caret.Column <= 0)
+            return null;
         string line = agentsInput.Document.LineAt(caret.Line);
         int column = Math.Min(caret.Column, line.Length), start = column;
         while (start > 0 && !char.IsWhiteSpace(line[start - 1]) && line[start - 1] != '/')

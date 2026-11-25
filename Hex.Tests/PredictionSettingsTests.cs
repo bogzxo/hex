@@ -19,13 +19,13 @@ public class PredictionSettingsTests
         var original = EditorSettingsCatalog.Settings.Single(row => row.Key == "edit_predictions_model");
         string[] installed = ["code:Q4_K_M", "other:latest"];
         var row = OllamaModelPicker.ModelRow(original, installed, "");
-        Assert.Equal(["", "code:Q4_K_M", "other:latest"], row.Choices);
+        Assert.Equal(["", "code:Q4_K_M", "other:latest"], row.Choices!);
         Assert.Equal("code:Q4_K_M", row.LabelOf("code:Q4_K_M"));
         var missing = OllamaModelPicker.ModelRow(row, installed, "older:1");
-        Assert.Equal(["older:1", "code:Q4_K_M", "other:latest"], missing.Choices);
+        Assert.Equal(["older:1", "code:Q4_K_M", "other:latest"], missing.Choices!);
         Assert.Same(missing, OllamaModelPicker.ModelRow(missing, installed, "older:1"));
         var empty = OllamaModelPicker.ModelRow(missing, [], "");
-        Assert.Equal([""], empty.Choices);
+        Assert.Equal([""], empty.Choices!);
         var offline = OllamaModelPicker.ModelRow(row, null, "older:1");
         Assert.Equal(original, offline);
     }
@@ -232,7 +232,9 @@ public class PredictionSettingsTests
             Assert.Equal(["plaintext", "markdown"], settings.EditPredictionsDisabledLanguages);
             Assert.Empty(settings.WorkspaceValues);
             Assert.All(new[] { "edit_predictions", "edit_predictions_provider", "edit_predictions_api_url", "edit_predictions_api_key", "edit_predictions_model",
-                "edit_predictions_prompt_format", "edit_predictions_max_tokens", "edit_predictions_debounce", "edit_predictions_disabled_languages", "edit_predictions_share", "edit_predictions_terminal" },
+                "edit_predictions_prompt_format", "edit_predictions_max_tokens", "edit_predictions_debounce", "edit_predictions_disabled_languages", "edit_predictions_share", "edit_predictions_terminal", "edit_predictions_renames", "edit_predictions_far",
+                "edit_predictions_system_prompt", "edit_predictions_thinking", "edit_predictions_temperature", "edit_predictions_top_p", "edit_predictions_top_k",
+                "edit_predictions_repeat_penalty", "edit_predictions_context", "edit_predictions_link_chat" },
                 key => Assert.False(HexSettings.IsWorkspaceKey(key), key));
         });
     }
@@ -272,8 +274,10 @@ public class PredictionSettingsTests
     public void The_rows_are_in_the_AI_section_under_the_switch_and_the_key_is_listed_only_as_set()
     {
         UISetting[] rows = [.. EditorSettingsCatalog.Settings.Where(row => row.Key.StartsWith("edit_predictions", StringComparison.Ordinal))];
-        Assert.Equal(14, rows.Length);
+        Assert.Equal(26, rows.Length);
+        Assert.Equal(["eager", "subtle"], rows.Single(row => row.Key == "edit_predictions_mode").Choices!);
         Assert.Equal(["after_typing", "shortcut"], rows.Single(row => row.Key == "edit_predictions_invocation").Choices!);
+        Assert.Equal(PredictionTuning.Thinkings, rows.Single(row => row.Key == "edit_predictions_thinking").Choices!);
         Assert.All(rows, row => Assert.Equal(EditorSettingsCatalog.AI, row.Group));
         Assert.All(rows.Where(row => row.Key != "edit_predictions"), row => Assert.Equal("edit_predictions", row.DependsOn));
         Assert.Contains(EditorSettingsCatalog.AI, EditorSettingsCatalog.Sections);
@@ -283,5 +287,31 @@ public class PredictionSettingsTests
         Assert.True(EditorSettingsCatalog.Masked(EditorSettingsCatalog.PREDICTION_KEY, new StringValue(FAKE_KEY)) is StringValue { Value: "set" });
         Assert.True(EditorSettingsCatalog.Masked(EditorSettingsCatalog.PREDICTION_KEY, new StringValue(string.Empty)) is StringValue { Value: "" });
         Assert.True(EditorSettingsCatalog.Masked("edit_predictions_model", new StringValue("zeta")) is StringValue { Value: "zeta" });
+    }
+
+    [Fact]
+    public void The_settings_window_shows_one_row_for_the_Local_AI_window_and_none_of_its_settings()
+    {
+        UISetting[] shown = EditorSettingsCatalog.Shown;
+        Assert.DoesNotContain(shown, row => EditorSettingsCatalog.IsLocalAiWindows(row.Key));
+        Assert.Equal([EditorSettingsCatalog.LOCAL_AI_WINDOW], shown.Where(row => row.Group == EditorSettingsCatalog.AI).Select(row => row.Key));
+        UISetting pointer = shown.Single(row => row.Key == EditorSettingsCatalog.LOCAL_AI_WINDOW);
+        Assert.True(pointer.ButtonsOnly);
+        Assert.Single(pointer.Buttons!);
+        string said = pointer.Title + pointer.Help + pointer.Buttons![0];
+        Assert.False(said.Contains('@'), said);
+        foreach (string word in new[] { "temperature", "llama", "ollama", "prediction", "model" })
+            Assert.Contains(word, pointer.Keywords.Split(' '));
+
+        // The catalog keeps every one of them: the file, hex_settings_get and set and their checks go by it
+        Assert.Contains(EditorSettingsCatalog.Settings, row => row.Key == "edit_predictions_temperature");
+        Assert.Contains(EditorSettingsCatalog.Settings, row => row.Key == "llamacpp_port");
+        Assert.Contains(EditorSettingsCatalog.Settings, row => row.Key == "local_ai_predict_model");
+        Assert.Contains(EditorSettingsCatalog.Settings, row => row.Key == "ai_edit_max_tokens");
+        Assert.Equal(EditorSettingsCatalog.Settings.Count(row => !EditorSettingsCatalog.IsLocalAiWindows(row.Key)) + 1, shown.Length);
+
+        // The rest of AI stays: the agents and the switch that turns every AI off
+        Assert.Contains(shown, row => row.Key == "no_ai" && row.Group == EditorSettingsCatalog.AGENTS);
+        Assert.Contains(shown, row => row.Key == "mcp_server");
     }
 }

@@ -19,11 +19,21 @@ internal static partial class Program
 {
     public static int Main(string[] args)
     {
+        // The roles with no window (HexRoles) touch no AppKit and no SDL video on the way, which is what keeps them off a Mac's
+        // Dock: a bare executable that registers with the window server is an app with an icon that comes up and goes again.
+        // Not even [NSApp setActivationPolicy:] is called for them, [NSApplication sharedApplication] registers the process itself
 #if DEBUG
         // The guard over a Hex restarting into a build of itself, no window, see DevGuard
         if (args.Length > 0 && args[0] == DevGuard.ARGUMENT)
             return DevGuard.Run(args);
 #endif
+
+        // Said and left, what Hex asks of itself for the Agents panel (the local model runs this very program) and a person types
+        if (args.Contains(Hex.Core.HexRoles.VERSION))
+        {
+            Console.WriteLine($"Hex {HexVersion.Label}");
+            return 0;
+        }
 
         // Everything Hex keeps (settings, backups, compiled shaders, the driver's pipeline cache) goes next to the exe,
         // before anything asks where. A copy carried about on a stick has it all with it
@@ -42,6 +52,11 @@ internal static partial class Program
 
         // A terminal nobody picked a theme for is Solstice's own of Dusk, before any settings are read
         Horizon.UI.Components.TerminalSettings.UsualTheme = Hex.Core.HexSettings.USUAL_TERMINAL_THEME;
+
+        // The local model as an agent of the Agents panel, JSON lines on stdin and stdout, no window: before the desktop's
+        // platform (windows, keys, clipboard) and the clean-up of old files are set up, which it has no use for
+        if (LocalAgentProgram.IsLocalAgentMode(args))
+            return LocalAgentProgram.Run(args);
 
         // Hex is a desktop program, its windows, keys and clipboard are the desktop's
         Horizon.Platform.Desktop.DesktopPlatform.Install();
@@ -88,6 +103,9 @@ internal static partial class Program
         // No AI for this run, said before either mode is made so Dusk's selector has no Agentic on it either
         if (args.Contains(Hex.Core.HexAi.ARGUMENT, StringComparer.OrdinalIgnoreCase))
             Hex.Core.HexAi.Force();
+
+        // Optional modules forced off for this run (--no-module link,notebooks) before either mode starts
+        Hex.Core.Modules.HexModules.ApplyArguments(args);
 
         HexMode mode = HexIdentity.ModeOf(args, Environment.ProcessPath);
         HexIdentity.Claim(mode);
@@ -225,6 +243,7 @@ internal static partial class Program
           --view <design|code|table>  which view a file comes up in
           --face <dawn|noon>       start in the editor or in Agentic, the agents' face (the one the workspace was left in otherwise)
           --no-ai                  this run without any of the agents, No AI whatever the settings say
+          --no-module <id[,...]>   disable optional modules for this run (link, local_ai, agentic, notebooks, designer)
           --link                   Hex Link on for this run whatever the settings say, this Hex linked to the ones it paired with
           --link-port <n>          the port Link listens on for this run, the link_port setting's otherwise
           --workspace <folder>     where layouts go when nobody says otherwise

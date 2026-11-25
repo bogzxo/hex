@@ -232,7 +232,7 @@ internal sealed partial class DawnScene
         test.Check("settings big display: on a big screen the window is about 80% of it, the rows wider than 1120, the text at the interface size", () =>
             SettingsWindow is { } window && SettingsPage is { } page && chrome.Root.Bounds.Size is var room
             && page.Zoom == 1.0f
-            && (room.X < 3000.0f || (Near(window.Size.X, room.X * 0.8f, room.X * 0.03f) && Near(window.Size.Y, room.Y * 0.8f, room.Y * 0.03f)
+            && (room.X < 3000.0f * Horizon.UI.Components.SettingsWindow.ScaleIn(chrome) || (Near(window.Size.X, room.X * 0.8f, room.X * 0.03f) && Near(window.Size.Y, room.Y * 0.8f, room.Y * 0.03f)
                 && page.RowWidthNow > 1120.0f)));
     }
 

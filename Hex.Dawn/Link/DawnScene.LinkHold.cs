@@ -10,15 +10,15 @@ internal sealed partial class DawnScene
     private void LinkHoldPaletteCommands(List<(string Text, Action Picked)> entries)
     {
         if (LinkHoldTarget(document.Path) is { } item)
-            Add("Hold changes to this file", () => StartLinkHold(() => HoldLinkPaths(item.Folder, [item.Wire])));
-        Add("Hold changes to all open files", HoldOpenLinkFiles);
-        Add("Hold all uncommitted changes", HoldUncommittedLinkFiles);
-        Add("Submit held changes…", () => WithLinkHeldFolder(folder => PreviewLinkSubmit(folder, null)));
-        Add("Update held files from others", () => WithLinkHeldFolder(folder => PreviewLinkUpdate(folder, null)));
-        Add("Discard held changes…", () => WithLinkHeldFolder(folder => ConfirmLinkDiscard(folder, null)));
-        Add("Show held files", () => WithLinkHeldFolder(ShowLinkHeld));
+            Add("Hold Changes to This File", () => StartLinkHold(() => HoldLinkPaths(item.Folder, [item.Wire])));
+        Add("Hold Changes to All Open Files", HoldOpenLinkFiles);
+        Add("Hold All Uncommitted Changes", HoldUncommittedLinkFiles);
+        Add("Submit Held Changes…", () => WithLinkHeldFolder(folder => PreviewLinkSubmit(folder, null)));
+        Add("Update Held Files From Others…", () => WithLinkHeldFolder(folder => PreviewLinkUpdate(folder, null)));
+        Add("Discard Held Changes…", () => WithLinkHeldFolder(folder => ConfirmLinkDiscard(folder, null)));
+        Add("Show Held Files", () => WithLinkHeldFolder(ShowLinkHeld));
 
-        void Add(string title, Action picked) => entries.Add(("Hex Link: " + title, picked));
+        void Add(string title, Action picked) => entries.Add(("Link: " + title, picked));
     }
 
     private (HexLinkFolder Folder, HexLinkHoldStore Store, string Wire)? LinkHoldTarget(string? full)
@@ -175,7 +175,7 @@ internal sealed partial class DawnScene
             menu.Add("Discard held changes", () => ConfirmLinkDiscard(target.Folder, [target.Wire]), icon: "discard", destructive: true);
         }
         else
-            menu.Add("Hold changes", () => StartLinkHold(() => HoldLinkPaths(target.Folder, [target.Wire])), icon: "pin");
+            menu.Add("Keep my changes to myself", () => StartLinkHold(() => HoldLinkPaths(target.Folder, [target.Wire])), icon: "pin");
     }
 
     private void PreviewLinkSubmit(HexLinkFolder folder, IReadOnlyList<string>? paths) =>
