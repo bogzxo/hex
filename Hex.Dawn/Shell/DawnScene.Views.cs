@@ -1,3 +1,5 @@
+using Hex.Core.Modules;
+
 using Horizon.UI;
 using Horizon.UI.Components;
 
@@ -10,7 +12,7 @@ namespace Hex.Dawn;
 internal sealed partial class DawnScene
 {
     /// <summary>Whether the tools of a layout are out, which is the designer of a layout.</summary>
-    private bool LayoutTools => document.InDesigner;
+    private bool LayoutTools => HexModules.IsEnabled(HexModuleId.Designer) && document.InDesigner;
 
     // The window was asked to close with something unsaved, and the question is to be asked on the next tick
     private volatile bool closeAsked;
@@ -43,6 +45,8 @@ internal sealed partial class DawnScene
         ApplyExtensionViews();
         bool extension = document.View == HexView.Extension;
         bool picture = document.Picture is not null;
+        if (document.View == HexView.Notebook && !IsNotebook(document))
+            document.View = HexView.Code;
         bool notebook = document.View == HexView.Notebook && IsNotebook(document);
         ApplyNotebookView(notebook);
         ApplyMarkdownPreview();
@@ -52,14 +56,15 @@ internal sealed partial class DawnScene
         codeScroll.Visible = !tools && !table && !extension && !picture && !notebook && !markdown;
         imageView.Visible = picture;
 
-        // The layout isn't laid out and painted while its code is what's on screen, nobody would see it
+        // The layout and stage compositor aren't laid out or painted while code is what's on screen, nobody would see them
         document.Module.Enabled = tools;
+        SyncDesignerStage(tools);
         running.Table.Visible = table;
         running.RefreshTable();
 
         // A layout is its designer or its code, a file of code its code or its table when it has one
         ShowViewButtons();
-        layout.Get<Button>("design_view").Visible = !document.IsText;
+        layout.Get<Button>("design_view").Visible = !document.IsText && HexModules.IsEnabled(HexModuleId.Designer);
         layout.Get<Button>("table_view").Visible = document.IsText && !IsNotebook(document) && !IsMarkdown(document);
         layout.Get<Button>("design_view").Selected = tools;
         layout.Get<Button>("code_view").Selected = !tools && !table && !extension && !notebook && !markdown;
@@ -105,8 +110,12 @@ internal sealed partial class DawnScene
     /// <summary>Shows a layout as its designer or as its code. The code typed into goes into the layout on its way to the designer.</summary>
     private void SwitchView(HexView view)
     {
-        // A file of code has no designer, a layout no table
-        if (document.View == view || (document.IsText && view == HexView.Design) || (!document.IsText && view == HexView.Table) || (view == HexView.Notebook && !IsNotebook(document)) || (view == HexView.Markdown && !IsMarkdown(document)))
+        // A file of code has no designer, a layout no table, and disabled modules reject their views
+        if (document.View == view
+            || (view == HexView.Design && (document.IsText || !HexModules.IsEnabled(HexModuleId.Designer)))
+            || (!document.IsText && view == HexView.Table)
+            || (view == HexView.Notebook && !IsNotebook(document))
+            || (view == HexView.Markdown && !IsMarkdown(document)))
             return;
 
         if (document.IsText)
@@ -238,6 +247,8 @@ internal sealed partial class DawnScene
     /// </summary>
     private void MakeLayout()
     {
+        if (!HexModules.IsEnabled(HexModuleId.Designer))
+            return;
         if (!document.IsText || document.Path is not { } path)
         {
             Say(Said("views.make_layout_needs_file"), error: true);

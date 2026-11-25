@@ -17,7 +17,7 @@ internal sealed partial class DawnScene
         test.Run(() => OpenSettings());
         test.Wait();
         test.Check("settings looks: the editor comes first, then the terminal, how Hex looks, AI, Link and the extensions", () =>
-            SettingsPage!.Settings.Select(setting => setting.Group.Split(" · ")[0]).Distinct().SequenceEqual(["Editor", "Terminal", "Appearance", "AI", "Link", "Extensions"])
+            SettingsPage!.Settings.Select(setting => setting.Group.Split(" · ")[0]).Distinct().SequenceEqual(["Editor", "Terminal", "Appearance", "Performance", "AI", "Link", "Extensions"])
             && SettingsPage.Settings.Where(setting => setting.Group == EditorSettingsCatalog.THEME).Select(setting => setting.Key).SequenceEqual(["editor_skin", "theme"]));
         test.Check("settings looks: the sections go Editor · Text first, then Caret, Code, Save and format, Files and Git, with Looks first of Appearance", () =>
             SettingsPage!.SectionsShown.ToList() is { Count: > 0 } shown && shown[0] == EditorSettingsCatalog.TEXT
@@ -70,10 +70,10 @@ internal sealed partial class DawnScene
             McpSaid("set", new() { ["key"] = "llamacpp_port", ["value"] = "not a number" }) is var said && said.Contains("a number", StringComparison.Ordinal) && !said.Contains("There's no setting", StringComparison.Ordinal));
         test.Run(() => SettingsPage!.Find(string.Empty));
 
-        // Liquid glass, what's under the window comes through, blurred enough that it's colour behind the rows and not words,
-        // and less clear than a popup's so a page of sentences on it still reads
-        test.Check("settings looks: the window's glass lets what's under it through, blurred and a little less clear than a popup's", () =>
-            !Glassy || SettingsWindow?.Glass is { Blur: >= 20.0f } glass && glass.Clarity < settings.GlassClarity && glass.Clarity > 0.25f);
+        // Liquid glass: what's under the window comes through with clear low-frost refraction,
+        // and slightly less clear than a popup's so a page of sentences on it still reads
+        test.Check("settings looks: the window's glass lets what's under it through, clear and a little less clear than a popup's", () =>
+            !Glassy || SettingsWindow?.Glass is { Blur: >= 0.0f } glass && glass.Clarity < settings.GlassClarity && glass.Clarity > 0.25f);
         test.Run(CloseSettings);
         test.Wait();
 

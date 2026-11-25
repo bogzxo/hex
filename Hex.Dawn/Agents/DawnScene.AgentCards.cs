@@ -33,10 +33,11 @@ internal sealed partial class DawnScene
     /// <summary>A card on screen and what puts its words right as its agent moves on, at the width it's at.</summary>
     private sealed record AgentCard(UIComponent Root, Action<float> Refresh);
 
+    private readonly System.Text.StringBuilder agentCardBuilder = new(96);
+
     /// <summary>
-    /// What a list of cards is made from as a number, the chats, their order and states, never their clocks or their
-    /// tools. A string of them was made a few times a second for nothing to have changed, most of what the panel
-    /// allocated standing still.
+    /// What a list of cards is made from as a number, the chats, their order and states, never their clocks, selection
+    /// highlight or tools (which update in place via each card's Refresh callback).
     /// </summary>
     private long AgentCardsKey(List<(HexAgentChat Chat, int Step)> chats)
     {
@@ -47,7 +48,7 @@ internal sealed partial class DawnScene
             key = key * 31 + chat.Id;
             key = key * 31 + step;
             key = key * 31 + string.GetHashCode(StateWord(chat), StringComparison.Ordinal);
-            key = key * 31 + (chat.Unread ? 1 : 0) + (chat == agentChat ? 2 : 0);
+            key = key * 31 + (chat.Unread ? 1 : 0);
             key = key * 31 + string.GetHashCode(chat.Shown, StringComparison.Ordinal);
             key = key * 31 + (chat.Parent ?? -1);
         }
@@ -87,7 +88,7 @@ internal sealed partial class DawnScene
         pick.OnContextMenu = at => ContextMenu.Show(chrome, at, remote is null ? ChatMenu(chat) : LinkRemoteMenu(remote));
 
         // The badge, the agent system's letters on a tint of its colour
-        HexAgentProfile? profile = HexAgentProfiles.All.FirstOrDefault(each => each.Id == chat.Agent);
+        HexAgentProfile? profile = FindAgentProfile(chat.Agent);
         string system = profile?.Name ?? chat.Agent;
         Vector4 tint = AgentTint(chat.Agent, skin);
         Vector4? remoteDim = remote is not null ? LinkChatDimInk() : null;
@@ -131,16 +132,27 @@ internal sealed partial class DawnScene
         // Over everything else on it, the box a name being renamed is typed in
         ChatCardMade(chat, root, pick, name);
 
-        // What the card was last written from, its words made again only when one of these moved. Every refresh made its
-        // strings anew, a few times a second for every card, which was most of what the fleet made standing still
-        (int Version, int Seconds, bool Unread, int Mail, int Width, string? Model, bool Stopped) drawn = (-1, -1, false, -1, -1, null, false);
+        // What the card was last written from, its words made again only when one of these moved. Selection state is
+        // updated in place so switching chats never rebuilds the fleet or sidebar card list.
+        bool finishedQuiet = quiet || (chat.Settled && remote is null);
+        (int Version, int Seconds, bool Unread, int Mail, int Width, string? Model, bool Stopped, bool Selected) drawn = (-1, -1, false, -1, -1, null, false, false);
 
         void Refresh(float width)
         {
-            var now = (chat.Version, chat.Running ? (int)chat.TurnSeconds : -1, chat.Unread, chat.UnreadMailCount(), (int)width, chat.Model, chat.Stopped);
+            bool selected = remote is null ? chat == agentChat : linkRemoteOpen == remote;
+            var now = (chat.Version, Seconds: chat.Running ? (int)chat.TurnSeconds : -1, chat.Unread, Mail: chat.UnreadMailCount(), Width: (int)width, chat.Model, chat.Stopped, Selected: selected);
             if (now == drawn)
                 return;
+            bool selectionOnly = drawn.Version == now.Version && drawn.Seconds == now.Seconds && drawn.Unread == now.Unread
+                && drawn.Mail == now.Mail && drawn.Width == now.Width && drawn.Model == now.Model && drawn.Stopped == now.Stopped;
             drawn = now;
+            pick.Selected = selected;
+            name.Bold = selected;
+            bool isQuiet = finishedQuiet && !selected;
+            name.Dim = isQuiet;
+            name.Color = isQuiet ? remoteDim : null;
+            if (selectionOnly)
+                return;
             float room = width - indent;
             FitChatRename(chat, room);
             string? model = HexAgentModels.Of(chat);
@@ -227,13 +239,25 @@ internal sealed partial class DawnScene
                 said = UIRichText.Literal(FitText(model is { Length: > 0 } ? $"{model} · {doing}" : doing, under.TextScale, room - 24));
             else
             {
-                string used = string.Join(" · ", new[]
+                agentCardBuilder.Clear();
+                if (!string.IsNullOrEmpty(model))
+                    agentCardBuilder.Append(model);
+                if (chat.ContextLimit > 0 && chat.ContextUsed > 0)
                 {
-                    model,
-                    chat.ContextLimit > 0 && chat.ContextUsed > 0 ? $"{Count(chat.ContextUsed)} / {Count(chat.ContextLimit)}"
-                        : chat.InputTokens + chat.OutputTokens > 0 ? $"{HexAgentLimits.Tokens(chat.InputTokens + chat.OutputTokens)} tokens" : null,
-                    chat.Cost > 0 ? "$" + chat.Cost.ToString("0.000", CultureInfo.InvariantCulture) : null
-                }.Where(part => !string.IsNullOrEmpty(part)));
+                    if (agentCardBuilder.Length > 0) agentCardBuilder.Append(" · ");
+                    agentCardBuilder.Append(Count(chat.ContextUsed)).Append(" / ").Append(Count(chat.ContextLimit));
+                }
+                else if (chat.InputTokens + chat.OutputTokens > 0)
+                {
+                    if (agentCardBuilder.Length > 0) agentCardBuilder.Append(" · ");
+                    agentCardBuilder.Append(HexAgentLimits.Tokens(chat.InputTokens + chat.OutputTokens)).Append(" tokens");
+                }
+                if (chat.Cost > 0)
+                {
+                    if (agentCardBuilder.Length > 0) agentCardBuilder.Append(" · ");
+                    agentCardBuilder.Append('$').Append(chat.Cost.ToString("0.000", CultureInfo.InvariantCulture));
+                }
+                string used = agentCardBuilder.ToString();
                 said = UIRichText.Literal(FitText(used, under.TextScale, room - 24 - mailWidth)) + (used.Length > 0 ? mail : mail.TrimStart(' ', '·'));
             }
             if (under.Text != said)
@@ -311,8 +335,7 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>Seconds said short, 12s, 11m, 1h 5m, the same whatever the machine's language writes numbers in.</summary>
-    internal static string Took(double seconds) =>
-        seconds < 60 ? $"{seconds.ToString("0", CultureInfo.InvariantCulture)}s" : seconds < 3600 ? $"{(seconds / 60).ToString("0", CultureInfo.InvariantCulture)}m" : $"{(int)(seconds / 3600)}h {(int)(seconds % 3600 / 60)}m";
+    internal static string Took(double seconds) => HexAgentRows.FormatDurationShort(seconds);
 
     /// <summary>An agent system's letters for its badge, CC for Claude Code, CO for Codex.</summary>
     internal static string Initials(string name)

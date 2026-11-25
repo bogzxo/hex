@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Numerics;
 
+using Hex.Core.Modules;
+
 using Horizon.Rendering;
 using Horizon.UI;
 using Horizon.UI.Components;
@@ -86,6 +88,8 @@ internal sealed partial class DawnScene
     /// <summary>Link's window brought up, the one up already given the keys rather than another made over it.</summary>
     internal void ShowLinkWindow()
     {
+        if (!HexModules.IsEnabled(HexModuleId.Link))
+            return;
         LinkTakeBodyScale();
         if (linkWindow is { } open)
         {

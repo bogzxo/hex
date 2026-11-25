@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Net.NetworkInformation;
 
+using Hex.Core.Modules;
+
 using Horizon.UI.Components;
 
 namespace Hex.Dawn;
@@ -82,19 +84,23 @@ internal sealed partial class DawnScene
     private LinkPairingAsk? linkPairingPending;
     private UIDialog? linkPairingDialog;
 
-    /// <summary>The status bar's item and Link itself, when the settings or the command line say so.</summary>
+    /// <summary>The status bar's item and Link itself, when the Link module and the settings or command line say so.</summary>
     private void BuildLink()
     {
+        if (!HexModules.IsEnabled(HexModuleId.Link))
+            return;
         BuildLinkUi();
         if (LinkWanted)
             StartLink();
     }
 
     /// <summary>
-    /// Whether Link should be up, the setting or --link, never for a run of checks. A self test goes by --link alone,
+    /// Whether Link should be up, the Link module plus setting or --link, never for a run of checks. A self test goes by --link alone,
     /// the link suites put it up themselves with folders and a port of their own.
     /// </summary>
-    private bool LinkWanted => ((settings.Link && !options.SelfTest) || (options.Link && !linkFlagTurnedOff)) && options.Check.Length == 0;
+    private bool LinkWanted => HexModules.IsEnabled(HexModuleId.Link)
+        && ((settings.Link && !options.SelfTest) || (options.Link && !linkFlagTurnedOff))
+        && options.Check.Length == 0;
 
     // Link switched off by hand while the --link flag had it on: the flag no longer holds it up, until it's switched on again
     private bool linkFlagTurnedOff;
@@ -105,6 +111,12 @@ internal sealed partial class DawnScene
     /// </summary>
     internal void ApplyLink(bool restart = false)
     {
+        if (!HexModules.IsEnabled(HexModuleId.Link))
+        {
+            if (linkTransport is not null)
+                StopLink();
+            return;
+        }
         if (linkByTest)
         {
             if (linkTransport is not null)
@@ -209,6 +221,8 @@ internal sealed partial class DawnScene
     /// <param name="loopbackOnly">Bind to IPv4 loopback and skip LAN discovery for local-only self-tests.</param>
     internal bool StartLink(int? port = null, string? home = null, bool? discover = null, bool loopbackOnly = false)
     {
+        if (!HexModules.IsEnabled(HexModuleId.Link))
+            return false;
         if (linkTransport is not null)
             return true;
         if (linkOwner is not null && linkOwner != this)
@@ -440,6 +454,8 @@ internal sealed partial class DawnScene
     /// </summary>
     private void UpdateLink(float dt)
     {
+        if (!HexModules.IsEnabled(HexModuleId.Link))
+            return;
         if (LinkOn || linkWindow is not null || linkDirty || pendingLinkPosts is { IsEmpty: false })
             PumpLink(dt);
     }

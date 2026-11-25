@@ -155,18 +155,18 @@ internal sealed partial class DawnScene
         test.Run(() =>
         {
             settings.GlassBlur = 8.0f;
-            settings.GlassRim = 0.6f;
+            settings.GlassBend = 14.0f;
             settings.Effects = "subtle";
             settings.EffectGlass = true;
             ApplyEffects();
         });
         test.Check("recent: the glass is as thick as its sliders, the sides worked out of them", () =>
-            compositor.PopupGlass is { Blur: 8.0f, Rim: 0.6f } && left.Glass is { } side && side.Blur > 8.0f && side.Rim < 0.6f && side.Bend == 0.0f);
+            compositor.PopupGlass is { Blur: 8.0f, Bend: 14.0f } && left.Glass is { } side && side.Blur == 8.0f && side.Bend <= 14.0f);
 
         test.Run(() =>
         {
             settings.GlassBlur = HexGlass.BLUR;
-            settings.GlassRim = HexGlass.RIM;
+            settings.GlassBend = HexGlass.BEND;
             settings.Effects = "none";
             settings.TrimWhitespace = trims;
             settings.FinalNewline = ends;

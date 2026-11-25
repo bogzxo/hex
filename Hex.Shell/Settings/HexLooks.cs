@@ -35,7 +35,7 @@ internal static partial class HexLooks
     /// <summary>Every key of the editor's section a look sets, the glass, the effects and the motion.</summary>
     public static readonly string[] Keys =
     [
-        "effect_glass", "glass_blur", "glass_clarity", "glass_rim", "glass_bend",
+        "effect_glass", "glass_blur", "glass_clarity", "glass_bend",
         "effects", "effect_sparks", "effect_caret_glow", "effect_spotlight", "effect_ripples", "effect_trail",
         "effect_motion", "ui_animation", "caret_glide"
     ];
@@ -55,7 +55,6 @@ internal static partial class HexLooks
         ["effect_glass"] = Values.Bool(true),
         ["glass_blur"] = new NumberValue(UIGlass.Clear.Blur),
         ["glass_clarity"] = new NumberValue(UIGlass.Clear.Clarity),
-        ["glass_rim"] = new NumberValue(UIGlass.Clear.Rim),
         ["glass_bend"] = new NumberValue(UIGlass.Clear.Bend),
         ["effects"] = new StringValue("none"),
         ["effect_sparks"] = Values.Bool(false),
@@ -69,7 +68,7 @@ internal static partial class HexLooks
     }, BuiltIn: true);
 
     /// <summary>
-    /// Thick frosted glass, a long blur and little of it coming through, a soft rim and no bend, which is the glass's
+    /// Thick frosted glass, a long blur and little of it coming through, with no bend, which is the glass's
     /// frosted kind. Easier behind a wall of text. Fluid's bend is what makes its glass liquid, see glass.slang.
     /// </summary>
     public static readonly HexLook Frosted = new(FROSTED, new Dictionary<string, IRuntimeValue>(StringComparer.Ordinal)
@@ -77,7 +76,6 @@ internal static partial class HexLooks
         ["effect_glass"] = Values.Bool(true),
         ["glass_blur"] = new NumberValue(40.0f),
         ["glass_clarity"] = new NumberValue(0.38f),
-        ["glass_rim"] = new NumberValue(0.2f),
         ["glass_bend"] = new NumberValue(0.0f),
         ["effects"] = new StringValue("none"),
         ["effect_sparks"] = Values.Bool(false),
@@ -276,7 +274,7 @@ internal static partial class HexLooks
             return null;
 
         return HexGlass.Popup(Number("glass_blur", settings.GlassBlur), Number("glass_clarity", settings.GlassClarity),
-            Number("glass_rim", settings.GlassRim), Number("glass_bend", settings.GlassBend));
+            Number("glass_bend", settings.GlassBend));
     }
 
     /// <summary>What a key of a look is in the settings now, Dusk's theme from what the mode says it is.</summary>
@@ -285,7 +283,6 @@ internal static partial class HexLooks
         "effect_glass" => Values.Bool(settings.EffectGlass),
         "glass_blur" => new NumberValue(settings.GlassBlur),
         "glass_clarity" => new NumberValue(settings.GlassClarity),
-        "glass_rim" => new NumberValue(settings.GlassRim),
         "glass_bend" => new NumberValue(settings.GlassBend),
         "effects" => new StringValue(settings.Effects),
         "effect_sparks" => Values.Bool(settings.EffectSparks),
@@ -313,7 +310,6 @@ internal static partial class HexLooks
             case ("effect_glass", BooleanValue on): settings.EffectGlass = on.Value; break;
             case ("glass_blur", NumberValue blur): settings.GlassBlur = Math.Clamp(blur.Value, 0.0f, 64.0f); break;
             case ("glass_clarity", NumberValue clarity): settings.GlassClarity = Math.Clamp(clarity.Value, 0.0f, 1.0f); break;
-            case ("glass_rim", NumberValue rim): settings.GlassRim = Math.Clamp(rim.Value, 0.0f, 1.0f); break;
             case ("glass_bend", NumberValue bend): settings.GlassBend = Math.Clamp(bend.Value, 0.0f, 24.0f); break;
             case ("effects", StringValue { Value: "none" or "subtle" or "all" } effects): settings.Effects = effects.Value; break;
             case ("effect_sparks", BooleanValue on): settings.EffectSparks = on.Value; break;

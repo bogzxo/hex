@@ -108,8 +108,11 @@ internal sealed partial class DawnScene
     private void PublishAgentStatuses()
     {
         // A chat whose run goes on after its turn says so, it read as done while it worked and what it was sent waited
-        foreach (HexAgentChat chat in agentChats)
+        for (int i = 0; i < agentChats.Count; i++)
+        {
+            HexAgentChat chat = agentChats[i];
             chat.RunGoing = !chat.Running && AgentRunBusy(chat);
+        }
 
         if (hub.Pump(AGENTS_REPLY))
         {
@@ -160,7 +163,7 @@ internal sealed partial class DawnScene
     ];
 
     private bool NeedsAgentExtension(string id) =>
-        !HexAi.Off && !extensions.All.Any(extension => extension.Id == id) && !extensions.AgentRuns.ContainsKey(id);
+        AgenticEnabled && !extensions.All.Any(extension => extension.Id == id) && !extensions.AgentRuns.ContainsKey(id);
 
     private static string InstallAgentExtension(string id, string name, string program) =>
         $"The '{program}' CLI is installed. On this machine, open Hex Settings → {HexExtensions.AVAILABLE} and install {name} ({id}).";

@@ -1,43 +1,55 @@
-using CSharpMath.SkiaSharp;
+using System.Text;
+
+using Hex.Core.Modules;
 using Hex.Core.Notebooks;
-using SkiaSharp;
 
 namespace Hex.Dawn;
 
-internal static partial class NotebookRender
+internal static unsafe partial class NotebookRender
 {
-    // Points to a formula's size in CSS pixels, the 15px of an exported page's text
-    private const float EXPORT_TEXT = 15.0f * 0.75f, EXPORT_DISPLAY = 18.0f * 0.75f, EXPORT_MARGIN = 2.0f;
-
     /// <summary>
     /// A formula drawn as SVG for an HTML export, its glyphs as paths so it needs no font and stays sharp at any zoom or
-    /// print size. Null when CSharpMath can't read it, the export shows its TeX then. Nothing in it depends on the
-    /// screen's density or the engine's render scale.
+    /// print size. Null when CSharpMath can't read it or when the Notebooks module is disabled/uninstalled, so the export
+    /// shows its TeX instead.
     /// </summary>
     public static NotebookHtmlMath? MathSvg(string tex, bool display)
     {
-        if (tex.Length > 32_000)
-            return null;
-        string source = FractionAliases().Replace(CommandBoundary().Replace(tex, "$0 "), @"\frac");
-        var painter = new MathPainter { LaTeX = source, FontSize = display ? EXPORT_DISPLAY : EXPORT_TEXT, TextColor = SKColors.Black };
-        if (!display)
-            painter.LineStyle = CSharpMath.Atom.LineStyle.Text;
-        var bounds = painter.Measure();
-        if (painter.ErrorMessage is not null || !float.IsFinite(bounds.Width) || !float.IsFinite(bounds.Height) || bounds.Width <= 0 || bounds.Height <= 0)
+        if (!HexModules.IsEnabled(HexModuleId.Notebooks) || tex.Length > 32_000)
             return null;
 
-        float width = bounds.Width + EXPORT_MARGIN * 2, height = bounds.Height + EXPORT_MARGIN * 2;
-        using var stream = new MemoryStream();
-        using (var canvas = SKSvgCanvas.Create(SKRect.Create(width, height), stream))
+        EnsureBackend();
+        if (nativeExports is { } native)
         {
-            canvas.Translate(EXPORT_MARGIN - bounds.Left, EXPORT_MARGIN - bounds.Top);
-            painter.Draw(canvas, 0, 0);
+            byte[] utf8 = Encoding.UTF8.GetBytes(tex);
+            fixed (byte* srcPtr = utf8)
+            {
+                byte* svgPtr = null;
+                int svgLen = 0;
+                float width = 0, height = 0, descent = 0;
+                int rc = native.RenderMathSvg(srcPtr, utf8.Length, display ? 1 : 0,
+                    &svgPtr, &svgLen, &width, &height, &descent);
+                try
+                {
+                    if (rc != 0 || svgPtr == null || svgLen <= 0)
+                        return null;
+                    string svg = Encoding.UTF8.GetString(new ReadOnlySpan<byte>(svgPtr, svgLen));
+                    return new NotebookHtmlMath(svg, width, height, descent);
+                }
+                finally
+                {
+                    if (svgPtr != null)
+                        native.Free(svgPtr);
+                }
+            }
         }
 
-        string svg = System.Text.Encoding.UTF8.GetString(stream.ToArray());
+        if (managedFallback is { } managed
+            && managed.RenderMathSvg(tex, display, out string? managedSvg, out float w, out float h, out float d)
+            && managedSvg is not null)
+        {
+            return new NotebookHtmlMath(managedSvg, w, h, d);
+        }
 
-        // The baseline is at nought, what's under it is how far the formula drops below the text round it
-        float descent = MathF.Max(0.0f, bounds.Bottom) + EXPORT_MARGIN;
-        return new NotebookHtmlMath(svg, width, height, descent);
+        return null;
     }
 }

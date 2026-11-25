@@ -1,5 +1,6 @@
 using System.Net;
 using Hex.Core;
+using Hex.Core.Modules;
 using Xunit.Abstractions;
 
 using static Hex.Tests.HexLinkTestKit;
@@ -195,5 +196,61 @@ public sealed class HexPerfBudgetTests(ITestOutputHelper output)
         output.WriteLine($"Start(config) again with the router adopted: {perAsk:0.0} B an ask");
         Assert.Equal(sent, router.Sent.Count);
         Assert.True(perAsk <= 512, $"asking an adopted server to start allocated {perAsk:0.0} B, the budget is 512");
+    }
+
+    [Fact]
+    public void Module_gate_hot_path_allocates_nothing()
+    {
+        // HexModules.IsEnabled is checked on simulation-thread tick paths and UI builders, so it must allocate 0 bytes
+        HexModules.SetEnabled(HexModuleId.Link, true);
+        HexModules.SetEnabled(HexModuleId.Agentic, true);
+        HexModules.SetEnabled(HexModuleId.Notebooks, true);
+
+        double perCheck = PerStep(10_000, _i =>
+        {
+            _ = HexModules.IsEnabled(HexModuleId.Link);
+            _ = HexModules.IsEnabled(HexModuleId.LocalAi);
+            _ = HexModules.IsEnabled(HexModuleId.Agentic);
+            _ = HexModules.IsEnabled(HexModuleId.Notebooks);
+            _ = HexModules.IsEnabled(HexModuleId.Designer);
+        });
+
+        output.WriteLine($"HexModules.IsEnabled (5 checks): {perCheck:0.00} B");
+        Assert.True(perCheck <= 0.01, $"HexModules.IsEnabled allocated {perCheck:0.00} B per 5 checks, expected 0 B");
+    }
+
+    [Fact]
+    public void Agent_chat_streaming_append_and_tool_calls_stay_within_budget()
+    {
+        // Streaming appends must stay amortized O(1) via StringBuilder instead of O(N^2) string concatenation
+        var chat = new HexAgentChat(1, "claude_code");
+        chat.Ask("Stream something long");
+        chat.Say("Start\n");
+        const string chunk = "Streaming line with **some** words.\n";
+
+        double perAppend = PerStep(1000, _ => chat.Say(chunk, append: true), warm: 32);
+
+        output.WriteLine($"HexAgentChat.Say(append: true): {perAppend:0.0} B a chunk");
+        Assert.True(perAppend <= 256, $"streaming append allocated {perAppend:0.0} B a chunk, the budget is 256 B");
+
+        // Tool call start + completion hot path (pre-built inputs so only chat bookkeeping is measured)
+        const int toolCount = 160;
+        var ids = new string[toolCount + 32];
+        for (int i = 0; i < ids.Length; i++)
+            ids[i] = "tool-" + i;
+        const string input = "{\"path\":\"Hex.Core/Agents/HexAgentChat.cs\"}";
+        const string result = "ok";
+
+        var toolChat = new HexAgentChat(2, "claude_code");
+        toolChat.Ask("Run tools");
+        double perTool = PerStep(toolCount, i =>
+        {
+            string id = ids[i];
+            toolChat.Tool(id, "mcp__hex__hex_read", input);
+            toolChat.ToolDone(id, true, result);
+        }, warm: 32);
+
+        output.WriteLine($"HexAgentChat.Tool + ToolDone: {perTool:0.0} B a call");
+        Assert.True(perTool <= 1024, $"tool call recording allocated {perTool:0.0} B a call, the budget is 1,024 B");
     }
 }

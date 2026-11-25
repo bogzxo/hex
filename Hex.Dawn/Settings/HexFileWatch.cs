@@ -57,9 +57,10 @@ internal sealed class HexFileWatch : IDisposable
         if (Volatile.Read(ref changed) == 0)
             return false;
 
-        if (Stopwatch.GetElapsedTime(Interlocked.Read(ref changedAt)).TotalSeconds < seconds)
+        double remaining = seconds - Stopwatch.GetElapsedTime(Interlocked.Read(ref changedAt)).TotalSeconds;
+        if (remaining > 0.0)
         {
-            Horizon.Engine.GameEngine.Instance?.WindowManager.RequestFrames();
+            Horizon.Engine.GameEngine.Instance?.WindowManager.RequestTickIn(remaining);
             return false;
         }
 

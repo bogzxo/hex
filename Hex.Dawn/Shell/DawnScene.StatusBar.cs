@@ -1,5 +1,7 @@
 using System.Numerics;
 
+using Hex.Core.Modules;
+
 using Horizon.UI;
 using Horizon.UI.Components;
 using Horizon.UI.Skinning;
@@ -138,10 +140,12 @@ internal sealed partial class DawnScene
         UpdateNativeFolding();
         UpdateReferenceLenses();
         UpdateSemantics();
-        UpdateAiEdit();
-        if (!HexAi.Off)
+        if (HexModules.IsEnabled(HexModuleId.LocalAi))
+        {
+            UpdateAiEdit();
             UpdatePredictions();
-        UpdateLlamaServer();
+            UpdateLlamaServer();
+        }
 
         // An error stays until it's pressed or something else is said, gone after ten seconds like the rest nobody saw it
         if (messageItem.Text.Length > 0 && !saidError && System.Environment.TickCount64 - saidAt > SAID_FOR)

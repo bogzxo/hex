@@ -1,3 +1,4 @@
+using System.Numerics;
 using Horizon.UI.Components;
 
 namespace Hex.Dawn;
@@ -11,43 +12,127 @@ namespace Hex.Dawn;
 /// </summary>
 internal sealed class HexAgentRowList
 {
+    private const int MAX_POOLED_PLACEHOLDERS = 300;
+
     private readonly List<UIComponent> rows = [];
-    private readonly Dictionary<UIComponent, long> keys = new(ReferenceEqualityComparer.Instance);
+    private readonly List<long> rowKeys = [];
     private long made;
 
-    // The rows still to be made, by the place each holds, made as it comes into sight
-    private readonly Dictionary<UIComponent, Func<UIComponent>> waiting = new(ReferenceEqualityComparer.Instance);
+    // Pooled lightweight placeholders reused across chat switches so switching a 200-row chat does not allocate 200 new Panels.
+    private readonly Stack<Panel> waitingPool = [];
+    private readonly Stack<Panel> groupedPool = [];
+    private readonly HashSet<UIComponent> pooledWaiting = new(ReferenceEqualityComparer.Instance);
+    private readonly HashSet<UIComponent> pooledGrouped = new(ReferenceEqualityComparer.Instance);
+
+    // The rows still to be made, by the place each holds, made as it comes into sight. Either a bespoke factory or a
+    // shared callback (MakeLater) with the item tag, avoiding a closure allocation per row when switching chats.
+    private readonly Dictionary<UIComponent, (object? Of, Func<UIComponent>? Make)> waiting = new(ReferenceEqualityComparer.Instance);
+    private int batchDepth;
+    private int batchFrom = int.MaxValue;
+
+    /// <summary>Shared lazy row factory invoked when a row was queued with <see cref="InsertLater(int, UIComponent, object)"/>.</summary>
+    public Func<object, UIComponent, UIComponent>? MakeLater { get; set; }
 
     public HexAgentRowList(VirtualStack shown)
     {
         Shown = shown;
         shown.Make = Make;
-        shown.KeyOf = index => keys[rows[index]];
+        shown.KeyOf = index => rowKeys[index];
         // A row of nothing (a call its group's row draws) takes no room before it's ever been seen either
         shown.EstimateHeight = (index, _) => rows[index].Visible ? shown.Estimate : 0.0f;
+    }
+
+    /// <summary>Rents a zero-size placeholder panel for a lazy row waiting to be materialized on scroll.</summary>
+    public Panel RentWaitingPlace()
+    {
+        if (waitingPool.Count > 0)
+        {
+            Panel reused = waitingPool.Pop();
+            reused.Visible = true;
+            reused.Size = Vector2.Zero;
+            reused.Color = Vector4.Zero;
+            return reused;
+        }
+        var created = new Panel { Size = Vector2.Zero, Color = Vector4.Zero };
+        pooledWaiting.Add(created);
+        return created;
+    }
+
+    /// <summary>Rents a hidden zero-size placeholder panel for a tool call drawn by its group's header row.</summary>
+    public Panel RentGroupedPlace()
+    {
+        if (groupedPool.Count > 0)
+        {
+            Panel reused = groupedPool.Pop();
+            reused.Visible = false;
+            reused.Size = Vector2.Zero;
+            return reused;
+        }
+        var created = new Panel { Visible = false, Size = Vector2.Zero };
+        pooledGrouped.Add(created);
+        return created;
+    }
+
+    private void ReturnIfPooled(UIComponent component)
+    {
+        if (component is not Panel panel || panel.Parent is not null || panel.Children.Count > 0)
+            return;
+        if (pooledWaiting.Contains(panel))
+        {
+            if (waitingPool.Count < MAX_POOLED_PLACEHOLDERS)
+                waitingPool.Push(panel);
+            else
+                pooledWaiting.Remove(panel);
+        }
+        else if (pooledGrouped.Contains(panel))
+        {
+            if (groupedPool.Count < MAX_POOLED_PLACEHOLDERS)
+                groupedPool.Push(panel);
+            else
+                pooledGrouped.Remove(panel);
+        }
+    }
+
+    /// <summary>Defers <see cref="VirtualStack.ItemsChanged"/> notifications until <see cref="EndBatch"/> so bulk chat switches notify once.</summary>
+    public void BeginBatch()
+    {
+        batchDepth++;
+    }
+
+    /// <summary>Flushes any deferred notifications from <see cref="BeginBatch"/>.</summary>
+    public void EndBatch()
+    {
+        if (batchDepth <= 0 || --batchDepth > 0)
+            return;
+        if (batchFrom == int.MaxValue)
+            return;
+        int from = batchFrom;
+        batchFrom = int.MaxValue;
+        Moved(from);
     }
 
     // A row as the list on screen asks for it, made now if it was waiting to be
     private UIComponent Make(int index)
     {
         UIComponent place = rows[index];
-        if (!waiting.Remove(place, out Func<UIComponent>? make))
+        if (!waiting.Remove(place, out var pending))
             return place;
 
-        UIComponent made = make();
+        UIComponent made = pending.Make is not null
+            ? pending.Make()
+            : MakeLater!(pending.Of!, place);
         rows[index] = made;
-        keys[made] = keys[place];
-        keys.Remove(place);
+        ReturnIfPooled(place);
         return made;
     }
 
     /// <summary>
     /// A row put in at a place to be made only once it comes into sight, <paramref name="place"/> holding its place until
-    /// then. A chat of a few hundred rows put on screen makes the dozen or two that show.
+    /// then. Uses <see cref="MakeLater"/> when <paramref name="make"/> is omitted to avoid per-row closure allocations.
     /// </summary>
-    public UIComponent InsertLater(int index, UIComponent place, object of, Func<UIComponent> make)
+    public UIComponent InsertLater(int index, UIComponent place, object of, Func<UIComponent>? make = null)
     {
-        waiting[place] = make;
+        waiting[place] = (of, make);
         return Insert(index, place, of);
     }
 
@@ -71,9 +156,9 @@ internal sealed class HexAgentRowList
     public int IndexOfThing(object of)
     {
         long key = (1L << 40) + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(of);
-        for (int i = 0; i < rows.Count; i++)
+        for (int i = 0; i < rowKeys.Count; i++)
         {
-            if (keys[rows[i]] == key)
+            if (rowKeys[i] == key)
                 return i;
         }
 
@@ -91,7 +176,7 @@ internal sealed class HexAgentRowList
         index = Math.Clamp(index, 0, rows.Count);
         rows.Insert(index, row);
         // The thing's own number above every count made here, which never gets near it
-        keys[row] = of is null ? ++made : (1L << 40) + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(of);
+        rowKeys.Insert(index, of is null ? ++made : (1L << 40) + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(of));
         Moved(index);
         return row;
     }
@@ -105,12 +190,32 @@ internal sealed class HexAgentRowList
         // In the list on screen it's taken out of its tree with the others the list asks for again
         Moved(at);
         rows.RemoveAt(at);
-        keys.Remove(row);
+        rowKeys.RemoveAt(at);
         waiting.Remove(row);
         Shown.ItemCount = rows.Count;
         if (row.Parent == Shown)
             Shown.Remove(row);
+        ReturnIfPooled(row);
         return true;
+    }
+
+    /// <summary>Removes a contiguous range of rows (e.g. spilled prefix) in one shot without clearing the rest.</summary>
+    public void RemoveRange(int index, int count)
+    {
+        if (count <= 0 || index < 0 || index >= rows.Count)
+            return;
+        int take = Math.Min(count, rows.Count - index);
+        for (int i = index; i < index + take; i++)
+        {
+            UIComponent row = rows[i];
+            waiting.Remove(row);
+            if (row.Parent == Shown)
+                Shown.Remove(row);
+            ReturnIfPooled(row);
+        }
+        rows.RemoveRange(index, take);
+        rowKeys.RemoveRange(index, take);
+        Moved(index);
     }
 
     /// <summary>A row put in another's place, keeping its place's height until it's measured itself.</summary>
@@ -125,11 +230,10 @@ internal sealed class HexAgentRowList
 
         Shown.Refresh(at);
         rows[at] = now;
-        keys[now] = keys[was];
-        keys.Remove(was);
         waiting.Remove(was);
         if (was.Parent == Shown)
             Shown.Remove(was);
+        ReturnIfPooled(was);
     }
 
     public void MoveChild(UIComponent row, int index)
@@ -145,11 +249,13 @@ internal sealed class HexAgentRowList
         Shown.Rebind();
         for (int i = rows.Count - 1; i >= 0; i--)
         {
-            if (rows[i] == keep)
+            UIComponent row = rows[i];
+            if (row == keep)
                 continue;
-            keys.Remove(rows[i]);
-            waiting.Remove(rows[i]);
+            waiting.Remove(row);
             rows.RemoveAt(i);
+            rowKeys.RemoveAt(i);
+            ReturnIfPooled(row);
         }
 
         Shown.ItemCount = rows.Count;
@@ -159,8 +265,25 @@ internal sealed class HexAgentRowList
     // Rows numbered from here on are other rows now, the ones on screen from there are asked for again
     private void Moved(int from)
     {
-        if (from <= Shown.Realized.Last)
-            Shown.Rebind();
+        if (batchDepth > 0)
+        {
+            if (from < batchFrom)
+                batchFrom = from;
+            return;
+        }
+        int last = Shown.Realized.Last;
+        if (from <= last)
+        {
+            // Appending a streaming row just before 1-2 tail indicators (typing dots / waiting banner) only shifts those
+            // tail indices; refreshing just that tail avoids detaching and re-measuring the entire visible viewport.
+            if (last - from <= 2 && from >= Shown.Realized.First)
+            {
+                for (int i = from; i <= last; i++)
+                    Shown.Refresh(i);
+            }
+            else
+                Shown.Rebind();
+        }
         Shown.ItemCount = rows.Count;
         Shown.ItemsChanged();
     }

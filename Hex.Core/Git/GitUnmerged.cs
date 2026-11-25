@@ -37,8 +37,7 @@ internal sealed class GitUnmerged
 
         GitUnmergedFile? stages = Read(repository, path);
         if (new FileInfo(full).LinkTarget is not null || Directory.Exists(full) ||
-            stages is not null && new[] { stages.Base, stages.Mine, stages.Theirs }
-                .Any(stage => stage is not null && stage.Mode is not ("100644" or "100755")))
+            (stages is not null && (IsUnsupportedMode(stages.Base) || IsUnsupportedMode(stages.Mine) || IsUnsupportedMode(stages.Theirs))))
             throw new IOException("Resolve this symbolic link, folder or submodule with Git.");
 
         byte[]? before = File.Exists(full) ? await File.ReadAllBytesAsync(full, cancel).ConfigureAwait(false) : null;
@@ -86,9 +85,11 @@ internal sealed class GitUnmerged
         try
         {
             CheckStages();
+            GitRepository.InvalidateInFlight(repository.Root);
             string[] arguments = bytes is null ? ["--literal-pathspecs", "rm", "-f", "--", path] :
                 ["--literal-pathspecs", "add", "--", path];
             GitResult staged = GitProcess.Run(repository.Root, arguments, cancel: cancel);
+            GitRepository.InvalidateInFlight(repository.Root);
             if (!staged.Ok)
                 throw new IOException(staged.Why);
         }
@@ -141,39 +142,95 @@ internal sealed class GitUnmerged
         return result.Ok ? output.ToArray() : throw new IOException(result.Why);
     }
 
+    private static bool IsUnsupportedMode(GitIndexStage? stage) => stage is not null && stage.Mode is not ("100644" or "100755");
+
+    private static readonly string[] ListAllArguments = ["ls-files", "-u", "-z"];
+
     private static IReadOnlyList<GitUnmergedFile> ReadStages(GitRepository repository, string? path)
     {
-        string[] arguments = path is null ? ["ls-files", "-u", "-z"] :
+        string[] arguments = path is null ? ListAllArguments :
             ["--literal-pathspecs", "ls-files", "-u", "-z", "--", path];
-        GitResult result = GitProcess.Run(repository.Root, arguments);
-        if (!result.Ok)
-            throw new IOException(result.Why);
+        var (files, error) = GitProcess.Run(repository.Root, arguments, (exit, output, err) =>
+            exit == 0 ? (ParseStages(output, path), (string?)null) : (null, GitProcess.FormatWhy(output, err)));
+        if (error is not null)
+            throw new IOException(error);
+        return files!;
+    }
 
+    internal static IReadOnlyList<GitUnmergedFile> ParseStages(ReadOnlySpan<char> output, string? path = null)
+    {
         var files = new Dictionary<string, GitUnmergedFile>(StringComparer.Ordinal);
-        foreach (string entry in result.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries))
+        var lookup = files.GetAlternateLookup<ReadOnlySpan<char>>();
+        int pos = 0;
+        while (pos < output.Length)
         {
-            int tab = entry.IndexOf('\t');
-            string[] fields = entry[..tab].Split(' ');
-            string name = entry[(tab + 1)..];
-            if (path is not null && name != path)
+            int nul = output[pos..].IndexOf('\0');
+            ReadOnlySpan<char> entry;
+            if (nul < 0)
+            {
+                entry = output[pos..];
+                pos = output.Length;
+            }
+            else
+            {
+                entry = output.Slice(pos, nul);
+                pos += nul + 1;
+            }
+
+            if (entry.IsEmpty)
                 continue;
-            var file = files.GetValueOrDefault(name) ?? new(name, null, null, null);
-            var stage = new GitIndexStage(fields[0], fields[1]);
-            files[name] = fields[2] switch
+
+            int tab = entry.IndexOf('\t');
+            if (tab < 0)
+                continue;
+
+            ReadOnlySpan<char> nameSpan = entry[(tab + 1)..];
+            if (path is not null && !nameSpan.SequenceEqual(path.AsSpan()))
+                continue;
+
+            ReadOnlySpan<char> meta = entry[..tab];
+            int s0 = meta.IndexOf(' ');
+            if (s0 < 0) continue;
+            ReadOnlySpan<char> modeSpan = meta[..s0];
+            ReadOnlySpan<char> rest = meta[(s0 + 1)..];
+            int s1 = rest.IndexOf(' ');
+            if (s1 < 0) continue;
+            ReadOnlySpan<char> objectIdSpan = rest[..s1];
+            ReadOnlySpan<char> stageSpan = rest[(s1 + 1)..];
+
+            if (!lookup.TryGetValue(nameSpan, out GitUnmergedFile? file))
+            {
+                string name = nameSpan.ToString();
+                file = new GitUnmergedFile(name, null, null, null);
+                files[name] = file;
+            }
+
+            var stage = new GitIndexStage(InternMode(modeSpan), objectIdSpan.ToString());
+            GitUnmergedFile updated = stageSpan switch
             {
                 "1" => file with { Base = stage },
                 "2" => file with { Mine = stage },
                 "3" => file with { Theirs = stage },
                 _ => file,
             };
+            files[file.Path] = updated;
         }
         return [.. files.Values];
     }
 
+    private static string InternMode(ReadOnlySpan<char> mode) => mode switch
+    {
+        "100644" => "100644",
+        "100755" => "100755",
+        "120000" => "120000",
+        "160000" => "160000",
+        _ => mode.ToString()
+    };
+
     private static (string Mine, string Theirs, string Ref) Labels(GitRepository repository)
     {
         string root = repository.Root;
-        string branch = GitProcess.Run(root, ["symbolic-ref", "--quiet", "--short", "HEAD"]).Output.Trim();
+        string branch = GitProcess.Run(root, ["symbolic-ref", "--quiet", "--short", "HEAD"], static (_, output, _) => output.Trim().ToString());
         var (incoming, fallback) = repository.Operation() switch
         {
             GitOperation.Merging => ("MERGE_HEAD", "incoming branch"),
@@ -198,13 +255,20 @@ internal sealed class GitUnmerged
             $"Theirs: {(other.Length > 0 ? other : fallback)}", incoming);
     }
 
+    private static readonly string[] OntoStates = ["rebase-merge/onto", "rebase-apply/onto"];
+
     private static string? OnTo(GitRepository repository)
     {
-        foreach (string state in new[] { "rebase-merge/onto", "rebase-apply/onto" })
+        foreach (string state in OntoStates)
         {
-            GitResult found = GitProcess.Run(repository.Root, ["rev-parse", "--git-path", state]);
-            string path = Path.Combine(repository.Root, found.Output.TrimEnd('\r', '\n'));
-            if (found.Ok && File.Exists(path))
+            string? path = GitProcess.Run(repository.Root, ["rev-parse", "--git-path", state], (exit, output, _) =>
+            {
+                if (exit != 0)
+                    return null;
+                ReadOnlySpan<char> trimmed = output.TrimEnd("\r\n");
+                return trimmed.IsEmpty ? null : Path.Combine(repository.Root, trimmed.ToString());
+            });
+            if (path is not null && File.Exists(path))
                 return File.ReadAllText(path).Trim();
         }
         return null;
@@ -212,24 +276,41 @@ internal sealed class GitUnmerged
 
     private static string Describe(GitRepository repository, string reference, string branchPoint)
     {
-        GitResult branch = GitProcess.Run(repository.Root,
-            ["for-each-ref", "--format=%(refname:short)", $"--points-at={branchPoint}", "refs/heads", "refs/remotes"]);
-        if (branch.Ok && branch.Output.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-            .FirstOrDefault() is { } name)
+        string? name = GitProcess.Run(
+            repository.Root,
+            ["for-each-ref", "--format=%(refname:short)", $"--points-at={branchPoint}", "refs/heads", "refs/remotes"],
+            static (exit, output, _) =>
+            {
+                if (exit != 0)
+                    return null;
+                ReadOnlySpan<char> remaining = output;
+                while (!remaining.IsEmpty)
+                {
+                    int nl = remaining.IndexOf('\n');
+                    ReadOnlySpan<char> line = nl < 0 ? remaining : remaining[..nl];
+                    remaining = nl < 0 ? default : remaining[(nl + 1)..];
+                    line = line.Trim();
+                    if (!line.IsEmpty)
+                        return line.ToString();
+                }
+                return null;
+            });
+        if (name is not null)
             return name;
-        return GitProcess.Run(repository.Root, ["show", "-s", "--format=%h %s", reference]).Output.Trim();
+        return GitProcess.Run(repository.Root, ["show", "-s", "--format=%h %s", reference], static (_, output, _) => output.Trim().ToString());
     }
 
     private static string CommitLabel(GitRepository repository, string reference, string fallback)
     {
-        GitResult result = GitProcess.Run(repository.Root, ["show", "-s", "--format=%h %s", reference]);
-        return result.Ok ? result.Output.Trim() : fallback;
+        return GitProcess.Run(repository.Root, ["show", "-s", "--format=%h %s", reference], (exit, output, _) =>
+            exit == 0 ? output.Trim().ToString() : fallback);
     }
 
     private static DateTimeOffset? DateOf(GitRepository repository, string reference)
     {
-        GitResult result = GitProcess.Run(repository.Root, ["show", "-s", "--format=%ct", reference]);
-        return result.Ok && long.TryParse(result.Output.Trim(), out long epoch)
-            ? DateTimeOffset.FromUnixTimeSeconds(epoch) : null;
+        return GitProcess.Run(repository.Root, ["show", "-s", "--format=%ct", reference], static (exit, output, _) =>
+            exit == 0 && long.TryParse(output.Trim(), System.Globalization.CultureInfo.InvariantCulture, out long epoch)
+                ? DateTimeOffset.FromUnixTimeSeconds(epoch)
+                : (DateTimeOffset?)null);
     }
 }

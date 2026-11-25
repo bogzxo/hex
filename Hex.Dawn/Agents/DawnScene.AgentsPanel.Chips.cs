@@ -33,11 +33,16 @@ internal sealed partial class DawnScene
         var key = (providers, (int)width);
         if (key == agentsChipsDrawn)
             return;
-        HexAgentProfile[] agents = [.. RunnableAgents()];
         if (providers != agentsChipsDrawn.Providers && agentChat is not { Entries.Count: > 0 })
             agentRowsFor = default;
         agentsChipsDrawn = key;
+        RebuildAgentChips(current, width);
+    }
 
+    // Slow path extracted so Roslyn never hoists closure display classes onto the idle fast path
+    private void RebuildAgentChips(string? current, float width)
+    {
+        HexAgentProfile[] agents = [.. RunnableAgents()];
         Empty(agentsChips);
         // A narrow sidebar gives the provider its own line. History and New stay at their
         // normal hit sizes on the next line beside the quiet status text.
@@ -129,12 +134,14 @@ internal sealed partial class DawnScene
         {
             bool missing = cached.Program == program && cached.Missing;
             agentPrograms[agent.Id] = cached = (now, program, missing);
-            string id = agent.Id;
-            InBackground<string?>("finding an agent's program", () => HexAgentProcess.Find(program),
-                found => RememberAgentProgram(id, program, found is null, now), quiet: true);
+            RefreshAgentProgram(agent.Id, program, now);
         }
         return cached.Missing ? AgentStates.Missing : AgentStates.Ready;
     }
+
+    private void RefreshAgentProgram(string id, string program, long now) =>
+        InBackground<string?>("finding an agent's program", () => HexAgentProcess.Find(program),
+            found => RememberAgentProgram(id, program, found is null, now), quiet: true);
 
     private void RememberAgentProgram(string id, string program, bool missing, long checkedAt)
     {
@@ -144,13 +151,16 @@ internal sealed partial class DawnScene
         {
             // A program that was there and isn't found once (a busy disk, the server working, a lookup that raced) isn't gone: it
             // has to be missing twice running, or the list flickered "Not installed" while a local run went on
-            bool wasThere = agentPrograms.TryGetValue(id, out var before) && before.Program == program && !before.Missing;
+            bool hadBefore = agentPrograms.TryGetValue(id, out var before);
+            bool wasThere = hadBefore && before.Program == program && !before.Missing;
             int misses = missing ? agentMisses.GetValueOrDefault(id) + 1 : 0;
             agentMisses[id] = misses;
             if (missing && wasThere && misses < 2)
                 missing = false;
+            bool changed = !hadBefore || before.Program != program || before.Missing != missing;
             agentPrograms[id] = (checkedAt, program, missing);
-            Engine.WindowManager.RequestFrames();
+            if (changed && (Face == Hex.Shell.HexFace.Noon || agentsView is { Visible: true }))
+                Engine.WindowManager.NoteChange();
         }
     }
 

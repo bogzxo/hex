@@ -1,5 +1,7 @@
 using System.Numerics;
 
+using Hex.Core.Modules;
+
 using Horizon.Engine;
 using Horizon.HIDL.Runtime;
 using Horizon.Rendering;
@@ -80,6 +82,9 @@ internal sealed partial class DawnScene : Scene
 
     // What is behind the layouts in the canvas, a module of the stage as big as the canvas
     private readonly UIModule backdrop;
+    private bool backdropLoaded;
+    private bool sceneReady;
+    private bool markdownGrammarWarmed;
     private readonly ScrollPanel treeScroll, inspectorScroll;
     private readonly Panel codeScroll;
     private readonly UIComponent rightHead, activityGap, palette;
@@ -133,13 +138,14 @@ internal sealed partial class DawnScene : Scene
         // layouts is a module of the stage itself, the first one, see PlaceCanvas
         Horizon.Core.Diagnostics.StartupTrace.Mark("editor: camera");
         stage = AddComponent(new UICompositor(camera));
+        stage.Enabled = false;
         Horizon.Core.Diagnostics.StartupTrace.Mark("editor: stage compositor");
         compositor = AddComponent(new UICompositor(camera, TOOL_SKIN_DIRECTORY, TOOL_SKIN));
         Horizon.Core.Diagnostics.StartupTrace.Mark("editor: editor compositor");
         backdrop = stage.CreateModule();
         backdrop.ShowInLayoutDebugger = false;
         backdrop.Interactive = false;
-        backdrop.LoadLayout("Assets/hex/backdrop.hor");
+        backdrop.Enabled = false;
 
         Horizon.Core.Diagnostics.StartupTrace.Mark("editor: compositors and backdrop");
         // What the editor says, before anything of it is shown, its layouts name the texts by key
@@ -201,8 +207,7 @@ internal sealed partial class DawnScene : Scene
             HexAi.Force();
         else
             HexAi.Decide(settings.NoAi);
-        if (!HexAi.Off)
-            _ = Task.Run(() => Horizon.UI.Scripting.CodeLanguages.ForFile("message.md")?.Read("x\n", 1));
+        settings.ApplyModules();
         BuildRenderScale();
         ReadBackdropAhead();
         DeclareMenus();
@@ -240,12 +245,9 @@ internal sealed partial class DawnScene : Scene
         BuildQuiet();
         Horizon.Core.Diagnostics.StartupTrace.Mark("editor: status bar, panel, find bar");
         BuildTerminal();
-        // The agents' panel and Agentic, never made with No AI on, nothing of them is there to tick or to lay out
-        if (!HexAi.Off)
-        {
-            BuildAgentsPanel();
-            BuildNoon();
-        }
+        // The agents' panel and Agentic's commands, never made with Agentic or No AI off; Agentic's own widgets wait until it's shown or warmed (EnsureNoon)
+        if (HexModules.IsEnabled(HexModuleId.Agentic))
+            EnsureAgentsPanel();
         Horizon.Core.Diagnostics.StartupTrace.Mark("editor: terminal and agents");
         StartRemote();
         BuildSideTree();
@@ -280,26 +282,32 @@ internal sealed partial class DawnScene : Scene
         // The servers' look round the machine spawns shells, which raced the first frame for the processor, so it waits
         // until the editor is up. A self test has them at once, its checks look
         if (options.SelfTest)
+        {
             languages.StartChecks();
+        }
         else
+        {
             AfterStart(languages.StartChecks);
-        languages.RestoreWhereNeeded();
+            AfterStart(languages.RestoreWhereNeeded);
+        }
         BuildEffects();
         BuildModes();
-        designer.AddDesignerCommands();
+        if (HexModules.IsEnabled(HexModuleId.Designer))
+            designer.AddDesignerCommands();
         WireRefresh();
         WireExplorerHead();
         BuildImageView();
         BuildNotebookView();
         BuildMarkdownPreview();
-        AddNotebookCommands();
+        if (HexModules.IsEnabled(HexModuleId.Notebooks))
+            AddNotebookCommands();
         BuildDiffs();
         BuildHistory();
         BuildConflicts();
         BuildMergeEditor();
         BuildPeek();
         AddLanguageModeCommands();
-        if (!HexAi.Off)
+        if (HexModules.IsEnabled(HexModuleId.LocalAi))
         {
             AddPredictionCommands();
             AddPickerCommands();
@@ -325,13 +333,12 @@ internal sealed partial class DawnScene : Scene
         };
 
         Horizon.Core.Diagnostics.StartupTrace.Mark("editor: views, keys, scale");
-        designer.BuildPalette();
         extensions.Find();
         Show(NewDocument());
         startedWith = document;
 
         // The folders of last time and the files that were open in them, unless the editor was told what to open
-        Horizon.Core.Diagnostics.StartupTrace.Mark("editor: palette, extensions found, first document");
+        Horizon.Core.Diagnostics.StartupTrace.Mark("editor: extensions found, first document");
         explorer.RestoreWorkspace();
 
         // A folder it was started on (dawn -window folder in a terminal) is the workspace instead, unless it's a folder of
@@ -339,8 +346,8 @@ internal sealed partial class DawnScene : Scene
         if (options.Folder is { } startedOn && !explorer.workspace.Folders.Any(folder => PlatformPaths.Same(folder, startedOn)))
             explorer.OpenFolder(options.Folder);
 
-        // The agents' chats of this workspace as they were when Hex last had it open, none read with No AI on
-        if (!HexAi.Off)
+        // The agents' chats of this workspace as they were when Hex last had it open, none read with Agentic off
+        if (HexModules.IsEnabled(HexModuleId.Agentic))
             BringBackChats();
 
         // A fresh start or one on a folder is on the explorer, for code and for the designer, whatever the side bar was left on.
@@ -397,8 +404,17 @@ internal sealed partial class DawnScene : Scene
         // The door for agents, once the workspace's folders are known for the bridge to pick this Hex by
         BuildMcp();
 
-        // And the door for other machines, Hex Link, nothing listening unless it's on
-        BuildLink();
+        // And the door for other machines, Hex Link, nothing built or listening when the Link module is off
+        if (HexModules.IsEnabled(HexModuleId.Link))
+            BuildLink();
+
+        // Now that initial files and workspace state are known, activate the stage compositor & designer palette only if a layout is on screen
+        sceneReady = true;
+        SyncDesignerStage(LayoutTools && !plainWelcome);
+
+        // Warm the Markdown grammar only if the editor actually opens into an Agentic view
+        if (HexModules.IsEnabled(HexModuleId.Agentic) && (Face == HexFace.Noon || Side == HexSide.Agents))
+            AfterStart(WarmMarkdownGrammarOnce);
 
         Horizon.Core.Diagnostics.StartupTrace.Mark("editor: extensions started, MCP");
         // Every part is made by now, what each tick does is put in order
@@ -507,7 +523,10 @@ internal sealed partial class DawnScene : Scene
             RunChecks();
 
         if (settleIn > 0.0f && (settleIn -= dt) <= 0.0f)
+        {
+            ForgetCodeText();
             GC.Collect(2, GCCollectionMode.Optimized, blocking: false, compacting: false);
+        }
 
         if (afterStart.Count > 0 && (afterStartIn -= dt) <= 0.0f)
         {
@@ -579,15 +598,58 @@ internal sealed partial class DawnScene : Scene
         PlaceCanvas();
     }
 
+    /// <summary>Loads the stage backdrop layout once on first Designer view.</summary>
+    private void EnsureBackdropLoaded()
+    {
+        if (backdropLoaded)
+            return;
+        backdropLoaded = true;
+        backdrop.LoadLayout("Assets/hex/backdrop.hor");
+    }
+
+    /// <summary>
+    /// Enables the stage compositor, its backdrop and the designer palette only when a layout is actually on screen and
+    /// the Designer module is enabled. Disabled during code editing so the extra compositor does zero work per frame.
+    /// </summary>
+    private void SyncDesignerStage(bool active)
+    {
+        if (!sceneReady)
+            return;
+
+        bool enable = active && HexModules.IsEnabled(HexModuleId.Designer);
+        if (enable)
+        {
+            EnsureBackdropLoaded();
+            designer.EnsurePalette();
+        }
+
+        stage.Enabled = enable;
+        backdrop.Enabled = enable;
+    }
+
+    /// <summary>Warms the Markdown TextMate grammar lazily the first time an Agentic or Markdown view actually needs it.</summary>
+    private void WarmMarkdownGrammarOnce()
+    {
+        if (markdownGrammarWarmed)
+            return;
+        markdownGrammarWarmed = true;
+        _ = Task.Run(() => Horizon.UI.Scripting.CodeLanguages.ForFile("message.md")?.Read("x\n", 1));
+    }
+
     /// <summary>The pointer on the canvas, the steps to come back to, and the code of a layout written again after a change.</summary>
     private void UpdateDesigner(float dt)
     {
-        designer.UpdateCanvasPointer();
-        designer.UpdateRecord(dt);
+        bool designerOn = HexModules.IsEnabled(HexModuleId.Designer);
+        if (designerOn)
+        {
+            designer.UpdateCanvasPointer();
+            designer.UpdateRecord(dt);
+        }
         UpdateKeys();
 
         // After the keys, so Escape in the box over a text on the canvas puts the box away and doesn't deselect too
-        designer.UpdateTextEdit();
+        if (designerOn)
+            designer.UpdateTextEdit();
 
         // Whatever changed the code changed the layout. A file of code keeps its own history in its editor
         if (codeDirty && !document.IsText)
@@ -610,7 +672,8 @@ internal sealed partial class DawnScene : Scene
     /// <summary>The tabs, the tree and the inspector made again if something marked them, once a tick however many times it did.</summary>
     private void RebuildMarked()
     {
-        designer.RevealInTree();
+        if (LayoutTools)
+            designer.RevealInTree();
 
         // The side's rows aren't made again under a name being typed over in them, they are once it's done
         bool treeHeld = treeDirty && sideTree.Edited is not null;
@@ -683,25 +746,29 @@ internal sealed partial class DawnScene : Scene
             .Add("asked_view", ApplyAskedView);
 
         panelTicks = new HexTicks("panel", Profile)
-            .Add("table", running.UpdateTable)
-            .Add("notebooks", UpdateNotebooks)
+            .Add("table", running.UpdateTable);
+        if (HexModules.IsEnabled(HexModuleId.Notebooks))
+            panelTicks.Add("notebooks", UpdateNotebooks);
+        panelTicks
             .Add("markdown", UpdateMarkdownPreview)
             .Add("terminal", UpdateTerminal)
             .Add("remote", UpdateRemote);
 
         // The agent of a selection, the harness, the Agents panel and the server, a step each so each is weighed. With
-        // No AI on the agents' steps aren't in the list at all, the harness and the server are the MCP tools' and stay
-        if (!HexAi.Off)
+        // Agentic or No AI off the agents' steps aren't in the list at all, the harness and the server are the MCP tools' and stay
+        bool agenticOn = HexModules.IsEnabled(HexModuleId.Agentic);
+        if (agenticOn)
             panelTicks.Add("agent", UpdateAgent);
         panelTicks.Add("harness", UpdateHarness);
-        if (!HexAi.Off)
+        if (agenticOn)
             panelTicks.Add("agents_panel", UpdateAgentsPanel);
         panelTicks
             .Add("spelling", UpdateSpelling)
-            .Add("mcp", UpdateMcp)
-            .Add("link", UpdateLink)
-            .Add("discord", UpdateDiscord);
-        if (!HexAi.Off)
+            .Add("mcp", UpdateMcp);
+        if (HexModules.IsEnabled(HexModuleId.Link))
+            panelTicks.Add("link", UpdateLink);
+        panelTicks.Add("discord", UpdateDiscord);
+        if (agenticOn)
             panelTicks.Add("noon", UpdateNoon).Add("chats_kept", UpdateChatsKept).Add("agent_data", UpdateAgentData);
         panelTicks
             .Add("dev_restart", UpdateDevRestart)

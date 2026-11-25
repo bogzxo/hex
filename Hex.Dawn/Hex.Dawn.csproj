@@ -42,11 +42,21 @@
     </None>
   </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Svg.Skia" Version="5.2.3" />
-    <PackageReference Include="CSharpMath.SkiaSharp" Version="1.0.0-pre.2" />
-    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.148.0" />
+  <!-- In Debug JIT builds, build Hex.Notebooks.Render without referencing it and flow its output into
+       modules/Hex.Notebooks.Render/ so NotebookRender's Debug managed fallback works in Hex and Hex.Tests.
+       In Release NativeAOT builds, Hex.Notebooks.Render is published separately as a native shared DLL. -->
+  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+    <ProjectReference Include="..\Hex.Notebooks.Render\Hex.Notebooks.Render.csproj" ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
+
+  <Target Name="IncludeDebugNotebooksModule" BeforeTargets="GetCopyToOutputDirectoryItems" Condition="'$(Configuration)' == 'Debug'">
+    <ItemGroup>
+      <_NotebooksModuleFiles Include="..\Hex.Notebooks.Render\bin\$(Configuration)\$(TargetFramework)\**\*" />
+      <ContentWithTargetPath Include="@(_NotebooksModuleFiles)"
+                             TargetPath="modules\Hex.Notebooks.Render\%(RecursiveDir)%(Filename)%(Extension)"
+                             CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
 
   <ItemGroup>
     <ProjectReference Include="..\Hex.Core\Hex.Core.csproj" />

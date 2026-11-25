@@ -26,8 +26,9 @@ internal sealed partial class DawnScene
         resumeLookedAt = now;
 
         DateTimeOffset clock = DateTimeOffset.Now;
-        foreach (HexAgentChat chat in agentChats)
+        for (int i = 0; i < agentChats.Count; i++)
         {
+            HexAgentChat chat = agentChats[i];
             if (ResumeDue(chat, clock) is not { } resets || !extensions.AgentRuns.TryGetValue(chat.Agent, out var run) || AgentRunBusy(chat))
                 continue;
 

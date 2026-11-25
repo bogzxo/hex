@@ -148,7 +148,7 @@ internal sealed partial class DawnScene
     /// typed in the fleet's filter (it looks through every chat), or the fleet has the whole window to itself.
     /// </summary>
     private bool FinishedShown =>
-        chatsFinishedOpen || (Face == HexFace.Noon && ((noonFleetFilter?.Text.Trim().Length ?? 0) > 0 || (noonNarrow && noonFleetOpened)));
+        chatsFinishedOpen || (Face == HexFace.Noon && (!string.IsNullOrWhiteSpace(noonFleetFilter?.Text) || (noonNarrow && noonFleetOpened)));
 
     /// <summary>The finished group opened or folded, both lists drawn again for it and the choice kept with the workspace.</summary>
     private void ToggleFinished()
@@ -157,7 +157,7 @@ internal sealed partial class DawnScene
         agentsListDrawn = NOT_DRAWN;
         noonFleetDrawn = NOT_DRAWN;
         noonWait = 0.0f;
-        Engine.WindowManager.RequestFrames();
+        Engine.WindowManager.NoteChange();
     }
 
     // The chats in order as they were last worked out and what they were worked out from, the ones not folded away, the
@@ -271,7 +271,7 @@ internal sealed partial class DawnScene
 
         // The systems under the chats in Dawn, Noon has them under its fleet. Their words put right every time, the list
         // laid out again only when the room they take changed
-        bool systems = Face != HexFace.Noon && agentsSystems is not null && AgentSystems().Length > 0;
+        bool systems = Face != HexFace.Noon && agentsSystems is not null && HasAgentSystems();
         float systemsTall = 0.0f;
         if (systems)
         {
@@ -482,7 +482,7 @@ internal sealed partial class DawnScene
         chatsOrderedFor = 0;
         agentsListDrawn = NOT_DRAWN;
         noonFleetDrawn = NOT_DRAWN;
-        Engine.WindowManager.RequestFrames();
+        Engine.WindowManager.NoteChange();
     }
 
     /// <summary>A chat called something of somebody's own, what it was asked coming back when the name is left empty.</summary>
@@ -511,9 +511,9 @@ internal sealed partial class DawnScene
     /// </summary>
     private void ShowDraftOf(HexAgentChat? chat)
     {
-        if (agentChat is not null && agentChats.Contains(agentChat))
+        if (agentChat is not null && agentChats.Contains(agentChat) && agentsInput is not null)
         {
-            if (agentsInput.Text.Length > 0 || agentDraftContext is not null)
+            if (!AgentsInputEmpty() || agentDraftContext is not null)
                 agentDrafts[agentChat] = (agentsInput.Text, agentDraftContext);
             else
                 agentDrafts.Remove(agentChat);
@@ -523,14 +523,18 @@ internal sealed partial class DawnScene
         if (chat is not null && agentDrafts.Remove(chat, out var draft))
         {
             agentDraftContext = draft.Context;
-            agentsInput.Text = draft.Text;
-            string[] lines = draft.Text.Split('\n');
-            agentsInput.GoTo(lines.Length - 1, lines[^1].Length);
+            if (agentsInput is not null)
+            {
+                agentsInput.Text = draft.Text;
+                string[] lines = draft.Text.Split('\n');
+                agentsInput.GoTo(lines.Length - 1, lines[^1].Length);
+            }
         }
         else
         {
             agentDraftContext = null;
-            agentsInput.Text = string.Empty;
+            if (agentsInput is not null && !AgentsInputEmpty())
+                agentsInput.Text = string.Empty;
         }
     }
 
@@ -575,7 +579,7 @@ internal sealed partial class DawnScene
         familyFiltersStale = true;
         agentsWait = noonWait = 0.0f;
         PublishAgentStatuses();
-        Engine.WindowManager.RequestFrames();
+        Engine.WindowManager.NoteChange();
     }
 
     /// <summary>A chat closed, its agent stopped, and the agents it started closed with it.</summary>
@@ -587,6 +591,7 @@ internal sealed partial class DawnScene
         StopAgent(chat, withStarted: true);
         privateAgentRoots.TryRemove(chat.Id, out _);
         ForgetAgentReview(chat);
+        EvictAgentRowCache(chat.Id);
         agentChats.Remove(chat);
         agentDrafts.Remove(chat);
         if (agentChat == chat)

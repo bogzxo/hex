@@ -52,7 +52,7 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>Makes the code bigger or smaller by a factor, in every file that is open, 0 for the size it comes at.</summary>
-    private void ZoomCode(float factor, bool smooth = false)
+    private void ZoomCode(float factor, bool smooth = false, bool quiet = false)
     {
         // A trackpad's smooth zoom goes on from where the fingers have it, not from where it was held: it's drawn to every
         // quarter (100%, 125%...) as it passes, and from the held one each small step would never get away again
@@ -79,7 +79,8 @@ internal sealed partial class DawnScene
             cell.Editor.TextScale = CODE_TEXT * zoom;
 
         QueueZoomSettings();
-        Say(Said("chrome.code_zoom", ("percent", (zoom * 100.0f).ToString("0"))));
+        if (!quiet)
+            Say(Said("chrome.code_zoom", ("percent", (zoom * 100.0f).ToString("0"))));
     }
 
     /// <summary>

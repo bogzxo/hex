@@ -207,10 +207,17 @@ internal sealed partial class HexSettings
     public readonly List<(string Name, Dictionary<string, IRuntimeValue> Values)> Looks = [];
 
     /// <summary>How thick the glass is, the popups' as they are and the sides' worked out of them (the engine's UIGlass.Clear to begin with, Hex.Shell's HexGlass draws it).</summary>
-    public float GlassBlur = UIGlass.Clear.Blur, GlassClarity = UIGlass.Clear.Clarity, GlassRim = UIGlass.Clear.Rim, GlassBend = UIGlass.Clear.Bend;
+    public float GlassBlur = UIGlass.Clear.Blur, GlassClarity = UIGlass.Clear.Clarity, GlassBend = UIGlass.Clear.Bend;
 
     /// <summary>How quickly the UI moves (UICompositor.AnimationSpeed), 0 for no motion, and how long the caret glides for.</summary>
     public float UiAnimation = 1.0f, CaretGlide;
+
+    /// <summary>
+    /// Whether what a hand does gets to the screen as soon as it can (the engine's WindowManager.LowLatency): the newest
+    /// tick shown as it is, and frames many times a second while something is typed, clicked or dragged. Off as it comes,
+    /// it costs the GPU frames nobody sees.
+    /// </summary>
+    public bool LowLatency;
 
     /// <summary>How many columns wide a tab is and a level of indentation, 1 to 16.</summary>
     public int TabSize = 4;
@@ -344,6 +351,22 @@ internal sealed partial class HexSettings
 
     /// <summary>Absolute local workspace roots that opt out of Link's default operating system file exclusions.</summary>
     public string[] LinkSystemFileFolders = [];
+
+    /// <summary>
+    /// Optional feature modules that can be switched off in Settings or omitted during installation. User-only, never
+    /// workspace-scoped. See <see cref="Hex.Core.Modules.HexModules"/>.
+    /// </summary>
+    public bool ModuleLink = true, ModuleLocalAi = true, ModuleAgentic = true, ModuleNotebooks = true, ModuleDesigner = true;
+
+    /// <summary>Syncs the optional module settings into <see cref="Hex.Core.Modules.HexModules"/>.</summary>
+    public void ApplyModules()
+    {
+        Modules.HexModules.SetEnabled(Modules.HexModuleId.Link, ModuleLink);
+        Modules.HexModules.SetEnabled(Modules.HexModuleId.LocalAi, ModuleLocalAi);
+        Modules.HexModules.SetEnabled(Modules.HexModuleId.Agentic, ModuleAgentic);
+        Modules.HexModules.SetEnabled(Modules.HexModuleId.Notebooks, ModuleNotebooks);
+        Modules.HexModules.SetEnabled(Modules.HexModuleId.Designer, ModuleDesigner);
+    }
 
     /// <summary>
     /// Whether Hex is without its agents, No AI. Agentic, the Agents panel, the chats and the extensions that are agent
@@ -705,6 +728,39 @@ internal sealed partial class HexSettings
     /// <summary>Writes the settings to their file. Says what went wrong if they couldn't be, null if they could.</summary>
     public string? Save()
     {
+        string? text = Compose();
+        return text is null ? null : Write(text);
+    }
+
+    /// <summary>Where the settings are kept, null for settings that are never written.</summary>
+    public string? FilePath => path;
+
+    private static readonly object WriteLock = new();
+
+    /// <summary>
+    /// Writes what <see cref="Compose"/> made, the part of a save that waits on the disk, safe on a thread of its own (one
+    /// write at a time). Says what went wrong, null when it went well.
+    /// </summary>
+    public string? Write(string text)
+    {
+        if (path is null)
+            return null;
+
+        try
+        {
+            lock (WriteLock)
+                DocumentFile.Write(path, text, new System.Text.UTF8Encoding(false));
+            return null;
+        }
+        catch (Exception e)
+        {
+            return $"couldn't keep the settings for next time: {e.Message}";
+        }
+    }
+
+    /// <summary>The text of the settings file as these settings would write it now, null for settings that are never written. Reads the settings, so on the thread that changes them.</summary>
+    public string? Compose()
+    {
         if (path is null)
             return null;
 
@@ -741,18 +797,8 @@ internal sealed partial class HexSettings
         }
 
         // the editor's and the extensions' sections of Hex's one settings file, the terminal's kept as it is
-        string text = Horizon.UI.Components.SettingsSections.Write(path, (Horizon.UI.Components.SettingsSections.EDITOR, settings),
+        return Horizon.UI.Components.SettingsSections.Write(path, (Horizon.UI.Components.SettingsSections.EDITOR, settings),
             (Horizon.UI.Components.SettingsSections.EXTENSIONS, extensions));
-
-        try
-        {
-            DocumentFile.Write(path, text, new System.Text.UTF8Encoding(false));
-            return null;
-        }
-        catch (Exception e)
-        {
-            return $"couldn't keep the settings for next time: {e.Message}";
-        }
     }
 
     /// <summary>Every one of the editor's settings as it is now by its key, in the order the file has them.</summary>

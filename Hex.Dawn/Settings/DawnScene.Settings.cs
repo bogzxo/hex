@@ -53,13 +53,18 @@ internal sealed partial class DawnScene
             WatchSettingsFile();
     }
 
+    // Whether a self test lets saves wait their moment as they do for a person, the test of what a toggle costs
+    private bool settingsSaveDeferred;
+
     private void SaveSettings()
     {
-        if (ReferenceEquals(zoomSettingsPending, settings)) zoomSettingsPending = null;
-        if (settings.Save() is { } problem)
-            Say(problem, error: true);
-        else
-            KnowSettingsFile();
+        // Written a moment after the last change, on the pool, so a row's switch never waits on the disk. One that has to be
+        // in the file now calls FlushZoomSettings after this
+        QueueZoomSettings();
+
+        // The self tests read the file as soon as a row has changed, they are the one place it is written on the spot
+        if (options.SelfTest && !settingsSaveDeferred)
+            FlushZoomSettings();
 
         // Getting started on the welcome ticks a step off as the setting it's about changes, wherever it was changed. Made
         // again now while it's up, otherwise the next time it is

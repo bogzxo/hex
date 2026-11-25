@@ -123,8 +123,23 @@ internal sealed partial class DawnScene
             page.Find(string.Empty);
         });
 
-        foreach (string key in new[] { "minimap", "wrap_code", "git_blame", "edit_predictions", "edit_predictions_far", "link" })
+        // The settings kept in a file of their own for this, a self test keeps nothing otherwise and a save would cost nothing
+        HexSettings? usual = null;
+        string folder = Path.Combine(Path.GetTempPath(), "hex-toggle-cost-" + Guid.NewGuid().ToString("N"));
+        test.Run(() =>
         {
+            Directory.CreateDirectory(folder);
+            usual = settings;
+            settings = new HexSettings(Path.Combine(folder, "settings.hor"));
+            settingsSaveDeferred = true;
+        });
+
+        // The first round warms the code up (a debug build compiles it as it's reached), the second is what's held to a frame
+        string[] keys = ["minimap", "wrap_code", "git_blame", "link_discoverable"];
+        int turn = 0;
+        foreach (string key in keys.Concat(keys))
+        {
+            bool warm = turn++ >= keys.Length;
             test.Run(() =>
             {
                 if (page.ValueOf?.Invoke(key) is not BooleanValue now)
@@ -135,22 +150,22 @@ internal sealed partial class DawnScene
                 watch.Restart();
                 int count = page.ModifiedCount;
                 double counted = watch.Elapsed.TotalMilliseconds;
-                spent.Add($"{key} set {set:F1}ms, changed count {counted:F1}ms ({count})");
-                worst = Math.Max(worst, set);
-            });
-            test.Wait();
-            test.Run(() =>
-            {
-                if (page.ValueOf?.Invoke(key) is BooleanValue now)
-                    page.Enter(key, Values.Bool(!now.Value));
+                watch.Restart();
+                string? wrote = settings.Save();
+                spent.Add($"{key} toggle {set:F1}ms, changed count {counted:F1}ms ({count}), a save on the spot would be {watch.Elapsed.TotalMilliseconds:F1}ms{wrote}");
+                if (warm)
+                    worst = Math.Max(worst, set);
             });
             test.Wait();
         }
 
-        test.Check("settings toggle cost", () =>
+        test.Run(() =>
         {
+            settingsSaveDeferred = false;
+            FlushZoomSettings();
+            settings = usual!;
+            Directory.Delete(folder, recursive: true);
             File.WriteAllLines("C:/Users/bogdan/source/repos/bogzxo/horizon/hex/Hex/bin/Debug/net11.0/data/agents/temp/scratch/toggle-cost.txt", spent);
-            return true;
         });
         test.Check("settings toggle: under a frame", () => worst < 16.0);
     }

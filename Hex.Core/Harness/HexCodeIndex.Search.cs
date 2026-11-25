@@ -12,6 +12,7 @@ internal sealed partial class HexCodeIndex
     private const int LINE_WIDTH = 150;
 
     private sealed record Place(int Line, int Column, bool Declares);
+    private delegate int LineMatch(HexIndexedFile file, ReadOnlySpan<char> line);
 
     /// <summary>
     /// hex_search, text or a regular expression over the files a glob says (all of them without one), ranked and
@@ -37,13 +38,13 @@ internal sealed partial class HexCodeIndex
             HexGlob[] only = glob is { Length: > 0 } ? HexGlob.All(glob.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) : [];
             string bare = regex ? string.Empty : query;
             StringComparison how = matchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
-            Func<HexIndexedFile, int, int> find = regex
-                ? (file, at) => FirstMatch(pattern, file.Lines[at], null, null, how)
+            LineMatch find = regex
+                ? (_, line) => FirstMatch(pattern, line, null, null, how)
                 : wholeWord
-                    ? (file, at) => FirstMatch(pattern, file.Lines[at], null, query, how)
+                    ? (_, line) => FirstMatch(pattern, line, null, query, how)
                     // Plain text is found by a vectorised search of the line, no expression involved
-                    : (file, at) => file.Lines[at].AsSpan().IndexOf(query, how);
-            return Grouped(index, file => InGlobs(only, file), find,
+                    : (_, line) => line.IndexOf(query, how);
+            return Grouped(index, file => InGlobs(only, file), find, regex ? null : query, how,
                 bare, query, Math.Clamp(context, 0, 5), most, budget, "hex_search");
         });
 
@@ -76,12 +77,13 @@ internal sealed partial class HexCodeIndex
             if (of is null)
             {
                 return Grouped(index, file => InGlobs(only, file),
-                    (file, at) => FirstMatch(pattern, file.Lines[at], file, asked, StringComparison.Ordinal), asked, asked, 0, most, budget, "hex_refs");
+                    (file, line) => FirstMatch(pattern, line, file, asked, StringComparison.Ordinal), asked, StringComparison.Ordinal,
+                    asked, asked, 0, most, budget, "hex_refs");
             }
 
             var receivers = new HexReceivers(index, container);
             int leftOut = 0;
-            HexAnswer found = Grouped(index, file => InGlobs(only, file) && receivers.Mentions(file),
+            HexAnswer found = GroupedByIndex(index, file => InGlobs(only, file) && receivers.Mentions(file),
                 (file, at) =>
                 {
                     int column = receivers.FirstOf(pattern, file, at, asked, out bool dropped);
@@ -114,9 +116,9 @@ internal sealed partial class HexCodeIndex
     // The column of the first match in a line, -1 for none. With a file the ones in comments and texts are passed over.
     // Walked as spans so a line that has nothing costs no allocation, which nearly all of them are. A line without the
     // text the expression needs in it (when there is one) is passed over before the expression looks at it.
-    private static int FirstMatch(Regex pattern, string line, HexIndexedFile? outsideOf, string? needs, StringComparison how)
+    private static int FirstMatch(Regex pattern, ReadOnlySpan<char> line, HexIndexedFile? outsideOf, string? needs, StringComparison how)
     {
-        if (line.Length == 0 || needs is not null && !line.AsSpan().Contains(needs, how))
+        if (line.Length == 0 || (needs is not null && !line.Contains(needs, how)))
             return -1;
 
         try
@@ -135,10 +137,13 @@ internal sealed partial class HexCodeIndex
     }
 
     // Whether a place is in a comment or a text, by the line alone, the way a language without // still has its own
-    internal static bool InCommentOrText(HexIndexedFile file, string line, int column)
+    internal static bool InCommentOrText(HexIndexedFile file, string line, int column) =>
+        InCommentOrText(file, line.AsSpan(), column);
+
+    internal static bool InCommentOrText(HexIndexedFile file, ReadOnlySpan<char> line, int column)
     {
-        string before = line[..column].TrimStart();
-        if (before.StartsWith('*') || before.StartsWith("/*", StringComparison.Ordinal))
+        ReadOnlySpan<char> before = line[..column].TrimStart();
+        if ((before.Length > 0 && before[0] == '*') || before.StartsWith("/*", StringComparison.Ordinal))
             return true;
         if (file.Extension is ".py" or ".yaml" or ".yml" or ".sh" && line.IndexOf('#') is var hash and >= 0 && hash < column)
             return true;
@@ -147,11 +152,107 @@ internal sealed partial class HexCodeIndex
         return HexSearch.InTextOrComment(line, column);
     }
 
+    private static HashSet<int> DeclaredLines(HexIndexedFile file, string name)
+    {
+        var set = new HashSet<int>();
+        if (name.Length == 0)
+            return set;
+        foreach (HexSymbol symbol in file.Symbols)
+        {
+            if (symbol.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                set.Add(symbol.Line);
+        }
+
+        return set;
+    }
+
     /// <summary>
     /// The places found, ranked and grouped, and what grep would have said for them, which is what was saved. The plain
-    /// way's cost counts every place, not just the ones that fit.
+    /// way's cost counts every place, not just the ones that fit. Scans cold disk files as raw text spans without
+    /// allocating a string[] per file.
     /// </summary>
-    private static HexAnswer Grouped(HexIndexSnapshot index, Func<HexIndexedFile, bool> include, Func<HexIndexedFile, int, int> find,
+    private static HexAnswer Grouped(HexIndexSnapshot index, Func<HexIndexedFile, bool> include, LineMatch find,
+        string? prefilter, StringComparison prefilterHow, string name, string query, int context, int most, int budget, string tool)
+    {
+        var files = new List<(HexIndexedFile File, List<Place> Places, int Score)>();
+        long plain = 0;
+        int total = 0;
+        foreach (HexIndexedFile file in index.Files)
+        {
+            if (!include(file))
+                continue;
+
+            List<Place>? places = null;
+            HashSet<int>? declared = null;
+            if (file.TryGetCachedLines(out string[] cached))
+            {
+                for (int i = 0; i < cached.Length; i++)
+                {
+                    int first = find(file, cached[i]);
+                    if (first < 0)
+                        continue;
+
+                    declared ??= DeclaredLines(file, name);
+                    (places ??= []).Add(new Place(i, first, declared.Contains(i)));
+                    plain += file.Path.Length + 8 + cached[i].Length;
+                }
+            }
+            else if (file.HasInMemoryLines)
+            {
+                string[] lines = file.Lines;
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    int first = find(file, lines[i]);
+                    if (first < 0)
+                        continue;
+
+                    declared ??= DeclaredLines(file, name);
+                    (places ??= []).Add(new Place(i, first, declared.Contains(i)));
+                    plain += file.Path.Length + 8 + lines[i].Length;
+                }
+            }
+            else
+            {
+                string? raw = HexSearch.ReadText(file.Path);
+                if (raw is null || (prefilter is not null && !raw.AsSpan().Contains(prefilter, prefilterHow)))
+                    continue;
+
+                int line = 0, start = 0;
+                while (true)
+                {
+                    int newline = raw.IndexOf('\n', start);
+                    int end = newline < 0 ? raw.Length : newline;
+                    int content = newline >= 0 && end > start && raw[end - 1] == '\r' ? end - 1 : end;
+                    ReadOnlySpan<char> span = raw.AsSpan(start, content - start);
+                    int first = find(file, span);
+                    if (first >= 0)
+                    {
+                        declared ??= DeclaredLines(file, name);
+                        (places ??= []).Add(new Place(line, first, declared.Contains(line)));
+                        plain += file.Path.Length + 8 + span.Length;
+                    }
+
+                    if (newline < 0)
+                        break;
+                    start = newline + 1;
+                    line++;
+                }
+            }
+
+            if (places is null)
+                continue;
+
+            total += places.Count;
+            int score = (places.Any(place => place.Declares) ? 1000 : 0)
+                + (query.Length > 0 && Path.GetFileNameWithoutExtension(file.Path.AsSpan()).Contains(query, StringComparison.OrdinalIgnoreCase) ? 300 : 0)
+                + Math.Min(places.Count, 50);
+            files.Add((file, places, score));
+        }
+
+        return FormatGrouped(files, total, plain, name, query, context, most, budget, tool);
+    }
+
+    private static HexAnswer GroupedByIndex(HexIndexSnapshot index, Func<HexIndexedFile, bool> include, Func<HexIndexedFile, int, int> find,
         string name, string query, int context, int most, int budget, string tool)
     {
         var files = new List<(HexIndexedFile File, List<Place> Places, int Score)>();
@@ -171,7 +272,7 @@ internal sealed partial class HexCodeIndex
                 if (first < 0)
                     continue;
 
-                declared ??= [.. file.Symbols.Where(symbol => name.Length > 0 && symbol.Name.Equals(name, StringComparison.OrdinalIgnoreCase)).Select(symbol => symbol.Line)];
+                declared ??= DeclaredLines(file, name);
                 (places ??= []).Add(new Place(i, first, declared.Contains(i)));
                 plain += file.Path.Length + 8 + lines[i].Length;
             }
@@ -181,11 +282,17 @@ internal sealed partial class HexCodeIndex
 
             total += places.Count;
             int score = (places.Any(place => place.Declares) ? 1000 : 0)
-                + (query.Length > 0 && Path.GetFileNameWithoutExtension(file.Path).Contains(query, StringComparison.OrdinalIgnoreCase) ? 300 : 0)
+                + (query.Length > 0 && Path.GetFileNameWithoutExtension(file.Path.AsSpan()).Contains(query, StringComparison.OrdinalIgnoreCase) ? 300 : 0)
                 + Math.Min(places.Count, 50);
             files.Add((file, places, score));
         }
 
+        return FormatGrouped(files, total, plain, name, query, context, most, budget, tool);
+    }
+
+    private static HexAnswer FormatGrouped(List<(HexIndexedFile File, List<Place> Places, int Score)> files, int total, long plain,
+        string name, string query, int context, int most, int budget, string tool)
+    {
         files.Sort((a, b) => a.Score != b.Score ? b.Score.CompareTo(a.Score) : string.Compare(a.File.Relative, b.File.Relative, StringComparison.OrdinalIgnoreCase));
 
         var said = new HexBudget(budget);

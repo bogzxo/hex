@@ -13,7 +13,14 @@ internal static class HexHunkReview
     public static List<(GitHunk Hunk, string[] Old, string[] New)> Hunks(string before, string now)
     {
         string[] old = GitLineDiff.Lines(before), current = GitLineDiff.Lines(now);
-        return [.. GitLineDiff.Diff(old, current).Select(hunk => (hunk, old[hunk.OldStart..(hunk.OldStart + hunk.OldCount)], current[hunk.NewStart..(hunk.NewStart + hunk.NewCount)]))];
+        List<GitHunk> hunks = GitLineDiff.Diff(old, current);
+        var result = new List<(GitHunk, string[], string[])>(hunks.Count);
+        for (int i = 0; i < hunks.Count; i++)
+        {
+            GitHunk hunk = hunks[i];
+            result.Add((hunk, old[hunk.OldStart..(hunk.OldStart + hunk.OldCount)], current[hunk.NewStart..(hunk.NewStart + hunk.NewCount)]));
+        }
+        return result;
     }
 
     /// <summary>

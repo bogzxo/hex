@@ -150,9 +150,11 @@ internal static partial class HexSearch
                 {
                     if (isFolder)
                         continue;
-                    string name = Path.GetFileName(file);
+                    ReadOnlySpan<char> name = Path.GetFileName(file.AsSpan());
                     if ((expression is null || FileSystemName.MatchesWin32Expression(expression, name, ignoreCase: true))
-                        && !name.StartsWith("~syncthing~", StringComparison.Ordinal) && (keep is null || keep(file)) && !Out(Inside(name), false))
+                        && !name.StartsWith("~syncthing~", StringComparison.Ordinal)
+                        && (keep is null || keep(file))
+                        && !Out(relative.Length == 0 ? name.ToString() : string.Concat(relative, "/", name), false))
                         files.Add(new HexWalkedFile(file, length, written));
                 }
 
@@ -174,7 +176,7 @@ internal static partial class HexSearch
                     FileAttributes git = new FileInfo(Path.Combine(inside, ".git")).Attributes;
                     bool repository = (int)git != -1 && git.HasFlag(FileAttributes.Directory);
                     bool gitFile = (int)git != -1 && !repository;
-                    if ((repository ? leftOut.Skipped(under, true) : Out(under, true)) || IsRepositoryCopy(inside, repository, gitFile)
+                    if ((!repository && ignores.Length > 0 && HexIgnoreFile.Ignored(ignores, under, true)) || IsRepositoryCopy(inside, repository, gitFile)
                         || (gitFile && (openNames is null || openNames.Contains(name))))
                         continue;
                     pending.Push((inside, under, repository ? [] : ignores));
@@ -208,7 +210,7 @@ internal static partial class HexSearch
     {
         try
         {
-            if (Path.GetFileName(folder).StartsWith('.') && (gitFolder || gitFile))
+            if (Path.GetFileName(folder.AsSpan()) is ['.', ..] && (gitFolder || gitFile))
                 return true;
             if (!gitFile)
                 return false;
@@ -227,7 +229,13 @@ internal static partial class HexSearch
     public static string RelativeTo(IReadOnlyList<string> roots, string path)
     {
         string full = Path.GetFullPath(path);
-        string? root = roots.Where(folder => full.StartsWith(folder, StringComparison.OrdinalIgnoreCase)).OrderByDescending(folder => folder.Length).FirstOrDefault();
+        string? root = null;
+        for (int i = 0; i < roots.Count; i++)
+        {
+            string folder = roots[i];
+            if (full.StartsWith(folder, StringComparison.OrdinalIgnoreCase) && (root is null || folder.Length > root.Length))
+                root = folder;
+        }
         if (root is null)
             return full.Replace('\\', '/');
 
@@ -305,7 +313,9 @@ internal static partial class HexSearch
     /// line). A name renamed by the word, and the references a server finds by name, went into strings that said it.
     /// What starts on a line before isn't known of here.
     /// </summary>
-    public static bool InTextOrComment(string line, int column)
+    public static bool InTextOrComment(string line, int column) => InTextOrComment(line.AsSpan(), column);
+
+    public static bool InTextOrComment(ReadOnlySpan<char> line, int column)
     {
         char quote = '\0';
         for (int i = 0; i < column && i < line.Length; i++)
@@ -330,10 +340,10 @@ internal static partial class HexSearch
             }
             else if (at == '/' && i + 1 < line.Length && line[i + 1] == '*')
             {
-                int end = line.IndexOf("*/", i + 2, StringComparison.Ordinal);
-                if (end < 0 || end + 2 > column)
+                int rel = line[(i + 2)..].IndexOf("*/", StringComparison.Ordinal);
+                if (rel < 0 || i + 2 + rel + 2 > column)
                     return true;
-                i = end + 1;
+                i = i + 2 + rel + 1;
             }
         }
 

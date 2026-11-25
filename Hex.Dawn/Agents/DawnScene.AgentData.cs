@@ -83,6 +83,8 @@ internal sealed partial class DawnScene
     /// <summary>Measured again when it's looked at and the last measure is old, the items put right when it's back.</summary>
     private void UpdateAgentData(float dt)
     {
+        if (!AgenticEnabled)
+            return;
         agentDataAge += dt;
         bool looked = menu.OpenMenu?.Title == "Agents" || (Face == HexFace.Noon && noonFleet.Visible);
         if (looked && agentDataAge > AGENT_DATA_FRESH)
@@ -107,7 +109,8 @@ internal sealed partial class DawnScene
                 noonAgentData.Tooltip = Said("agent_data.noon_tip", ("chats", usage.ChatCount.ToString()), ("images", usage.ImageCount.ToString()), ("folder", HexData.Root))
                     + (HexData.Fallback ? "\n" + Said("agent_data.fallback") : string.Empty);
             }
-            Engine.WindowManager.RequestFrames();
+            if (menu.OpenMenu?.Title == "Agents" || (Face == HexFace.Noon && noonFleet.Visible))
+                Engine.WindowManager.NoteChange();
         }, quiet: true);
     }
 

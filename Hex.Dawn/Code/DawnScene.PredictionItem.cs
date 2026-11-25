@@ -1,4 +1,5 @@
 using Hex.Core;
+using Hex.Core.Modules;
 using Hex.Core.Notebooks;
 using Hex.Shell;
 
@@ -73,7 +74,7 @@ internal sealed partial class DawnScene
         commands.Add(PREDICTION_MENU, Said("local_ai.command_open"), () => OpenLocalAiWindow(), icon: "chip");
         commands.Add(PREDICTION_MENU, Said("prediction.settings"), () =>
         {
-            if (HexAi.Off)
+            if (!HexModules.IsEnabled(HexModuleId.LocalAi))
                 OpenSettings(EditorSettingsCatalog.AGENTS);
             else
                 OpenLocalAiWindow("predictions");
@@ -115,7 +116,7 @@ internal sealed partial class DawnScene
     /// <summary>Edit predictions switched on or off, in the user's settings.</summary>
     private void TogglePredictions()
     {
-        if (HexAi.Off)
+        if (!HexModules.IsEnabled(HexModuleId.LocalAi))
             return;
         settings.EditPredictions = !settings.EditPredictions;
         if (!settings.EditPredictions && predictionSession is not null)
@@ -128,7 +129,7 @@ internal sealed partial class DawnScene
     /// <summary>Edit predictions switched off, or on again, for the language of the file on screen.</summary>
     private void TogglePredictionsForLanguage()
     {
-        if (HexAi.Off || PredictionTargetOnScreen() is not { } target)
+        if (!HexModules.IsEnabled(HexModuleId.LocalAi) || PredictionTargetOnScreen() is not { } target)
             return;
 
         string language = PredictionLanguage(target);
@@ -193,7 +194,7 @@ internal sealed partial class DawnScene
     /// <summary>The item pressed: the switches, Predict Now and the settings.</summary>
     private void ShowPredictionMenu()
     {
-        if (HexAi.Off)
+        if (!HexModules.IsEnabled(HexModuleId.LocalAi))
             return;
 
         ChooseAt(Said("prediction.menu"), Said("prediction.menu_text"), PredictionMenuChoices(), PredictionItemAnchor());
@@ -202,7 +203,7 @@ internal sealed partial class DawnScene
     /// <summary>A right click on the item: the same rows as the press, as a context menu over the item.</summary>
     private Menu? PredictionContextMenu()
     {
-        if (HexAi.Off)
+        if (!HexModules.IsEnabled(HexModuleId.LocalAi))
             return null;
 
         var menu = new Menu(Said("prediction.menu"));
@@ -360,7 +361,7 @@ internal sealed partial class DawnScene
             predictionWaitingSince = -1;
         bool waitingLong = predictionWaitingSince >= 0 && Environment.TickCount64 - predictionWaitingSince > HexPredictionGlue.WAITING_AFTER_MS;
 
-        PredictionItemState state = HexPredictionGlue.ItemState(HexAi.Off, target is not null, settings.EditPredictions, PredictionSettings.Configured(settings),
+        PredictionItemState state = HexPredictionGlue.ItemState(!HexModules.IsEnabled(HexModuleId.LocalAi), target is not null, settings.EditPredictions, PredictionSettings.Configured(settings),
             settings.EditPredictionsWorkspace, target is { } editor && LanguageOffOnScreen(editor), target is null || AllowedOnScreen(), status, waitingLong);
 
         if (predictionItemWritten && state == predictionItemState && status == predictionItemStatus

@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Hex.Core;
@@ -102,6 +103,7 @@ internal sealed partial class HexAgentReviews
 
     private void WriteBlob(string folder, string hash)
     {
+        string file = BlobFile(folder, hash);
         lock (movedLock)
         {
             if (blobsWritten.Contains(hash))
@@ -110,7 +112,6 @@ internal sealed partial class HexAgentReviews
 
         if (blobs.PackedOf(hash) is not { } packed)
             return;
-        string file = BlobFile(folder, hash);
         Directory.CreateDirectory(Path.GetDirectoryName(file)!);
         if (!File.Exists(file))
         {
@@ -119,6 +120,7 @@ internal sealed partial class HexAgentReviews
             File.Move(temp, file, overwrite: true);
         }
 
+        blobs.MarkWrittenToDisk(hash, file);
         lock (movedLock)
             blobsWritten.Add(hash);
     }
@@ -131,24 +133,37 @@ internal sealed partial class HexAgentReviews
             try
             {
                 string file = FileOf(folder, chat);
-                if (!File.Exists(file) || JsonNode.Parse(File.ReadAllText(file)) is not JsonObject read)
+                if (!File.Exists(file))
+                    continue;
+
+                using FileStream stream = File.OpenRead(file);
+                using JsonDocument document = JsonDocument.Parse(stream);
+                JsonElement root = document.RootElement;
+                if (root.ValueKind != JsonValueKind.Object)
                     continue;
 
                 ConcurrentDictionaryOf(chat, out var files);
-                if (read["format"] is JsonValue && read["files"] is JsonObject listed)
+                if (root.TryGetProperty("format", out _)
+                    && root.TryGetProperty("files", out JsonElement listed)
+                    && listed.ValueKind == JsonValueKind.Object)
                 {
-                    foreach (var (path, hash) in listed)
+                    foreach (JsonProperty entry in listed.EnumerateObject())
                     {
-                        if (hash is not JsonValue value || !value.TryGetValue(out string? said) || files.ContainsKey(path))
+                        string path = entry.Name;
+                        if (entry.Value.ValueKind != JsonValueKind.String
+                            || entry.Value.GetString() is not { Length: > 0 } said
+                            || files.ContainsKey(path))
                             continue;
+
                         string blob = BlobFile(folder, said);
                         if (blobs.Has(said))
                         {
-                            blobs.AddPacked(said, []);
+                            blobs.AddDiskBacked(said, blob);
                         }
                         else if (File.Exists(blob))
                         {
-                            blobs.AddPacked(said, File.ReadAllBytes(blob));
+                            // Keep compressed baseline bytes on disk until the review is actually inspected.
+                            blobs.AddDiskBacked(said, blob);
                             lock (movedLock)
                                 blobsWritten.Add(said);
                         }
@@ -164,17 +179,17 @@ internal sealed partial class HexAgentReviews
                 }
 
                 // The first format: each file's text itself
-                foreach (var (path, text) in read)
+                foreach (JsonProperty entry in root.EnumerateObject())
                 {
-                    if (text is JsonValue value && value.TryGetValue(out string? said))
+                    if (entry.Value.ValueKind == JsonValueKind.String && entry.Value.GetString() is { } said)
                     {
                         string hash = blobs.Add(said);
-                        if (!files.TryAdd(path, hash))
+                        if (!files.TryAdd(entry.Name, hash))
                             blobs.Release(hash);
                     }
                 }
             }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
             {
                 // A file half written, the chat has no review of it
             }
@@ -190,11 +205,18 @@ internal sealed partial class HexAgentReviews
         baselines.Clear();
         blobs.Clear();
         lock (statsLock)
+        {
             stats.Clear();
+            stats.TrimExcess();
+            stamped.Clear();
+            stamped.TrimExcess();
+        }
         lock (movedLock)
         {
             moved.Clear();
+            moved.TrimExcess();
             blobsWritten.Clear();
+            blobsWritten.TrimExcess();
         }
     }
 

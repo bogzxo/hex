@@ -1,3 +1,5 @@
+using System.Buffers;
+
 namespace Hex.Core.Git;
 
 /// <summary>
@@ -63,8 +65,46 @@ internal static class GitLineDiff
     /// </summary>
     public static string[] Lines(string text)
     {
-        string[] lines = text.Replace("\r\n", "\n").Split('\n');
-        return lines.Length > 1 && lines[^1].Length == 0 ? lines[..^1] : lines;
+        if (text.Length == 0)
+            return [string.Empty];
+
+        ReadOnlySpan<char> span = text.AsSpan();
+        int count = 0;
+        int pos = 0;
+        while (pos < span.Length)
+        {
+            int nl = span[pos..].IndexOf('\n');
+            count++;
+            if (nl < 0)
+                break;
+            pos += nl + 1;
+        }
+
+        // Preserve exact behaviour for single newline ("\n" -> [""]) and no trailing newline ("a\nb" -> ["a", "b"])
+        var lines = new string[count];
+        int index = 0;
+        pos = 0;
+        while (index < count)
+        {
+            int nl = span[pos..].IndexOf('\n');
+            ReadOnlySpan<char> line;
+            if (nl < 0)
+            {
+                line = span[pos..];
+                pos = span.Length;
+            }
+            else
+            {
+                line = span.Slice(pos, nl);
+                if (line.Length > 0 && line[^1] == '\r')
+                    line = line[..^1];
+                pos += nl + 1;
+            }
+
+            lines[index++] = line.IsEmpty ? string.Empty : line.ToString();
+        }
+
+        return lines;
     }
 
     // How deep the patience splitting goes before what's left is called one change
@@ -170,34 +210,42 @@ internal static class GitLineDiff
     {
         int max = n + m;
         int offset = max + 1;
-        var v = new int[2 * max + 3];
+        int[] v = ArrayPool<int>.Shared.Rent(2 * max + 3);
+        v[offset + 1] = 0;
         var trace = new List<int[]>();
         int found = -1;
 
-        for (int d = 0; d <= Math.Min(max, MOST_EDITS) && found < 0; d++)
+        try
         {
-            for (int k = -d; k <= d; k += 2)
+            for (int d = 0; d <= Math.Min(max, MOST_EDITS) && found < 0; d++)
             {
-                int x = k == -d || (k != d && v[offset + k - 1] < v[offset + k + 1]) ? v[offset + k + 1] : v[offset + k - 1] + 1;
-                int y = x - k;
-                while (x < n && y < m && a[aStart + x] == b[bStart + y])
+                for (int k = -d; k <= d; k += 2)
                 {
-                    x++;
-                    y++;
+                    int x = k == -d || (k != d && v[offset + k - 1] < v[offset + k + 1]) ? v[offset + k + 1] : v[offset + k - 1] + 1;
+                    int y = x - k;
+                    while (x < n && y < m && a[aStart + x] == b[bStart + y])
+                    {
+                        x++;
+                        y++;
+                    }
+
+                    v[offset + k] = x;
+                    if (x >= n && y >= m)
+                    {
+                        found = d;
+                        break;
+                    }
                 }
 
-                v[offset + k] = x;
-                if (x >= n && y >= m)
-                {
-                    found = d;
-                    break;
-                }
+                // Where each diagonal got to after this many edits, -d to d
+                var reached = new int[2 * d + 1];
+                Array.Copy(v, offset - d, reached, 0, reached.Length);
+                trace.Add(reached);
             }
-
-            // Where each diagonal got to after this many edits, -d to d
-            var reached = new int[2 * d + 1];
-            Array.Copy(v, offset - d, reached, 0, reached.Length);
-            trace.Add(reached);
+        }
+        finally
+        {
+            ArrayPool<int>.Shared.Return(v);
         }
 
         if (found < 0)

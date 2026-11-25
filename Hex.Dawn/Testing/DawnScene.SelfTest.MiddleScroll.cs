@@ -14,7 +14,8 @@ internal sealed partial class DawnScene
         test.Run(() =>
         {
             string file = Path.Combine(testFolder, "middle-scroll.txt");
-            File.WriteAllText(file, string.Join('\n', Enumerable.Range(0, 1000).Select(i => $"Line {i}")));
+            string padding = new string('x', 600);
+            File.WriteAllText(file, string.Join('\n', Enumerable.Range(0, 1000).Select(i => $"Line {i} {padding}")));
             Open(file);
             OpenSettings();
             SettingsPage!.Find("middle-mouse scroll speed");
@@ -40,6 +41,37 @@ internal sealed partial class DawnScene
         test.Hover(() => anchor - new Vector2(0, 180));
         test.Settle(0.2f);
         test.Check("middle scroll: movement after release no longer scrolls", () => TopLine() == before);
+
+        // Horizontal and diagonal middle-click autoscroll with word wrap disabled
+        bool originalWordWrap = code.WordWrap;
+        float beforeX = 0.0f;
+        float midX = 0.0f;
+        test.Run(() =>
+        {
+            originalWordWrap = code.WordWrap;
+            code.WordWrap = false;
+            code.ScrollXPixels = 0.0f;
+            before = TopLine();
+            beforeX = code.ScrollXPixels;
+        });
+        test.Settle(0.1f);
+        test.MiddleClick(() => anchor);
+        test.Hover(() => anchor + new Vector2(120, 0));
+        test.Settle(0.3f);
+        test.Check("middle scroll: moving right of the anchor scrolls horizontally without vertical drift", () =>
+            code.ScrollXPixels > beforeX && TopLine() == before);
+        test.Run(() =>
+        {
+            code.ScrollXPixels = 0.0f;
+            midX = 0.0f;
+            before = TopLine();
+        });
+        test.Hover(() => anchor + new Vector2(120, -120));
+        test.Settle(0.3f);
+        test.Check("middle scroll: diagonal displacement scrolls both horizontally and vertically", () =>
+            code.ScrollXPixels > midX && TopLine() > before);
+        test.MiddleClick(() => anchor);
+        test.Run(() => code.WordWrap = originalWordWrap);
 
         // Slow, over a part of a page that passes it on to the scroll it holds (the settings' search over its rows, as
         // Agentic's margins pass it to the chat), the rows go by fractions of a pixel every frame. Turned into whole

@@ -13,7 +13,7 @@ internal sealed partial class DawnScene
         commands.Add("Agents/open", Said("agent.explain"), () => RequestAgent("explain"), icon: "robot").IsEnabled = CanAskAgent;
         commands.Add("Agents/open", Said("agent.change"), () => RequestAgent("change"), icon: "edit").IsEnabled = CanAskAgent;
         BuildAgentReview();
-        if (!HexAi.Off)
+        if (AgenticEnabled)
             languages.MoreActions = AgentActions;
     }
 
@@ -25,7 +25,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private IReadOnlyList<UIChoice> AgentActions(HexDocument of, UITextPosition from, UITextPosition to)
     {
-        if (HexAi.Off || of != document || !CanAskAgent() || (AgentFor(null) is null && LinkRunsOnDevices().Count == 0))
+        if (!AgenticEnabled || of != document || !CanAskAgent() || (AgentFor(null) is null && LinkRunsOnDevices().Count == 0))
             return [];
 
         string group = Said("agent.actions_group");

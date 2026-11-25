@@ -52,7 +52,7 @@ internal sealed partial class DawnScene
         return null;
     }
 
-    /// <summary>Everything inside of a component, all the way down.</summary>
+    /// <summary>Everything inside of a component, all the way down (including virtualized off-screen rows of a <see cref="Horizon.UI.Components.SettingsPage"/>).</summary>
     private static IEnumerable<UIComponent> Descendants(UIComponent of)
     {
         foreach (UIComponent child in of.Children)
@@ -60,6 +60,19 @@ internal sealed partial class DawnScene
             yield return child;
             foreach (UIComponent inside in Descendants(child))
                 yield return inside;
+        }
+
+        if (of is Horizon.UI.Components.SettingsPage page)
+        {
+            foreach (UIComponent item in page.RowItems)
+            {
+                if (item.Parent is null)
+                {
+                    yield return item;
+                    foreach (UIComponent inside in Descendants(item))
+                        yield return inside;
+                }
+            }
         }
     }
 
@@ -326,6 +339,7 @@ internal sealed partial class DawnScene
         ("solstice", "the Solstice looks, flush panes on the window's tone, Dawn's orange accent, and the welcome page with what's new", TestSolstice),
         ("settings-look", "the settings in every look at 100, 150 and 200%: the window, a search, a changed setting, the looks, the keyboard shortcuts and a language server's settings", TestSettingsLook),
         (DawnProgram.NO_AI_SUITE, "No AI, a run without the agents: no Agentic, Agents view, menu, commands, agent systems, agents' ticks or MCP tools about agents. Only when named, the run is without them", TestNoAi),
+        ("modules", "optional modules in Editor · Modules toggled live, lazy stage/notebook/noon activation, and clean restore", TestModules),
         ("ticks", "what the editor does every tick as a list of named steps, the parts among them, in the order that matters", TestTicks),
         ("triple-click", "two presses on a word in the code pick the word and a third picks its line", TestTripleClick),
         ("window-click", "a press on a window of the editor leaves it where it is", TestWindowClick),

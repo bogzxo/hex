@@ -56,6 +56,39 @@ internal sealed partial class DawnScene
     private int agentsWidthDrawn = -1;
     private float agentsSystemsTallDrawn = -1.0f;
 
+    private bool agentsPanelBuilt;
+
+    /// <summary>Builds the Agents side-bar view and registers Agentic's commands once when the Agentic module is enabled.</summary>
+    private void EnsureAgentsPanel()
+    {
+        if (agentsPanelBuilt || !AgenticEnabled)
+            return;
+        agentsPanelBuilt = true;
+        BuildAgentsPanel();
+        RegisterNoonCommands();
+        HexAgentProcess.Woken = Engine.WindowManager.Wake;
+    }
+
+    /// <summary>Updates Agentic UI, ticks and activity button when <c>module_agentic</c> is toggled live in Settings.</summary>
+    private void ApplyAgenticModule()
+    {
+        layout.Get<Button>("act_agents").Visible = AgenticEnabled;
+        if (AgenticEnabled)
+        {
+            EnsureAgentsPanel();
+            if (chatsKept is null)
+                BringBackChats();
+        }
+        else
+        {
+            if (Face == HexFace.Noon)
+                ShowFace(HexFace.Dawn);
+            if (Side == HexSide.Agents)
+                Side = HexSide.Explorer;
+        }
+        DeclareTicks();
+    }
+
     private void BuildAgentsPanel()
     {
         UILayout made = layout.Instantiate(AGENTS_LAYOUT, left);
@@ -76,7 +109,10 @@ internal sealed partial class DawnScene
             Spacing = laidRows.Spacing >= 0.0f ? laidRows.Spacing : 8.0f, Estimate = AGENTS_ROW_ESTIMATE, StickToEnd = true
         });
         agentsBody.Remove(laid);
-        agentsRows = new HexAgentRowList(agentsScroll);
+        agentsRows = new HexAgentRowList(agentsScroll)
+        {
+            MakeLater = (of, place) => MadeLater(agentRowsFor.Chat!, (HexAgentEntry)of, place)
+        };
         agentsSubtitle = made.Get<Label>("agents_subtitle");
         agentsPlaceholder = made.Get<Label>("agents_placeholder");
         agentsInput = agentsCompose.Add(new CodeEditor
@@ -151,14 +187,23 @@ internal sealed partial class DawnScene
         commands.Add("Agents/open", Said("agents_panel.command"), ShowAgentsPanel, "Ctrl+Alt+A", "robot", UIKeyUse.BoundWhileTyping);
     }
 
+    /// <summary>Whether the optional Agentic module is enabled this run (respects both <c>module_agentic</c> and <see cref="HexAi.Off"/>).</summary>
+    private static bool AgenticEnabled => Hex.Core.Modules.HexModules.IsEnabled(Hex.Core.Modules.HexModuleId.Agentic);
+
     /// <summary>The Agents view of the side bar brought up, and the box given the keys.</summary>
     internal void ShowAgentsPanel()
     {
+        if (!AgenticEnabled)
+        {
+            Say(Said("no_ai.no_agentic"));
+            return;
+        }
+        EnsureAgentsPanel();
         left.Show(true);
         Side = HexSide.Agents;
         RebuildTree();
         treeDirty = false;
-        agentsInput.Focus();
+        agentsInput?.Focus();
     }
 
     /// <summary>The view in the side bar shown or put away as the side bar's view changes, the tree away while it's up.</summary>
@@ -166,6 +211,15 @@ internal sealed partial class DawnScene
     {
         // Noon has it in its middle, the side bar's view changing is nothing to do with it then
         if (Face == HexFace.Noon)
+            return;
+
+        if (!shown && agentsView is null)
+            return;
+        if (shown && !AgenticEnabled)
+            return;
+        if (shown && agentsView is null)
+            EnsureAgentsPanel();
+        if (agentsView is null)
             return;
 
         if (shown)
@@ -235,18 +289,42 @@ internal sealed partial class DawnScene
     private IEnumerable<HexAgentProfile> RunnableAgents() =>
         HexAgentProfiles.All.Where(profile => extensions.AgentRuns.ContainsKey(profile.Id));
 
-    /// <summary>The agent a chat goes to, the one picked or the first there is.</summary>
-    private string? AgentFor(HexAgentChat? chat) =>
-        chat is { Entries.Count: > 0 } ? chat.Agent : agentPicked is { } picked && extensions.AgentRuns.ContainsKey(picked) ? picked : RunnableAgents().FirstOrDefault()?.Id;
+    /// <summary>The agent a chat goes to, the one picked or the first there is. Zero allocations on the hot path.</summary>
+    private string? AgentFor(HexAgentChat? chat)
+    {
+        if (chat is { Entries.Count: > 0 })
+            return chat.Agent;
+        if (agentPicked is { } picked && extensions.AgentRuns.ContainsKey(picked))
+            return picked;
+        IReadOnlyList<HexAgentProfile> all = HexAgentProfiles.All;
+        for (int i = 0; i < all.Count; i++)
+        {
+            if (extensions.AgentRuns.ContainsKey(all[i].Id))
+                return all[i].Id;
+        }
+        return null;
+    }
+
+    private static HexAgentProfile? FindAgentProfile(string id)
+    {
+        IReadOnlyList<HexAgentProfile> all = HexAgentProfiles.All;
+        for (int i = 0; i < all.Count; i++)
+        {
+            if (all[i].Id == id)
+                return all[i];
+        }
+        return null;
+    }
 
     private void NewAgentChat()
     {
         agentChat = null;
         agentDraftContext = null;
-        agentsInput.Text = string.Empty;
+        if (agentsInput is not null)
+            agentsInput.Text = string.Empty;
         // Begun from a narrow window's fleet, the middle comes back before the box takes the keys
         FleetPicked();
-        agentsInput.Focus();
+        agentsInput?.Focus();
     }
 
     private void ClearAgentChat()
@@ -261,6 +339,8 @@ internal sealed partial class DawnScene
     /// </summary>
     private void UpdateAgentsPanel(float dt)
     {
+        if (!AgenticEnabled)
+            return;
         // A frame's length while the agentic perf test measures
         perfFrames?.Add(dt);
         // A fold of the systems pressed is drawn on the ticks straight after, not when the panels next look
@@ -369,9 +449,10 @@ internal sealed partial class DawnScene
         }
 
         agentsHistory.Enabled = agentChats.Count > 0;
-        agentsNew.Enabled = agentChat is not null || agentsInput.Text.Length > 0 || agentDraftContext is not null;
+        bool hasInput = !AgentsInputEmpty();
+        agentsNew.Enabled = agentChat is not null || hasInput || agentDraftContext is not null;
         bool canCompose = CanComposeAgent();
-        agentsSend.Enabled = canCompose && (!string.IsNullOrWhiteSpace(agentsInput.Text) || agentImages.Count > 0);
+        agentsSend.Enabled = canCompose && ((hasInput && !string.IsNullOrWhiteSpace(agentsInput.Text)) || agentImages.Count > 0);
         DrawAgentChips();
         DrawAgentsList();
         DrawAgentOptions();
@@ -397,6 +478,11 @@ internal sealed partial class DawnScene
 
     // What the line under the agents was last written from
     private (HexAgentChat? Chat, int Version, int Tenths, object? Draft, string? Agent, int State) agentsHeadDrawn = (null, -2, -2, null, null, -2);
+    private readonly System.Text.StringBuilder agentsHeadBuilder = new(128);
+
+    /// <summary>Checks whether the composer is empty without materializing a joined string from its document.</summary>
+    private bool AgentsInputEmpty() =>
+        agentsInput is null || (agentsInput.Document.LineCount <= 1 && agentsInput.Document.LineAt(0).Length == 0);
 
     // The quiet line under the agents, the model, the tokens, the cost and the time of the turn, and the card at the
     // bottom in the theme's colours, its edge lit while the box has the keys
@@ -430,20 +516,32 @@ internal sealed partial class DawnScene
         agentsHeadDrawn = now;
 
         // The agent's chip says who, so this is the rest of it, kept short for a side bar
-        var parts = new List<string?> { AgentDraftCaption(), agentChat is null && profile is not null ? AgentState(profile) : null };
-        if (agentChat?.Parent is { } parent)
-            parts.Add(Said("agents_panel.started_by", ("name", ChatName(parent))));
-        if (agentChat is { } shown && (shown.InputTokens > 0 || shown.Model is not null || shown.Running || shown.TurnSeconds > 0))
+        agentsHeadBuilder.Clear();
+        static void AppendPart(System.Text.StringBuilder sb, string? part)
         {
-            parts.Add(HexAgentModels.Of(shown));
-            if (shown.InputTokens + shown.OutputTokens > 0)
-                parts.Add(Said("agents_panel.tokens", ("input", Count(shown.InputTokens)), ("output", Count(shown.OutputTokens))).TrimStart(' ', '·'));
-            if (shown.Cost > 0)
-                parts.Add(Said("agents_panel.cost", ("cost", shown.Cost.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture))).TrimStart(' ', '·'));
-            parts.Add(Said(shown.Running ? "agents_panel.tool_running" : "agents_panel.turn_done", ("seconds", shown.TurnSeconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture))));
+            if (string.IsNullOrWhiteSpace(part))
+                return;
+            if (sb.Length > 0)
+                sb.Append("  ·  ");
+            sb.Append(part);
         }
 
-        agentsSubtitle.Text = UIRichText.Literal(string.Join("  ·  ", parts.Where(part => !string.IsNullOrWhiteSpace(part))));
+        AppendPart(agentsHeadBuilder, AgentDraftCaption());
+        if (agentChat is null && profile is not null)
+            AppendPart(agentsHeadBuilder, AgentState(profile));
+        if (agentChat?.Parent is { } parent)
+            AppendPart(agentsHeadBuilder, Said("agents_panel.started_by", ("name", ChatName(parent))));
+        if (agentChat is { } shown && (shown.InputTokens > 0 || shown.Model is not null || shown.Running || shown.TurnSeconds > 0))
+        {
+            AppendPart(agentsHeadBuilder, HexAgentModels.Of(shown));
+            if (shown.InputTokens + shown.OutputTokens > 0)
+                AppendPart(agentsHeadBuilder, Said("agents_panel.tokens", ("input", Count(shown.InputTokens)), ("output", Count(shown.OutputTokens))).TrimStart(' ', '·'));
+            if (shown.Cost > 0)
+                AppendPart(agentsHeadBuilder, Said("agents_panel.cost", ("cost", shown.Cost.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture))).TrimStart(' ', '·'));
+            AppendPart(agentsHeadBuilder, Said(shown.Running ? "agents_panel.tool_running" : "agents_panel.turn_done", ("seconds", shown.TurnSeconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture))));
+        }
+
+        agentsSubtitle.Text = UIRichText.Literal(agentsHeadBuilder.ToString());
         FitAgentsCompose();
     }
 
@@ -455,7 +553,7 @@ internal sealed partial class DawnScene
     {
         // The skin paints an editor's ground over what it was given, the box is the card's
         agentsInput.Color = System.Numerics.Vector4.Zero;
-        agentsPlaceholder.Visible = agentsInput.Text.Length == 0;
+        agentsPlaceholder.Visible = AgentsInputEmpty();
         float tall = MathF.Max(96.0f, MathF.Ceiling(agentsInput.Bounds.Height) + 56.0f) + AgentImagesTall;
         if (MathF.Abs(tall - agentsComposeTall) < 0.5f)
             return;
@@ -515,7 +613,7 @@ internal sealed partial class DawnScene
 
     private bool CanComposeAgent() => LinkCanCompose() ?? (AgentFor(agentChat) is { } id
         && extensions.AgentRuns.ContainsKey(id)
-        && HexAgentProfiles.All.FirstOrDefault(profile => profile.Id == id) is { } profile
+        && FindAgentProfile(id) is { } profile
         && StateOf(profile) != AgentStates.Missing);
 
     private static string Count(long tokens) => HexAgentLimits.Tokens(tokens);

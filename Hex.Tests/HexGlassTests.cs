@@ -7,19 +7,17 @@ namespace Hex.Tests;
 public sealed class HexGlassTests
 {
     [Theory]
-    [InlineData(2.0f, 0.3f, 0.2f, 0.0f)]
-    [InlineData(8.0f, 0.78f, 0.6f, 16.0f)]
-    [InlineData(30.0f, 0.95f, 1.0f, 24.0f)]
-    public void Popups_sides_and_windows_smear_as_far_and_shine_as_much(float blur, float clarity, float rim, float bend)
+    [InlineData(2.0f, 0.3f, 0.0f)]
+    [InlineData(8.0f, 0.78f, 16.0f)]
+    [InlineData(30.0f, 0.95f, 24.0f)]
+    public void Popups_sides_and_windows_smear_as_far(float blur, float clarity, float bend)
     {
-        UIGlass popup = HexGlass.Popup(blur, clarity, rim, bend);
-        UIGlass side = HexGlass.Side(blur, clarity, rim, bend);
+        UIGlass popup = HexGlass.Popup(blur, clarity, bend);
+        UIGlass side = HexGlass.Side(blur, clarity, bend);
         UIGlass window = HexGlass.Window(popup);
 
         Assert.Equal(popup.Blur, side.Blur);
         Assert.Equal(popup.Blur, window.Blur);
-        Assert.Equal(popup.Rim, side.Rim);
-        Assert.Equal(popup.Rim, window.Rim);
         Assert.Equal(popup.Clarity, side.Clarity);
         Assert.True(side.Bend <= popup.Bend && window.Bend <= popup.Bend);
         Assert.Equal(side.Bend, window.Bend);
@@ -31,7 +29,7 @@ public sealed class HexGlassTests
         foreach (float clarity in new[] { 0.0f, 0.2f, HexGlass.CLARITY, 0.9f, 1.0f })
             Assert.True(HexGlass.WindowClarity(clarity) <= clarity + 1.0e-6f);
 
-        Assert.Equal(HexGlass.CLARITY * 0.6f, HexGlass.WindowClarity(HexGlass.CLARITY), 4);
+        Assert.Equal(HexGlass.CLARITY * 0.8f, HexGlass.WindowClarity(HexGlass.CLARITY), 4);
         Assert.Equal(1.0f, HexGlass.WindowClarity(1.0f), 4);
     }
 }

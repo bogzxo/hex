@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Hex.Core;
@@ -117,8 +118,10 @@ internal sealed class HexAgentChatsKept
             {
                 if (node is null && text is null)
                     File.Delete(path);
+                else if (text is not null)
+                    WriteOver(path, text);
                 else
-                    WriteOver(path, text ?? node!.ToJsonString());
+                    WriteOver(path, node!);
             }
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -158,23 +161,26 @@ internal sealed class HexAgentChatsKept
                 if (key is not JsonValue value || !value.TryGetValue(out string? said) || said is not { Length: > 0 } name)
                     continue;
                 named.Add(name);
-                if (!File.Exists(FileOf(name)))
+                string chatFile = FileOf(name);
+                if (!File.Exists(chatFile))
                     continue;
                 // A chat that doesn't read is skipped, a value of the wrong kind threw past this and lost every other chat
                 try
                 {
-                    if (HexAgentChatStore.Read(JsonNode.Parse(File.ReadAllText(FileOf(name)))) is { } chat)
+                    if (HexAgentChatStore.ReadFile(chatFile) is { } chat)
                     {
                         chats.Add(chat);
                         written[chat.Key] = Stamp(chat);
                     }
                 }
-                catch (Exception e) when (e is System.Text.Json.JsonException or InvalidOperationException or FormatException or IOException)
+                catch (Exception e) when (e is JsonException or InvalidOperationException or FormatException or IOException)
                 {
                 }
             }
 
             listWritten = state?.ToJsonString() ?? string.Empty;
+            chats.TrimExcess();
+            written.TrimExcess();
             Tidy(named);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException)
@@ -233,6 +239,16 @@ internal sealed class HexAgentChatsKept
     {
         string beside = file + ".new";
         File.WriteAllText(beside, text);
+        File.Move(beside, file, overwrite: true);
+    }
+
+    // Streams a JsonNode directly to UTF-8 on disk without allocating a large intermediate JSON string
+    private static void WriteOver(string file, JsonNode node)
+    {
+        string beside = file + ".new";
+        using (FileStream stream = File.Create(beside))
+        using (var writer = new Utf8JsonWriter(stream))
+            node.WriteTo(writer);
         File.Move(beside, file, overwrite: true);
     }
 }

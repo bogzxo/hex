@@ -1,5 +1,7 @@
 using System.Numerics;
 
+using Hex.Core.Modules;
+
 using Horizon.Engine;
 using Horizon.HIDL.Runtime;
 using Horizon.Rendering;
@@ -124,8 +126,10 @@ internal sealed partial class DawnScene
         commands.Declare("File", "new", "open", "save", "close", "path", "workspace", "exit");
         commands.Declare("Edit", "history", "clipboard", "selection", "find", "files", "comment");
         commands.Declare("Selection", "select", "lines", "carets");
-        commands.Declare("Layout", "add", "group", "move", "select", "screen", "skin");
-        commands.Declare("Notebook", "run", "cells", "clear", "export", "kernel");
+        if (HexModules.IsEnabled(HexModuleId.Designer))
+            commands.Declare("Layout", "add", "group", "move", "select", "screen", "skin");
+        if (HexModules.IsEnabled(HexModuleId.Notebooks))
+            commands.Declare("Notebook", "run", "cells", "clear", "export", "kernel");
         commands.Declare("View", "palette", "sides", "panels", "appearance", "editor");
         commands.Declare("Go", "places", "open", "symbols", "problems");
         // The debugger's own groups first, the session, stepping through it and what's looked at on the way, then
@@ -135,8 +139,8 @@ internal sealed partial class DawnScene
         commands.Declare("Terminal", "terminals", "tasks", "pane", "options");
         commands.Declare("Git", "commit", "conflicts", "operation", "menus", "settings");
         // The agents' own menu, bringing them up or asking one about the code, going between their chats, what the harness
-        // saved, and their data on the disk. Not there at all with No AI on, nothing goes in it
-        if (!HexAi.Off)
+        // saved, and their data on the disk. Not there at all with Agentic or No AI off, nothing goes in it
+        if (HexModules.IsEnabled(HexModuleId.Agentic))
             commands.Declare("Agents", "open", "chats", "harness", "data");
         commands.Declare("Help", "help", "developer", "about");
 
@@ -149,7 +153,8 @@ internal sealed partial class DawnScene
         commands.DeclareSubmenu("Run/inspect", "breakpoints", Said("menus.breakpoints"), "debug-breakpoint");
         commands.DeclareSubmenu("Run/inspect", "views", Said("menus.debug_views"), "debug-console");
         commands.DeclareSubmenu("View/appearance", "look", Said("menus.appearance"), "layout", "screen", "parts", "zoom");
-        commands.DeclareSubmenu("Layout/skin", "debugger", Said("menus.layout_debugger"), "debug", "switch", "options");
+        if (HexModules.IsEnabled(HexModuleId.Designer))
+            commands.DeclareSubmenu("Layout/skin", "debugger", Said("menus.layout_debugger"), "debug", "switch", "options");
         commands.DeclareSubmenu("Git/menus", "changes", Said("menus.git_changes"), "diff", "open", "file", "all");
         commands.DeclareSubmenu("Git/menus", "commit", Said("menus.git_commit"), "git-commit", "commit", "fix", "flags");
         commands.DeclareSubmenu("Git/menus", "branches", Said("menus.git_branches"), "git-branch", "switch", "change", "commits");
@@ -157,7 +162,7 @@ internal sealed partial class DawnScene
         commands.DeclareSubmenu("Git/menus", "stash", Said("menus.git_stash"), "git-stash", "stash", "pick");
         commands.DeclareSubmenu("Git/menus", "history", Said("menus.git_history"), "history");
         commands.DeclareSubmenu("Git/menus", "tags", Said("menus.git_tags"), "tag");
-        if (!HexAi.Off)
+        if (HexModules.IsEnabled(HexModuleId.Agentic))
             commands.DeclareSubmenu("Agents/data", "agent_data", Said("agent_data.title"), "database", "folder", "usage", "clean");
         commands.DeclareSubmenu("Help/developer", "developer", Said("menus.developer"), "tools");
     }
@@ -209,14 +214,17 @@ internal sealed partial class DawnScene
         foreach (float scale in Scales)
             size.Add(DescribeSize(scale), () => SetInterfaceSize(scale, remember: true)).IsChecked = () => compositor.Scale == scale;
 
-        // The layout debugger is the designer's, in the Layout menu with what it draws under it
-        layoutDebugger.AddTo(commands, "Layout/skin/debugger:switch", "Layout/skin/debugger:options",
-            () => Say(layoutDebugger.IsOn ? Said("menus.layout_debugger_on") : Said("menus.layout_debugger_off")));
+        // The layout debugger and layout skin menu belong to the Designer module
+        if (HexModules.IsEnabled(HexModuleId.Designer))
+        {
+            layoutDebugger.AddTo(commands, "Layout/skin/debugger:switch", "Layout/skin/debugger:options",
+                () => Say(layoutDebugger.IsOn ? Said("menus.layout_debugger_on") : Said("menus.layout_debugger_off")));
 
-        // The skin the layouts are shown in, every one there is under Assets/uix and every theme of each, a menu a skin.
-        // It is the game's setting (UISkins) and not the editor's own, a layout looks here the way it will in a game set
-        // to the same, and the editor itself stays in its flat one
-        AddSkins(commands.AddMenu("Layout/skin", Said("menus.layout_skin"), "paintcan"));
+            // The skin the layouts are shown in, every one there is under Assets/uix and every theme of each, a menu a skin.
+            // It is the game's setting (UISkins) and not the editor's own, a layout looks here the way it will in a game set
+            // to the same, and the editor itself stays in its flat one
+            AddSkins(commands.AddMenu("Layout/skin", Said("menus.layout_skin"), "paintcan"));
+        }
 
         // The canvas in the designer, the code in code, each with a zoom of its own. These go while typing, the code is typed into
         commands.Bind(Key.Number0, () => { if (LayoutTools) designer.ZoomToFit(); else ZoomCode(0.0f); }, control: true, whileTyping: true);

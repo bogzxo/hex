@@ -53,14 +53,16 @@ internal sealed partial class DawnScene
     private void Opening(float eased)
     {
         root.VisualScale = new Vector2(1.0f, OPEN_FROM + (1.0f - OPEN_FROM) * eased);
-        foreach (UICompositor faded in (UICompositor[])[stage, compositor])
+        if (stage.Enabled)
         {
-            foreach (UIModule module in faded.Modules)
+            foreach (UIModule module in stage.Modules)
             {
                 if (module != backdrop)
                     module.Root.Opacity = eased;
             }
         }
+        foreach (UIModule module in compositor.Modules)
+            module.Root.Opacity = eased;
 
         // The code of an editor is drawn by its own opacity, not by what it's in
         foreach (HexDocument open in documents)
@@ -89,7 +91,7 @@ internal sealed partial class DawnScene
         if (done >= 1.0f)
             openTime = 0.0f;
         else
-            Engine.WindowManager.RequestFrames(0.05);
+            Engine.WindowManager.RequestSmooth(0.05);
     }
 
     /// <summary>How long a piece of Dawn's motion lasts, scaled by the interface animation setting, 0 when it's off.</summary>

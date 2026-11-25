@@ -16,8 +16,11 @@ internal sealed record HexSymbol(string Name, string Kind, string Container, int
     /// Symbols out of outline entries, what each is inside of worked out from how deep it is. An entry is inside the last
     /// one before it that was less deep.
     /// </summary>
-    public static List<HexSymbol> Of(IEnumerable<OutlineEntry> entries)
+    public static HexSymbol[] Of(IEnumerable<OutlineEntry> entries)
     {
+        if (entries is ICollection<OutlineEntry> { Count: 0 })
+            return [];
+
         var symbols = new List<HexSymbol>();
         var open = new List<(int Depth, string Full)>();
         foreach (OutlineEntry entry in entries)
@@ -34,7 +37,7 @@ internal sealed record HexSymbol(string Name, string Kind, string Container, int
             open.Add((entry.Depth, symbol.Full));
         }
 
-        return symbols;
+        return symbols.Count == 0 ? [] : symbols.ToArray();
     }
 
     // The kinds made so far, by the outline's icon or as the cache on disk says them. There are a dozen or so, and every
@@ -56,7 +59,17 @@ internal sealed record HexSymbol(string Name, string Kind, string Container, int
 /// </summary>
 internal sealed class HexIndexedFile
 {
-    private readonly Lazy<string[]> lines;
+    // The extensions seen so far, lower case with the dot. There are a few dozen across the whole workspace, shared
+    // rather than allocated per file on every walk or cache load
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> extensions = new(StringComparer.Ordinal);
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string>.AlternateLookup<ReadOnlySpan<char>> extensionsLookup =
+        extensions.GetAlternateLookup<ReadOnlySpan<char>>();
+
+    // Strong lines only for synthetic/in-memory files (editor buffers, held reads, unreadable stubs); disk-backed files
+    // keep a weak reference so burst queries reuse them while the GC can reclaim cold file text
+    private readonly string[]? inMemoryLines;
+    private readonly Func<string[]>? readLines;
+    private WeakReference<string[]>? cachedLines;
 
     public string Path { get; }
 
@@ -74,18 +87,48 @@ internal sealed class HexIndexedFile
     /// <summary>Whether the symbols are a language server's rather than the outline's shapes.</summary>
     public bool FromServer { get; }
 
-    /// <summary>The lines, read from the disk the first time they're asked for.</summary>
-    public string[] Lines => lines.Value;
-
-    /// <summary>A file read now, its symbols the outline's.</summary>
-    public HexIndexedFile(string path, string relative, long length, long written, string[] read)
-        : this(path, relative, length, written, read.Length, read.Length == 0 ? [] : OutlineOf(path, string.Join('\n', read)), false, () => read)
+    /// <summary>The lines, read from the disk on demand and held weakly so cold files don't stay pinned in memory.</summary>
+    public string[] Lines
     {
+        get
+        {
+            if (inMemoryLines is not null)
+                return inMemoryLines;
+
+            if (Volatile.Read(ref cachedLines)?.TryGetTarget(out string[]? hit) == true)
+                return hit;
+
+            string[] loaded = readLines is not null ? readLines() : HexSearch.ReadLines(Path);
+            Volatile.Write(ref cachedLines, new WeakReference<string[]>(loaded));
+            return loaded;
+        }
     }
 
-    // A file read now with the text it was split from, which the outline reads as it is rather than joined up again
-    private HexIndexedFile(string path, string relative, long length, long written, string[] read, string text)
-        : this(path, relative, length, written, read.Length, OutlineOf(path, text), false, () => read)
+    /// <summary>The lines if they're already in memory (in-memory file or still live in the weak cache), without reading the disk.</summary>
+    internal bool TryGetCachedLines(out string[] lines)
+    {
+        if (inMemoryLines is not null)
+        {
+            lines = inMemoryLines;
+            return true;
+        }
+
+        if (Volatile.Read(ref cachedLines)?.TryGetTarget(out string[]? hit) == true)
+        {
+            lines = hit;
+            return true;
+        }
+
+        lines = [];
+        return false;
+    }
+
+    /// <summary>Whether this file's lines come from memory or a custom reader rather than straight off the disk.</summary>
+    internal bool HasInMemoryLines => inMemoryLines is not null || readLines is not null;
+
+    /// <summary>A file read now, its symbols the outline's, keeping the given lines in memory.</summary>
+    public HexIndexedFile(string path, string relative, long length, long written, string[] read)
+        : this(path, relative, length, written, read.Length, read.Length == 0 ? [] : OutlineOf(path, string.Join('\n', read)), false, read)
     {
     }
 
@@ -95,30 +138,57 @@ internal sealed class HexIndexedFile
         if (HexSearch.ReadText(path) is not { } text)
             return new HexIndexedFile(path, relative, length, written, []);
 
-        // The outline goes by \n alone, the way the lines are split
-        return new HexIndexedFile(path, relative, length, written, HexSearch.SplitLines(text), text.Replace("\r\n", "\n"));
+        int lineCount = text.AsSpan().Count('\n') + 1;
+        return new HexIndexedFile(path, relative, length, written, lineCount, OutlineOf(path, text), false);
     }
 
     /// <summary>A file as it was kept, by the cache or by a language server's answer, its text read when it's needed.</summary>
     public HexIndexedFile(string path, string relative, long length, long written, int lineCount, IReadOnlyList<HexSymbol> symbols, bool fromServer, Func<string[]>? read = null)
+        : this(path, relative, length, written, lineCount, Compact(symbols), fromServer, inMemoryLines: null, readLines: read, cachedLines: null)
+    {
+    }
+
+    private HexIndexedFile(string path, string relative, long length, long written, int lineCount, HexSymbol[] symbols, bool fromServer, string[]? inMemoryLines, Func<string[]>? readLines = null, WeakReference<string[]>? cachedLines = null)
     {
         Path = path;
         Relative = relative;
-        Extension = System.IO.Path.GetExtension(path).ToLowerInvariant();
+        Extension = InternExtension(path);
         Length = length;
         Written = written;
         LineCount = lineCount;
         Symbols = symbols;
         FromServer = fromServer;
-        lines = new Lazy<string[]>(read ?? (() => HexSearch.ReadLines(path)), LazyThreadSafetyMode.ExecutionAndPublication);
+        this.inMemoryLines = inMemoryLines;
+        this.readLines = readLines;
+        this.cachedLines = cachedLines;
     }
 
     /// <summary>The same file with a language server's symbols in place of the outline's.</summary>
     public HexIndexedFile WithServerSymbols(IReadOnlyList<HexSymbol> symbols) =>
-        new(Path, Relative, Length, Written, LineCount, symbols, true, () => Lines);
+        new(Path, Relative, Length, Written, LineCount, Compact(symbols), true, inMemoryLines, readLines, Volatile.Read(ref cachedLines));
+
+    internal static string InternExtension(string path)
+    {
+        ReadOnlySpan<char> ext = System.IO.Path.GetExtension(path.AsSpan());
+        if (ext.IsEmpty)
+            return string.Empty;
+        if (extensionsLookup.TryGetValue(ext, out string? hit))
+            return hit;
+
+        Span<char> lower = ext.Length <= 32 ? stackalloc char[ext.Length] : new char[ext.Length];
+        ext.ToLowerInvariant(lower);
+        if (extensionsLookup.TryGetValue(lower, out hit))
+            return hit;
+
+        string made = lower.ToString();
+        return extensions.GetOrAdd(made, made);
+    }
+
+    private static HexSymbol[] Compact(IReadOnlyList<HexSymbol> symbols) =>
+        symbols.Count == 0 ? [] : symbols is HexSymbol[] array ? array : [.. symbols];
 
     // What a file declares by the outline Hex draws for it, nothing for one the outline chokes on
-    private static List<HexSymbol> OutlineOf(string path, string text)
+    private static HexSymbol[] OutlineOf(string path, string text)
     {
         try
         {

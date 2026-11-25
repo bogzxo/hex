@@ -97,7 +97,7 @@ internal sealed partial class DawnScene
         settings.NoonFleetWidth = 0.0f;
         noonFleetDrawn = NOT_DRAWN;
         SaveSettings();
-        Engine.WindowManager.RequestFrames();
+        Engine.WindowManager.NoteChange();
     }
 
     /// <summary>Details back at Agentic's own width, a double click on its line.</summary>
@@ -105,7 +105,7 @@ internal sealed partial class DawnScene
     {
         settings.NoonContextWidth = 0.0f;
         SaveSettings();
-        Engine.WindowManager.RequestFrames();
+        Engine.WindowManager.NoteChange();
     }
 
     /// <summary>

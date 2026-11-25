@@ -19,9 +19,10 @@ internal sealed class ReviewBlobs
     private readonly Dictionary<string, Blob> blobs = new(StringComparer.Ordinal);
     private readonly List<(string Hash, string Text)> unpacked = [];
 
-    private sealed class Blob(byte[] packed)
+    private sealed class Blob(byte[]? packed, string? diskPath = null)
     {
-        public readonly byte[] Packed = packed;
+        public byte[]? Packed = packed;
+        public string? DiskPath = diskPath;
         public int Holders;
     }
 
@@ -76,16 +77,67 @@ internal sealed class ReviewBlobs
         }
     }
 
+    /// <summary>Registers a packed blob that already lives on disk so its bytes stay out of RAM until inspected.</summary>
+    public void AddDiskBacked(string hash, string diskPath)
+    {
+        lock (gate)
+        {
+            if (blobs.TryGetValue(hash, out Blob? known))
+            {
+                known.Holders++;
+                known.DiskPath ??= diskPath;
+            }
+            else
+            {
+                blobs[hash] = new Blob(null, diskPath) { Holders = 1 };
+            }
+        }
+    }
+
+    /// <summary>Notes that a blob is now persisted at <paramref name="diskPath"/> and drops its in-memory packed bytes.</summary>
+    public void MarkWrittenToDisk(string hash, string diskPath)
+    {
+        lock (gate)
+        {
+            if (blobs.TryGetValue(hash, out Blob? blob))
+            {
+                blob.DiskPath = diskPath;
+                blob.Packed = null;
+            }
+        }
+    }
+
     /// <summary>The packed bytes of a text, for the disk.</summary>
     public byte[]? PackedOf(string hash)
     {
+        string? diskPath;
         lock (gate)
-            return blobs.TryGetValue(hash, out Blob? blob) ? blob.Packed : null;
+        {
+            if (!blobs.TryGetValue(hash, out Blob? blob))
+                return null;
+            if (blob.Packed is { } packed)
+                return packed;
+            diskPath = blob.DiskPath;
+        }
+
+        if (diskPath is null)
+            return null;
+
+        try
+        {
+            return File.Exists(diskPath) ? File.ReadAllBytes(diskPath) : null;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     /// <summary>A text, null for one that isn't kept (or can't be read).</summary>
     public string? Get(string hash)
     {
+        byte[]? packed;
+        string? diskPath;
         lock (gate)
         {
             for (int i = unpacked.Count - 1; i >= 0; i--)
@@ -97,11 +149,20 @@ internal sealed class ReviewBlobs
             if (!blobs.TryGetValue(hash, out Blob? blob))
                 return null;
 
-            string? text = Unpack(blob.Packed);
-            if (text is not null)
-                Remember(hash, text);
-            return text;
+            packed = blob.Packed;
+            diskPath = blob.DiskPath;
         }
+
+        string? text = packed is not null ? Unpack(packed) : (diskPath is not null ? UnpackFile(diskPath) : null);
+        if (text is not null)
+        {
+            lock (gate)
+            {
+                if (blobs.ContainsKey(hash))
+                    Remember(hash, text);
+            }
+        }
+        return text;
     }
 
     /// <summary>A holder let go of its text; the last to do so takes it away.</summary>
@@ -123,7 +184,9 @@ internal sealed class ReviewBlobs
         lock (gate)
         {
             blobs.Clear();
+            blobs.TrimExcess();
             unpacked.Clear();
+            unpacked.TrimExcess();
         }
     }
 
@@ -156,6 +219,23 @@ internal sealed class ReviewBlobs
             return Encoding.UTF8.GetString(bytes.GetBuffer(), 0, (int)bytes.Length);
         }
         catch (InvalidDataException)
+        {
+            return null;
+        }
+    }
+
+    private static string? UnpackFile(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+                return null;
+            using var from = File.OpenRead(path);
+            using var brotli = new BrotliStream(from, CompressionMode.Decompress);
+            using var reader = new StreamReader(brotli, Encoding.UTF8);
+            return reader.ReadToEnd();
+        }
+        catch (Exception e) when (e is InvalidDataException or IOException or UnauthorizedAccessException)
         {
             return null;
         }

@@ -111,6 +111,18 @@ internal sealed partial class DawnScene
 
     private static readonly string[] STAGE_KEYS = ["Alt+1", "Alt+2", "Alt+3", "Alt+4"];
 
+    private void RegisterNoonStageCommands()
+    {
+        commands.Add("Agents/chats", Said("noon.command_fleet"), ToggleFleet, FLEET_KEY, "layout-sidebar-left", UIKeyUse.BoundWhileTyping).IsEnabled = InAgentic;
+        commands.Add("Agents/chats", Said("noon.command_stage_chat"), () => ShowStage(NoonStage.Chat), STAGE_KEYS[0], "comment-discussion", UIKeyUse.BoundWhileTyping).IsEnabled = InAgentic;
+        commands.Add("Agents/chats", Said("noon.command_stage_inbox"), () => ShowStage(NoonStage.Inbox), STAGE_KEYS[1], "inbox", UIKeyUse.BoundWhileTyping).IsEnabled = InAgentic;
+        commands.Add("Agents/chats", Said("noon.command_stage_changes"), () => ShowStage(NoonStage.Changes), STAGE_KEYS[2], "diff", UIKeyUse.BoundWhileTyping).IsEnabled = InAgentic;
+        commands.Add("Agents/chats", Said("noon.command_stage_plan"), () => ShowStage(NoonStage.Plan), STAGE_KEYS[3], "checklist", UIKeyUse.BoundWhileTyping).IsEnabled = InAgentic;
+        // Only while a request waits, the keys are New Scratchpad in Language's the rest of the time (AnyRequestWaiting)
+        commands.Add("Agents/chats", Said("noon.command_allow"), () => DecideWaiting(true), ALLOW_KEY, "check", UIKeyUse.BoundWhileTyping).IsEnabled = AnyRequestWaiting;
+        commands.Add("Agents/chats", Said("noon.command_deny"), () => DecideWaiting(false), DENY_KEY, "close", UIKeyUse.BoundWhileTyping).IsEnabled = AnyRequestWaiting;
+    }
+
     private void BuildNoonStage()
     {
         noonTabs = noonCenter.Add(new StackPanel
@@ -124,7 +136,6 @@ internal sealed partial class DawnScene
             Icon = "layout-sidebar-left", Style = "button_flat", Size = new Vector2(30, 26), Animated = false, Visible = false,
             Tooltip = Said("noon.fleet_show", ("key", FLEET_KEY)), OnPressed = () => ShowFleet(true)
         });
-        commands.Add("Agents/chats", Said("noon.command_fleet"), ToggleFleet, FLEET_KEY, "layout-sidebar-left", UIKeyUse.BoundWhileTyping).IsEnabled = InAgentic;
         foreach (NoonStage stage in Enum.GetValues<NoonStage>())
         {
             NoonStage shown = stage;
@@ -150,14 +161,6 @@ internal sealed partial class DawnScene
         (noonInbox, noonInboxRows) = StagePanel();
         (noonChanges, noonChangesRows) = StagePanel();
         (noonPlan, noonPlanRows) = StagePanel();
-
-        commands.Add("Agents/chats", Said("noon.command_stage_chat"), () => ShowStage(NoonStage.Chat), STAGE_KEYS[0], "comment-discussion", UIKeyUse.BoundWhileTyping).IsEnabled = InAgentic;
-        commands.Add("Agents/chats", Said("noon.command_stage_inbox"), () => ShowStage(NoonStage.Inbox), STAGE_KEYS[1], "inbox", UIKeyUse.BoundWhileTyping).IsEnabled = InAgentic;
-        commands.Add("Agents/chats", Said("noon.command_stage_changes"), () => ShowStage(NoonStage.Changes), STAGE_KEYS[2], "diff", UIKeyUse.BoundWhileTyping).IsEnabled = InAgentic;
-        commands.Add("Agents/chats", Said("noon.command_stage_plan"), () => ShowStage(NoonStage.Plan), STAGE_KEYS[3], "checklist", UIKeyUse.BoundWhileTyping).IsEnabled = InAgentic;
-        // Only while a request waits, the keys are New Scratchpad in Language's the rest of the time (AnyRequestWaiting)
-        commands.Add("Agents/chats", Said("noon.command_allow"), () => DecideWaiting(true), ALLOW_KEY, "check", UIKeyUse.BoundWhileTyping).IsEnabled = AnyRequestWaiting;
-        commands.Add("Agents/chats", Said("noon.command_deny"), () => DecideWaiting(false), DENY_KEY, "close", UIKeyUse.BoundWhileTyping).IsEnabled = AnyRequestWaiting;
     }
 
     private bool InAgentic() => Face == HexFace.Noon;
@@ -165,8 +168,8 @@ internal sealed partial class DawnScene
     /// <summary>Whether any agent waits on the person, when Ctrl+Alt+Y and Ctrl+Alt+N answer it rather than doing what else they do.</summary>
     private bool AnyRequestWaiting()
     {
-        foreach (HexAgentChat chat in agentChats)
-            if (chat.HasPending)
+        for (int i = 0; i < agentChats.Count; i++)
+            if (agentChats[i].HasPending)
                 return true;
         return false;
     }
@@ -211,7 +214,7 @@ internal sealed partial class DawnScene
     // The stage's panel up and the rest down, its tab marked
     private void ApplyStage()
     {
-        if (Face != HexFace.Noon)
+        if (Face != HexFace.Noon || !noonBuilt)
             return;
         agentsView.Visible = noonStage == NoonStage.Chat;
         noonInbox.Visible = noonStage == NoonStage.Inbox;

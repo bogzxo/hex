@@ -32,6 +32,23 @@ internal sealed partial class DawnScene
         FillAgentEarlier(chat);
     }
 
+    /// <summary>Updates the "Show earlier" counter in place when older rows spill off the top during streaming.</summary>
+    private void UpdateAgentEarlierCount(HexAgentChat chat)
+    {
+        if (chat.Dropped <= 0 || hub.History is null)
+            return;
+        if (agentsEarlier is null)
+        {
+            DrawAgentEarlier(chat);
+            return;
+        }
+        int left = chat.Dropped - agentsEarlierShown;
+        if (left > 0 && agentsEarlier.Children.Count > 0 && agentsEarlier.Children[0] is Button button)
+            button.Label = Said("agents_panel.earlier", ("count", left.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        else
+            FillAgentEarlier(chat);
+    }
+
     // The button and what's been read back, made again as more is
     private void FillAgentEarlier(HexAgentChat chat)
     {

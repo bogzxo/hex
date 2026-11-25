@@ -14,8 +14,22 @@ namespace Hex.Dawn;
 // The palette of components on the left of the designer, a button a kind with its icon and what it is, pressed to add one.
 internal sealed partial class HexDesigner
 {
+    private bool paletteBuilt;
+
+    /// <summary>Populates the designer component palette once on first Design view.</summary>
+    internal void EnsurePalette()
+    {
+        if (paletteBuilt)
+            return;
+        BuildPalette();
+    }
+
     internal void BuildPalette()
     {
+        if (paletteBuilt)
+            return;
+        paletteBuilt = true;
+
         // One button per kind of component, each made from the template the palette names
         var items = layout.Populate("palette", Palette.Length);
 

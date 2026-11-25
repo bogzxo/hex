@@ -31,6 +31,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hex.Link.Transport", "Hex.L
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hex.Prediction.Runtime", "Hex.Prediction.Runtime\Hex.Prediction.Runtime.csproj", "{EC5DF76A-4499-4F77-904B-520472F799AD}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hex.Notebooks.Render", "Hex.Notebooks.Render\Hex.Notebooks.Render.csproj", "{B4E2A91C-7D3F-4E8A-9C1B-5F6E3A2D8C41}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -209,6 +211,18 @@ Global
 		{70E4B00C-0E10-4C7A-99FF-249DCA33A864}.Release|x64.Build.0 = Release|x64
 		{70E4B00C-0E10-4C7A-99FF-249DCA33A864}.Release|x86.ActiveCfg = Release|Any CPU
 		{70E4B00C-0E10-4C7A-99FF-249DCA33A864}.Release|x86.Build.0 = Release|Any CPU
+		{B4E2A91C-7D3F-4E8A-9C1B-5F6E3A2D8C41}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B4E2A91C-7D3F-4E8A-9C1B-5F6E3A2D8C41}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B4E2A91C-7D3F-4E8A-9C1B-5F6E3A2D8C41}.Debug|x64.ActiveCfg = Debug|x64
+		{B4E2A91C-7D3F-4E8A-9C1B-5F6E3A2D8C41}.Debug|x64.Build.0 = Debug|x64
+		{B4E2A91C-7D3F-4E8A-9C1B-5F6E3A2D8C41}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B4E2A91C-7D3F-4E8A-9C1B-5F6E3A2D8C41}.Debug|x86.Build.0 = Debug|Any CPU
+		{B4E2A91C-7D3F-4E8A-9C1B-5F6E3A2D8C41}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B4E2A91C-7D3F-4E8A-9C1B-5F6E3A2D8C41}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B4E2A91C-7D3F-4E8A-9C1B-5F6E3A2D8C41}.Release|x64.ActiveCfg = Release|x64
+		{B4E2A91C-7D3F-4E8A-9C1B-5F6E3A2D8C41}.Release|x64.Build.0 = Release|x64
+		{B4E2A91C-7D3F-4E8A-9C1B-5F6E3A2D8C41}.Release|x86.ActiveCfg = Release|Any CPU
+		{B4E2A91C-7D3F-4E8A-9C1B-5F6E3A2D8C41}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

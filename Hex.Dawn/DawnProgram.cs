@@ -90,6 +90,9 @@ public static partial class DawnProgram
 
     private static void Start(string[] args)
     {
+        // Optional modules forced off for this run, applied here too in case DawnProgram.Run is invoked directly
+        Hex.Core.Modules.HexModules.ApplyArguments(args);
+
         bool selfTest = args.Contains(ARGUMENT_SELF_TEST);
         bool nativeShortcuts = selfTest && args.Contains("native-shortcuts");
 

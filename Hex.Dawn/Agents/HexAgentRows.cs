@@ -162,28 +162,52 @@ internal static class HexAgentRows
     /// <summary>The icon of a tool by what kind of tool it is, a command, a file changed or read, a search, Hex's own.</summary>
     public static string ToolIcon(string name)
     {
-        string tool = ToolTitle(name).ToLowerInvariant();
-        return tool switch
-        {
-            "bash" or "command" or "command_execution" or "shell" or "hex_terminal_run" or "hex_terminal" or "hex_terminal_send" or "hex_terminal_read" or "hex_run_task" or "hex_task_output" => "terminal",
-            "edit" or "write" or "multiedit" or "file_change" or "apply_patch" or "notebookedit" or "hex_edit" or "hex_write" => "diff",
-            "read" or "hex_read" or "hex_skim" or "hex_editor" or "hex_open" => "file-code",
-            "grep" or "glob" or "hex_search" or "hex_find_in_files" or "hex_files" or "hex_refs" or "hex_references" => "search",
-            "hex_symbols" or "hex_outline" or "hex_definition" or "hex_symbol_info" => "symbol-class",
-            "hex_map" => "list-tree",
-            "hex_show_image" => "file-media",
-            "websearch" or "webfetch" or "web_search" => "globe",
-            "todowrite" or "todo_list" or "hex_plan_update" or "hex_plan_read" => "checklist",
-            "task" or "agent" => "organization",
-            _ when tool.StartsWith("hex_notebook", StringComparison.Ordinal) => "notebook",
-            _ when tool.StartsWith("hex_", StringComparison.Ordinal) => "robot",
-            _ => "tools"
-        };
+        ReadOnlySpan<char> tool = ToolTitleSpan(name);
+        if (tool.Equals("bash", StringComparison.OrdinalIgnoreCase) || tool.Equals("command", StringComparison.OrdinalIgnoreCase)
+            || tool.Equals("command_execution", StringComparison.OrdinalIgnoreCase) || tool.Equals("shell", StringComparison.OrdinalIgnoreCase)
+            || tool.Equals("hex_terminal_run", StringComparison.OrdinalIgnoreCase) || tool.Equals("hex_terminal", StringComparison.OrdinalIgnoreCase)
+            || tool.Equals("hex_terminal_send", StringComparison.OrdinalIgnoreCase) || tool.Equals("hex_terminal_read", StringComparison.OrdinalIgnoreCase)
+            || tool.Equals("hex_run_task", StringComparison.OrdinalIgnoreCase) || tool.Equals("hex_task_output", StringComparison.OrdinalIgnoreCase))
+            return "terminal";
+        if (tool.Equals("edit", StringComparison.OrdinalIgnoreCase) || tool.Equals("write", StringComparison.OrdinalIgnoreCase)
+            || tool.Equals("multiedit", StringComparison.OrdinalIgnoreCase) || tool.Equals("file_change", StringComparison.OrdinalIgnoreCase)
+            || tool.Equals("apply_patch", StringComparison.OrdinalIgnoreCase) || tool.Equals("notebookedit", StringComparison.OrdinalIgnoreCase)
+            || tool.Equals("hex_edit", StringComparison.OrdinalIgnoreCase) || tool.Equals("hex_write", StringComparison.OrdinalIgnoreCase))
+            return "diff";
+        if (tool.Equals("read", StringComparison.OrdinalIgnoreCase) || tool.Equals("hex_read", StringComparison.OrdinalIgnoreCase)
+            || tool.Equals("hex_skim", StringComparison.OrdinalIgnoreCase) || tool.Equals("hex_editor", StringComparison.OrdinalIgnoreCase)
+            || tool.Equals("hex_open", StringComparison.OrdinalIgnoreCase))
+            return "file-code";
+        if (tool.Equals("grep", StringComparison.OrdinalIgnoreCase) || tool.Equals("glob", StringComparison.OrdinalIgnoreCase)
+            || tool.Equals("hex_search", StringComparison.OrdinalIgnoreCase) || tool.Equals("hex_find_in_files", StringComparison.OrdinalIgnoreCase)
+            || tool.Equals("hex_files", StringComparison.OrdinalIgnoreCase) || tool.Equals("hex_refs", StringComparison.OrdinalIgnoreCase)
+            || tool.Equals("hex_references", StringComparison.OrdinalIgnoreCase))
+            return "search";
+        if (tool.Equals("hex_symbols", StringComparison.OrdinalIgnoreCase) || tool.Equals("hex_outline", StringComparison.OrdinalIgnoreCase)
+            || tool.Equals("hex_definition", StringComparison.OrdinalIgnoreCase) || tool.Equals("hex_symbol_info", StringComparison.OrdinalIgnoreCase))
+            return "symbol-class";
+        if (tool.Equals("hex_map", StringComparison.OrdinalIgnoreCase))
+            return "list-tree";
+        if (tool.Equals("hex_show_image", StringComparison.OrdinalIgnoreCase))
+            return "file-media";
+        if (tool.Equals("websearch", StringComparison.OrdinalIgnoreCase) || tool.Equals("webfetch", StringComparison.OrdinalIgnoreCase)
+            || tool.Equals("web_search", StringComparison.OrdinalIgnoreCase))
+            return "globe";
+        if (tool.Equals("todowrite", StringComparison.OrdinalIgnoreCase) || tool.Equals("todo_list", StringComparison.OrdinalIgnoreCase)
+            || tool.Equals("hex_plan_update", StringComparison.OrdinalIgnoreCase) || tool.Equals("hex_plan_read", StringComparison.OrdinalIgnoreCase))
+            return "checklist";
+        if (tool.Equals("task", StringComparison.OrdinalIgnoreCase) || tool.Equals("agent", StringComparison.OrdinalIgnoreCase))
+            return "organization";
+        if (tool.StartsWith("hex_notebook", StringComparison.OrdinalIgnoreCase))
+            return "notebook";
+        if (tool.StartsWith("hex_", StringComparison.OrdinalIgnoreCase))
+            return "robot";
+        return "tools";
     }
 
     public static Vector4? ToolColour(string name, UIPalette? palette)
     {
-        if (palette is null || !ToolTitle(name).StartsWith("hex_", StringComparison.OrdinalIgnoreCase))
+        if (palette is null || !ToolTitleSpan(name).StartsWith("hex_", StringComparison.OrdinalIgnoreCase))
             return null;
 
         return ToolIcon(name) switch
@@ -196,5 +220,108 @@ internal static class HexAgentRows
             "checklist" or "notebook" => palette.Syntax.Reference,
             _ => palette.Accent
         };
+    }
+
+    private const int CACHED_SMALL_INTS = 257;
+    private static readonly string[] SmallIntCache = CreateSmallIntCache();
+
+    private static string[] CreateSmallIntCache()
+    {
+        var cache = new string[CACHED_SMALL_INTS];
+        for (int i = 0; i < cache.Length; i++)
+            cache[i] = i.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return cache;
+    }
+
+    /// <summary>Formats non-negative small integers without allocating on hot UI paths.</summary>
+    public static string SmallInt(int value) =>
+        (uint)value < (uint)SmallIntCache.Length
+            ? SmallIntCache[value]
+            : value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private const int CACHED_TENTHS_MAX = 601; // 0.0s through 60.0s
+    private static readonly string[] TenthsSecondsCache = CreateTenthsSecondsCache();
+
+    private static string[] CreateTenthsSecondsCache()
+    {
+        var cache = new string[CACHED_TENTHS_MAX];
+        for (int i = 0; i < cache.Length; i++)
+            cache[i] = (i / 10.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "s";
+        return cache;
+    }
+
+    /// <summary>Formats a duration in seconds as <c>0.0s</c>, reusing cached strings for 0.0s–60.0s.</summary>
+    public static string FormatTenthsSeconds(double seconds)
+    {
+        if (seconds < 0.0)
+            seconds = 0.0;
+        int tenths = (int)Math.Round(seconds * 10.0, MidpointRounding.AwayFromZero);
+        if ((uint)tenths < (uint)TenthsSecondsCache.Length)
+            return TenthsSecondsCache[tenths];
+        return seconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "s";
+    }
+
+    private static readonly string[] ShortSecondsCache = CreateShortDurationCache(60, "s");
+    private static readonly string[] ShortMinutesCache = CreateShortDurationCache(60, "m");
+
+    private static string[] CreateShortDurationCache(int count, string suffix)
+    {
+        var cache = new string[count];
+        for (int i = 0; i < count; i++)
+            cache[i] = i.ToString(System.Globalization.CultureInfo.InvariantCulture) + suffix;
+        return cache;
+    }
+
+    /// <summary>Formats short durations (<c>12s</c>, <c>11m</c>, <c>1h 5m</c>) with zero allocations under one hour.</summary>
+    public static string FormatDurationShort(double seconds)
+    {
+        if (seconds < 0.0)
+            seconds = 0.0;
+        if (seconds < 60.0)
+        {
+            int whole = (int)Math.Round(seconds, MidpointRounding.AwayFromZero);
+            if ((uint)whole < (uint)ShortSecondsCache.Length)
+                return ShortSecondsCache[whole];
+            return "1m";
+        }
+        if (seconds < 3600.0)
+        {
+            int mins = (int)Math.Round(seconds / 60.0, MidpointRounding.AwayFromZero);
+            if ((uint)mins < (uint)ShortMinutesCache.Length)
+                return ShortMinutesCache[mins];
+            return "1h 0m";
+        }
+        return $"{(int)(seconds / 3600)}h {(int)(seconds % 3600 / 60)}m";
+    }
+
+    /// <summary>
+    /// Finds the index right after the last blank line (<c>\n\n</c>) outside a fenced code block so completed
+    /// markdown blocks above that point stay frozen while the tail streams in.
+    /// When <paramref name="startFrom"/> is a previous split point (guaranteed outside a fence), scans only the delta.
+    /// </summary>
+    public static int StableMarkdownSplit(string text, int startFrom = 0)
+    {
+        if (startFrom < 0)
+            startFrom = 0;
+        if (startFrom >= text.Length)
+            return startFrom;
+
+        bool inFence = false;
+        int lastSplit = startFrom;
+        int i = startFrom;
+        while (i < text.Length)
+        {
+            int lineStart = i;
+            int nl = text.IndexOf('\n', i);
+            int lineEnd = nl < 0 ? text.Length : nl;
+            ReadOnlySpan<char> line = text.AsSpan(lineStart, lineEnd - lineStart).TrimEnd('\r');
+            ReadOnlySpan<char> trimmed = line.TrimStart();
+            if (trimmed.StartsWith("```", StringComparison.Ordinal) || trimmed.StartsWith("~~~", StringComparison.Ordinal))
+                inFence = !inFence;
+            else if (!inFence && trimmed.Length == 0 && lineStart > 0 && nl >= 0)
+                lastSplit = nl + 1;
+            i = nl < 0 ? text.Length : nl + 1;
+        }
+        return lastSplit;
     }
 }

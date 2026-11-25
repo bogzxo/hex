@@ -38,7 +38,8 @@ Scope: `hex/Hex.Dawn/` except `Testing/` and `Tests/` (HexTestExplorer lives in 
 | `--fresh` | `Fresh` | no workspace/tabs/backups restore |
 | `--window` | (none) | never hand over to a running Dawn |
 | `--mcp` | `Mcp` | MCP server up for this run |
-| `--no-ai` | `NoAi` | No AI for this run (`HexAi.Force`, also in `Program.Main` so Dusk's selector has no Agentic); setting `no_ai`. `HexAi.Off` gates the agents panel, Noon, chats, agent ticks, Agents menu, agent extensions (`HexExtensionCatalog.IsAgentSystem`) and agent MCP tools (`AgentsOnly`). `--selftest no-ai` implies it |
+| `--no-ai` | `NoAi` | No AI for this run (`HexAi.Force`, also in `Program.Main` so Dusk's selector has no Agentic); setting `no_ai`. `HexAi.Off` forces `HexModuleId.Agentic` and `HexModuleId.LocalAi` off in `HexModules.IsEnabled(...)`. `--selftest no-ai` implies it |
+| `--no-module <csv>` | (parsed by `HexModules.ApplyArguments`) | Disables named optional modules (`link`, `local_ai`, `agentic`, `notebooks`, `designer`) for this run, overriding `module_*` settings. See `modules-and-performance.md`. |
 
 Env: `HEX_PROFILE=<ms>` writes slow ticks and per-step cost (`Shell/HexProfiler.cs`), `HEX_CONSOLE=on` (debug console, Program.cs).
 

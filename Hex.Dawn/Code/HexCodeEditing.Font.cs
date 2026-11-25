@@ -20,15 +20,102 @@ internal sealed partial class HexCodeEditing
         // A font that isn't there is Hack, a monospace whatever was asked for. A name typed wrong made a font with no lines
         // in it and took the code down, and then the skin's, which isn't one, and the columns went wandering
         string name = settings.CodeFont;
-        if (name.Length > 0 && !File.Exists(FontFile(name)))
+        string? path = name.Length > 0 ? ResolveCodeFontPath(name) : null;
+        if (name.Length > 0 && path is null)
         {
             context.Notices.Say(context.Strings.Said("code.no_font", ("name", name)), true);
-            name = HACK;
+            path = ResolveCodeFontPath(HACK) ?? FontFile(HACK);
         }
 
-        codeFont = name.Length > 0 ? UIFont.Shared(Path.GetDirectoryName(FontFile(name))!, name + ".ttf", CODE_FONT_EM) : null;
+        codeFont = path is not null ? UIFont.Shared(Path.GetDirectoryName(path)!, Path.GetFileName(path), CODE_FONT_EM) : null;
         foreach (HexDocument open in documents)
             open.Editor.Font = codeFont;
+    }
+
+    /// <summary>Resolves a configured code font name or path, preferring bundled fonts and falling back to platform system monospace fonts.</summary>
+    internal static string? ResolveCodeFontPath(string name) =>
+        TryResolveFontPath(name, Hex.Core.HexHost.ProgramFolder, OperatingSystem.IsMacOS(), File.Exists,
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+
+    /// <summary>
+    /// Pure font path resolver: checks bundled <c>Assets/fonts/&lt;name&gt;/&lt;name&gt;.ttf</c> first, then direct
+    /// <c>.ttf</c>/<c>.otf</c>/<c>.ttc</c> file paths, then macOS system monospace font aliases when <paramref name="isMac"/> is set.
+    /// </summary>
+    internal static string? TryResolveFontPath(string name, string programFolder, bool isMac, Func<string, bool> fileExists, string? userHome = null)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return null;
+
+        string trimmed = name.Trim();
+
+        // 1. Bundled font under Assets/fonts/<name>/<name>.ttf
+        if (!Path.IsPathRooted(trimmed) && trimmed.IndexOfAny(['/', '\\']) < 0)
+        {
+            string bundled = Path.Combine(programFolder, "Assets", "fonts", trimmed, trimmed + ".ttf");
+            if (fileExists(bundled))
+                return bundled;
+        }
+
+        // 2. Direct file path (.ttf, .otf, .ttc), with optional ~/ expansion
+        string direct = trimmed;
+        if (direct.Length >= 2 && direct[0] == '~' && (direct[1] == '/' || direct[1] == '\\') && !string.IsNullOrEmpty(userHome))
+            direct = userHome.TrimEnd('/', '\\') + direct[1..];
+
+        if (IsSupportedFontExtension(direct) && fileExists(direct))
+            return direct;
+
+        // 3. macOS system monospace fonts by friendly name or alias
+        if (isMac)
+        {
+            string normalized = trimmed.ToLowerInvariant();
+            switch (normalized)
+            {
+                case "sf mono":
+                case "sf_mono":
+                case "sfmono":
+                case "sfnsmono":
+                case "sf-mono":
+                    if (fileExists("/System/Library/Fonts/SFNSMono.ttf"))
+                        return "/System/Library/Fonts/SFNSMono.ttf";
+                    if (fileExists("/Library/Fonts/SF-Mono-Regular.otf"))
+                        return "/Library/Fonts/SF-Mono-Regular.otf";
+                    if (!string.IsNullOrEmpty(userHome))
+                    {
+                        string userSfMono = userHome.TrimEnd('/', '\\') + "/Library/Fonts/SF-Mono-Regular.otf";
+                        if (fileExists(userSfMono))
+                            return userSfMono;
+                    }
+                    break;
+
+                case "menlo":
+                    if (fileExists("/System/Library/Fonts/Menlo.ttc"))
+                        return "/System/Library/Fonts/Menlo.ttc";
+                    break;
+
+                case "monaco":
+                    if (fileExists("/System/Library/Fonts/Monaco.ttf"))
+                        return "/System/Library/Fonts/Monaco.ttf";
+                    break;
+
+                case "andale mono":
+                case "andale_mono":
+                case "andalemono":
+                case "andale-mono":
+                    if (fileExists("/System/Library/Fonts/Supplemental/Andale Mono.ttf"))
+                        return "/System/Library/Fonts/Supplemental/Andale Mono.ttf";
+                    break;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsSupportedFontExtension(string path)
+    {
+        ReadOnlySpan<char> extension = Path.GetExtension(path.AsSpan());
+        return extension.Equals(".ttf", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".otf", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".ttc", StringComparison.OrdinalIgnoreCase);
     }
 
     // Where a font's file is, Assets/fonts/name/name.ttf

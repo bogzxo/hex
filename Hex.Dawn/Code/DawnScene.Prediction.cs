@@ -1,4 +1,5 @@
 using Hex.Core;
+using Hex.Core.Modules;
 using Hex.Core.Notebooks;
 
 using Horizon.UI.Components;
@@ -68,6 +69,8 @@ internal sealed partial class DawnScene
 
     private void StartPredictions()
     {
+        if (!HexModules.IsEnabled(HexModuleId.LocalAi))
+            return;
         predictionSession = new(new PredictionEngine(TimeProvider.System)
         {
             ShortcutOnly = settings.PredictionShortcutOnly,
@@ -284,17 +287,18 @@ internal sealed partial class DawnScene
     /// <summary>Every tick: the engine asked, a finished prediction given to the editor, the status item brought up to date.</summary>
     private void UpdatePredictions()
     {
-        if (!settings.EditPredictions || HexAi.Off)
+        bool localAiOff = !HexModules.IsEnabled(HexModuleId.LocalAi);
+        if (!settings.EditPredictions || localAiOff)
         {
             if (predictionSession is not null)
                 StopPredictions();
 
             // Off by the setting, the item stays (dim, "Predictions off") so its menu can turn them on again, as Zed's does
-            if (!HexAi.Off)
+            if (!localAiOff)
                 UpdatePredictionItemOff();
             else if (predictionItem is not null && predictionItemState != PredictionItemState.Hidden)
             {
-                // No AI at all: no item either, not even the dim one
+                // Local AI module or No AI off: no item either, not even the dim one
                 predictionItemState = PredictionItemState.Hidden;
                 predictionItemOffWritten = false;
                 predictionItemWritten = false;

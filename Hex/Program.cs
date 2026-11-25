@@ -104,6 +104,9 @@ internal static partial class Program
         if (args.Contains(Hex.Core.HexAi.ARGUMENT, StringComparer.OrdinalIgnoreCase))
             Hex.Core.HexAi.Force();
 
+        // Optional modules forced off for this run (--no-module link,notebooks) before either mode starts
+        Hex.Core.Modules.HexModules.ApplyArguments(args);
+
         HexMode mode = HexIdentity.ModeOf(args, Environment.ProcessPath);
         HexIdentity.Claim(mode);
 
@@ -240,6 +243,7 @@ internal static partial class Program
           --view <design|code|table>  which view a file comes up in
           --face <dawn|noon>       start in the editor or in Agentic, the agents' face (the one the workspace was left in otherwise)
           --no-ai                  this run without any of the agents, No AI whatever the settings say
+          --no-module <id[,...]>   disable optional modules for this run (link, local_ai, agentic, notebooks, designer)
           --link                   Hex Link on for this run whatever the settings say, this Hex linked to the ones it paired with
           --link-port <n>          the port Link listens on for this run, the link_port setting's otherwise
           --workspace <folder>     where layouts go when nobody says otherwise

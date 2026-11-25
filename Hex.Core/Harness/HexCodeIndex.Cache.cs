@@ -17,7 +17,7 @@ internal sealed partial class HexCodeIndex
     private const int CACHE_EVERY = 5000;
 
     private readonly string? cacheFolder;
-    private Dictionary<string, (long Length, long Written, int Lines, List<HexSymbol> Symbols, bool FromServer)>? cached;
+    private Dictionary<string, (long Length, long Written, int Lines, HexSymbol[] Symbols, bool FromServer)>? cached;
     private string? cacheFile;
     private bool cacheDirty;
     private long cacheSaved;
@@ -56,6 +56,7 @@ internal sealed partial class HexCodeIndex
                 return;
 
             int count = reader.ReadInt32();
+            var containers = new Dictionary<string, string>(StringComparer.Ordinal);
             for (int f = 0; f < count; f++)
             {
                 string path = reader.ReadString();
@@ -63,9 +64,29 @@ internal sealed partial class HexCodeIndex
                 int lines = reader.ReadInt32();
                 bool fromServer = reader.ReadBoolean();
                 int symbolCount = reader.ReadInt32();
-                var symbols = new List<HexSymbol>(symbolCount);
+                HexSymbol[] symbols = symbolCount == 0 ? [] : new HexSymbol[symbolCount];
+                string lastContainer = string.Empty;
+                if (containers.Count > 0)
+                    containers.Clear();
                 for (int s = 0; s < symbolCount; s++)
-                    symbols.Add(new HexSymbol(reader.ReadString(), HexSymbol.SharedKind(reader.ReadString()), reader.ReadString(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32()));
+                {
+                    string name = reader.ReadString();
+                    string kind = HexSymbol.SharedKind(reader.ReadString());
+                    string container = reader.ReadString();
+                    if (container.Length == 0)
+                        container = string.Empty;
+                    else if (container == lastContainer)
+                        container = lastContainer;
+                    else if (containers.TryGetValue(container, out string? existing))
+                        lastContainer = container = existing;
+                    else
+                    {
+                        containers[container] = container;
+                        lastContainer = container;
+                    }
+
+                    symbols[s] = new HexSymbol(name, kind, container, reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32());
+                }
                 cached[path] = (length, written, lines, symbols, fromServer);
             }
         }
@@ -77,7 +98,7 @@ internal sealed partial class HexCodeIndex
     }
 
     // What the cache had of a file, when it was the same length and time as now
-    private (int Lines, List<HexSymbol> Symbols, bool FromServer)? Cached(string path, long length, long written)
+    private (int Lines, HexSymbol[] Symbols, bool FromServer)? Cached(string path, long length, long written)
     {
         if (cached is null || !cached.TryGetValue(path, out var kept) || kept.Length != length || kept.Written != written)
             return null;

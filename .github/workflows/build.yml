@@ -104,6 +104,9 @@ jobs:
       - name: Publish
         run: dotnet publish Hex/Hex.csproj --configuration Release --runtime ${{ matrix.rid }} --output publish/Hex ${{ matrix.publish_args }} "-p:HexChannel=${{ inputs.channel }}" "-p:HexNightly=${{ inputs.nightly }}" "-p:HexBuildFixed=${{ env.HEX_BUILD_FIXED }}"
 
+      - name: Publish notebooks module
+        run: dotnet publish Hex.Notebooks.Render/Hex.Notebooks.Render.csproj --configuration Release --runtime ${{ matrix.rid }} --output publish/Hex/modules ${{ matrix.publish_args }}
+
       - name: Publish installer
         run: dotnet publish Hex.Installer/Hex.Installer.csproj --configuration Release --runtime ${{ matrix.rid }} --output publish/Hex.Setup ${{ matrix.publish_args }} "-p:HexChannel=${{ inputs.channel }}" "-p:HexNightly=${{ inputs.nightly }}"
 
@@ -246,6 +249,9 @@ jobs:
             echo "$NOTARY_KEY" | base64 --decode > "$RUNNER_TEMP/hex-notary.p8"
             echo "notary_key=$RUNNER_TEMP/hex-notary.p8" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Publish notebooks module
+        run: dotnet publish Hex.Notebooks.Render/Hex.Notebooks.Render.csproj --configuration Release --runtime osx-${{ matrix.arch }} --output publish/modules ${{ matrix.publish_args }}
 
       - name: Make Hex.app
         env:

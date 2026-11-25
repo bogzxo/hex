@@ -1,3 +1,5 @@
+using Hex.Core.Modules;
+
 using Horizon.UI;
 using Horizon.UI.Components;
 
@@ -48,9 +50,11 @@ internal sealed partial class DawnScene
         get => LayoutTools ? designSide : codeSide;
         set
         {
-            // There's no Agents view with No AI on, a side bar left on it (or asked for it) is on the explorer instead
-            if (value == HexSide.Agents && HexAi.Off)
+            // There's no Agents view with Agentic or No AI off, a side bar left on it (or asked for it) is on the explorer instead
+            if (value == HexSide.Agents && !HexModules.IsEnabled(HexModuleId.Agentic))
                 value = HexSide.Explorer;
+            if (value == HexSide.Design && !HexModules.IsEnabled(HexModuleId.Designer))
+                value = HexSide.Outline;
 
             // The outline and the toolbox belong to their kind of file, the rest are the same whatever's open. Source
             // Control turned into the outline the moment a code tab was clicked after a layout's, and back again
@@ -101,8 +105,8 @@ internal sealed partial class DawnScene
         layout.Get<Button>("act_git").OnPressed = () => ShowSide(HexSide.SourceControl);
         layout.Get<Button>("act_agents").OnPressed = () => ShowSide(HexSide.Agents);
 
-        // No robot on the activity bar with No AI on, there's no Agents view for it to bring up
-        layout.Get<Button>("act_agents").Visible = !HexAi.Off;
+        // No robot on the activity bar with Agentic or No AI off, there's no Agents view for it to bring up
+        layout.Get<Button>("act_agents").Visible = HexModules.IsEnabled(HexModuleId.Agentic);
         layout.Get<Button>("act_settings").OnPressed = OpenSettings;
         layout.Get<Button>("act_extensions").OnPressed = ShowExtensions;
 
@@ -205,6 +209,7 @@ internal sealed partial class DawnScene
         // The agents' box has the keys, there's no list to go down
         if (Side == HexSide.Agents)
         {
+            WarmMarkdownGrammarOnce();
             RebuildTree();
             treeDirty = false;
             agentsInput?.Focus();

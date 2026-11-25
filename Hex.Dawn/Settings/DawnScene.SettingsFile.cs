@@ -44,7 +44,10 @@ internal sealed partial class DawnScene
     {
         string path = SettingsFilePath;
         if (!File.Exists(path))
+        {
             SaveSettings();
+            FlushZoomSettings();
+        }
 
         if (!File.Exists(path))
         {
@@ -252,7 +255,8 @@ internal sealed partial class DawnScene
         ollamaModels?.Update(SettingsPage);
         UpdateWorkspaceSettings();
         UpdateWorkspaceSettingsFile();
-        if (settingsWatch.TakeSettled(SETTINGS_SETTLE))
+        // Not while Hex's own write is on its way: the file then is the old one, the change heard is what Hex made
+        if (!SettingsBeingKept && settingsWatch.TakeSettled(SETTINGS_SETTLE))
             TakeInSettingsFile();
     }
 
@@ -274,20 +278,6 @@ internal sealed partial class DawnScene
         CheckSettingsFiles();
     }
 
-    /// <summary>
-    /// The file Hex just wrote, known so the watch doesn't read Hex's own save back in. What was wrong with it is looked
-    /// over again when something was, a row changed may have put it right.
-    /// </summary>
-    private void KnowSettingsFile()
-    {
-        if (settingsWatched is not { } watched)
-            return;
-
-        settingsKnown = ReadSettingsText(watched);
-        if (settingsProblems.ContainsKey(watched))
-            CheckSettingsFiles();
-    }
-
     private static string? ReadSettingsText(string path)
     {
         try
@@ -307,9 +297,13 @@ internal sealed partial class DawnScene
     /// </summary>
     private void TakeInSettingsFile()
     {
+        // A write of Hex's own still on the pool is over before the file is looked at
+        settingsWrites.Wait();
         if (settingsWatched is not { } path || ReadSettingsText(path) is not { } text || text == settingsKnown)
             return;
 
+        // What was read replaces the settings, a change not yet written goes with them
+        zoomSettingsPending = null;
         settingsKnown = text;
         CheckSettingsFiles();
         string name = Path.GetFileName(path);

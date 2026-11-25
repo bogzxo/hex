@@ -2638,12 +2638,14 @@ let strings = {
         glass_blur_help: "How far what is behind the glass is blurred, in pixels, 0 for clear glass. The side panels take a little more.",
         glass_clarity_title: "Glass clarity",
         glass_clarity_help: "How much of what is behind the glass shows through the colour of the panel on it, 0 for none of it, 1 for all of it.",
-        glass_rim_title: "Glass rim brightness",
-        glass_rim_help: "How bright the silver lining round the edge of the glass is.",
         glass_bend_title: "Glass edge bend",
         glass_bend_help: "How far the rim of the popups' glass bends what is behind it, in pixels. 0 is frosted glass, a blur laid flat. More is liquid glass, what's behind bent hard round the rim and split a little into its colours there, the way Apple's is.",
         ui_animation_title: "Interface animation",
         ui_animation_help: "0 disables interface transitions, caret glide, wrap glide and terminal pane motion. 1 enables normal speed; 2 is twice as quick. Dusk's own Animations switch can also disable its motion. Decorative effects have separate switches.",
+        low_latency_title: "Low latency mode",
+        low_latency_help: "Cuts the delay between your input and the screen. Frames show the newest state instead of a blend about 8 ms behind it, and while you type, click or drag they are drawn up to 480 times a second instead of 120, with only the newest shown at each refresh. Uses more GPU and processor during input, none while idle. Animations are slightly less smooth.",
+        performance_battery_note_title: "Battery use",
+        performance_battery_note_help: "The features on this page make the GPU and the processor do more work. On a laptop, tablet or other portable device running on its battery, they drain it faster.",
         caret_glide_title: "Caret glide time",
         caret_glide_help: "How long the caret glides, in seconds; 0 makes it immediate. Smooth caret and interface animations must be on. Dusk's cursor has its own duration in Terminal settings.",
         backdrop_title: "Behind the code",
@@ -2921,7 +2923,18 @@ let strings = {
         snap_title: "Snap",
         snap_help: "How many pixels the designer snaps what is dragged to, 0 for none.",
         canvas_handles_title: "Handles on the canvas",
-        canvas_handles_help: "Whether the designer draws the handles that drag a component bigger."
+        canvas_handles_help: "Whether the designer draws the handles that drag a component bigger.",
+        module_link_title: "Hex Link",
+        module_link_help: "Remote device pairing, file syncing, and Link chat.",
+        module_local_ai_title: "Local AI",
+        module_local_ai_help: "Local model management, llama.cpp server integration, edit predictions, and AI Edit.",
+        module_agentic_title: "Agentic",
+        module_agentic_help: "Autonomous agent workspace, fleet view, and agent MCP tools. Takes effect after restarting Hex.",
+        module_notebooks_title: "Notebooks",
+        module_notebooks_help: "Interactive Jupyter notebooks, math typesetting, and SVG output rendering.",
+        module_designer_title: "UI Designer",
+        module_designer_help: "Visual Horizon UI layout editor and live canvas.",
+        module_not_installed_hint: "(Native module library is not installed on disk.)"
     },
 
     settings_choices: {
@@ -3080,6 +3093,7 @@ let strings = {
         wrap_code: "word wrap wordwrap line wrap soft wrap editor.wordWrap",
         code_zoom: "font size zoom text size editor.fontSize",
         interface_size: "scale zoom ui size ui scale text size bigger smaller dpi window.zoomLevel",
+        low_latency: "performance latency lag input lag input delay responsive responsiveness drag window frame rate fps vsync smooth",
         code_font: "font family typeface editor.fontFamily",
         auto_save: "autosave save automatically files.autoSave",
         auto_save_delay: "autosave delay files.autoSaveDelay",
@@ -3184,7 +3198,12 @@ let strings = {
         link_discoverable: "link mdns bonjour discover nearby network lan",
         link_invite_rights: "hex link invite device rights work together ai agents steer default",
     link_talk_open_on_message: "link chat open message arrives automatically panel",
-        no_ai: "no ai agents agentic off disable artificial intelligence llm claude codex"
+        no_ai: "no ai agents agentic off disable artificial intelligence llm claude codex",
+        module_link: "module optional feature link remote pair sync disable",
+        module_local_ai: "module optional feature local ai llama ollama prediction disable",
+        module_agentic: "module optional feature agentic agents fleet mcp disable",
+        module_notebooks: "module optional feature notebooks jupyter ipynb math svg skia disable",
+        module_designer: "module optional feature designer canvas layout hor ui disable"
     },
 
     settings_page: {
@@ -3248,7 +3267,14 @@ let strings = {
         also_in_user_tip: "Your settings have it as {value}, this folder doesn't set it",
         workspace_only: "Only settings a folder can have are shown",
         workspace_no_file: "{path} doesn't exist yet, it's created the first time a setting is changed here",
-        open_file: "Open Settings File"
+        open_file: "Open Settings File",
+        restart_required: "Restart required",
+        restart_required_tip: "Restart Hex for module changes to take effect.",
+        modules_restart_button: "Restart Hex",
+        modules_restart_button_tip: "Restart Hex now so optional module changes take effect.",
+        modules_restart_idle: "Changes to optional modules take effect after restarting Hex.",
+        modules_restart_pending_one: "1 optional module change will take effect after restarting Hex.",
+        modules_restart_pending_many: "{count} optional module changes will take effect after restarting Hex."
     },
     extension_settings: {
         choose: "Choose...",
@@ -4867,7 +4893,7 @@ local_ai_picker: {
         side: "Side",
         popup_on: "Popup on glass",
         glass_off: "The glass is off",
-        values: "blur {blur}, clarity {clarity}, rim {rim}, bend {bend}",
+        values: "blur {blur}, clarity {clarity}, bend {bend}",
         off_reason: "the glass switch says solid panels"
     },
 
@@ -6376,5 +6402,19 @@ conflict_tab_kept: "{name} is still open, so its conflict was not settled. Close
         the_shell: "the shell",
         open_in_hex: "Open {items} in Hex",
         no_hex: "There's no Hex to open {name} in"
+    },
+
+    // Optional feature modules shown in Settings and diagnostics (HexModuleCatalog)
+    modules: {
+        link_title: "Hex Link",
+        link_help: "Remote device pairing, file syncing, and Link chat.",
+        local_ai_title: "Local AI",
+        local_ai_help: "Local model management, llama.cpp server integration, edit predictions, and AI Edit.",
+        agentic_title: "Agentic",
+        agentic_help: "Autonomous agent workspace, fleet view, and agent MCP tools. Takes effect after restarting Hex.",
+        notebooks_title: "Notebooks",
+        notebooks_help: "Interactive Jupyter notebooks, math typesetting, and SVG output rendering.",
+        designer_title: "UI Designer",
+        designer_help: "Visual Horizon UI layout editor and live canvas."
     }
 };

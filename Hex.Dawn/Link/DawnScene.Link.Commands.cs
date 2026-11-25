@@ -1,5 +1,7 @@
 using System.Globalization;
 
+using Hex.Core.Modules;
+
 namespace Hex.Dawn;
 
 // Link's commands in the palette, all of them starting "Link:", what the status bar's link item opens the palette on.
@@ -10,6 +12,8 @@ internal sealed partial class DawnScene
     /// <summary>Link's commands for the palette, those that make sense right now.</summary>
     private List<(string Text, Action Picked)> LinkPaletteCommands()
     {
+        if (!HexModules.IsEnabled(HexModuleId.Link))
+            return [];
         var commands = new List<(string Text, Action Picked)> { (Said("link.command_open"), ShowLinkWindow) };
         if (!LinkOn)
         {

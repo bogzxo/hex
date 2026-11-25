@@ -6,6 +6,9 @@ namespace Hex.Core.Git;
 // leaves git's files behind for GitMerge to find, so the caller asks Operation afterwards to tell the two apart.
 internal sealed partial class GitRepository
 {
+    private static readonly string[] TagsArguments = ["for-each-ref", "refs/tags", "--sort=-creatordate", "--format=%(refname:short)%00%(creatordate:relative)%00%(subject)"];
+    private static readonly string[] ConflictCountArguments = ["diff", "--name-only", "--diff-filter=U"];
+
     /// <summary>Merges a branch into the one checked out, git's own message for it and no editor to stop in.</summary>
     public string? MergeBranch(string name) => Did(["merge", "--no-edit", name]);
 
@@ -32,18 +35,32 @@ internal sealed partial class GitRepository
     /// <summary>Every tag, the newest first, with when it was made and the subject of what it points at.</summary>
     public IReadOnlyList<GitTag> Tags()
     {
-        GitResult result = GitProcess.Run(Root, ["for-each-ref", "refs/tags", "--sort=-creatordate", "--format=%(refname:short)%00%(creatordate:relative)%00%(subject)"]);
-        if (!result.Ok)
-            return [];
+        return GitProcess.Run(Root, TagsArguments, static (exit, output, _) => exit == 0 ? ParseTags(output) : []);
+    }
 
+    internal static IReadOnlyList<GitTag> ParseTags(ReadOnlySpan<char> remaining)
+    {
         var tags = new List<GitTag>();
-        foreach (string line in result.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        while (!remaining.IsEmpty)
         {
-            string[] fields = line.Split('\0');
-            if (fields.Length >= 3)
-                tags.Add(new GitTag(fields[0], fields[1], fields[2].TrimEnd('\r')));
+            ReadOnlySpan<char> line = NextNonEmptyLine(ref remaining);
+            if (line.IsEmpty)
+                break;
+
+            int n0 = line.IndexOf('\0');
+            if (n0 < 0)
+                continue;
+            ReadOnlySpan<char> r1 = line[(n0 + 1)..];
+            int n1 = r1.IndexOf('\0');
+            if (n1 < 0)
+                continue;
+            ReadOnlySpan<char> r2 = r1[(n1 + 1)..];
+            int n2 = r2.IndexOf('\0');
+            ReadOnlySpan<char> subject = (n2 >= 0 ? r2[..n2] : r2).TrimEnd('\r');
+            tags.Add(new GitTag(line[..n0].ToString(), r1[..n1].ToString(), subject.ToString()));
         }
 
+        tags.TrimExcess();
         return tags;
     }
 
@@ -59,29 +76,50 @@ internal sealed partial class GitRepository
     /// </summary>
     public IReadOnlyList<GitLogCommit> Log(string revision = "HEAD", int most = 200)
     {
-        GitResult result = GitProcess.Run(Root, ["log", $"--max-count={most}", "--format=%H%x00%an%x00%at%x00%s", revision, "--"]);
-        if (!result.Ok)
-            return [];
+        return GitProcess.Run(
+            Root,
+            ["log", $"--max-count={most}", "--format=%H%x00%an%x00%at%x00%s", revision, "--"],
+            static (exit, output, _) => exit == 0 ? ParseLog(output) : []);
+    }
 
+    internal static IReadOnlyList<GitLogCommit> ParseLog(ReadOnlySpan<char> remaining)
+    {
         var commits = new List<GitLogCommit>();
-        foreach (string line in result.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        while (!remaining.IsEmpty)
         {
-            string[] fields = line.Split('\0');
-            if (fields.Length < 4)
+            ReadOnlySpan<char> line = NextNonEmptyLine(ref remaining);
+            if (line.IsEmpty)
+                break;
+
+            if (!TrySplitFourNul(line, out ReadOnlySpan<char> hash, out ReadOnlySpan<char> author, out ReadOnlySpan<char> time, out ReadOnlySpan<char> subject))
                 continue;
 
-            long.TryParse(fields[2], out long seconds);
-            commits.Add(new GitLogCommit(fields[0], fields[1], DateTimeOffset.FromUnixTimeSeconds(seconds).ToLocalTime(), fields[3].TrimEnd('\r')));
+            long.TryParse(time, System.Globalization.CultureInfo.InvariantCulture, out long seconds);
+            commits.Add(new GitLogCommit(hash.ToString(), author.ToString(), DateTimeOffset.FromUnixTimeSeconds(seconds).ToLocalTime(), subject.TrimEnd('\r').ToString()));
         }
 
+        commits.TrimExcess();
         return commits;
     }
 
     /// <summary>How many files are in conflict, what a merge or a rebase that stopped left to settle.</summary>
     public int ConflictCount()
     {
-        GitResult result = GitProcess.Run(Root, ["diff", "--name-only", "--diff-filter=U"]);
-        return result.Ok ? result.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length : 0;
+        return GitProcess.Run(Root, ConflictCountArguments, static (exit, output, _) =>
+        {
+            if (exit != 0)
+                return 0;
+
+            int count = 0;
+            ReadOnlySpan<char> remaining = output;
+            while (!remaining.IsEmpty)
+            {
+                if (NextNonEmptyLine(ref remaining).IsEmpty)
+                    break;
+                count++;
+            }
+            return count;
+        });
     }
 
     /// <summary>
@@ -90,22 +128,38 @@ internal sealed partial class GitRepository
     /// </summary>
     public string? Commit(string message, bool noVerify, bool signOff)
     {
-        // Whitespace only, the same as a plain commit, a Markdown heading isn't a comment
-        var arguments = new List<string> { "commit", "--file=-", "--cleanup=whitespace" };
-        if (noVerify)
-            arguments.Add("--no-verify");
-        if (signOff)
-            arguments.Add("--signoff");
+        InvalidateInFlight(Root);
+        try
+        {
+            // Whitespace only, the same as a plain commit, a Markdown heading isn't a comment
+            var arguments = new List<string>(5) { "commit", "--file=-", "--cleanup=whitespace" };
+            if (noVerify)
+                arguments.Add("--no-verify");
+            if (signOff)
+                arguments.Add("--signoff");
 
-        GitResult result = GitProcess.Run(Root, arguments, message);
-        return result.Ok ? null : Said(result);
+            GitResult result = GitProcess.Run(Root, arguments, message);
+            return result.Ok ? null : Said(result);
+        }
+        finally
+        {
+            InvalidateInFlight(Root);
+        }
     }
 
     // Runs something of git's, what it said when it went wrong
     private string? Did(string[] arguments)
     {
-        GitResult result = GitProcess.Run(Root, arguments);
-        return result.Ok ? null : Said(result);
+        InvalidateInFlight(Root);
+        try
+        {
+            GitResult result = GitProcess.Run(Root, arguments);
+            return result.Ok ? null : Said(result);
+        }
+        finally
+        {
+            InvalidateInFlight(Root);
+        }
     }
 }
 

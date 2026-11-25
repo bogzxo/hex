@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Numerics;
 
+using Hex.Core.Modules;
+
 using Horizon.Input;
 using Horizon.Rendering;
 using Horizon.UI;
@@ -52,7 +54,7 @@ internal sealed partial class DawnScene
 
     private void ShowLocalAi(LocalAiPage? page)
     {
-        if (HexAi.Off)
+        if (!HexModules.IsEnabled(HexModuleId.LocalAi))
             return;
         if (page is { } wanted)
         {

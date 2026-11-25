@@ -262,7 +262,8 @@ internal sealed partial class DuskScene : Scene
         UpdateBackdropArrange();
         UpdateEffects();
         UpdateTheme();
-        UpdateKeys();
+        if (options.SelfTest || Engine.WindowManager.IsFocused || keysDown.Count > 0)
+            UpdateKeys();
         UpdateQuake();
         UpdateInstance();
         UpdateHandoffs();
@@ -270,14 +271,15 @@ internal sealed partial class DuskScene : Scene
         UpdateStatusBar();
 
         // The horizon under the title bar in a flush look, Dawn's runs with its tasks and Dusk's is the line alone
-        if (compositor.Skin is { } worn && !top.Bounds.IsEmpty)
+        if (!Engine.WindowManager.IsMinimized && compositor.Skin is { } worn && !top.Bounds.IsEmpty)
             frame.UpdateHorizon(chrome.Root, worn, top.Bounds.Height, chrome.Root.Bounds.Width, Hex.Shell.HexHorizonState.Idle, null);
         host.Update(dt);
         UpdateSession(dt);
 
         base.UpdateState(dt);
 
-        FitChrome();
+        if (!Engine.WindowManager.IsMinimized)
+            FitChrome();
         UpdateSelfTest(dt);
     }
 

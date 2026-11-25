@@ -16,6 +16,8 @@ internal sealed partial class DawnScene
     {
         string root = string.Empty;
         bool browsingWas = false;
+        HexSide sideWas = Side;
+        bool? solutionViewWas = null;
         List<string> Listed() => [.. HexSearch.OpenableFilesUnder([root], _ => true).Select(file => HexSearch.RelativeTo([root], file))];
         bool InExplorer(string name) => explorer.explorerRows.Any(row => row.Path == Path.Combine(root, name));
 
@@ -82,7 +84,11 @@ internal sealed partial class DawnScene
         test.Run(() =>
         {
             browsingWas = browsing;
+            sideWas = Side;
+            solutionViewWas = explorer.workspace.SolutionView;
+            explorer.workspace.SolutionView = false;
             explorer.AddFolder(root);
+            Side = HexSide.Explorer;
         });
         test.WaitFor(() => InExplorer("src"), 3.0f);
         test.Check("excludes: the explorer still shows .github, .env, vendor, node_modules and bin, only .git is gone", () =>
@@ -102,7 +108,9 @@ internal sealed partial class DawnScene
         test.Run(() =>
         {
             explorer.RemoveFolder(root);
+            explorer.workspace.SolutionView = solutionViewWas;
             browsing = browsingWas;
+            Side = sideWas;
         });
         test.Wait();
 

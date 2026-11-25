@@ -50,8 +50,20 @@ public static class EditorSettingsCatalog
         HexText.Get("settings_catalog.local_ai_window_help"), AI, Buttons: [HexText.Get("settings_catalog.local_ai_window_button")], ButtonsOnly: true,
         Keywords: HexText.Strings.GetValueOrDefault($"settings_keywords.{LOCAL_AI_WINDOW}", string.Empty));
 
+    /// <summary>
+    /// The Performance part, what trades the machine's work for how Hex feels: how soon the screen shows what a hand
+    /// did (<c>low_latency</c>, the engine's WindowManager.LowLatency).
+    /// </summary>
+    public const string LATENCY = "Performance · Latency";
+
+    /// <summary>The row of the Performance part that says what its switches cost a battery, which keeps nothing of its own.</summary>
+    public const string PERFORMANCE_NOTE = "performance_battery_note";
+
     /// <summary>The Discord section of the editor: what Rich Presence shows of what is being edited (docs/discord.md).</summary>
     public const string DISCORD = "Editor · Discord";
+
+    /// <summary>The Modules section of the editor: optional feature modules that can be switched on or off.</summary>
+    public const string MODULES = "Editor · Modules";
 
     /// <summary>
     /// The Link part. Connection is this machine's own side (on or off, its name, port and whether it's found), Sync what
@@ -71,15 +83,16 @@ public static class EditorSettingsCatalog
     /// The sections in the order they're shown inside their parts, the editor's text first and the looks first of how
     /// Hex looks, they're the whole of the rest of it in one go.
     /// </summary>
-    public static readonly string[] Sections = [TEXT, CARET, CODE, SAVE, FILES, GIT, RUN, KEYS, DESIGNER, STARTUP, DISCORD, WindowsSource.GROUP,
+    public static readonly string[] Sections = [TEXT, CARET, CODE, SAVE, FILES, GIT, RUN, KEYS, DESIGNER, STARTUP, MODULES, DISCORD, WindowsSource.GROUP,
         LOOKS, THEME, INTERFACE, GLASS, EFFECTS, BACKDROP, BACKDROP_CODE, BACKDROP_TERMINALS, RENDERING,
+        LATENCY,
         AGENTS, AI, LINK, LINK_SYNC, LINK_AGENTS, LINK_PUBLISH];
 
     /// <summary>
     /// The parts of the settings window in the order they're shown, whichever mode a setting is (Dusk's theme is the
     /// terminal's and goes with Dawn's under how Hex looks). The editor comes first, the window opens on it.
     /// </summary>
-    public static readonly string[] Parts = ["Editor", "Terminal", "Appearance", "AI", "Link", "Extensions"];
+    public static readonly string[] Parts = ["Editor", "Terminal", "Appearance", "Performance", "AI", "Link", "Extensions"];
 
     /// <summary>
     /// The section words a row was found by before the sections were drawn again, by its key, added to the words it's
@@ -201,8 +214,7 @@ public static class EditorSettingsCatalog
         new("effect_glass", HexText.Get("settings_catalog.effect_glass_title"), UIFormKind.Flag, HexText.Get("settings_catalog.effect_glass_help"), GLASS),
         new("glass_blur", HexText.Get("settings_catalog.glass_blur_title"), UIFormKind.Number, HexText.Get("settings_catalog.glass_blur_help"), GLASS, Least: 0.0f, Most: 48.0f, Step: 1.0f, Slider: true, Unit: "px"),
         new("glass_clarity", HexText.Get("settings_catalog.glass_clarity_title"), UIFormKind.Number, HexText.Get("settings_catalog.glass_clarity_help"), GLASS, Least: 0.0f, Most: 1.0f, Step: 0.01f, Slider: true),
-        new("glass_rim", HexText.Get("settings_catalog.glass_rim_title"), UIFormKind.Number, HexText.Get("settings_catalog.glass_rim_help"), GLASS, Least: 0.0f, Most: 1.0f, Step: 0.01f, Slider: true),
-        new("glass_bend", HexText.Get("settings_catalog.glass_bend_title"), UIFormKind.Number, HexText.Get("settings_catalog.glass_bend_help"), GLASS, Least: 0.0f, Most: 16.0f, Step: 0.5f, Slider: true, Unit: "px"),
+        new("glass_bend", HexText.Get("settings_catalog.glass_bend_title"), UIFormKind.Number, HexText.Get("settings_catalog.glass_bend_help"), GLASS, Least: 0.0f, Most: 24.0f, Step: 0.5f, Slider: true, Unit: "px"),
 
         Choice("effects", EFFECTS, ["none", "subtle", "all"]),
         new("effect_sparks", HexText.Get("settings_catalog.effect_sparks_title"), UIFormKind.Flag, HexText.Get("settings_catalog.effect_sparks_help"), EFFECTS),
@@ -217,6 +229,10 @@ public static class EditorSettingsCatalog
         Choice("render_upscaler", RENDERING, ["cas", "fsr1", "gsr1", "bilinear", "nearest"]),
         new("render_sharpness", HexText.Get("settings_catalog.render_sharpness_title"), UIFormKind.Number, HexText.Get("settings_catalog.render_sharpness_help"), RENDERING, Least: 0.0f, Most: 1.0f, Step: 0.05f, Slider: true),
         Choice("text_smoothing", RENDERING, ["auto", "subpixel", "grayscale"]),
+
+        new("low_latency", HexText.Get("settings_catalog.low_latency_title"), UIFormKind.Flag, HexText.Get("settings_catalog.low_latency_help"), LATENCY),
+        // A note and nothing else: a row with no control and no buttons, its name and its sentence. It keeps nothing of its own
+        new(PERFORMANCE_NOTE, HexText.Get("settings_catalog.performance_battery_note_title"), UIFormKind.Text, HexText.Get("settings_catalog.performance_battery_note_help"), LATENCY, ButtonsOnly: true),
 
         new("effect_motion", HexText.Get("settings_catalog.effect_motion_title"), UIFormKind.Flag, HexText.Get("settings_catalog.effect_motion_help"), CARET),
         new("ui_animation", HexText.Get("settings_catalog.ui_animation_title"), UIFormKind.Number, HexText.Get("settings_catalog.ui_animation_help"), INTERFACE, Least: 0.0f, Most: 3.0f, Step: 0.1f, Slider: true, Unit: "×"),
@@ -359,8 +375,22 @@ public static class EditorSettingsCatalog
             KeyPlaceholder: HexText.Get("settings_catalog.link_system_file_folders_placeholder"), ValuePlaceholder: HexText.Get("settings_catalog.link_system_file_folders_add")),
 
         new("snap", HexText.Get("settings_catalog.snap_title"), UIFormKind.Whole, HexText.Get("settings_catalog.snap_help"), DESIGNER, Least: 0.0f, Most: 16.0f),
-        new("canvas_handles", HexText.Get("settings_catalog.canvas_handles_title"), UIFormKind.Flag, HexText.Get("settings_catalog.canvas_handles_help"), DESIGNER)
+        new("canvas_handles", HexText.Get("settings_catalog.canvas_handles_title"), UIFormKind.Flag, HexText.Get("settings_catalog.canvas_handles_help"), DESIGNER),
+
+        new("module_link", HexText.Get("settings_catalog.module_link_title"), UIFormKind.Flag, ModuleHelp(Hex.Core.Modules.HexModuleId.Link, "settings_catalog.module_link_help"), MODULES),
+        new("module_local_ai", HexText.Get("settings_catalog.module_local_ai_title"), UIFormKind.Flag, ModuleHelp(Hex.Core.Modules.HexModuleId.LocalAi, "settings_catalog.module_local_ai_help"), MODULES),
+        new("module_agentic", HexText.Get("settings_catalog.module_agentic_title"), UIFormKind.Flag, ModuleHelp(Hex.Core.Modules.HexModuleId.Agentic, "settings_catalog.module_agentic_help"), MODULES),
+        new("module_notebooks", HexText.Get("settings_catalog.module_notebooks_title"), UIFormKind.Flag, ModuleHelp(Hex.Core.Modules.HexModuleId.Notebooks, "settings_catalog.module_notebooks_help"), MODULES),
+        new("module_designer", HexText.Get("settings_catalog.module_designer_title"), UIFormKind.Flag, ModuleHelp(Hex.Core.Modules.HexModuleId.Designer, "settings_catalog.module_designer_help"), MODULES)
     ]);
+
+    private static string ModuleHelp(string moduleId, string helpKey)
+    {
+        string help = HexText.Get(helpKey);
+        if (!Hex.Core.Modules.HexModules.IsInstalled(moduleId))
+            help = $"{help} {HexText.Get("settings_catalog.module_not_installed_hint")}";
+        return help;
+    }
 
     /// <summary>
     /// The rows of <see cref="Settings"/> the settings window shows, in both modes: all but the Local AI window's, which
@@ -463,12 +493,12 @@ public static class EditorSettingsCatalog
         ["effect_trail"] = Values.Bool(false),
         ["glass_blur"] = new NumberValue(HexGlass.BLUR),
         ["glass_clarity"] = new NumberValue(HexGlass.CLARITY),
-        ["glass_rim"] = new NumberValue(HexGlass.RIM),
         ["glass_bend"] = new NumberValue(HexGlass.BEND),
         ["ui_animation"] = new NumberValue(1.0f),
         ["scroll_speed"] = new NumberValue(1.0f),
         ["middle_scroll_speed"] = new NumberValue(1.0f),
         ["caret_glide"] = new NumberValue(0.0f),
+        ["low_latency"] = Values.Bool(false),
         ["backdrop"] = Values.Bool(false),
         ["backdrop_terminal"] = Values.Bool(false),
         ["backdrop_image"] = new StringValue(string.Empty),
@@ -607,6 +637,11 @@ public static class EditorSettingsCatalog
         ["edit_predictions_notice_done"] = Values.Bool(false),
 
         ["snap"] = new NumberValue(0.0f),
-        ["canvas_handles"] = Values.Bool(true)
+        ["canvas_handles"] = Values.Bool(true),
+        ["module_link"] = Values.Bool(true),
+        ["module_local_ai"] = Values.Bool(true),
+        ["module_agentic"] = Values.Bool(true),
+        ["module_notebooks"] = Values.Bool(true),
+        ["module_designer"] = Values.Bool(true)
     };
 }

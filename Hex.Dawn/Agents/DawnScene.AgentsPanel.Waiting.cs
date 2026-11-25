@@ -29,7 +29,7 @@ internal sealed partial class DawnScene
         // Plain looks, this runs ten times a second and nothing waits most of the time
         // Another device's chat that may only be watched has nothing here to answer it with (DawnScene.LinkChats)
         HexAgentEntry? waiting = chat is not { HasPending: true } || !LinkMaySteer(chat) ? null
-            : HexAgentHub.Approvals(chat).FirstOrDefault() ?? chat.FirstPending(HexAgentEntryKind.Question);
+            : chat.FirstPending(HexAgentEntryKind.Approval) ?? chat.FirstPending(HexAgentEntryKind.Question);
         int others = 0;
         for (int i = 0; i < agentChats.Count; i++)
             if (agentChats[i] != chat && agentChats[i].HasPending)
@@ -38,7 +38,12 @@ internal sealed partial class DawnScene
         if (now == agentsWaitStripDrawn)
             return;
         agentsWaitStripDrawn = now;
+        RebuildAgentsWaiting(chat, waiting, others);
+    }
 
+    // Slow path extracted so Roslyn never hoists closure display classes onto the idle fast path
+    private void RebuildAgentsWaiting(HexAgentChat? chat, HexAgentEntry? waiting, int others)
+    {
         bool was = agentsWaitStrip is { Visible: true };
         if (waiting is null && others == 0)
         {

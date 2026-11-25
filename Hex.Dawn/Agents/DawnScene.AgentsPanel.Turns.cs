@@ -30,16 +30,19 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>The turn's line for a row that ends one, null for any other row.</summary>
-    private UIComponent? TurnFooter(HexAgentChat chat, HexAgentEntry entry)
+    private UIComponent? TurnFooter(HexAgentChat chat, HexAgentEntry entry, int at = -1)
     {
         IReadOnlyList<HexAgentEntry> entries = chat.Entries;
-        int at = -1;
-        for (int i = entries.Count - 1; i >= 0; i--)
+        if (at < 0 || at >= entries.Count || !ReferenceEquals(entries[at], entry))
         {
-            if (ReferenceEquals(entries[i], entry))
+            at = -1;
+            for (int i = entries.Count - 1; i >= 0; i--)
             {
-                at = i;
-                break;
+                if (ReferenceEquals(entries[i], entry))
+                {
+                    at = i;
+                    break;
+                }
             }
         }
         if (at < 0 || !EndsTurn(chat, at))
@@ -47,7 +50,7 @@ internal sealed partial class DawnScene
 
         // Back to what was asked, counting the calls and the files they wrote
         int calls = 0;
-        var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        HashSet<string>? files = null;
         HexAgentEntry? asked = null;
         for (int i = at; i >= 0; i--)
         {
@@ -61,7 +64,7 @@ internal sealed partial class DawnScene
             {
                 calls++;
                 if (Writes(each.ToolName) && FileOfCall(each) is { } file)
-                    files.Add(file);
+                    (files ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase)).Add(file);
             }
         }
         if (asked is null)
@@ -74,9 +77,9 @@ internal sealed partial class DawnScene
         string time = seconds is >= 1 and < 86_400 ? TurnTime(seconds) : string.Empty;
         // A turn of no calls is its time alone, and one with nothing to say has no line
         string counted = calls == 0 ? time
-            : calls == 1 ? Said("agents_panel.turn_summary_one", ("time", time)) : Said("agents_panel.turn_summary", ("time", time), ("calls", calls.ToString(CultureInfo.InvariantCulture)));
+            : calls == 1 ? Said("agents_panel.turn_summary_one", ("time", time)) : Said("agents_panel.turn_summary", ("time", time), ("calls", HexAgentRows.SmallInt(calls)));
         counted = counted.Trim().Trim('·').Trim();
-        if (counted.Length == 0 && files.Count == 0)
+        if (counted.Length == 0 && (files is null || files.Count == 0))
             return null;
 
         // A tick for a turn that went, the error's mark for one that ended failing
@@ -87,7 +90,15 @@ internal sealed partial class DawnScene
         if (counted.Length > 0)
             line.Add(new Label { Text = $"$({(failed ? "error" : "check")}) {UIRichText.Literal(counted)}", TextScale = 0.125f, Dim = true, Anchor = Origin.Left, Pivot = Origin.Left });
         // Only under the chat's last turn, what's still to review is the chat's, not a turn's
-        bool latest = !entries.Skip(at + 1).Any(each => each.Kind == HexAgentEntryKind.User);
+        bool latest = true;
+        for (int i = at + 1; i < entries.Count; i++)
+        {
+            if (entries[i].Kind == HexAgentEntryKind.User)
+            {
+                latest = false;
+                break;
+            }
+        }
         (int Files, int Added, int Removed) review = latest ? ReviewTotalsOf(chat) : default;
         List<UIComponent>? reviewFiles = null;
         if (review.Files > 0)
@@ -129,7 +140,7 @@ internal sealed partial class DawnScene
                 }
             }
         }
-        if (files.Count > 0)
+        if (files is { Count: > 0 })
         {
             string changed = files.Count == 1 ? Said("agents_panel.turn_files_one") : Said("agents_panel.turn_files", ("count", files.Count.ToString(CultureInfo.InvariantCulture)));
             float wide = Skin is { } skin ? MathF.Ceiling(skin.Font.MeasureLine($"$(diff) {changed}", 0.125f, UITextStyle.None, default) + skin.ButtonPadding.Total.X + 6) : 130;
@@ -160,7 +171,7 @@ internal sealed partial class DawnScene
     // How long a turn took the way a person says it, 8.4s, 3m 05s, 1h 02m
     private static string TurnTime(double seconds) => seconds switch
     {
-        < 60 => seconds.ToString("0.0", CultureInfo.InvariantCulture) + "s",
+        < 60 => HexAgentRows.FormatTenthsSeconds(seconds),
         < 3600 => $"{(int)seconds / 60}m {(int)seconds % 60:00}s",
         _ => $"{(int)seconds / 3600}h {(int)seconds % 3600 / 60:00}m"
     };

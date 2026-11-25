@@ -115,7 +115,8 @@ HIDL (`.hor`) analysis behind the editor and `Hex --lsp`: `HidlAnalysis`, `HidlS
 ### 4.12 Languages/ (5 files)
 `HexServerCatalog` (`HexServerCatalog.cs:71`; `HexServerEntry` :29) parses `Hex.Dawn/Assets/hex/language_servers.hor` (`let servers = { csharp, python, slang, cpp, typescript, json, markdown, d, yaml, go, java, rust, bash, toml, docker, svelte, ... }`, each with command, args, language, extensions, about, install/update/repo/version, reload, needs, settings). `HexReleases` (:17; GitHub releases, also used by the extension catalog download), `HexCodeLens` (:9; reference-count helpers), `DSemantics` (:15 + `.Lexer`; Hex's own semantic tokens for D). The LSP client itself is the engine's `Horizon.Tooling/LanguageServers/LanguageServer*.cs`; Dawn glue is `Hex.Dawn/Languages/HexLanguages*.cs`.
 
-### 4.13 Agents/ (4 files), see section 7
+### 4.13 Agents/ & Modules/, see section 7 and `modules-and-performance.md`
+- `Hex.Core/Modules/` (`HexModuleId.cs`, `HexModules.cs`, `HexNativeModule.cs`): optional feature module registry (`link`, `local_ai`, `agentic`, `notebooks`, `designer`), zero-alloc runtime gate `HexModules.IsEnabled(id)` (also respects `--no-module` and `HexAi.Off`), `IHexModuleHost` lifecycle, and lazy NativeAOT shared DLL loader (`HexNativeModule.TryLoad`, used by `Hex.Notebooks.Render`). See `modules-and-performance.md`.
 ### 4.14 Values/ (3 files)
 `HexEvaluation` (:25; run a `.hor` through the HIDL runtime, capture declared values and timing, `HexValues` :17), `HexFixes` (:11; "did you mean" fixes), `HexLints` (:16; lints). Consumers: Dawn `Values/` (values panel, value box), diagnostics.
 

@@ -87,16 +87,21 @@ internal sealed partial class HexLanguages
 
             if (WarmFiles(server) is not { Count: > 0 } paths)
                 continue;
-            state.Going = true;
-            Task<string> warming = Warm(server, paths, TypesNear?.Invoke());
-            warming.ContinueWith(done =>
-            {
-                state.Going = false;
-                state.Done = true;
-                LastWarmed = done.IsCompletedSuccessfully ? done.Result : "failed";
-                Console.WriteLine($"[Hex] {server.Name} warmed, {LastWarmed}.");
-            }, TaskScheduler.Default);
+            StartWarm(server, state, paths);
         }
+    }
+
+    private void StartWarm(LanguageServer server, Warmth state, List<string> paths)
+    {
+        state.Going = true;
+        Task<string> warming = Warm(server, paths, TypesNear?.Invoke());
+        warming.ContinueWith(done =>
+        {
+            state.Going = false;
+            state.Done = true;
+            LastWarmed = done.IsCompletedSuccessfully ? done.Result : "failed";
+            Console.WriteLine($"[Hex] {server.Name} warmed, {LastWarmed}.");
+        }, TaskScheduler.Default);
     }
 
     // How many of the files open in a server are looked through for a method and a type that can be derived from

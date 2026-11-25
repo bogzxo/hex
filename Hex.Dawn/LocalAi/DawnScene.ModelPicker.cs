@@ -1,5 +1,7 @@
 using System.Numerics;
 
+using Hex.Core.Modules;
+
 using Horizon.UI;
 using Horizon.UI.Components;
 
@@ -20,7 +22,7 @@ internal sealed partial class DawnScene
     /// </summary>
     internal void OpenModelPicker(LocalAiRole role, UIRect? anchor, Action<LocalModel> onPick, Action? back = null, string typed = "", string chosen = "")
     {
-        if (HexAi.Off)
+        if (!HexModules.IsEnabled(HexModuleId.LocalAi))
             return;
 
         LocalModelLibrary library = LocalModelLibrary.Shared;
@@ -140,7 +142,7 @@ internal sealed partial class DawnScene
     /// <summary>The next favourite chat model after the current one, set as the chat model: Zed's cycle of favourites.</summary>
     internal void CycleFavouriteChatModel()
     {
-        if (HexAi.Off)
+        if (!HexModules.IsEnabled(HexModuleId.LocalAi))
             return;
 
         LocalModelLibrary library = LocalModelLibrary.Shared;

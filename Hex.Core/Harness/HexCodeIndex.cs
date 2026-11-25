@@ -17,7 +17,7 @@ internal sealed class HexIndexSnapshot(long generation, string[] roots, HexIndex
     /// <summary>Every file, in the order of their paths.</summary>
     public HexIndexedFile[] Files { get; } = files;
 
-    /// <summary>Every declaration by its name in lower case, made the first time it's asked for.</summary>
+    /// <summary>Every declaration by its name (case-insensitive), made the first time it's asked for.</summary>
     public Dictionary<string, List<(HexIndexedFile File, HexSymbol Symbol)>> ByName => byName ??= MakeByName();
 
     /// <summary>
@@ -49,14 +49,13 @@ internal sealed class HexIndexSnapshot(long generation, string[] roots, HexIndex
 
     private Dictionary<string, List<(HexIndexedFile, HexSymbol)>> MakeByName()
     {
-        var made = new Dictionary<string, List<(HexIndexedFile, HexSymbol)>>(StringComparer.Ordinal);
+        var made = new Dictionary<string, List<(HexIndexedFile, HexSymbol)>>(StringComparer.OrdinalIgnoreCase);
         foreach (HexIndexedFile file in Files)
         {
             foreach (HexSymbol symbol in file.Symbols)
             {
-                string key = symbol.Name.ToLowerInvariant();
-                if (!made.TryGetValue(key, out var all))
-                    made[key] = all = [];
+                if (!made.TryGetValue(symbol.Name, out var all))
+                    made[symbol.Name] = all = [];
                 all.Add((file, symbol));
             }
         }
@@ -151,16 +150,16 @@ internal sealed partial class HexCodeIndex
                 else if (Cached(path, length, written) is { } fromDisk)
                     made[i] = ServerSymbolsFor(new HexIndexedFile(path, HexSearch.RelativeTo(now, path), length, written, fromDisk.Lines, fromDisk.Symbols, fromDisk.FromServer));
                 else
-                {
-                    made[i] = new HexIndexedFile(path, HexSearch.RelativeTo(now, path), length, written, []);
                     toRead.Add(i);
-                }
             }
+
+            // Once the initial cache has been applied to the snapshot, release the staging dictionary
+            cached = null;
 
             Parallel.ForEach(toRead, i =>
             {
-                HexIndexedFile stub = made[i];
-                made[i] = ServerSymbolsFor(HexIndexedFile.Read(stub.Path, stub.Relative, stub.Length, stub.Written));
+                var (path, length, written) = paths[i];
+                made[i] = ServerSymbolsFor(HexIndexedFile.Read(path, HexSearch.RelativeTo(now, path), length, written));
             });
 
             bool rootsMoved = !now.SequenceEqual(was.Roots, StringComparer.OrdinalIgnoreCase);

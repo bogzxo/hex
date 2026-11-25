@@ -6,6 +6,13 @@ namespace Hex.Dawn;
 // the effects are, and everything put back as it was at the end.
 internal sealed partial class DawnScene
 {
+    // A picture of the window as it is, into the folder HEX_SELFTEST_SHOTS names, nothing without it
+    private void GlassShot(HexPointerScript test, string name) => test.Run(() =>
+    {
+        if (System.Environment.GetEnvironmentVariable("HEX_SELFTEST_SHOTS") is { Length: > 0 } shots)
+            Engine.CaptureScreenshot(Path.Combine(shots, name));
+    });
+
     private void TestEffects(HexPointerScript test)
     {
         string file = Path.Combine(testFolder, "effects.txt");
@@ -61,10 +68,73 @@ internal sealed partial class DawnScene
         test.Run(CommandPalette);
         test.WaitFor(() => chrome.Dialog is { IsOpen: true } && compositor.GlassDrawn.Panes > sides, 3.0f);
         test.Run(() => palette = compositor.GlassDrawn.Panes);
+        GlassShot(test, "effects_glass_palette.png");
+        test.Settle(0.2f);
         test.Check("effects: one blur for every pane at the most", () => compositor.GlassDrawn.Blurs is > 0 && compositor.GlassDrawn.Blurs <= compositor.GlassDrawn.Panes);
         test.Run(() => chrome.Dialog?.Close());
         test.WaitFor(() => compositor.GlassDrawn.Panes < palette, 3.0f);
         test.Check("effects: and the palette over the code is a pane more, gone with it", () => palette > sides && compositor.GlassDrawn.Panes < palette);
+
+        // The settings' own picture of the glass, for whoever is looking at how it bends (HEX_SELFTEST_SHOTS)
+        if (System.Environment.GetEnvironmentVariable("HEX_SELFTEST_SHOTS") is { Length: > 0 })
+        {
+            // Over a picture where one is named (HEX_SELFTEST_BACKDROP), glass over a flat dark editor bends nothing to see
+            var wasBackdrop = (settings.BackdropOn, settings.BackdropImage, settings.BackdropOpacity);
+            string? picture = System.Environment.GetEnvironmentVariable("HEX_SELFTEST_BACKDROP");
+            string codeFile = Path.Combine(testFolder, "effects_glass.cs");
+            HexDocument? wasShown = null;
+            test.Run(() =>
+            {
+                // A screen of highlighted code under the glass, which is what it's over most of the time
+                wasShown = document;
+                File.WriteAllLines(codeFile, Enumerable.Range(0, 70).Select(line => (line % 7) switch
+                {
+                    0 => $"    /// <summary>Line {line} of the code the glass sits over, words and numbers and names.</summary>",
+                    1 => $"    public static readonly Vector4 Colour{line} = new({line}.0f, 0.5f, 0.25f, 1.0f); // a comment out to the side",
+                    2 => $"    private readonly Dictionary<string, List<int>> lookup{line} = new(StringComparer.Ordinal);",
+                    3 => $"    public async Task<bool> Compute{line}Async(string name, int count = {line}, CancellationToken cancel = default)",
+                    4 => $"        => await Task.Run(() => name.Length * count > {line * 3} && lookup{line - 2}.ContainsKey(\"key {line}\"), cancel);",
+                    5 => $"    if (value is {{ Length: > {line} }} text && text.StartsWith(\"glass\", StringComparison.Ordinal)) return true;",
+                    _ => string.Empty
+                }));
+                Open(codeFile);
+                SwitchView(HexView.Code);
+            });
+            test.Settle(1.0f);
+            test.Run(() =>
+            {
+                if (picture is not { Length: > 0 } || !File.Exists(picture))
+                    return;
+                (settings.BackdropOn, settings.BackdropImage, settings.BackdropOpacity) = (true, picture, 1.0f);
+                ApplyBackdrop();
+            });
+            test.Settle(0.6f);
+            test.Run(CommandPalette);
+            test.WaitFor(() => chrome.Dialog is { IsOpen: true }, 3.0f);
+            test.Settle(0.6f);
+            GlassShot(test, "effects_glass_palette_picture.png");
+            test.Settle(0.3f);
+            test.Run(() => chrome.Dialog?.Close());
+            test.WaitFor(() => chrome.Dialog is null, 3.0f);
+
+            test.Run(() => OpenSettings(Hex.Shell.EditorSettingsCatalog.GLASS));
+            test.WaitFor(() => SettingsPage is not null, 3.0f);
+            test.Settle(0.8f);
+            GlassShot(test, "effects_glass_settings.png");
+            test.Settle(0.3f);
+            test.Run(() =>
+            {
+                CloseSettings();
+                (settings.BackdropOn, settings.BackdropImage, settings.BackdropOpacity) = wasBackdrop;
+                ApplyBackdrop();
+                if (document.Path is { } path && Path.GetFullPath(path) == Path.GetFullPath(codeFile))
+                    Close();
+                if (wasShown is not null && documents.Contains(wasShown))
+                    Show(wasShown);
+            });
+            test.WaitFor(() => SettingsWindow is null, 3.0f);
+            test.Settle(0.3f);
+        }
         test.Run(() => settings.EffectGlass = false);
         test.Run(ApplyEffects);
         test.WaitFor(() => compositor.GlassDrawn.Panes == 0, 3.0f);

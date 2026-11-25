@@ -23,7 +23,9 @@ internal sealed partial class DawnScene
         int version = code.Document.Version;
         if (outlineKeptFor.Of != document)
         {
-            outlineKept = OutlineHere();
+            outlineSettle.Reset();
+            outlineKept = HexOutline.Outline(CodeText(code), document?.Path);
+            TrimOutline(outlineKept);
             outlineKeptFor = (document, version);
             return outlineKept;
         }
@@ -36,6 +38,12 @@ internal sealed partial class DawnScene
 
         WorkOutOutline(version);
         return outlineKept;
+    }
+
+    private static void TrimOutline(List<OutlineEntry> outline)
+    {
+        if (outline.Capacity > outline.Count + 16)
+            outline.TrimExcess();
     }
 
     // The text of the code as of a version, put together once for whatever works it out in the background (the outline,
@@ -70,6 +78,7 @@ internal sealed partial class DawnScene
             if (document != of)
                 return;
 
+            TrimOutline(outline);
             outlineKept = outline;
             outlineKeptFor = (of, version);
 

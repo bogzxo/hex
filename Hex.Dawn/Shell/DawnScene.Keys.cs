@@ -461,8 +461,9 @@ internal sealed partial class DawnScene
 
     private static bool HasDialog(UICompositor ui)
     {
-        foreach (UIModule module in ui.Modules)
-            if (module.Enabled && module.Dialog is not null)
+        IReadOnlyList<UIModule> modules = ui.Modules;
+        for (int i = 0; i < modules.Count; i++)
+            if (modules[i].Enabled && modules[i].Dialog is not null)
                 return true;
         return false;
     }

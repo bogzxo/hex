@@ -6,6 +6,59 @@ namespace Hex.Installation;
 /// <summary>Stages complete replacements beside the destination, then swaps directories with rollback.</summary>
 public static class InstallTransaction
 {
+    private static readonly IReadOnlyDictionary<string, string[]> ModuleNativePatterns =
+        new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["notebooks"] = ["Hex.Notebooks.Render", "libSkiaSharp", "SkiaSharp", "Svg.Skia", "Svg.Custom", "Svg.SceneGraph", "CSharpMath", "ExCSS"]
+        };
+
+    /// <summary>Whether an archive file belongs exclusively to a deselected optional module and should be omitted.</summary>
+    internal static bool ShouldSkipModuleFile(string relativePath, InstallChoices choices)
+    {
+        string fileName = Path.GetFileName(relativePath);
+        foreach (var (moduleId, patterns) in ModuleNativePatterns)
+        {
+            if (choices.IsModuleEnabled(moduleId))
+                continue;
+            foreach (string pattern in patterns)
+            {
+                if (fileName.Contains(pattern, StringComparison.OrdinalIgnoreCase)
+                    || relativePath.Contains($"modules/{pattern}", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    private static void WriteInitialModuleSettings(string stage, InstallChoices choices)
+    {
+        string[] disabled = [.. InstallChoices.KnownModules.Where(id => !choices.IsModuleEnabled(id))];
+        if (disabled.Length == 0)
+            return;
+
+        string settingsPath = Path.Combine(stage, "settings", "settings.hor");
+        if (File.Exists(settingsPath))
+            return;
+
+        Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
+        var lines = new List<string>
+        {
+            "// Hex's settings for the editor (Dawn) and the terminal (Dusk), one section each.",
+            "#define dusk",
+            "#define hex_settings",
+            "",
+            "let settings = {",
+            "    editor: {"
+        };
+        for (int i = 0; i < disabled.Length; i++)
+        {
+            string comma = i + 1 < disabled.Length ? "," : "";
+            lines.Add($"        module_{disabled[i]}: false{comma}");
+        }
+        lines.Add("    }");
+        lines.Add("};");
+        File.WriteAllText(settingsPath, string.Join('\n', lines) + "\n", new System.Text.UTF8Encoding(false));
+    }
     public static Task Install(ReleaseAsset release, string root, Action<InstallProgress>? progress, CancellationToken cancel, InstallChoices? choices = null, string? package = null)
     {
         root = ValidateRoot(root);
@@ -108,6 +161,7 @@ public static class InstallTransaction
             int kind = (entry.ExternalAttributes >> 16) & 0xf000;
             if (kind is not (0 or 0x8000 or 0x4000)) throw new InvalidDataException(InstallText.Get("errors.package_links"));
             if (entry.Name.Length == 0) { Directory.CreateDirectory(path); continue; }
+            if (ShouldSkipModuleFile(name, choices)) continue;
             if (!unique.Add(name) || name.Equals(InstallPaths.Manifest, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException(InstallText.Get("errors.package_names"));
             unpacked += entry.Length;
@@ -138,6 +192,7 @@ public static class InstallTransaction
             ["files"] = new JsonArray(files.Select(f => (JsonNode?)JsonValue.Create(f)).ToArray())
         };
         File.WriteAllText(Path.Combine(stage, InstallPaths.Manifest), record.ToJsonString());
+        WriteInitialModuleSettings(stage, choices);
     }
 
     public static void Commit(string stage, string root, Action register, Action? rollbackRegistration = null)

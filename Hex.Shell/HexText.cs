@@ -1,3 +1,7 @@
+using System.Collections.ObjectModel;
+using System.Globalization;
+using System.Text;
+
 using Horizon.Content;
 using Horizon.Core.Platform;
 
@@ -18,7 +22,7 @@ public static class HexText
     /// <summary>The file of texts, from the program's folder.</summary>
     public const string FILE = "Assets/hex/localisation/en-gb.hor";
 
-    private static IReadOnlyDictionary<string, string> strings = new Dictionary<string, string>();
+    private static IReadOnlyDictionary<string, string> strings = ReadOnlyDictionary<string, string>.Empty;
     private static bool read;
 
     /// <summary>Every text by its key, read the first time it's asked for.</summary>
@@ -38,13 +42,226 @@ public static class HexText
         read = true;
         try
         {
-            strings = Localisation.ReadFile(Path.Combine(Hex.Core.HexHost.ProgramFolder, FILE));
+            string path = Path.Combine(Hex.Core.HexHost.ProgramFolder, FILE);
+            if (File.Exists(path) && TryReadFast(path, out Dictionary<string, string>? fast))
+            {
+                strings = fast!;
+                return null;
+            }
+
+            strings = Localisation.ReadFile(path);
             return null;
         }
         catch (Exception e)
         {
             return e.Message;
         }
+    }
+
+    // Streams static `let strings = { ... };` files directly into a trimmed dictionary so startup skips instantiating
+    // HIDLRuntime, its AST, and its intermediate ObjectValue tree. Falls back to Localisation.ReadFile on any non-literal
+    // construct so full HIDL syntax stays supported.
+    private static bool TryReadFast(string path, out Dictionary<string, string>? result)
+    {
+        result = null;
+        var into = new Dictionary<string, string>(StringComparer.Ordinal);
+        var intern = new HashSet<string>(StringComparer.Ordinal);
+        var prefixes = new List<string>(8);
+        var scratch = new StringBuilder(128);
+        var listBuf = new StringBuilder(256);
+        string currentPrefix = string.Empty;
+        string? listKey = null;
+        int listCount = 0;
+        bool started = false;
+        bool finished = false;
+
+        using var reader = new StreamReader(path, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 4096);
+        while (reader.ReadLine() is { } raw)
+        {
+            ReadOnlySpan<char> line = raw.AsSpan().Trim();
+            if (line.IsEmpty || line.StartsWith("//", StringComparison.Ordinal))
+                continue;
+
+            if (finished)
+                return false;
+
+            if (!started)
+            {
+                if (!line.SequenceEqual("let strings = {"))
+                    return false;
+                started = true;
+                continue;
+            }
+
+            if (listKey is not null)
+            {
+                if (line.SequenceEqual("]") || line.SequenceEqual("],"))
+                {
+                    into[listKey] = Intern(intern, listBuf.ToString());
+                    listKey = null;
+                    listBuf.Clear();
+                    listCount = 0;
+                    continue;
+                }
+
+                if (!TryParseStringLine(line, scratch, out string? item))
+                    return false;
+
+                if (listCount > 0)
+                    listBuf.Append('\n');
+                listBuf.Append(item);
+                listCount++;
+                continue;
+            }
+
+            if (line.SequenceEqual("}") || line.SequenceEqual("},") || line.SequenceEqual("};"))
+            {
+                if (prefixes.Count == 0)
+                {
+                    finished = true;
+                    continue;
+                }
+
+                prefixes.RemoveAt(prefixes.Count - 1);
+                currentPrefix = prefixes.Count > 0 ? prefixes[^1] : string.Empty;
+                continue;
+            }
+
+            int colon = line.IndexOf(':');
+            if (colon <= 0)
+                return false;
+
+            ReadOnlySpan<char> name = line[..colon].TrimEnd();
+            if (!IsIdentifier(name))
+                return false;
+
+            ReadOnlySpan<char> rest = line[(colon + 1)..].TrimStart();
+            string fullKey = currentPrefix.Length > 0
+                ? string.Concat(currentPrefix, ".", name)
+                : name.ToString();
+
+            if (rest.SequenceEqual("{"))
+            {
+                prefixes.Add(fullKey);
+                currentPrefix = fullKey;
+                continue;
+            }
+
+            if (rest.SequenceEqual("["))
+            {
+                listKey = fullKey;
+                listBuf.Clear();
+                listCount = 0;
+                continue;
+            }
+
+            if (!TryParseStringLine(rest, scratch, out string? text))
+                return false;
+
+            into[fullKey] = Intern(intern, text!);
+        }
+
+        if (!started || !finished || prefixes.Count != 0 || listKey is not null)
+            return false;
+
+        into.TrimExcess();
+        result = into;
+        return true;
+    }
+
+    private static string Intern(HashSet<string> pool, string value)
+    {
+        if (value.Length == 0)
+            return string.Empty;
+        if (pool.TryGetValue(value, out string? existing))
+            return existing;
+        pool.Add(value);
+        return value;
+    }
+
+    private static bool IsIdentifier(ReadOnlySpan<char> name)
+    {
+        if (name.IsEmpty)
+            return false;
+        foreach (char c in name)
+        {
+            if (!(char.IsAsciiLetterOrDigit(c) || c == '_'))
+                return false;
+        }
+        return true;
+    }
+
+    private static bool TryParseStringLine(ReadOnlySpan<char> span, StringBuilder scratch, out string? text)
+    {
+        text = null;
+        if (span.Length < 2 || span[0] != '"')
+            return false;
+
+        bool hasEscapes = false;
+        int i = 1;
+        while (i < span.Length && span[i] != '"')
+        {
+            if (span[i] == '\\')
+            {
+                if (i + 1 >= span.Length)
+                    return false;
+                hasEscapes = true;
+                i += 2;
+                continue;
+            }
+            i++;
+        }
+
+        if (i >= span.Length || span[i] != '"')
+            return false;
+
+        ReadOnlySpan<char> trailing = span[(i + 1)..].TrimStart();
+        if (!trailing.IsEmpty)
+        {
+            if (trailing[0] == ',')
+                trailing = trailing[1..].TrimStart();
+            if (!trailing.IsEmpty && !trailing.StartsWith("//", StringComparison.Ordinal))
+                return false;
+        }
+
+        ReadOnlySpan<char> inner = span[1..i];
+        text = hasEscapes ? Unescape(inner, scratch) : (inner.IsEmpty ? string.Empty : inner.ToString());
+        return true;
+    }
+
+    // Matches HIDL Lexer.Unescape for \" \\ \n \t \r \0 and \uXXXX.
+    private static string Unescape(ReadOnlySpan<char> span, StringBuilder scratch)
+    {
+        scratch.Clear();
+        for (int i = 0; i < span.Length; i++)
+        {
+            char c = span[i];
+            if (c == '\\' && i + 1 < span.Length)
+            {
+                if (span[i + 1] == 'u' && i + 5 < span.Length
+                    && ushort.TryParse(span.Slice(i + 2, 4), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out ushort code))
+                {
+                    scratch.Append((char)code);
+                    i += 5;
+                    continue;
+                }
+
+                char after = span[++i];
+                scratch.Append(after switch
+                {
+                    'n' => '\n',
+                    't' => '\t',
+                    'r' => '\r',
+                    '0' => '\0',
+                    _ => after
+                });
+                continue;
+            }
+
+            scratch.Append(c);
+        }
+
+        return scratch.ToString();
     }
 
     /// <summary>
@@ -67,10 +284,11 @@ public static class HexText
     /// place, problem). The status bar said a word was "in 1 files".
     /// </summary>
     public static string Count(string what, int count) =>
-        Get($"counts.{what}_{(count == 1 ? "one" : "many")}", ("count", count.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        Get($"counts.{what}_{(count == 1 ? "one" : "many")}", ("count", count.ToString(CultureInfo.InvariantCulture)));
 
     // The little words a title leaves small, unless one starts it
     private static readonly HashSet<string> Small = new(StringComparer.Ordinal) { "a", "an", "and", "as", "at", "by", "for", "from", "in", "into", "of", "on", "or", "the", "to", "with" };
+    private static readonly HashSet<string>.AlternateLookup<ReadOnlySpan<char>> SmallLookup = Small.GetAlternateLookup<ReadOnlySpan<char>>();
 
     /// <summary>
     /// A command's name written the way a menu's are, every word with a capital but the little ones ("Select last output"
@@ -79,18 +297,34 @@ public static class HexText
     /// </summary>
     public static string TitleCase(string text)
     {
-        var titled = new System.Text.StringBuilder(text.Length);
+        var titled = new StringBuilder(text.Length);
         bool first = true;
-        foreach (string word in text.Split(' '))
+        ReadOnlySpan<char> remaining = text.AsSpan();
+        while (true)
         {
+            int space = remaining.IndexOf(' ');
+            ReadOnlySpan<char> word = space >= 0 ? remaining[..space] : remaining;
+
             if (titled.Length > 0)
                 titled.Append(' ');
 
-            bool small = !first && Small.Contains(word);
-            titled.Append(word.Length > 0 && !small && char.IsLower(word[0]) ? char.ToUpperInvariant(word[0]) + word[1..] : word);
+            bool small = !first && SmallLookup.Contains(word);
+            if (word.Length > 0 && !small && char.IsLower(word[0]))
+            {
+                titled.Append(char.ToUpperInvariant(word[0]));
+                titled.Append(word[1..]);
+            }
+            else
+            {
+                titled.Append(word);
+            }
 
             // A word after a heading (one that ends in a colon, or a dot between) starts the title again
-            first = word.EndsWith(':') || word == "\u00b7";
+            first = (word.Length > 0 && word[^1] == ':') || word.SequenceEqual("\u00b7");
+
+            if (space < 0)
+                break;
+            remaining = remaining[(space + 1)..];
         }
 
         return titled.ToString();

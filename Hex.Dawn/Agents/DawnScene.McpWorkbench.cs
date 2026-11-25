@@ -89,7 +89,7 @@ internal sealed partial class DawnScene
     /// Agentic and the count of what the harness saved them. What a client outside finds code and drives the editor with
     /// is all still there.
     /// </summary>
-    internal List<HexMcpTool> McpToolList() => HexAi.Off
+    internal List<HexMcpTool> McpToolList() => !AgenticEnabled
         ? [.. new[] { ScreenTools(), EditorTools(), WorkbenchTools(), NotebookTools(), Behind(WorkspaceTools()), DevTools(), Behind(HarnessTools()),
             Alongside(Behind(FileTools())), Alongside(Behind(CodeTools())), GitDiffTools(), TerminalTools(), DebugTools() }.SelectMany(tools => tools).Where(tool => !AgentsOnly(tool.Meta.Name)), .. (LinkOn ? new[] { LinkHoldTool() } : [])]
         : [.. ScreenTools(), .. EditorTools(), .. WorkbenchTools(), .. NotebookTools(), .. AgentTools(),

@@ -190,12 +190,22 @@ internal sealed partial class HexDesigner
     internal static string DescribeDesign(Vector2 size) =>
         Hex.Shell.HexText.Get("designer_canvas.design_for", ("width", size.X.ToString("0")), ("height", size.Y.ToString("0")));
 
+    private (Vector2 Shown, bool Any, string? Language) screenTextFor;
+    private string screenTextCached = string.Empty;
+
     /// <summary>What the status bar says about the screen, the one the layout says it's made for or the one it's previewed on.</summary>
     internal string ScreenText()
     {
         Vector2 shown = document.Design ?? DesignSize;
+        bool any = document.Design is null;
+        string? language = Horizon.Content.Localisation.Language;
+        var key = (shown, any, language);
+        if (screenTextCached.Length > 0 && screenTextFor == key)
+            return screenTextCached;
+
+        screenTextFor = key;
         string size = $"{shown.X:0} × {shown.Y:0}";
-        return document.Design is null ? context.Strings.Said("designer_canvas.screen_any", ("size", size)) : size;
+        return screenTextCached = any ? context.Strings.Said("designer_canvas.screen_any", ("size", size)) : size;
     }
 
     /// <summary>The Layout menu's Screen at the pointer, for the status bar's screen item.</summary>

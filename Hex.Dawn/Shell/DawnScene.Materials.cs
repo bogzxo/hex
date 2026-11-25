@@ -149,8 +149,22 @@ internal sealed partial class DawnScene
         // The windows that are up, the settings, the keys, a page of help
         foreach (WindowPanel up in chrome.Root.Children.OfType<WindowPanel>())
             DressWindow(up);
-        treeDirty = inspectorDirty = true;
+
+        // Only rebuild the file tree and inspector when the skin, theme or palette colours changed; dragging glass or
+        // motion sliders calls DressChrome every tick without changing any tree item colour.
+        int palette = HashCode.Combine(skin.TextColor, skin.DimTextColor, skin.AccentColor, skin.PanelColor, skin.FieldColor);
+        if (!ReferenceEquals(skin, dressedTreeSkin) || dressedTreeTheme != skin.Theme || dressedTreePalette != palette)
+        {
+            dressedTreeSkin = skin;
+            dressedTreeTheme = skin.Theme;
+            dressedTreePalette = palette;
+            treeDirty = inspectorDirty = true;
+        }
     }
+
+    private Horizon.UI.Skinning.UISkin? dressedTreeSkin;
+    private string? dressedTreeTheme;
+    private int dressedTreePalette;
 
     /// <summary>
     /// A little window of the editor's dressed the one way they all are, the raised tone every popup is made of on the

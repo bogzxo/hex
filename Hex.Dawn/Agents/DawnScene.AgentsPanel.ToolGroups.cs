@@ -138,23 +138,36 @@ internal sealed partial class DawnScene
         return hash.ToHashCode();
     }
 
+    // Reusable scratch buffers for building tool group tooltips and summaries without per-row allocations
+    private readonly StringBuilder toolGroupTooltipScratch = new(256);
+    private readonly StringBuilder toolKindsBuilderScratch = new(64);
+    private readonly List<(string Kind, int Count)> toolKindsCountScratch = [];
+
     /// <summary>
     /// A group of calls. One alone is its line. More are a head saying how many and of what, or the one running, a chevron
     /// opening it to a line for each.
     /// </summary>
-    private UIComponent ToolGroupRow(HexAgentChat chat, HexAgentEntry first, UISkin? skin)
+    private UIComponent ToolGroupRow(HexAgentChat chat, HexAgentEntry first, UISkin? skin, int start = -1)
     {
-        int start = -1;
-        for (int i = 0; i < chat.Entries.Count; i++)
+        IReadOnlyList<HexAgentEntry> entries = chat.Entries;
+        if (start < 0 || start >= entries.Count || !ReferenceEquals(entries[start], first))
         {
-            if (ReferenceEquals(chat.Entries[i], first))
+            start = -1;
+            for (int i = 0; i < entries.Count; i++)
             {
-                start = i;
-                break;
+                if (ReferenceEquals(entries[i], first))
+                {
+                    start = i;
+                    break;
+                }
             }
         }
 
-        List<HexAgentEntry> calls = start < 0 ? [first] : ToolGroupAt(chat, start);
+        // Single-call fast path avoids allocating a List<HexAgentEntry> for standalone calls
+        if (start < 0 || start + 1 >= entries.Count || !Groupable(entries[start + 1]))
+            return ToolLine(chat, first, skin, alone: true);
+
+        List<HexAgentEntry> calls = ToolGroupAt(chat, start);
         if (calls.Count == 1)
             return ToolLine(chat, first, skin, alone: true);
 
@@ -162,16 +175,28 @@ internal sealed partial class DawnScene
         bool open = toolGroupsOpen.Contains(first);
         var holder = new StackPanel { Fill = UIFill.Horizontal, Spacing = 1 };
 
-        HexAgentEntry? running = calls.LastOrDefault(call => call.State == HexAgentToolState.Running);
-        int failed = calls.Count(call => call.State == HexAgentToolState.Failed);
+        HexAgentEntry? running = null;
+        int failed = 0;
+        toolGroupTooltipScratch.Clear();
+        for (int i = 0; i < calls.Count; i++)
+        {
+            HexAgentEntry call = calls[i];
+            if (call.State == HexAgentToolState.Running)
+                running = call;
+            else if (call.State == HexAgentToolState.Failed)
+                failed++;
+            if (i > 0)
+                toolGroupTooltipScratch.Append('\n');
+            toolGroupTooltipScratch.Append(ShortToolName(call)).Append(' ').Append(OneLine(ToolPreview(call.Input), 80));
+        }
         string kinds = ToolKinds(calls);
         double seconds = GroupSeconds(calls);
         // One that failed on the way and was got past (its last call went) is a warning, a group that ended failing an error
         bool endedFailing = calls[^1].State == HexAgentToolState.Failed;
         string icon = running is not null ? (settings.UiAnimation > 0 ? "loading~spin" : "loading") : endedFailing ? "error" : failed > 0 ? "warning" : "tools";
         string head = running is not null
-            ? Said("agents_panel.tools_running", ("count", calls.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)), ("tool", ShortToolName(running)))
-            : Said("agents_panel.tools_group", ("count", calls.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)), ("kinds", kinds));
+            ? Said("agents_panel.tools_running", ("count", HexAgentRows.SmallInt(calls.Count)), ("tool", ShortToolName(running)))
+            : Said("agents_panel.tools_group", ("count", HexAgentRows.SmallInt(calls.Count)), ("kinds", kinds));
 
         var bar = holder.Add(new Panel
         {
@@ -184,22 +209,25 @@ internal sealed partial class DawnScene
         var button = bar.Add(new Button
         {
             Style = "button_flat", Fill = UIFill.Both, Animated = false, Align = Origin.Left, LabelScale = 0.13f, Icon = icon,
-            Padding = new UIEdges(6, 0, 70, 0), Tooltip = string.Join("\n", calls.Select(call => $"{ShortToolName(call)} {OneLine(ToolPreview(call.Input), 80)}")),
+            Padding = new UIEdges(6, 0, 70, 0), Tooltip = toolGroupTooltipScratch.ToString(),
         });
         Label chevron = null!;
         StackPanel? lines = null;
-        // Opened and folded in place, its lines put in under the head or taken out, the row not made again. Made again,
-        // the new row wasn't laid out for a frame, the chat was held to the wrong place and jumped up and back
+        // Opened and folded in place, its lines kept attached and toggled via Visible so folding/re-opening never
+        // detaches or re-attaches the subtree
         void Lay(bool opening)
         {
             if (opening)
             {
-                lines ??= MakeLines();
-                if (lines.Parent is null)
+                if (lines is null)
+                {
+                    lines = MakeLines();
                     holder.Add(lines);
+                }
+                lines.Visible = true;
             }
-            else
-                lines?.Parent?.Remove(lines);
+            else if (lines is not null)
+                lines.Visible = false;
             chevron.Text = opening ? "$(chevron-down)" : "$(chevron-right)";
         }
         StackPanel MakeLines()
@@ -224,7 +252,7 @@ internal sealed partial class DawnScene
                 button.Label = fitted;
         });
         var right = bar.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 5, Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-8, 0) });
-        Label time = right.Add(new Label { Text = failed > 0 ? Said("agents_panel.tools_failed", ("count", failed.ToString(System.Globalization.CultureInfo.InvariantCulture))) : seconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "s", TextScale = 0.125f, Dim = failed == 0 });
+        Label time = right.Add(new Label { Text = failed > 0 ? Said("agents_panel.tools_failed", ("count", HexAgentRows.SmallInt(failed))) : HexAgentRows.FormatTenthsSeconds(seconds), TextScale = 0.125f, Dim = failed == 0 });
         // Its time goes on with the call running in it, a few times a second (TickRunningTimes)
         if (running is not null && failed == 0)
             agentsGroupTimes[first] = (time, calls);
@@ -243,17 +271,42 @@ internal sealed partial class DawnScene
     /// </summary>
     private static double GroupSeconds(List<HexAgentEntry> calls)
     {
-        long now = Environment.TickCount64, total = 0, from = 0, to = long.MinValue;
-        foreach (HexAgentEntry call in calls.OrderBy(call => call.Started))
+        int count = calls.Count;
+        if (count == 0)
+            return 0.0;
+        long now = Environment.TickCount64;
+        if (count == 1)
+            return Math.Max(0, (calls[0].Ended ?? now) - calls[0].Started) / 1000.0;
+
+        // Sort intervals by start time without LINQ OrderBy allocations
+        Span<long> starts = count <= 32 ? stackalloc long[count] : new long[count];
+        Span<long> ends = count <= 32 ? stackalloc long[count] : new long[count];
+        for (int i = 0; i < count; i++)
         {
-            long end = Math.Max(call.Started, call.Ended ?? now);
-            if (call.Started > to)
+            long s = calls[i].Started;
+            long e = Math.Max(s, calls[i].Ended ?? now);
+            int j = i;
+            while (j > 0 && starts[j - 1] > s)
+            {
+                starts[j] = starts[j - 1];
+                ends[j] = ends[j - 1];
+                j--;
+            }
+            starts[j] = s;
+            ends[j] = e;
+        }
+
+        long total = 0, from = starts[0], to = ends[0];
+        for (int i = 1; i < count; i++)
+        {
+            if (starts[i] > to)
             {
                 total += to > from ? to - from : 0;
-                (from, to) = (call.Started, end);
+                from = starts[i];
+                to = ends[i];
             }
-            else
-                to = Math.Max(to, end);
+            else if (ends[i] > to)
+                to = ends[i];
         }
         total += to > from ? to - from : 0;
         return total / 1000.0;
@@ -262,48 +315,62 @@ internal sealed partial class DawnScene
     // A call's name as a line says it, Hex's without hex_ and in words
     // The four kinds of call a group has most of, the most first and those as many in the order they came, each with how
     // many when there's more than one
-    private static string ToolKinds(List<HexAgentEntry> calls)
+    private string ToolKinds(List<HexAgentEntry> calls)
     {
-        List<(string Kind, int Count)> counted = [];
-        foreach (HexAgentEntry call in calls)
+        toolKindsCountScratch.Clear();
+        for (int c = 0; c < calls.Count; c++)
         {
-            string kind = ShortToolName(call);
-            int at = counted.FindIndex(each => each.Kind == kind);
+            string kind = ShortToolName(calls[c]);
+            int at = -1;
+            for (int j = 0; j < toolKindsCountScratch.Count; j++)
+            {
+                if (toolKindsCountScratch[j].Kind == kind)
+                {
+                    at = j;
+                    break;
+                }
+            }
             if (at < 0)
-                counted.Add((kind, 1));
+                toolKindsCountScratch.Add((kind, 1));
             else
-                counted[at] = (kind, counted[at].Count + 1);
+                toolKindsCountScratch[at] = (kind, toolKindsCountScratch[at].Count + 1);
         }
 
-        var said = new StringBuilder();
-        for (int taken = 0; taken < 4 && counted.Count > 0; taken++)
+        toolKindsBuilderScratch.Clear();
+        for (int taken = 0; taken < 4 && toolKindsCountScratch.Count > 0; taken++)
         {
             int most = 0;
-            for (int i = 1; i < counted.Count; i++)
+            for (int i = 1; i < toolKindsCountScratch.Count; i++)
             {
-                if (counted[i].Count > counted[most].Count)
+                if (toolKindsCountScratch[i].Count > toolKindsCountScratch[most].Count)
                     most = i;
             }
-            var (name, count) = counted[most];
-            counted.RemoveAt(most);
-            if (said.Length > 0)
-                said.Append(", ");
-            said.Append(name);
+            var (name, count) = toolKindsCountScratch[most];
+            toolKindsCountScratch.RemoveAt(most);
+            if (toolKindsBuilderScratch.Length > 0)
+                toolKindsBuilderScratch.Append(", ");
+            toolKindsBuilderScratch.Append(name);
             if (count > 1)
-                said.Append(" ×").Append(count);
+                toolKindsBuilderScratch.Append(" ×").Append(count);
         }
 
-        return said.ToString();
+        return toolKindsBuilderScratch.ToString();
     }
 
-    // A call's name as a line says it, Hex's without hex_ and in words
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> shortToolNames = new(StringComparer.Ordinal);
+
+    // A call's name as a line says it, Hex's without hex_ and in words, cached per tool name
     private static string ShortToolName(HexAgentEntry call)
     {
-        string name = ToolTitle(call.ToolName ?? "tool");
-        if (name.StartsWith("hex_", StringComparison.Ordinal))
-            name = name[4..];
-        name = name.Replace('_', ' ');
-        return string.IsNullOrWhiteSpace(name) ? "Tool" : char.ToUpperInvariant(name[0]) + name[1..];
+        string raw = call.ToolName ?? "tool";
+        return shortToolNames.GetOrAdd(raw, static key =>
+        {
+            string name = ToolTitle(key);
+            if (name.StartsWith("hex_", StringComparison.Ordinal))
+                name = name[4..];
+            name = name.Replace('_', ' ');
+            return string.IsNullOrWhiteSpace(name) ? "Tool" : char.ToUpperInvariant(name[0]) + name[1..];
+        });
     }
 
     /// <summary>
@@ -340,7 +407,7 @@ internal sealed partial class DawnScene
             LabelColor = toolColour,
             Padding = new UIEdges(8, 0, 56, 0), Tooltip = $"{call.ToolName}\n{preview}"
         });
-        // Opened and folded in place under its line, nothing made again, as a group is
+        // Opened and folded in place under its line, kept attached once created
         Panel? opened = null;
         button.OnPressed = () =>
         {
@@ -348,12 +415,15 @@ internal sealed partial class DawnScene
             HoldRowInPlace(call, line);
             if (call.Open)
             {
-                opened ??= OpenedCall(call, skin);
-                if (opened.Parent is null)
+                if (opened is null)
+                {
+                    opened = OpenedCall(call, skin);
                     holder.Add(opened);
+                }
+                opened.Visible = true;
             }
-            else
-                opened?.Parent?.Remove(opened);
+            else if (opened is not null)
+                opened.Visible = false;
         };
         FollowWidth(width =>
         {
@@ -364,10 +434,9 @@ internal sealed partial class DawnScene
                 button.Label = fitted;
         });
 
-        string seconds = call.Seconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
         Label time = line.Add(new Label
         {
-            Text = call.State == HexAgentToolState.Running ? Said("agents_panel.tool_running", ("seconds", RunningSeconds(call.Seconds))) : $"{seconds}s",
+            Text = call.State == HexAgentToolState.Running ? Said("agents_panel.tool_running", ("seconds", RunningSeconds(call.Seconds))) : HexAgentRows.FormatTenthsSeconds(call.Seconds),
             TextScale = 0.125f, Dim = call.State != HexAgentToolState.Failed, Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-8, 0)
         });
         if (call.State == HexAgentToolState.Running)

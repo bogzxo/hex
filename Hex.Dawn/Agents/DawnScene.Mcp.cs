@@ -10,9 +10,6 @@ namespace Hex.Dawn;
 // idle Hex answers at once. While an agent is connected the status bar says so. Off, all a tick costs is a null check.
 internal sealed partial class DawnScene
 {
-    // How often the folders in the file the bridge reads are looked at again, in seconds
-    private const float MCP_FOLDERS_EVERY = 1.0f;
-
     // The one Hex scene in the process with the server up, a Dawn made for the terminal's window too mustn't put up another
     private static DawnScene? mcpOwner;
 
@@ -27,7 +24,6 @@ internal sealed partial class DawnScene
     private readonly ConcurrentQueue<HexMcpCall> mcpAlongsideIn = new();
     private readonly List<HexMcpCall> mcpAlongside = [];
     private volatile bool mcpChanged;
-    private float mcpFoldersWait;
     private int mcpClientsShown;
 
     // Whether a call of an agent was going the last tick, what the robot breathes for
@@ -41,8 +37,8 @@ internal sealed partial class DawnScene
     /// <summary>The status bar's item and the server, when the settings or the command line say so.</summary>
     private void BuildMcp()
     {
-        // The Explain and Change with Agent commands, and the status bar's agents, none of them with No AI on
-        if (!HexAi.Off)
+        // The Explain and Change with Agent commands, and the status bar's agents, none of them with Agentic off
+        if (AgenticEnabled)
             BuildAgent();
         mcpItem = statusBar.Add("$(robot)", right: true, pressed: () =>
         {
@@ -51,7 +47,7 @@ internal sealed partial class DawnScene
         }, tooltip: Said("mcp.status_tip", ("clients", string.Empty)));
         mcpItem.IsVisible = () => mcpClientsShown > 0 || System.Environment.TickCount64 - mcpLastOn < MCP_LINGER_MS;
         ApplyMcp();
-        if (!HexAi.Off)
+        if (AgenticEnabled)
             BuildAgentsItem();
     }
 
@@ -149,11 +145,11 @@ internal sealed partial class DawnScene
     private McpServer MakeMcpServer(string? tag)
     {
         // Without the agents' tools there's no telling a client about starting agents of its own
-        string usual = Said(HexAi.Off ? "mcp.instructions_plain" : "mcp.instructions");
+        string usual = Said(!AgenticEnabled ? "mcp.instructions_plain" : "mcp.instructions");
         bool chatBound = int.TryParse(tag, out int chat);
         // A chat's own connection can write its Plan tab, so its agent is told how that tab is kept, for a system that
         // reads the server's instructions rather than being told in its prompt (Antigravity). Others aren't offered it
-        if (chatBound && !HexAi.Off)
+        if (chatBound && AgenticEnabled)
             usual += "\n\n" + HexAgentProfiles.PLAN_RULES;
         IMcpTools tools = chatBound ? new HexMcpCaller(mcpTools!, chat) : mcpTools!;
         return new(tools, "hex", HexAbout.Version, usual)
@@ -166,6 +162,21 @@ internal sealed partial class DawnScene
 
     /// <summary>The folders of the workspace, what the bridge picks a Hex by.</summary>
     private string[] McpFolders() => harnessRoots = [.. explorer.workspace.Folders];
+
+    /// <summary>Whether the workspace's open folders match what was last published, without allocating.</summary>
+    private static bool McpFoldersMatch(IReadOnlyList<string> current, string[] published)
+    {
+        if (current.Count != published.Length)
+            return false;
+
+        for (int i = 0; i < current.Count; i++)
+        {
+            if (!PlatformPaths.Comparer.Equals(current[i], published[i]))
+                return false;
+        }
+
+        return true;
+    }
 
     /// <summary>A call from a client, queued for the next tick, the editor woken for it. From the pipe's threads.</summary>
     internal void QueueMcp(HexMcpCall call)
@@ -212,21 +223,18 @@ internal sealed partial class DawnScene
             mcpItem.Tooltip = Said("mcp.status_tip", ("clients", string.Join(", ", clients)));
         }
 
-        // The folders open now, for a client started in one of them to find this Hex
-        if ((mcpFoldersWait -= dt) <= 0.0f && mcpListing is not null)
+        // The folders open now, for a client started in one of them to find this Hex. Compared in-place so idle ticks
+        // allocate nothing, and published immediately whenever the folder list actually changes
+        if (mcpListing is not null && !McpFoldersMatch(explorer.workspace.Folders, mcpListing.Folders))
         {
-            mcpFoldersWait = MCP_FOLDERS_EVERY;
             string[] folders = McpFolders();
-            if (!folders.SequenceEqual(mcpListing.Folders, PlatformPaths.Comparer))
+            mcpListing = mcpListing with { Folders = folders };
+            try
             {
-                mcpListing = mcpListing with { Folders = folders };
-                try
-                {
-                    McpDiscovery.Write(mcpListing);
-                }
-                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-                {
-                }
+                McpDiscovery.Write(mcpListing);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
             }
         }
     }

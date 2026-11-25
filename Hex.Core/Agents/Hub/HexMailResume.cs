@@ -45,8 +45,16 @@ internal sealed class HexMailResume(Func<long>? clock = null)
     /// <summary>The chats whose debounce is over, still waiting until <see cref="Cancel"/> or <see cref="Take"/> is called for each.</summary>
     public int[] Ready()
     {
+        if (due.Count == 0)
+            return [];
         long at = now();
-        return [.. due.Where(pair => pair.Value <= at).Select(pair => pair.Key)];
+        List<int>? ready = null;
+        foreach (var (chat, when) in due)
+        {
+            if (when <= at)
+                (ready ??= []).Add(chat);
+        }
+        return ready is null ? [] : [.. ready];
     }
 
     /// <summary>Takes a ready chat off the waiting ones.</summary>

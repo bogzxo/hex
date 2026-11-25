@@ -237,7 +237,7 @@ internal sealed class HexLookPicker : StackPanel
                 list.BeginPart(i);
                 HexLook? look = i < picker.looks.Count ? picker.looks[i] : null;
                 bool picked = look is null || look == picker.current;
-                UIGlass? glass = look is null ? (picker.shown.EffectGlass ? HexGlass.Popup(picker.shown.GlassBlur, picker.shown.GlassClarity, picker.shown.GlassRim, picker.shown.GlassBend) : null)
+                UIGlass? glass = look is null ? (picker.shown.EffectGlass ? HexGlass.Popup(picker.shown.GlassBlur, picker.shown.GlassClarity, picker.shown.GlassBend) : null)
                     : HexLooks.GlassOf(look, picker.shown);
                 PaintCard(list, skin, CardBounds(i), look, glass, picked, i == over);
             }
@@ -276,14 +276,13 @@ internal sealed class HexLookPicker : StackPanel
             {
                 list.Glass(pane, 8.0f, liquid.Blur * 0.25f, liquid.Bend * 0.5f);
                 list.RoundRect(pane, 8.0f, panel with { W = 0.3f });
-                list.RoundOutline(pane, 8.0f, 1.5f, Vector4.One with { W = 0.5f });
-                list.RoundRect(new UIRect(new Vector2(pane.Min.X + 8.0f, pane.Max.Y - 3.0f), new Vector2(pane.Max.X - 8.0f, pane.Max.Y - 2.0f)), 0.5f, Vector4.One with { W = 0.55f });
+                list.RoundOutline(pane, 8.0f, 1.0f, palette.Border);
             }
             else if (glass is { } frosted)
             {
                 list.Glass(pane, 8.0f, frosted.Blur * 0.6f, 0.0f);
                 list.RoundRect(pane, 8.0f, Vector4.Lerp(panel, Vector4.One, 0.14f) with { W = 0.72f });
-                list.SilverLining(pane, 8.0f, frosted.Rim);
+                list.RoundOutline(pane, 8.0f, 1.0f, palette.Border);
             }
             else if (look?.Name == HexLooks.VISUAL_STUDIO)
             {

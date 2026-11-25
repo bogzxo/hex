@@ -212,10 +212,14 @@ internal sealed partial class DawnScene
                     break;
                 case ("caret_fast_after", NumberValue after):
                     settings.CaretFastAfter = Math.Clamp(after.Value, 0.0f, 3.0f);
-                    break;
+                    UIKeyboard.FastAfter = settings.CaretFastAfter;
+                    hex.SaveSettings();
+                    return;
                 case ("caret_fast_rate", NumberValue rate):
                     settings.CaretFastRate = Math.Clamp(rate.Value, 30.0f, 200.0f);
-                    break;
+                    UIKeyboard.FastRate = settings.CaretFastRate;
+                    hex.SaveSettings();
+                    return;
                 case ("sticky_scroll", BooleanValue sticky):
                     settings.StickyScroll = sticky.Value;
                     break;

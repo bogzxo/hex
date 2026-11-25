@@ -1,4 +1,5 @@
 using Hex.Core;
+using Hex.Core.Modules;
 using Hex.Shell;
 
 using Horizon.HIDL.Runtime;
@@ -14,6 +15,7 @@ internal sealed partial class DuskScene
 {
     private SettingsWindow? settingsView;
     private OllamaModelPicker? ollamaModels;
+    private ModulesRestartPanel? modulesRestartPanel;
 
     // The part of the settings that's the terminal's, what Dusk's window is for
     private const string TERMINAL_PART = "Terminal";
@@ -44,6 +46,7 @@ internal sealed partial class DuskScene
         {
             ReadEffects();
             ReadBackdrop();
+            RefreshModuleRestartUi(editor);
         };
 
         // Editor · Text as well, the tab size and the rest Dawn applies to its files, written into the same section.
@@ -60,6 +63,12 @@ internal sealed partial class DuskScene
         // Dusk's window is the terminal's, the other parts fold away the first time it opens and a search puts the
         // terminal's rows a little over the rest
         settingsView.Page.HomePart = TERMINAL_PART;
+        settingsView.Page.NoteOf = key => HexModules.ModuleKeyNeedsRestart(key, ConfiguredModuleValue(editor, key))
+            ? HexText.Get("settings_page.restart_required")
+            : null;
+        settingsView.Page.NoteTipOf = key => HexModules.ModuleKeyNeedsRestart(key, ConfiguredModuleValue(editor, key))
+            ? HexText.Get("settings_page.restart_required_tip")
+            : null;
         settingsView.Window.Color = compositor.Skin?.Palette.Raised;
         settingsView.Window.Glass = effectGlass ? HexGlass.Window(popupGlass) : null;
 
@@ -67,6 +76,11 @@ internal sealed partial class DuskScene
 
         // The glass under its sliders, as they make it while they're dragged
         settingsView.SetPanel(EditorSettingsCatalog.GLASS, new GlassPreview(640.0f) { Look = () => (popupGlass, sideGlass, effectGlass) });
+
+        // Optional modules are restart-only; show a themed restart banner when changes are pending
+        modulesRestartPanel = new ModulesRestartPanel(640.0f, RestartHexForModules);
+        settingsView.SetPanel(EditorSettingsCatalog.MODULES, modulesRestartPanel);
+        RefreshModuleRestartUi(editor);
 
         // The profiles of how Hex looks over all of it, see DuskScene.Looks
         AddLookPicker(settingsView);
@@ -132,10 +146,27 @@ internal sealed partial class DuskScene
         ollamaModels = null;
         settingsView = null;
         lookPicker = null;
+        modulesRestartPanel = null;
         panel.FocusedView?.Focus();
 
         // The editor's section has the effects and the picture, which are Dusk's too
         ReadEffects();
         ReadBackdrop();
+    }
+
+    private static bool ConfiguredModuleValue(FileSectionSource editor, string key) =>
+        editor.Get(key) is BooleanValue flag
+            ? flag.Value
+            : EditorSettingsCatalog.Usual.GetValueOrDefault(key) is not BooleanValue { Value: false };
+
+    private void RefreshModuleRestartUi(FileSectionSource editor)
+    {
+        modulesRestartPanel?.SetPending(HexModules.PendingRestartCount(key => ConfiguredModuleValue(editor, key)));
+        settingsView?.Page.Refresh();
+    }
+
+    private void RestartHexForModules()
+    {
+        HexModes.Restart(HexMode.Dusk, null, () => Quit(0));
     }
 }

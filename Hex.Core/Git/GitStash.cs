@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Hex.Core.Git;
 
 /// <summary>A stash, its place in the list (0 the newest), its name as git writes it (stash@{0}), what it says and when it was made.</summary>
@@ -9,23 +11,53 @@ internal readonly record struct GitStashEntry(int Index, string Name, string Mes
         : Message;
 
     /// <summary>The entries of git stash list, as <see cref="GitStash.List"/> asks for them.</summary>
-    public static IReadOnlyList<GitStashEntry> Parse(string output)
+    public static IReadOnlyList<GitStashEntry> Parse(string output) => Parse(output.AsSpan());
+
+    /// <summary>Parses git stash list output directly from a character span.</summary>
+    public static IReadOnlyList<GitStashEntry> Parse(ReadOnlySpan<char> output)
     {
         var entries = new List<GitStashEntry>();
-        foreach (string line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        int pos = 0;
+        while (pos < output.Length)
         {
-            string[] fields = line.TrimEnd('\r').Split('\0');
-            if (fields.Length < 3)
+            int nl = output[pos..].IndexOf('\n');
+            ReadOnlySpan<char> line;
+            if (nl < 0)
+            {
+                line = output[pos..];
+                pos = output.Length;
+            }
+            else
+            {
+                line = output.Slice(pos, nl);
+                pos += nl + 1;
+            }
+
+            if (line.Length > 0 && line[^1] == '\r')
+                line = line[..^1];
+            if (line.IsEmpty)
                 continue;
+
+            int n0 = line.IndexOf('\0');
+            if (n0 < 0) continue;
+            ReadOnlySpan<char> name = line[..n0];
+
+            ReadOnlySpan<char> r1 = line[(n0 + 1)..];
+            int n1 = r1.IndexOf('\0');
+            if (n1 < 0) continue;
+            ReadOnlySpan<char> message = r1[..n1];
+
+            ReadOnlySpan<char> r2 = r1[(n1 + 1)..];
+            int n2 = r2.IndexOf('\0');
+            ReadOnlySpan<char> time = n2 >= 0 ? r2[..n2] : r2;
 
             // stash@{3}, the number between the braces
-            string name = fields[0];
             int open = name.IndexOf('{'), close = name.IndexOf('}');
-            if (open < 0 || close <= open || !int.TryParse(name.AsSpan(open + 1, close - open - 1), out int index))
+            if (open < 0 || close <= open || !int.TryParse(name.Slice(open + 1, close - open - 1), CultureInfo.InvariantCulture, out int index))
                 continue;
 
-            long.TryParse(fields[2], out long seconds);
-            entries.Add(new GitStashEntry(index, name, fields[1], DateTimeOffset.FromUnixTimeSeconds(seconds).ToLocalTime()));
+            long.TryParse(time, CultureInfo.InvariantCulture, out long seconds);
+            entries.Add(new GitStashEntry(index, name.ToString(), message.ToString(), DateTimeOffset.FromUnixTimeSeconds(seconds).ToLocalTime()));
         }
 
         return entries;
@@ -38,11 +70,12 @@ internal readonly record struct GitStashEntry(int Index, string Name, string Mes
 /// </summary>
 internal static class GitStash
 {
+    private static readonly string[] ListArguments = ["stash", "list", "--format=%gd%x00%s%x00%ct"];
+
     /// <summary>Every stash, the newest first. Empty for none or git not saying.</summary>
     public static IReadOnlyList<GitStashEntry> List(this GitRepository repository)
     {
-        GitResult result = GitProcess.Run(repository.Root, ["stash", "list", "--format=%gd%x00%s%x00%ct"]);
-        return result.Ok ? GitStashEntry.Parse(result.Output) : [];
+        return GitProcess.Run(repository.Root, ListArguments, static (exit, output, _) => exit == 0 ? GitStashEntry.Parse(output) : []);
     }
 
     /// <summary>
@@ -52,21 +85,29 @@ internal static class GitStash
     /// </summary>
     public static string? PushStash(this GitRepository repository, string? message, bool includeUntracked)
     {
-        var arguments = new List<string> { "stash", "push" };
-        if (includeUntracked)
-            arguments.Add("--include-untracked");
-        if (!string.IsNullOrWhiteSpace(message))
+        GitRepository.InvalidateInFlight(repository.Root);
+        try
         {
-            arguments.Add("-m");
-            arguments.Add(message.Trim());
+            var arguments = new List<string>(5) { "stash", "push" };
+            if (includeUntracked)
+                arguments.Add("--include-untracked");
+            if (!string.IsNullOrWhiteSpace(message))
+            {
+                arguments.Add("-m");
+                arguments.Add(message.Trim());
+            }
+
+            GitResult result = GitProcess.Run(repository.Root, arguments);
+            if (!result.Ok)
+                return Said(result);
+
+            // git says it had nothing to save and still exits 0, which isn't a stash made
+            return result.Output.Contains("No local changes to save", StringComparison.Ordinal) ? result.Output.Trim() : null;
         }
-
-        GitResult result = GitProcess.Run(repository.Root, arguments);
-        if (!result.Ok)
-            return Said(result);
-
-        // git says it had nothing to save and still exits 0, which isn't a stash made
-        return result.Output.Contains("No local changes to save", StringComparison.Ordinal) ? result.Output.Trim() : null;
+        finally
+        {
+            GitRepository.InvalidateInFlight(repository.Root);
+        }
     }
 
     /// <summary>Brings a stash's changes back and keeps the stash. What git said when it went wrong (a conflict), null when it didn't.</summary>
@@ -87,10 +128,18 @@ internal static class GitStash
 
     private static string? Stash(GitRepository repository, string verb, int index)
     {
-        GitResult result = GitProcess.Run(repository.Root, ["stash", verb, "--quiet", $"stash@{{{index}}}"]);
-        return result.Ok ? null : Said(result);
+        GitRepository.InvalidateInFlight(repository.Root);
+        try
+        {
+            GitResult result = GitProcess.Run(repository.Root, ["stash", verb, "--quiet", $"stash@{{{index}}}"]);
+            return result.Ok ? null : Said(result);
+        }
+        finally
+        {
+            GitRepository.InvalidateInFlight(repository.Root);
+        }
     }
 
     // Everything git said about something that failed, its errors or failing that what it wrote out
-    internal static string Said(GitResult result) => (result.Error.Trim().Length > 0 ? result.Error : result.Output).Trim();
+    internal static string Said(GitResult result) => GitProcess.FormatSaid(result.Output.AsSpan(), result.Error.AsSpan());
 }

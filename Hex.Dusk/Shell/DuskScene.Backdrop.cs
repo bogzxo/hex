@@ -24,6 +24,12 @@ internal sealed partial class DuskScene
     private Texture? backdropPicture;
     private string? backdropLoaded;
 
+    // Pending GPU texture load deferred to the render thread's exclusive phase (simulation paused)
+    private readonly Lock backdropSync = new();
+    private string? pendingBackdropPath;
+    private bool pendingBackdropArrange;
+    private Action<float>? backdropExclusive;
+
     // What a dialog that ran on a thread of its own hands back to be done on this one, next tick
     private readonly ConcurrentQueue<Action> later = new();
 
@@ -36,7 +42,14 @@ internal sealed partial class DuskScene
 
         // Read as Dawn reads them, the backdrop is the editor's section's for both modes
         HexSettings settings = new(host.Settings.Path);
-        panel.Backdrop = settings.BackdropTerminal ? BackdropPicture(settings) : null;
+        if (!settings.BackdropTerminal)
+        {
+            CancelPendingBackdrop();
+            panel.Backdrop = null;
+            return;
+        }
+
+        panel.Backdrop = RequestBackdrop(settings, arrangeAfter: false);
         if (panel.Backdrop is null)
             return;
 
@@ -49,19 +62,80 @@ internal sealed partial class DuskScene
     }
 
     /// <summary>The picture the settings say, loaded once a file, null for one that isn't there.</summary>
-    private Texture? BackdropPicture(HexSettings settings)
+    private Texture? BackdropPicture(HexSettings settings) => RequestBackdrop(settings, arrangeAfter: true);
+
+    private Texture? RequestBackdrop(HexSettings settings, bool arrangeAfter)
     {
         string path = settings.BackdropImage.Length > 0 ? settings.BackdropImage : Path.Combine(Hex.Core.HexHost.ProgramFolder, USUAL_BACKDROP);
         if (!File.Exists(path))
             return null;
 
-        if (backdropLoaded != path)
+        if (backdropLoaded == path && backdropPicture is { IsValid: true })
+            return backdropPicture;
+
+        if (Horizon.Core.EntityLifecycle.IsRenderThread)
         {
+            CancelPendingBackdrop();
             backdropPicture = Texture.Load(path, smooth: true);
             backdropLoaded = path;
+            return backdropPicture;
         }
 
-        return backdropPicture;
+        lock (backdropSync)
+        {
+            pendingBackdropPath = path;
+            pendingBackdropArrange |= arrangeAfter;
+            if (backdropExclusive is null)
+            {
+                backdropExclusive = _ => LoadPendingBackdrop();
+                Engine.WindowManager.Exclusive += backdropExclusive;
+            }
+        }
+        Engine.WindowManager.RequestExclusive();
+        return null;
+    }
+
+    private void CancelPendingBackdrop()
+    {
+        Action<float>? handler;
+        lock (backdropSync)
+        {
+            pendingBackdropPath = null;
+            pendingBackdropArrange = false;
+            handler = backdropExclusive;
+            backdropExclusive = null;
+        }
+
+        if (handler is not null)
+            Engine.WindowManager.Exclusive -= handler;
+    }
+
+    // Runs on the render thread during WindowManager.Exclusive (simulation paused) so Vulkan Texture.Load never runs on Simulation
+    private void LoadPendingBackdrop()
+    {
+        string? path;
+        bool arrange;
+        Action<float>? handler;
+        lock (backdropSync)
+        {
+            path = pendingBackdropPath;
+            arrange = pendingBackdropArrange;
+            pendingBackdropPath = null;
+            pendingBackdropArrange = false;
+            handler = backdropExclusive;
+            backdropExclusive = null;
+        }
+
+        if (handler is not null)
+            Engine.WindowManager.Exclusive -= handler;
+
+        if (IsDisposed || path is null || !File.Exists(path))
+            return;
+
+        backdropPicture = Texture.Load(path, smooth: true);
+        backdropLoaded = path;
+        later.Enqueue(arrange ? ArrangeBackdrop : ReadBackdrop);
+        Engine.WindowManager.Wake();
     }
 
     /// <summary>A button of the settings pressed, the picture chosen with Hex's own dialog or the usual one back.</summary>

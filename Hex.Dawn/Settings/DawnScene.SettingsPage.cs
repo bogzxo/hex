@@ -30,6 +30,7 @@ internal sealed partial class DawnScene
 
     private SettingsWindow? settingsView;
     private OllamaModelPicker? ollamaModels;
+    private ModulesRestartPanel? modulesRestartPanel;
 
     /// <summary>The page while it is up, for the self test.</summary>
     internal SettingsPage? SettingsPage => settingsView?.Window.Parent is not null ? settingsView.Page : null;
@@ -108,6 +109,11 @@ internal sealed partial class DawnScene
         // The keys aren't rows of these, they've a window of their own, but whoever searches here for them finds the way
         SetSettingsPanel(settingsView, KEYS_SECTION, KeysPanel());
 
+        // Optional modules are restart-only so runtime state stays consistent; show a themed restart banner when changes are pending
+        modulesRestartPanel = new ModulesRestartPanel(PANEL_PROSE * settingsView.Page.Zoom, RestartHexForModules);
+        SetSettingsPanel(settingsView, EditorSettingsCatalog.MODULES, modulesRestartPanel);
+        RefreshModuleRestartUi();
+
         // The profiles of how Hex looks over all of it, see DawnScene.Looks
         AddLookPicker(settingsView);
         if (lookPicker is not null)
@@ -175,6 +181,8 @@ internal sealed partial class DawnScene
         ollamaModels = null;
         settingsView = null;
         lookPicker = null;
+        modulesRestartPanel = null;
+        restartModulesButton = null;
         userScopeTab = workspaceScopeTab = null;
         scopeLine = null;
         workspaceScope = false;
@@ -299,12 +307,15 @@ internal sealed partial class DawnScene
         // What a row shows, the workspace or user value by the window's switch (DawnScene.SettingsScope)
         public IRuntimeValue? Get(string key) => hex.ScopedValue(key, InForce(key));
 
+        private readonly List<(UISkinChoice Skin, string? Theme, string Text)> editorSkins = EditorSkins();
+        private readonly List<(UISkinChoice Skin, string? Theme, string Text)> layoutSkins = LayoutSkins();
+
         // A setting's effective value, the workspace value over the user value
         private IRuntimeValue? InForce(string key) => key switch
         {
-            "editor_skin" => new StringValue(EditorSkins().Find(choice => choice.Skin.Name == hex.settings.EditorSkin && (choice.Theme ?? string.Empty) == hex.settings.EditorTheme).Text ?? string.Empty),
+            "editor_skin" => new StringValue(editorSkins.Find(choice => choice.Skin.Name == hex.settings.EditorSkin && (choice.Theme ?? string.Empty) == hex.settings.EditorTheme).Text ?? string.Empty),
             INTERFACE_SIZE => new StringValue(DescribeSize(hex.compositor.Scale)),
-            "layout_skin" => new StringValue(LayoutSkins().Find(choice => choice.Skin.Name == UISkins.Current.Name && choice.Theme == (UISkins.Theme ?? UISkins.Current.UsualTheme)).Text ?? UISkins.Current.Title),
+            "layout_skin" => new StringValue(layoutSkins.Find(choice => choice.Skin.Name == UISkins.Current.Name && choice.Theme == (UISkins.Theme ?? UISkins.Current.UsualTheme)).Text ?? UISkins.Current.Title),
             "code_zoom" => new NumberValue(hex.settings.CodeZoom),
             "code_font" => new StringValue(hex.settings.CodeFont),
             "wrap_code" => Values.Bool(hex.settings.WrapCode),
@@ -335,6 +346,11 @@ internal sealed partial class DawnScene
         "link_talk_open_on_message" => Values.Bool(hex.settings.LinkTalkOpenOnMessage),
             "link_invite_rights" => new StringValue(hex.settings.LinkInviteRights),
             "no_ai" => Values.Bool(hex.settings.NoAi),
+            "module_link" => Values.Bool(hex.settings.ModuleLink),
+            "module_local_ai" => Values.Bool(hex.settings.ModuleLocalAi),
+            "module_agentic" => Values.Bool(hex.settings.ModuleAgentic),
+            "module_notebooks" => Values.Bool(hex.settings.ModuleNotebooks),
+            "module_designer" => Values.Bool(hex.settings.ModuleDesigner),
             "agents_resume_after_limit" => Values.Bool(hex.settings.AgentsResumeAfterLimit),
             "agents_auto_settle_seconds" => new NumberValue(hex.settings.AgentsAutoSettleSeconds),
             "debugger_path" => new StringValue(hex.settings.DebuggerPath),
@@ -376,12 +392,12 @@ internal sealed partial class DawnScene
             "render_composition" => new StringValue(hex.settings.RenderComposition),
             "render_scale_now" => new StringValue(hex.DescribeRenderScale()),
             "glass_clarity" => new NumberValue(hex.settings.GlassClarity),
-            "glass_rim" => new NumberValue(hex.settings.GlassRim),
             "glass_bend" => new NumberValue(hex.settings.GlassBend),
             "ui_animation" => new NumberValue(hex.settings.UiAnimation),
             "scroll_speed" => new NumberValue(hex.settings.ScrollSpeed),
             "middle_scroll_speed" => new NumberValue(hex.settings.MiddleScrollSpeed),
             "caret_glide" => new NumberValue(hex.settings.CaretGlide),
+            "low_latency" => Values.Bool(hex.settings.LowLatency),
             "trim_whitespace" => Values.Bool(hex.settings.TrimWhitespace),
             "final_newline" => Values.Bool(hex.settings.FinalNewline),
             "auto_save" => Values.Bool(hex.settings.AutoSave),
@@ -452,7 +468,7 @@ internal sealed partial class DawnScene
         {
             "editor_skin" => hex.settings.EditorSkin != HexSettings.USUAL_SKIN || hex.settings.EditorTheme != HexSettings.USUAL_THEME,
             INTERFACE_SIZE => hex.compositor.Scale != 1.0f,
-            "panels" or "layout_skin" or EditorSettingsCatalog.ARRANGE_BACKDROP or EditorSettingsCatalog.LLAMACPP_SETUP or EditorSettingsCatalog.LOCAL_AI_WINDOW or "render_scale_now" => false,
+            "panels" or "layout_skin" or EditorSettingsCatalog.ARRANGE_BACKDROP or EditorSettingsCatalog.LLAMACPP_SETUP or EditorSettingsCatalog.LOCAL_AI_WINDOW or EditorSettingsCatalog.PERFORMANCE_NOTE or "render_scale_now" => false,
             "disabled_extensions" => hex.extensions.All.Any(extension => !extension.Enabled),
             _ => !SettingValues.Same(Get(key), EditorSettingsCatalog.Usual.GetValueOrDefault(key))
         };
@@ -487,7 +503,7 @@ internal sealed partial class DawnScene
                         hex.UseSkin(layoutSkins[which].Skin, layoutSkins[which].Theme);
                     return;
                 case ("code_zoom", NumberValue zoom):
-                    hex.ZoomCode(zoom.Value / MathF.Max(0.01f, settings.CodeZoom));
+                    hex.ZoomCode(zoom.Value / MathF.Max(0.01f, settings.CodeZoom), quiet: true);
                     return;
                 case ("code_font", StringValue font):
                     settings.CodeFont = font.Value;
@@ -600,6 +616,26 @@ internal sealed partial class DawnScene
             case ("no_ai", BooleanValue noAi):
                     settings.NoAi = noAi.Value;
                     hex.NoAiChanged();
+                    break;
+                case ("module_link", BooleanValue moduleLink):
+                    settings.ModuleLink = moduleLink.Value;
+                    hex.RefreshModuleRestartUi();
+                    break;
+                case ("module_local_ai", BooleanValue moduleLocalAi):
+                    settings.ModuleLocalAi = moduleLocalAi.Value;
+                    hex.RefreshModuleRestartUi();
+                    break;
+                case ("module_agentic", BooleanValue moduleAgentic):
+                    settings.ModuleAgentic = moduleAgentic.Value;
+                    hex.RefreshModuleRestartUi();
+                    break;
+                case ("module_notebooks", BooleanValue moduleNotebooks):
+                    settings.ModuleNotebooks = moduleNotebooks.Value;
+                    hex.RefreshModuleRestartUi();
+                    break;
+                case ("module_designer", BooleanValue moduleDesigner):
+                    settings.ModuleDesigner = moduleDesigner.Value;
+                    hex.RefreshModuleRestartUi();
                     break;
                 case ("backdrop", BooleanValue on):
                     settings.BackdropOn = on.Value;
@@ -720,10 +756,6 @@ internal sealed partial class DawnScene
                     settings.GlassClarity = Math.Clamp(clarity.Value, 0.0f, 1.0f);
                     hex.ApplyEffects();
                     break;
-                case ("glass_rim", NumberValue rim):
-                    settings.GlassRim = Math.Clamp(rim.Value, 0.0f, 1.0f);
-                    hex.ApplyEffects();
-                    break;
                 case ("glass_bend", NumberValue bend):
                     settings.GlassBend = Math.Clamp(bend.Value, 0.0f, 24.0f);
                     hex.ApplyEffects();
@@ -742,6 +774,10 @@ internal sealed partial class DawnScene
                     break;
                 case ("caret_glide", NumberValue glide):
                     settings.CaretGlide = Math.Clamp(glide.Value, 0.0f, 0.3f);
+                    hex.ApplyEffects();
+                    break;
+                case ("low_latency", BooleanValue quick):
+                    settings.LowLatency = quick.Value;
                     hex.ApplyEffects();
                     break;
                 case ("trim_whitespace", BooleanValue trims):

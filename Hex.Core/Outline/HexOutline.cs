@@ -26,7 +26,7 @@ internal static partial class HexOutline
     {
         // The breadcrumbs ask on every move of the caret, the values on every click, the outline on every change. An
         // editor hands out the same string until its text changes, so the last one is kept, nobody changes the list
-        string extension = path is null ? ".hor" : Path.GetExtension(path).ToLowerInvariant();
+        string extension = path is null ? ".hor" : HexIndexedFile.InternExtension(path);
         if (kept is { } last && ReferenceEquals(text, last.Text) && extension == last.Extension)
             return last.Entries;
 
@@ -43,6 +43,8 @@ internal static partial class HexOutline
 
     private static List<OutlineEntry> OutlineOf(string text)
     {
+        if (text.Contains('\r'))
+            text = text.Replace("\r\n", "\n");
         var entries = new List<OutlineEntry>();
         Token[] tokens = Lexer.Tokenize(text, lenient: true);
         int depth = 0;

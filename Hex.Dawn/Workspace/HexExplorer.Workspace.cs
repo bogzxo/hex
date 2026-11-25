@@ -18,6 +18,9 @@ internal sealed partial class HexExplorer
     // Whether the workspace of last time has been brought back yet, it isn't written over before then
     internal bool workspaceRestored;
 
+    // Suppresses redundant KeepWorkspace writes while opening a workspace's saved tabs in bulk
+    private bool restoringWorkspace;
+
     // The rows of the explorer, for the self-test to find
     internal readonly List<(string Path, bool IsFolder, UITreeItem Row)> explorerRows = [];
 
@@ -78,17 +81,25 @@ internal sealed partial class HexExplorer
         if (options.Open is not null)
             return;
 
-        foreach (string file in workspace.OpenFiles.ToArray())
+        restoringWorkspace = true;
+        try
         {
-            if (File.Exists(file) && (only is null || PlatformPaths.IsUnder(file, only)))
-                context.Documents.Open(file);
+            foreach (string file in workspace.OpenFiles.ToArray())
+            {
+                if (File.Exists(file) && (only is null || PlatformPaths.IsUnder(file, only)))
+                    context.Documents.Open(file);
+            }
+        }
+        finally
+        {
+            restoringWorkspace = false;
         }
     }
 
     /// <summary>Helper method to keep the workspace in its file (or next to the editor while it has none), after any change to it.</summary>
     internal void KeepWorkspace()
     {
-        if (!workspaceRestored)
+        if (!workspaceRestored || restoringWorkspace)
             return;
 
         workspace.Terminal = context.Terminals.Host.Panel.Tabs.Count > 0 ? TerminalSessions.Value(context.Terminals.Host.Panel) : workspace.Terminal;
@@ -304,10 +315,18 @@ internal sealed partial class HexExplorer
         treeDirty = true;
         FoldersChanged?.Invoke();
 
-        foreach (string file in workspace.OpenFiles.ToArray())
+        restoringWorkspace = true;
+        try
         {
-            if (File.Exists(file))
-                context.Documents.Open(file);
+            foreach (string file in workspace.OpenFiles.ToArray())
+            {
+                if (File.Exists(file))
+                    context.Documents.Open(file);
+            }
+        }
+        finally
+        {
+            restoringWorkspace = false;
         }
 
         KeepWorkspace();
@@ -335,6 +354,8 @@ internal sealed partial class HexExplorer
     internal void CloseWorkspace()
     {
         workspace = new HexWorkspace();
+        explorerRows.Clear();
+        explorerRows.TrimExcess();
         browsing = false;
         treeDirty = true;
         FoldersChanged?.Invoke();

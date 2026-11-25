@@ -59,6 +59,19 @@ internal sealed partial class DawnScene
         // On the folder's tab, a quiet line after the tabs saying why there are so few rows
         scopeLine = bar.Add(new Label { Text = $"[color:dim]{Said("settings_page.workspace_only")}[/color]", Align = Horizon.Rendering.Origin.Left, Padding = new UIEdges(12.0f, 0.0f, 0.0f, 0.0f), Visible = false });
 
+        // Compact themed restart button shown whenever optional module toggles differ from the active session,
+        // kept in the top bar so it stays visible even when filtering Settings via search
+        restartModulesButton = bar.Add(new Button
+        {
+            Label = Said("settings_page.modules_restart_button"),
+            Icon = "debug-restart",
+            Primary = true,
+            Animated = false,
+            Tooltip = Said("settings_page.modules_restart_button_tip"),
+            OnPressed = RestartHexForModules,
+            Visible = false
+        });
+
         // A row the other scope sets says so after its key
         view.Page.NoteOf = ScopeNote;
         view.Page.NoteTipOf = ScopeNoteTip;
@@ -92,19 +105,61 @@ internal sealed partial class DawnScene
             scopeLine.Visible = workspaceScope;
     }
 
-    // The dim line after the tabs on the folder's tab
+    // The dim line after the tabs on the folder's tab, and the top-bar restart button when module changes are pending
     private Label? scopeLine;
+    private Button? restartModulesButton;
 
     /// <summary>What the scope line after the tabs says while it shows, null while it doesn't. For the self test.</summary>
     internal string? ScopeLineShown => scopeLine is { Visible: true } line ? line.Text : null;
 
+    /// <summary>Whether the top-bar Restart Hex button for pending module changes is currently visible. For the self test.</summary>
+    internal bool ModuleRestartButtonVisible => restartModulesButton is { Visible: true };
+
+    /// <summary>The top-bar Restart Hex button while the Settings window is open. For the self test.</summary>
+    internal Button? ModuleRestartButton => restartModulesButton;
+
+    /// <summary>The Editor · Modules restart banner panel while the Settings window is open. For the self test.</summary>
+    internal Hex.Shell.ModulesRestartPanel? ModulesRestartPanel => modulesRestartPanel;
+
+    private void RefreshModuleRestartUi()
+    {
+        int pending = Hex.Core.Modules.HexModules.PendingModuleRestartCount(settings);
+        modulesRestartPanel?.SetPending(pending);
+        if (restartModulesButton is not null)
+            restartModulesButton.Visible = pending > 0;
+        settingsView?.Page.Refresh();
+    }
+
+    private void RestartHexForModules()
+    {
+        SaveSettings();
+        Hex.Shell.HexModes.Restart(Hex.Shell.HexMode.Dawn, WorkspaceSettingsFolder(), () =>
+        {
+            DawnResident.ExitRequested = true;
+            quitting = true;
+            Quit();
+        });
+    }
+
+    private bool ModuleKeyPendingRestart(string key) => key switch
+    {
+        "module_link" => Hex.Core.Modules.HexModules.IsConfiguredDifferent(Hex.Core.Modules.HexModuleId.Link, settings.ModuleLink),
+        "module_local_ai" => Hex.Core.Modules.HexModules.IsConfiguredDifferent(Hex.Core.Modules.HexModuleId.LocalAi, settings.ModuleLocalAi),
+        "module_agentic" => Hex.Core.Modules.HexModules.IsConfiguredDifferent(Hex.Core.Modules.HexModuleId.Agentic, settings.ModuleAgentic),
+        "module_notebooks" => Hex.Core.Modules.HexModules.IsConfiguredDifferent(Hex.Core.Modules.HexModuleId.Notebooks, settings.ModuleNotebooks),
+        "module_designer" => Hex.Core.Modules.HexModules.IsConfiguredDifferent(Hex.Core.Modules.HexModuleId.Designer, settings.ModuleDesigner),
+        _ => false
+    };
+
     /// <summary>
-    /// What a row says after its key about the other scope. On User a setting the workspace overrides says so, the
-    /// value in effect isn't the one shown. On Workspace a setting the folder leaves alone that the user has
+    /// What a row says after its key about the other scope or a pending restart. On User a setting the workspace overrides
+    /// says so, the value in effect isn't the one shown. On Workspace a setting the folder leaves alone that the user has
     /// changed is modified in User as well. Null for the rest.
     /// </summary>
     private string? ScopeNote(string key)
     {
+        if (ModuleKeyPendingRestart(key))
+            return Said("settings_page.restart_required");
         if (!HexSettings.IsWorkspaceKey(key) || settings.WorkspacePath is null)
             return null;
         if (!InWorkspaceScope)
@@ -112,9 +167,11 @@ internal sealed partial class DawnScene
         return !settings.IsOverridden(key) && UserModified(key) ? Said("settings_page.also_in_user") : null;
     }
 
-    // What the note says when the pointer rests on it, the value the other scope has
+    // What the note says when the pointer rests on it, the value the other scope has or why a restart is needed
     private string? ScopeNoteTip(string key)
     {
+        if (ModuleKeyPendingRestart(key))
+            return Said("settings_page.restart_required_tip");
         if (ScopeNote(key) is null)
             return null;
         if (!InWorkspaceScope)

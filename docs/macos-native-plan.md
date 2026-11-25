@@ -189,13 +189,13 @@ The waves run in order. Inside a wave the packages own disjoint files and run in
 | **D: Dock, CLI, plist and Trash** | Dock badge and bounce for agents waiting on approval or a finished build while Hex isn't active. "Install `hex` command" (a symlink in `/usr/local/bin` through `osascript … with administrator privileges`, or `~/.local/bin` when that's on PATH). Info.plist UTIs and LSApplicationCategoryType. Trash through `NSFileManager trashItemAtURL` (Put Back works). | `Mac/MacDock.cs`, `Hex.Core/Workspace/HexTrash.cs`, `scripts/macos/Info.plist.in`, new `Hex.Dawn/Shell/MacCli.cs` | A |
 
 ### Wave 3
-| WP | Scope |
-|---|---|
-| **F: native panels** | §3.7 |
-| **G: gestures** | Pinch (`magnifyWithEvent:`) and smart zoom (`smartMagnifyWithEvent:`) added to SDL's view class with `class_addMethod`, as MacOpenDocuments does, becoming editor font zoom. Swipe (`swipeWithEvent:`) switches to the previous or next tab. |
-| **R: frame pacing** | Measure fps on the M6 (ProMotion) with vsync on. If it is capped at 60, set `CAMetalLayer.displaySyncEnabled` / `maximumDrawableCount`, MoltenVK `MVK_CONFIG_*`, and ask `NSScreen.maximumFramesPerSecond` for the limiter. Confirm App Nap and idle CPU (`top -pid`) stay near 0 % when idle. |
-| **N: system notifications** | UNUserNotificationCenter needs a signed bundle with an identifier and block-based authorization. This needs a block ABI shim (a static `Block_literal` with an `UnmanagedCallersOnly` invoke). Do it after D, falling back to the Dock bounce. |
-| **T: fonts** | Check whether `GlyphOutlines` reads TTC (Menlo.ttc) and variable fonts (SFNS.ttf, SF Mono). If it does, list the system monospace fonts in the font picker on a Mac and use SF Mono or Menlo as the Mac default for new installs. |
+| WP | Scope | Status |
+|---|---|---|
+| **F: native panels** | §3.7 (`IPlatformDialogs`, `MacDialogs`, `HexDialogs`) | Done (Wave 3) |
+| **G: gestures** | Pinch (`magnifyWithEvent:`) and smart zoom (`smartMagnifyWithEvent:`) added to SDL's view class with `class_addMethod`, as MacOpenDocuments does, becoming editor font zoom. Swipe (`swipeWithEvent:`) switches to the previous or next tab. | Done (Wave 1/2) |
+| **R: frame pacing** | Measure fps on the M6 (ProMotion) with vsync on; query `NSScreen.maximumFramesPerSecond`, add `PlatformPower` / `DesktopPower` Low Power Mode observer, and make `MacWindowChrome.Maintain` zero-traffic when idle. | Done (Wave 3) |
+| **N: system notifications** | UNUserNotificationCenter needs a signed bundle with an identifier and block-based authorization. This needs a block ABI shim (a static `Block_literal` with an `UnmanagedCallersOnly` invoke). Do it after D, falling back to the Dock bounce. | Open |
+| **T: fonts** | `.ttc` collection support in `GlyphOutlines` (`stbtt_GetFontOffsetForIndex`) and macOS system monospace fonts (`SF Mono`, `Menlo`, `Monaco`) in `HexCodeEditing.Font`. | Done (Wave 3) |
 
 ### Later or not planned
 VoiceOver (a large NSAccessibility bridge for a UI the engine draws; a plan of its own), the spell checker, Look Up, Quick Look panel integration, Services acting on the selection, Handoff, App Intents, native tabs and window restoration. Notarisation is waiting on the owner's Apple Developer account (the script and CI are ready, see `macos-app.md`).
@@ -343,7 +343,23 @@ Filled in as packages land (what was built, how it was checked, and on which mac
   * The wrap-on fracturing was `CodeEditor.Flow`, which eases every word to where the wrap puts it; during a zoom every word trailed at its own pace. It now snaps when the line height changes.
   * Line numbers stop growing at 150% (`MostGutterScale`).
 * **Tests:** Horizon.Tests needs `--artifacts-path` under `horizon/` (it looks for `horizon/Horizon.sln`), and Hex.Tests under `hex/`.
-* **Still open:** I (IME); the "Alt+N" tab hints (⌥N). Where they are drawn wasn't found yet; `local_ai.page_key: "Alt+{number}"` in en-gb.hor is unused. Also open: wave 3, and the rest of the perf list above.
+* **Still open:** N (system notifications via `UNUserNotificationCenter`); the "Alt+N" tab hints (⌥N).
+
+### 2026-11-25, wave 3 completions (I, F, R, T)
+* **I, IME composition & UTF-8 emoji commit (`SdlTextEditing`):**
+  * `Horizon.Platform.Desktop/Input/SdlTextEditing.cs` installs an SDL event watch for `SDL_TEXTEDITING`, `SDL_TEXTEDITING_EXT`, and `SDL_TEXTINPUT`, delivering full UTF-8 emoji/IME commits without Silk's UTF-16 surrogate splitting and emitting `InputEvent.Composition` for live preedit underlines.
+  * `IPlatformInput.SetTextInputRect` forwards caret bounds to `SDL_SetTextInputRect` so the macOS candidate window tracks the caret in `CodeEditor` and `TextBox`.
+  * `TextMateHighlighter.CutNear` guards UTF-16 surrogate pairs so emoji/non-BMP commits never split across syntax-highlighting chunks.
+* **F, native panels (`MacDialogs` & `HexDialogs`):**
+  * Added `IPlatformDialogs` and `PlatformFeatures.NativeDialogs` in Horizon, implemented on macOS via `MacDialogs` (`NSOpenPanel` / `NSSavePanel` with `UTType` filters on the main thread).
+  * `Hex.Shell/Platform/HexDialogs.cs` routes Open, Save, and PickFolder through native panels when `PlatformFeatures.NativeDialogs` and `dialogs.native` are enabled, falling back cleanly to `UIFileDialogs`.
+* **R, ProMotion, Low Power Mode & zero-traffic chrome (`PlatformPower` / `DesktopPower` / `MacWindowChrome`):**
+  * Queries `NSScreen.maximumFramesPerSecond` so ProMotion displays pace up to 120 Hz and 60 Hz external displays cap at 60 Hz.
+  * Added `PlatformPower` / `DesktopPower` observing macOS Low Power Mode (`NSProcessInfoPowerStateDidChangeNotification`) so `WindowManager` automatically reduces calm/background cadence on battery power saving.
+  * Made `MacWindowChrome.Maintain` zero-traffic when window state has not changed, eliminating unnecessary per-tick ObjC bridge work while idle.
+* **T, fonts (`GlyphOutlines` TTC + `HexCodeEditing.Font`):**
+  * `Horizon/Rendering/2D/Text/GlyphOutlines.cs` accepts `.ttc` TrueType collections via `stbtt_GetFontOffsetForIndex` alongside `.ttf`/`.otf`.
+  * `hex/Hex.Dawn/Code/HexCodeEditing.Font.cs` resolves macOS system monospace fonts (`SF Mono`, `Menlo`, `Monaco`) in addition to bundled `Assets/fonts/`.
 
 ## 8. Waves 2 and 3, refined on the Mac
 Facts below were read on bogzmacpro (M6, macOS 27.2, built-in display 1512×982 pt @ 120 Hz). SDL is `ultz.native.sdl` 2.32.10 (universal) under Silk.NET 2.23.
