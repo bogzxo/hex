@@ -27,6 +27,8 @@ internal sealed partial class DawnScene
         // the files by hand is underlined in them and listed in Problems (SettingsDiagnostics)
         SettingsSections.Missing = Said("settings_problems.no_settings", ("skeleton", Said("settings_problems.skeleton")));
         diagnosticSources.Add(SettingsDiagnosticsOf);
+        if (kept)
+            HexSettings.PinFollowSystem(Horizon.UI.Components.TerminalFiles.Settings(), Path.Combine(Hex.Core.HexHost.ProgramFolder, HexSettings.FILE));
         settings = new HexSettings(kept ? Horizon.UI.Components.TerminalFiles.Settings() : null, Path.Combine(Hex.Core.HexHost.ProgramFolder, HexSettings.FILE));
         if (kept)
             Hex.Core.HexData.UseAgentFolder(settings.AgentDataFolder);

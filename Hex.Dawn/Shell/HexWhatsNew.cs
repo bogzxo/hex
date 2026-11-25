@@ -18,7 +18,10 @@ internal enum HexNewsPlace
     Problems,
 
     // The New Project window
-    NewProject
+    NewProject,
+
+    // A page of the Local AI window, named in the target
+    LocalAi
 }
 
 /// <summary>
@@ -45,6 +48,16 @@ internal static class HexWhatsNew
 
     private static readonly Dictionary<string, HexNewsItem[]> releases = new(StringComparer.Ordinal)
     {
+        ["3.4.7"] =
+        [
+            new("local_ai", "go_local_ai", "sparkle", HexNewsPlace.LocalAi, "overview"),
+            new("model_picker", "go_model_picker", "chip", HexNewsPlace.LocalAi, "models"),
+            new("ai_edit", "go_ai_edit", "edit", HexNewsPlace.LocalAi, "overview"),
+            new("local_agent", "go_agents", "robot", HexNewsPlace.Side, Side: HexSide.Agents),
+            new("link_chat", "go_link", "comment-discussion", HexNewsPlace.Setting, "link"),
+            new("ai_over_link", "go_link", "link", HexNewsPlace.Setting, "link"),
+            new("merge_editor", "go_merge", "git-merge", HexNewsPlace.Side, Side: HexSide.SourceControl)
+        ],
         ["3.4.0"] =
         [
             new("linked_workspaces", "go_link", "link", HexNewsPlace.Setting, "link")

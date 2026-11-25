@@ -66,7 +66,7 @@ internal sealed partial class DawnScene
         var root = new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, AGENT_CARD), Padding = new UIEdges(indent, 0, 0, 0), Color = Vector4.Zero };
         var pick = root.Add(new AgentCardButton(this, chat)
         {
-            Style = "button_flat", Fill = UIFill.Both, Label = string.Empty, Animated = false, Selected = remote is null ? chat == agentChat : linkRemoteOpen == remote,
+            Style = "button_flat", Fill = UIFill.Both, Label = string.Empty, Animated = false, Card = root, Selected = remote is null ? chat == agentChat : linkRemoteOpen == remote,
             Tooltip = remote is not null && !LinkChatOnline(remote.DeviceId)
                 ? $"#{chat.Id} {chat.Shown}\n{LinkChatOfflineReason(remote.DeviceName)}"
                 : $"#{chat.Id} {chat.Shown}"
@@ -230,7 +230,8 @@ internal sealed partial class DawnScene
                 string used = string.Join(" · ", new[]
                 {
                     model,
-                    chat.InputTokens + chat.OutputTokens > 0 ? $"{HexAgentLimits.Tokens(chat.InputTokens + chat.OutputTokens)} tokens" : null,
+                    chat.ContextLimit > 0 && chat.ContextUsed > 0 ? $"{Count(chat.ContextUsed)} / {Count(chat.ContextLimit)}"
+                        : chat.InputTokens + chat.OutputTokens > 0 ? $"{HexAgentLimits.Tokens(chat.InputTokens + chat.OutputTokens)} tokens" : null,
                     chat.Cost > 0 ? "$" + chat.Cost.ToString("0.000", CultureInfo.InvariantCulture) : null
                 }.Where(part => !string.IsNullOrEmpty(part)));
                 said = UIRichText.Literal(FitText(used, under.TextScale, room - 24 - mailWidth)) + (used.Length > 0 ? mail : mail.TrimStart(' ', '·'));

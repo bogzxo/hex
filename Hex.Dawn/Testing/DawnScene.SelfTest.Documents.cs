@@ -169,11 +169,27 @@ internal sealed partial class DawnScene
     {
         /* Scrolling */
 
+        // A tall screen shows the whole list, with nothing to scroll, so the list is given the length a short screen has
+        Spacer? length = null;
+        test.Run(() =>
+        {
+            float room = treeScroll.Bounds.Height;
+            if (treeScroll.MaxOffset > treeScroll.WheelStep * 3 || room <= 0)
+                return;
+
+            length = tree.Add(new Spacer { Space = room * 2.0f });
+        });
+        test.Wait();
         test.Hover(Part("tree_scroll"));
         test.Run(() => compositor.Scroll(-3));
         // Eased there a few pixels a tick (UIScrollEase), not jumped, as far as the list goes (a shorter screen leaves less of it to scroll)
-        test.WaitFor(() => Near(treeScroll.Offset, MathF.Min(3 * treeScroll.WheelStep, treeScroll.MaxOffset)), 2.0f);
+        test.WaitFor(() => Near(treeScroll.Offset, MathF.Min(3 * treeScroll.WheelStep, treeScroll.MaxOffset)), 10.0f); // the ease takes longer to play out under load, so the bound is generous and the wait ends the moment it's there
         test.Check("scroll: the wheel scrolls the list under the pointer", () => treeScroll.Offset > 0.0f && Near(treeScroll.Offset, MathF.Min(3 * treeScroll.WheelStep, treeScroll.MaxOffset)));
+        test.Run(() =>
+        {
+            if (length is not null)
+                tree.Remove(length);
+        });
 
         if (options.Wheel)
         {

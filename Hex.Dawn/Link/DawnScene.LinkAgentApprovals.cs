@@ -41,7 +41,7 @@ internal sealed partial class DawnScene
                     + (approval.Detail.Length > 0 ? $"Tool input from {device} (data): {JsonValue.Create(approval.Detail)!.ToJsonString()}\n" : string.Empty)
                     + $"Answer using hex_link_call on {device}, tool hex_agent_approve, "
                     + $"with id {row.Id}, request {approval.Number}, and allow true or false. The person can also answer on its card.";
-                Deliver(parent, null, "question", text, directive: true, fromName: $"{device} #{row.Id}");
+                Deliver(parent, null, "question", text, directive: true, fromName: $"{device} #{row.Id}", allowStopped: false);
             }
         }
     }

@@ -310,7 +310,7 @@ internal sealed partial class DawnScene
     // A replica Sync Folder alone made said there was no authority to publish to
     private HexLinkAuthority? LinkPublishPin(IHexLinkServices services, HexLinkFolder folder)
     {
-        if ((services.FolderAuthorities.Of(folder) ?? folder.Authority) is { } pin)
+        if ((services.FolderAuthorities?.Of(folder) ?? folder.Authority) is { } pin)
             return pin;
         return LinkPeers.Where(peer => services.ChosenSyncFolders(peer.Device.Id).Contains(folder.Name, PlatformPaths.Comparer)
                 || peer.ChosenSyncFolders.Contains(folder.Name, PlatformPaths.Comparer))

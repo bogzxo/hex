@@ -147,7 +147,7 @@ internal sealed class LinkTools : IMcpTools
         .. HexLinkAllowed.Names.Select(name => new McpTool(name, name, $"The stand in for {name}.",
             name == "hex_read" ? McpSchema.Object([("path", McpSchema.String("The file.")), ("symbol", McpSchema.String("The symbol."))], "path")
             : McpSchema.Object([("id", McpSchema.Integer("A chat.")), ("text", McpSchema.String("Text.")), ("allow", McpSchema.Flag("Allow.")), ("request", McpSchema.Integer("Which.")),
-                ("path", McpSchema.String("A path.")), ("name", McpSchema.String("A name.")), ("clear", McpSchema.Flag("Clear.")), ("confirm", McpSchema.Flag("Confirm."))]))),
+                ("path", McpSchema.String("A path.")), ("name", McpSchema.String("A name.")), ("clear", McpSchema.Flag("Clear.")), ("confirm", McpSchema.Flag("Confirm.")), ("from_person", McpSchema.Flag("A person typed it."))]))),
         new McpTool("hex_terminal_run", "Terminal", "Runs a command.", McpSchema.Object([("command", McpSchema.String("What."))], "command")),
         new McpTool("hex_screenshot", "Screenshot", "Takes one.", McpSchema.Empty())
     ];
@@ -190,6 +190,7 @@ internal sealed partial class LinkServices : IHexLinkServices, IDisposable
 
     public HexLinkWorkspace Workspace { get; set; }
     public HexLinkAuthorityStore? FolderAuthorities { get; set; }
+    public HexLinkPorts? Ports { get; } = new();
     public IHexLinkPublicationService? Publication { get; set; }
     public Func<HexLinkFolder, HexLinkWorktreeGatePolicy?>? GateFor { get; set; }
     public HexLinkWorktreeGatePolicy? WorktreeGate(HexLinkFolder folder) => GateFor?.Invoke(folder);

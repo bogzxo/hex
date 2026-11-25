@@ -10,6 +10,42 @@ internal sealed partial class HexLinkSync
 {
     private readonly Dictionary<string, HexLinkMergePreview> mergePreviews = new(StringComparer.Ordinal);
 
+    // The text files this sync last agreed on, kept on the disk by hash so a merge has its base after a restart
+    // (none when the state is kept inside the folder synced)
+    private readonly HexLinkMergeBases? mergeBases;
+
+    // Keeps the bytes of a file just agreed on in the store, off the caller's thread and outside the gate: a copy of a
+    // file is a disk write the sync never waits for. A base that isn't written costs a two-way merge, nothing more.
+    // Only for a real change of one file, never the bulk and line-end-only agreements, which would copy the repository.
+    private void KeepBase(byte[]? bytes)
+    {
+        if (bytes is null || bytes.Length > HexLinkMerge.CACHE_FILE_BYTES || mergeBases is not { } store)
+            return;
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                store.Add(bytes);
+            }
+            catch (Exception e) when (e is not OutOfMemoryException)
+            {
+                // Never reaches the sync: a base not kept only means a comparison without it
+            }
+        });
+    }
+
+    // The agreed base of a path, read under the gate by the caller before RemoveBase drops it
+    private HexLinkSyncAgreed? AgreedFor(string wire) => bases.GetValueOrDefault(wire);
+
+    // A conflict is about to take the base out of the sync's list: whatever bytes of it are known (the memory cache or
+    // Git's last version of the file) go to the store so the merge editor can still find them by the conflict's hash
+    private async Task KeepConflictBase(string full, HexLinkSyncAgreed? agreed, CancellationToken stop)
+    {
+        if (agreed is null || await MergeBase(full, agreed, stop) is not { } basis)
+            return;
+        KeepBase(basis);
+    }
+
     public HexLinkMergePreview? MergePreview(string wire)
     {
         lock (gate)
@@ -60,10 +96,12 @@ internal sealed partial class HexLinkSync
                 if (mergePreviews.Count >= 8)
                     mergePreviews.Remove(mergePreviews.Keys.First());
                 mergePreviews[wire] = new HexLinkMergePreview(mine, theirs, result.Bytes);
-                conflicts[wire] = new HexLinkSyncConflict(wire, "changed on both", copy, copyHash);
+                conflicts[wire] = new HexLinkSyncConflict(wire, "changed on both", copy, copyHash, agreed.Local);
                 RemoveBase(wire);
             }
 
+            // The base is about to leave the sync's list, so the conflict keeps its hash and the store its bytes
+            KeepBase(basis);
             Save();
             Notify();
             return true;
@@ -90,10 +128,21 @@ internal sealed partial class HexLinkSync
         return true;
     }
 
-    private static async Task<byte[]?> MergeBase(string full, HexLinkSyncAgreed agreed, CancellationToken stop)
+    private Task<byte[]?> MergeBase(string full, HexLinkSyncAgreed agreed, CancellationToken stop) =>
+        MergeBase(full, agreed.Local, agreed.Text, stop);
+
+    // The common base of a file by the hash of this side's bytes when both agreed, looked for in the memory cache, then
+    // in the store kept on the disk (which is what survives a restart), then in Git. The text it was agreed with is
+    // only known while the sync still has the base, a conflict kept alone has the hash.
+    private async Task<byte[]?> MergeBase(string full, string hash, string? text, CancellationToken stop)
     {
-        if (HexLinkMerge.CachedBase(agreed.Local) is { } cached)
+        if (HexLinkMerge.CachedBase(hash) is { } cached)
             return cached;
+        if (await Task.Run(() => mergeBases?.Get(hash), stop) is { } stored)
+        {
+            HexLinkMerge.RememberBase(hash, stored);
+            return stored;
+        }
 
         // The previous Git blob is useful only if its raw or normalized hash matches the base kept by sync.
         string? directory = Path.GetDirectoryName(full);
@@ -108,7 +157,7 @@ internal sealed partial class HexLinkSync
                 return null;
             byte[] candidate = Encoding.UTF8.GetBytes(blob.Output);
             string? digest = TextAndEol(candidate).Text;
-            return HexLinkFiles.Hash(candidate) == agreed.Local || digest is not null && digest == agreed.Text
+            return HexLinkFiles.Hash(candidate) == hash || digest is not null && digest == text
                 ? candidate : null;
         }, stop);
     }
@@ -141,6 +190,7 @@ internal sealed partial class HexLinkSync
         Interlocked.Increment(ref sent);
         lock (gate)
             SetBase(wire, AgreedOf(localBytes, remoteBytes));
+        KeepBase(localBytes);
     }
 
     internal async Task<MergeSession?> ConflictMergeSession(string wire, CancellationToken cancel)
@@ -163,8 +213,23 @@ internal sealed partial class HexLinkSync
             byte[]? mine = await ReadLocal(full, cancel);
             byte[]? theirs = conflict.Copy is { } copy
                 ? await HexLinkFiles.ReadSharedAsync(HexLinkFiles.Resolve([folder], copy), cancel) : null;
+            // Deleted here and changed there leaves no copy beside it, but the other device still has its version
+            bool theirsExists;
+            lock (gate)
+                theirsExists = remote.TryGetValue(wire, out HexLinkTreeFile? there) && there.Hash is not null && !there.Unavailable;
+            if (theirs is null && mine is null && theirsExists)
+            {
+                try { theirs = (await Fetch(wire, cancel)).Bytes; }
+                catch (HexLinkException) { }
+            }
             if (mine is null || theirs is null)
                 model = MergeModel.Binary([], mine ?? [], theirs ?? []);
+            else if (conflict.Base is { } baseHash && await MergeBase(full, baseHash, null, cancel) is { } basis)
+            {
+                // The draft is gone (a restart) but the base isn't: merged region by region, so only the regions both
+                // sides changed are conflicts instead of the whole file
+                model = await MergeModel.FromThree(basis, mine, theirs, cancel);
+            }
             else
                 model = MergeModel.FromTwo(mine, theirs);
             if (model.IsBinary)
@@ -176,7 +241,15 @@ internal sealed partial class HexLinkSync
                     {
                         if (await Resolve(wire, side == MergeSide.Mine ? HexLinkSyncKeep.Mine : HexLinkSyncKeep.Theirs, cancel) is { } why)
                             throw new IOException(why);
-                    }),
+                    })
+                    {
+                        // One side deleted it and the other changed it: each side said by what it did, and each button by what it keeps
+                        MineButton = mine is null && theirs is not null ? "Keep deleted" : theirs is null && mine is not null ? "Keep my version" : null,
+                        TheirsButton = mine is null && theirs is not null ? "Keep their version" : theirs is null && mine is not null ? "Keep deleted" : null,
+                        MineDescription = mine is null && theirs is not null ? "Deleted here" : null,
+                        TheirsDescription = mine is null && theirs is not null ? $"Changed on {peer.Device.Name}  {theirs.LongLength:N0} bytes"
+                            : theirs is null && mine is not null ? $"Deleted on {peer.Device.Name}" : null,
+                    },
                     MineModified = mine is null ? null : new DateTimeOffset(File.GetLastWriteTimeUtc(full)),
                 };
             }
@@ -192,12 +265,12 @@ internal sealed partial class HexLinkSync
             }
         }
 
-        return new(Path.GetFileName(full), "Mine", "Theirs", "Base", model, async bytes =>
+        return new(Path.GetFileName(full), "Your copy", $"{peer.Device.Name}'s copy", "Original", model, async bytes =>
         {
             string resolved = HexLinkFiles.Decode(bytes)?.Text ?? throw new IOException("The merge result is not text.");
             if (await PublishMerge(wire, preview!, resolved, cancel) is { } why)
                 throw new IOException(why);
-        }, static () => { }, full);
+        }, static () => { }, full) { LinkDevice = peer.Device.Name };
     }
 
     public async Task<string?> PublishMerge(string wire, HexLinkMergePreview preview, string resolved, CancellationToken cancel = default)
@@ -220,9 +293,14 @@ internal sealed partial class HexLinkSync
             HexLinkFile remoteFile = await Fetch(wire, cancel);
             if (remoteFile.Hash != preview.RemoteHash)
                 return "The remote file changed since the merge preview was opened.";
-            if (HexLinkMerge.EncodeLike(resolved, localBytes) is not { Length: <= HexLinkFiles.MOST_READ } localResolved
-                || HexLinkMerge.EncodeLike(resolved, remoteFile.Bytes) is not { Length: <= HexLinkFiles.MOST_READ } remoteResolved)
-                return "The resolved file is too large or its encoding changed.";
+            byte[]? localMade = HexLinkMerge.EncodeKeeping(resolved, localBytes, remoteFile.Bytes),
+                remoteMade = HexLinkMerge.EncodeKeeping(resolved, remoteFile.Bytes, localBytes);
+            string name = Path.GetFileName(wire);
+            if (localMade is null || remoteMade is null)
+                return $"Hex couldn't write the merged text in the encoding {(localMade is null ? "here" : peer.Device.Name)} uses. Save {name} as plain text on both devices, then compare again.";
+            if (localMade.Length > HexLinkFiles.MOST_READ || remoteMade.Length > HexLinkFiles.MOST_READ)
+                return $"The merged {name} is larger than Link sends. Shorten it, then save again.";
+            byte[] localResolved = localMade, remoteResolved = remoteMade;
             await WriteMerge(wire, full, preview.LocalHash, preview.RemoteHash, localBytes, localResolved, remoteResolved, cancel);
             lock (gate)
             {

@@ -11,10 +11,11 @@ public sealed class HexAgentHubTests
     [Theory]
     [InlineData("progress", false)]
     [InlineData("finding", false)]
-    [InlineData("instruction", false)]
-    [InlineData("question", true)]
+    [InlineData("question", false)]
+    [InlineData("answer", false)]
+    [InlineData("instruction", true)]
     [InlineData("blocked", true)]
-    public void OnlyQuestionsAndBlockersFromAgentsWakeAQuietWait(string kind, bool wakes)
+    public void OnlyInstructionsAndBlockersFromAgentsWakeAQuietWait(string kind, bool wakes)
     {
         var hub = new HexAgentHub();
         var waiting = new HexAgentChat(1, "codex");
@@ -27,6 +28,18 @@ public sealed class HexAgentHubTests
         Assert.Equal(wakes, row.UnreadForWait(wakesOnMail: false, finished: false).Length > 0);
         Assert.Single(row.UnreadForWait(wakesOnMail: true, finished: false));
         Assert.Single(row.UnreadForWait(wakesOnMail: false, finished: true));
+    }
+
+    [Fact]
+    public void APersonsMessageWakesAQuietWaitWhateverItsKind()
+    {
+        var hub = new HexAgentHub();
+        var waiting = new HexAgentChat(1, "claude_code");
+        hub.Add(waiting);
+        waiting.Post(new HexAgentMail(hub.NextMailSeq(), null, HexAgentMail.PersonName, "progress", "hi", false) { To = waiting.Id });
+        hub.Pump(100);
+
+        Assert.Single(hub.Snapshot.Rows[waiting.Id].UnreadForWait(wakesOnMail: false, finished: false));
     }
 
     [Fact]

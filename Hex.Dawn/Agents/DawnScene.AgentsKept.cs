@@ -46,6 +46,9 @@ internal sealed partial class DawnScene
             agentChatsMade = Math.Max(agentChatsMade, chat.Id);
         }
 
+        // What each chat's edits are reviewed against, kept beside its chats
+        HexAgentReviews.Shared.Load(chatsKept.Folder, chats.Select(chat => chat.Id));
+
         agentChatsMade = Math.Max(agentChatsMade, state?["made"]?.GetValue<int>() ?? 0);
         if (state?["open"]?.GetValue<int>() is { } open && ChatById(open) is { } opened)
             agentChat = opened;
@@ -91,6 +94,7 @@ internal sealed partial class DawnScene
             if (old != agentChat)
                 CloseAgentChat(old);
         }
+        HexAgentReviews.Shared.Keep(chatsKept.Folder);
         IReadOnlyList<HexAgentChat> kept = over.Count == 0 ? agentChats : [.. agentChats.Where(chat => !over.Contains(chat))];
         chatsKept.Keep(kept, new JsonObject
         {
@@ -117,6 +121,9 @@ internal sealed partial class DawnScene
     {
         // This folder's chats on the disk before the other's are read
         chatsKept?.Flush();
+        if (chatsKept is not null)
+            HexAgentReviews.Shared.Keep(chatsKept.Folder);
+        HexAgentReviews.Shared.Unload();
         hub.History = null;
         foreach (HexAgentChat chat in agentChats.ToList())
             agentChats.Remove(chat);

@@ -26,7 +26,7 @@ public sealed class HexLinkSymbolTests
         Assert.Equal("view", (denied.Detail as JsonObject)?["needs"]?.GetValue<string>());
         Assert.Empty(pair.A.LinkTools.Called);
         Assert.Contains(pair.A.Audited, entry =>
-            entry.What == "refused" && entry.Who.Id == DeviceB.Id && entry.Detail == "tool hex_symbols, it needs view");
+            entry.What == "refused" && entry.Who.Id == DeviceB.Id && entry.Detail == "tool hex_symbols, it needs \"See my files\"");
     }
 
     [Fact]

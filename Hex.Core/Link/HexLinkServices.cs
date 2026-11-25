@@ -46,6 +46,9 @@ internal interface IHexLinkServices
     /// <summary>The workspace open now, swapped whole when it changes.</summary>
     HexLinkWorkspace Workspace { get; }
 
+    /// <summary>The ports this machine shares and the ports of others it opened, null when the editor keeps none.</summary>
+    HexLinkPorts? Ports => null;
+
     HexLinkAuthorityStore? FolderAuthorities => null;
     IHexLinkPublicationService? Publication => null;
     HexLinkWorktreeGatePolicy? WorktreeGate(HexLinkFolder folder) => null;
@@ -159,4 +162,24 @@ internal interface IHexLinkServices
     /// enumeration. Called off the editor's thread and must never wait on it: somebody is typing at the other end.
     /// </summary>
     IAsyncEnumerable<string> Predict(HexLinkPrediction request, CancellationToken cancel) => HexLinkPrediction.NotServed();
+
+    /// <summary>
+    /// Whether this machine would serve its chat models to a device that may ask (the Serve AI setting on, and a chat model
+    /// it can reach). Read off the editor's thread on every ai/start and hello. Not, unless the editor says.
+    /// </summary>
+    bool ServesAi => false;
+
+    /// <summary>The chat models this machine serves, empty when it serves none. Called off the editor's thread.</summary>
+    Task<IReadOnlyList<HexLinkAiModel>> AiModels(CancellationToken cancel) => Task.FromResult<IReadOnlyList<HexLinkAiModel>>([]);
+
+    /// <summary>
+    /// A chat completion made with this machine's model for a device, the model's streamed chunks (chat.completion.chunk
+    /// JSON texts) as they come; the request is already bounded. Throws a <see cref="HexLinkException"/> with
+    /// <see cref="HexLinkErrors.AI_FAILED"/> (and data.status) when it couldn't, from the call or the enumeration. Called off the
+    /// editor's thread. <paramref name="device"/> is who asked, for the audit and the status line.
+    /// </summary>
+    IAsyncEnumerable<string> Ai(HexLinkDevice device, HexLinkAiRequest request, CancellationToken cancel) => HexLinkAiRequest.NotServed();
+
+    /// <summary>How many chat requests this machine is serving for a device now (running and queued), told whenever it changes. Nothing, unless the editor shows it.</summary>
+    void AiServing(HexLinkDevice device, int requests) { }
 }

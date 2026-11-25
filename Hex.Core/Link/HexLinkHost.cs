@@ -27,6 +27,7 @@ internal sealed partial class HexLinkHost : IDisposable
         this.session = session;
         this.services = services;
         fleet = new HexLinkCoalesce(FLEET_GAP, SendFleet);
+        Tunnels = new HexLinkTunnels(session, services);
         InstallFilePacks();
         RegisterPublicationReceiver();
     }
@@ -89,6 +90,7 @@ internal sealed partial class HexLinkHost : IDisposable
         "publish/status" => PublicationStatus(parameters, cancel),
         "publish/presence" => PublicationPresence(parameters, cancel),
         "sync/manifest" => SyncManifest(parameters, cancel),
+        "sync/dirs" => SyncDirs(parameters, cancel),
         "sync/watch" => SyncWatch(parameters, cancel),
         "sync/unwatch" => Task.FromResult<JsonNode?>(SyncUnwatch(parameters)),
         "sync/flush" => SyncFlush(parameters),
@@ -99,6 +101,9 @@ internal sealed partial class HexLinkHost : IDisposable
         "provision/bulk" => ProvisionBulk(parameters, cancel),
         "patch/offer" => PatchOffer(parameters),
         "predict/start" => PredictStart(parameters),
+        "ai/models" => AiModelsAsk(cancel),
+        "ai/start" => AiStart(parameters),
+        "ports/list" or "ports/connect" or "ports/ready" or "ports/data" or "ports/close" => PortsRequest(method, parameters, cancel),
         _ => throw new HexLinkException(HexLinkErrors.METHOD_NOT_FOUND, $"A link has no {(method.Length > 60 ? method[..60] : method)}.")
     };
 
@@ -107,6 +112,8 @@ internal sealed partial class HexLinkHost : IDisposable
     {
         if (method == "predict/cancel")
             return PredictCancel(parameters);
+        if (method == "ai/cancel")
+            return AiCancel(parameters);
         if (method == "git/cancel")
         {
             GitBundleCancel(parameters);
@@ -114,6 +121,11 @@ internal sealed partial class HexLinkHost : IDisposable
         }
         if (method == "claims/delta")
             return ClaimsNotice(parameters);
+        if (method == "ports/changed")
+        {
+            PortsChanged?.Invoke();
+            return true;
+        }
         if (method != "presence/set")
             return false;
 
@@ -195,6 +207,7 @@ internal sealed partial class HexLinkHost : IDisposable
             StopWatching();
         session.TellLatest("link/rights", new JsonObject { ["granted"] = HexLinkData.Words(Rights) });
         ServesMoved();
+        Tunnels.RightsMoved();
     }
 
     // What's asked of a device's right for a method, refused (and logged) when it hasn't it
@@ -203,7 +216,7 @@ internal sealed partial class HexLinkHost : IDisposable
         if (HexLinkAllowed.Has(Rights, right))
             return;
         string needs = HexLinkData.Word(right);
-        services.Audit("refused", Device, $"{what}, it needs {needs}");
+        services.Audit("refused", Device, $"{what}, it needs \"{HexLinkData.Readable(needs)}\"");
         throw HexLinkException.NotAllowed(needs);
     }
 
@@ -479,6 +492,7 @@ internal sealed partial class HexLinkHost : IDisposable
     public void Dispose()
     {
         fleet.Dispose();
+        Tunnels.Dispose();
         StopWatching();
         StopPredicting();
     }

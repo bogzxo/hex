@@ -58,7 +58,7 @@ internal sealed partial class DawnScene
         if (saved is not { Text: { } text } || saved.Receipt != receipt)
             return false;
 
-        string raw = DocumentFile.WithLineEndings(text, basis.Text, basis.CrLf, basis.CrLf);
+        string raw = basis.Render(text);
         byte[] bytes = basis.Bytes(raw);
         await LinkLiveWriteSaved(shared, receipt, full, shared.Wire, basis.Expected, bytes, HexLinkFiles.Hash(bytes),
             raw, basis.Text, basis.Encoding, cancel, relayed: true).ConfigureAwait(false);
@@ -81,7 +81,7 @@ internal sealed partial class DawnScene
         if (!active)
         {
             cancel.ThrowIfCancellationRequested();
-            throw LinkLiveSaveConflict(full, wire);
+            throw shared.Draft is null && !relayed ? LinkLiveSaveLagging(wire) : LinkLiveSaveConflict(full, wire);
         }
 
         try
@@ -183,7 +183,11 @@ internal sealed partial class DawnScene
         tabsDirty = true;
     }
 
+    // Transient: no editor_dirty marker, so sync schedules another attempt instead of holding a conflict.
+    private static HexLinkException LinkLiveSaveLagging(string wire) =>
+        new(HexLinkErrors.CONFLICT, $"{wire} is open as a shared document that has not caught up with this save yet.");
+
     private static HexLinkException LinkLiveSaveConflict(string full, string wire) =>
-        new(HexLinkErrors.CONFLICT, $"{wire} is open in a shared document.",
+        new(HexLinkErrors.CONFLICT, HexLinkSync.SharedOpenRefusal(wire),
             new JsonObject { ["hash"] = HexLinkFiles.HashOf(full), ["editor_dirty"] = true });
 }

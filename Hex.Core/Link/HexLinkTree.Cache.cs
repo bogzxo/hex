@@ -65,7 +65,7 @@ internal sealed partial class HexLinkTree
                 string full = Path.Combine(Root, relative.Replace('/', Path.DirectorySeparatorChar));
                 // Older text hashes include the UTF-8 BOM. Re-read text while retaining cached executable modes.
                 if (version == CacheVersion || text is null)
-                    entries.Add(full, new HashStamp(length, written, created, hash, text, eol));
+                    entries[Folder.Name + "/" + relative] = new HashStamp(length, written, created, hash, text == hash ? hash : text, eol);
                 if (version >= 2 && reader.ReadByte() is byte mode && mode != 0)
                     modes[full] = mode == 2;
             }
@@ -106,8 +106,7 @@ internal sealed partial class HexLinkTree
                 foreach (HexLinkTreeFile file in files)
                 {
                     string relative = file.Path[(Folder.Name.Length + 1)..];
-                    if (!hashes.TryGetValue(Path.Combine(Root, relative.Replace('/', Path.DirectorySeparatorChar)), out HashStamp entry) ||
-                        entry.Hash != file.Hash)
+                    if (!hashes.TryGetValue(file.Path, out HashStamp entry) || entry.Hash != file.Hash)
                         continue;
                     WriteCacheText(writer, relative);
                     writer.Write(entry.Length);

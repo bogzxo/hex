@@ -271,6 +271,82 @@ internal static class HexLinkWorkspaces
         if (HexHost.NoProcesses("git") is not null || !GitProcess.Installed || !Directory.Exists(folder))
             return null;
 
+        // Asked again every few seconds while a device is linked, to see a branch change: when .git/HEAD and what it points
+        // at read the same as last time the answer is the same, and no git is run for it
+        string? stamp = HeadStamp(folder);
+        if (stamp is not null)
+        {
+            lock (repositoryAnswers)
+            {
+                if (repositoryAnswers.TryGetValue(folder, out var known) && known.Stamp == stamp)
+                    return known.Found;
+            }
+        }
+
+        HexLinkRepository? found = AskRepositoryOf(folder);
+        if (stamp is not null && found is not null && HeadStamp(folder) == stamp)
+        {
+            lock (repositoryAnswers)
+            {
+                if (repositoryAnswers.Count >= MOST_ANSWERS)
+                    repositoryAnswers.Clear();
+                repositoryAnswers[folder] = (stamp, found);
+            }
+        }
+
+        return found;
+    }
+
+    private const int MOST_ANSWERS = 64;
+    private static readonly Dictionary<string, (string Stamp, HexLinkRepository Found)> repositoryAnswers = new(PlatformPaths.Comparer);
+
+    /// <summary>
+    /// What .git/HEAD says and the commit or packed refs it leads to, null where git has to be asked (no plain .git folder
+    /// above, a worktree or submodule's .git file, a HEAD that can't be read).
+    /// </summary>
+    private static string? HeadStamp(string folder)
+    {
+        try
+        {
+            for (DirectoryInfo? at = new(Path.GetFullPath(folder)); at is not null; at = at.Parent)
+            {
+                string git = Path.Combine(at.FullName, ".git");
+                if (File.Exists(git))
+                    return null;
+                if (!Directory.Exists(git))
+                    continue;
+                string head = File.ReadAllText(Path.Combine(git, "HEAD")).Trim();
+                if (head.Length > 4096)
+                    return null;
+                string target;
+                if (head.StartsWith("ref: ", StringComparison.Ordinal))
+                {
+                    string name = head[5..].Trim();
+                    if (name.Contains("..", StringComparison.Ordinal) || Path.IsPathRooted(name))
+                        return null;
+                    string loose = Path.Combine(git, name.Replace('/', Path.DirectorySeparatorChar));
+                    if (File.Exists(loose))
+                        target = File.ReadAllText(loose).Trim();
+                    else
+                    {
+                        var packed = new FileInfo(Path.Combine(git, "packed-refs"));
+                        target = packed.Exists ? $"packed:{packed.Length}:{packed.LastWriteTimeUtc.Ticks}" : "none";
+                    }
+                }
+                else
+                    target = string.Empty;
+                return $"{at.FullName}\n{head}\n{target}";
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+        }
+
+        return null;
+    }
+
+    private static HexLinkRepository? AskRepositoryOf(string folder)
+    {
         // The top folder and the commit at the head, then the branch's name (abbrev-ref holds for every name after it)
         GitResult said = GitProcess.Run(folder, ["rev-parse", "--show-toplevel", "HEAD"]);
         string[] lines = said.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

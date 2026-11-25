@@ -43,31 +43,12 @@ internal sealed partial class DawnScene
                 heard = null;
         }
 
+        // A bind that fails is tried again and one another Hex answers on is left to it, in HexInstance.Serve, which lets
+        // nothing out to take the program down
         private static void Listen()
         {
-            HexInstance.ClearStale(RemotePipe);
-            while (true)
-            {
-                try
-                {
-                    using var pipe = new NamedPipeServerStream(RemotePipe, PipeDirection.In, 1, PipeTransmissionMode.Byte);
-                    Owned = true;
-                    pipe.WaitForConnection();
-                    using var reader = new StreamReader(pipe, Encoding.UTF8);
-                    while (reader.ReadLine() is { } line)
-                        heard?.Invoke(line);
-                }
-                catch (IOException)
-                {
-                    // Another Hex has the pipe, this one opens what it is told on its own command line and nothing else
-                    return;
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine($"[Hex] the pipe for other programs stopped, {e.Message}");
-                    return;
-                }
-            }
+            HexInstance.Serve(RemotePipe, line => heard?.Invoke(line), CancellationToken.None, () => Owned = true, PipeOptions.None);
+            Owned = false;
         }
     }
 

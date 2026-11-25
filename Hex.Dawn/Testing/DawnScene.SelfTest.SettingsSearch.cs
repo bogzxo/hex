@@ -107,6 +107,52 @@ internal sealed partial class DawnScene
             page.DependentShown("auto_save_delay") is (true, var faint) && faint == !autoSave);
 
         TestSettingsPage(test);
+        TestSettingsToggleCost(test);
+    }
+
+    // What a toggle in the settings costs the UI thread: the row's set path, then the next ticks (nav, chips, the changed
+    // count), one line per setting. A toggle is to be under a frame
+    private void TestSettingsToggleCost(HexPointerScript test)
+    {
+        SettingsPage page = null!;
+        var spent = new List<string>();
+        double worst = 0.0;
+        test.Run(() =>
+        {
+            page = SettingsPage!;
+            page.Find(string.Empty);
+        });
+
+        foreach (string key in new[] { "minimap", "wrap_code", "git_blame", "edit_predictions", "edit_predictions_far", "link" })
+        {
+            test.Run(() =>
+            {
+                if (page.ValueOf?.Invoke(key) is not BooleanValue now)
+                    return;
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                page.Enter(key, Values.Bool(!now.Value));
+                double set = watch.Elapsed.TotalMilliseconds;
+                watch.Restart();
+                int count = page.ModifiedCount;
+                double counted = watch.Elapsed.TotalMilliseconds;
+                spent.Add($"{key} set {set:F1}ms, changed count {counted:F1}ms ({count})");
+                worst = Math.Max(worst, set);
+            });
+            test.Wait();
+            test.Run(() =>
+            {
+                if (page.ValueOf?.Invoke(key) is BooleanValue now)
+                    page.Enter(key, Values.Bool(!now.Value));
+            });
+            test.Wait();
+        }
+
+        test.Check("settings toggle cost", () =>
+        {
+            File.WriteAllLines("C:/Users/bogdan/source/repos/bogzxo/horizon/hex/Hex/bin/Debug/net11.0/data/agents/temp/scratch/toggle-cost.txt", spent);
+            return true;
+        });
+        test.Check("settings toggle: under a frame", () => worst < 16.0);
     }
 
     // The page's own part of a round of the settings. The controls down one right edge with the search's, the key on

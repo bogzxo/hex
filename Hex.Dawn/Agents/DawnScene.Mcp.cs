@@ -448,6 +448,10 @@ internal sealed class HexMcpTools : IMcpTools
         if (caller is { } chat && (tool.TakesCaller || name.StartsWith("hex_agent", StringComparison.Ordinal)))
             arguments[HexMcpCaller.CALLER] = chat;
 
+        // The file an agent's edit is about to change kept as it is, what its hunks are reviewed against after
+        if (caller is { } editor)
+            hex.ReviewObserve(editor, name, arguments);
+
         if (caller is { } agent && hex.LinkPreparePrivateAgentPath(agent, name, arguments, cancel) is { } prepare)
             return AfterPrivateRepository(prepare);
         return Run();

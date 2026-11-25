@@ -169,8 +169,13 @@ internal sealed partial class DawnScene
             if (closeConfirmed)
                 return true;
 
+            // On a Mac the application quit (Cmd+Q, the Dock's Quit, logout) is no window close: it quits for real, after
+            // the question if there is one, where the red button only puts a persistent Hex away
+            if (OperatingSystem.IsMacOS() && Engine.WindowManager.CloseIsQuit)
+                quitting = true;
+
             // As a persistent process the editor is put away on its own thread, after the question if there is one
-            if (!anyUnsaved && !PersistentProcess)
+            if (!anyUnsaved && (!PersistentProcess || quitting))
                 return true;
 
             closeAsked = true;
@@ -188,7 +193,15 @@ internal sealed partial class DawnScene
         (settings.PersistentProcess || System.Environment.GetEnvironmentVariable("HEX_PERSISTENT") == "1");
 
     // File, Exit asked, Hex quits for real whatever PersistentProcess says
-    private bool quitting;
+    private volatile bool quitting;
+
+    // The question about unsaved files was answered with "leave it": what was asked to quit isn't quitting any more, so the
+    // next red button only puts Hex away
+    private void AbandonQuit()
+    {
+        quitting = false;
+        AbandonRestart();
+    }
 
     /// <summary>Closes Hex for real, asking first about anything unsaved, rather than putting it to sleep the way the x does.</summary>
     private void Quit()
@@ -301,7 +314,7 @@ internal sealed partial class DawnScene
             unsaved.Count == 1 ? Said("views.unsaved_one", ("names", names)) : Said("views.unsaved_many", ("count", unsaved.Count.ToString()), ("names", names)),
             new DialogChoice(Said("views.save_all"), () => SaveAllAndQuit(unsaved)),
             new DialogChoice(Said("documents.dont_save"), QuitNow, Risky: true),
-            new DialogChoice(Said("keys.leave_it"), AbandonRestart));
+            new DialogChoice(Said("keys.leave_it"), AbandonQuit));
     }
 
     private void SaveAllAndQuit(List<HexDocument> unsaved)
@@ -311,7 +324,7 @@ internal sealed partial class DawnScene
             // Never saved anywhere, there is no file to put it in without asking where
             if (open.Path is null)
             {
-                AbandonRestart();
+                AbandonQuit();
                 Show(open);
                 Say(Said("views.never_saved", ("name", open.Name)), error: true);
                 return;
@@ -321,7 +334,7 @@ internal sealed partial class DawnScene
             Save();
             if (open.Modified || open.CodeEdited)
             {
-                AbandonRestart();
+                AbandonQuit();
                 return;
             }
         }

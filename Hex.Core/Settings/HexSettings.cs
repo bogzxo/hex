@@ -86,6 +86,59 @@ internal sealed partial class HexSettings
     public bool PersistentAtLogin;
 
     /// <summary>
+    /// On a Mac, whether the menus are in the system's menu bar along the top of the screen and not in the window's title bar.
+    /// Nothing anywhere else has a menu bar of the system's, so it is not looked at there.
+    /// </summary>
+    public bool MacNativeMenu = true;
+
+    /// <summary>
+    /// Whether the editor follows the system's light or dark appearance (a Mac's) and its accent colour, see
+    /// HexAppearance. On by default on a Mac and off elsewhere (<see cref="ThemeFollowSystemDefault"/>), and a settings file
+    /// that was there before the key existed has it written as off once (<see cref="PinFollowSystem"/>), so what a person already
+    /// has is never changed under them. The theme picked stays <see cref="EditorTheme"/>, following only changes which one is shown.
+    /// </summary>
+    public bool ThemeFollowSystem = ThemeFollowSystemDefault(OperatingSystem.IsMacOS());
+
+    /// <summary>The default of following the system: on for a Mac, off anywhere else.</summary>
+    public static bool ThemeFollowSystemDefault(bool mac) => mac;
+
+    /// <summary>
+    /// Whether following the system has to be written as off into a settings file: on a Mac, for a file that is there, when
+    /// it was not decided before (<paramref name="decided"/>, a marker kept beside the file). A file that is not there is a new
+    /// install and keeps the default, and nothing anywhere else has a default to keep off.
+    /// </summary>
+    public static bool ThemeFollowNeedsPin(bool mac, bool fileExists, bool decided) => mac && fileExists && !decided;
+
+    /// <summary>
+    /// Once, before the settings are read: a Mac's settings file that existed before the key did gets it written as off, so
+    /// an install that was there stays as it was. Either way it is decided then, and a marker beside the file says so, since a
+    /// file that keeps only what differs from the defaults can't (a fresh install's has no key either).
+    /// </summary>
+    public static void PinFollowSystem(string path, string? old = null)
+    {
+        string marker = path + ".appearance";
+        try
+        {
+            bool mac = OperatingSystem.IsMacOS();
+            if (!mac || File.Exists(marker))
+                return;
+
+            if (ThemeFollowNeedsPin(mac, File.Exists(path) || old is not null && File.Exists(old), File.Exists(marker)))
+            {
+                var pinned = new HexSettings(path, old) { ThemeFollowSystem = false };
+                if (pinned.Save() is not null)
+                    return;
+            }
+
+            File.WriteAllText(marker, "decided\n");
+        }
+        catch (Exception e)
+        {
+            Log.Warning($"[Hex] couldn't keep the appearance as it was for {path}: {e.Message}");
+        }
+    }
+
+    /// <summary>
     /// The picture behind the code (see DawnScene.Backdrop), whether it's there, which (empty for the girl that comes with
     /// Hex), how big against its pixels, how far from the bottom right corner it is, along and up, and how much of it shows.
     /// </summary>
@@ -279,6 +332,12 @@ internal sealed partial class HexSettings
 
     /// <summary>Whether the user approved requesting a router mapping for the public listener.</summary>
     public bool LinkMapPublicPort;
+
+    /// <summary>Whether Link Chat opens by itself when a message arrives while its panel is closed.</summary>
+    public bool LinkTalkOpenOnMessage = true;
+
+    /// <summary>What an invite grants unless changed: work_together (see and change files) or use_agents (also use this device's AI agents). The last choice in an invite is kept.</summary>
+    public string LinkInviteRights = "work_together";
 
     /// <summary>The colour this device picked for itself on Link, #rrggbb, empty for the one its id gives it. Only it sets it.</summary>
     public string LinkColour = string.Empty;
@@ -517,6 +576,7 @@ internal sealed partial class HexSettings
 
             userValues = new Dictionary<string, IRuntimeValue>(values, StringComparer.Ordinal);
             Apply(values);
+            MigrateLocalAi();
 
             if (byExtension is null && values.TryGetValue("extension_settings", out var told) && told is ObjectValue inOld)
                 byExtension = inOld.Properties;

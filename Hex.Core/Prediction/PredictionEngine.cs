@@ -38,6 +38,47 @@ internal sealed class PredictionEngine(TimeProvider time)
 
     private int requests, cancelled;
 
+    // Far (jump) predictions (docs/next-edit-plan.md, 2.2 A and 4.4): the places still to ask about once a near request is
+    // done, what they are asked of, and the answers waiting to be taken. Guarded by gate.
+    private const int FAR_IDLE_MS = 600;
+    private const int FAR_KEPT = 8;
+    private const int FAR_STALE_MS = 8000;
+    private readonly List<NextEditCandidate> farQueue = [];
+    private PredictionSnapshot? farSnapshot;
+    private string farText = "";
+    private PredictionStrategy? farStrategy;
+    private long farAt;
+    private bool farNow;
+    private int farRequests, farWaiting;
+    private readonly List<FarAnswer> farReady = [];
+
+    private sealed record FarAnswer(object Document, int Version, string Text, NextEdit Edit);
+
+    /// <summary>
+    /// Set while an instruction edit (Ctrl+I) is being made: nothing is asked for beside it, the priority being instruction
+    /// edit, then near the caret, then far.
+    /// </summary>
+    public bool InstructActive { get; set; }
+
+    /// <summary>Far requests sent to the provider, the cache's answers not counted.</summary>
+    public int FarRequests => Volatile.Read(ref farRequests);
+
+    /// <summary>Whether a far prediction is waiting to be taken; cheap to ask every tick.</summary>
+    public bool HasFar => Volatile.Read(ref farWaiting) > 0;
+
+    /// <summary>The places still to ask a far question about, for the tests.</summary>
+    internal int FarPending
+    {
+        get
+        {
+            lock (gate)
+                return farQueue.Count;
+        }
+    }
+
+    /// <summary>Whether the window has the user's attention; far questions are not asked while it hasn't. Asked on the editor's thread.</summary>
+    public Func<bool> Active { get; set; } = static () => true;
+
     /// <summary>What the settings say, null when predictions are off; asked on the editor's thread.</summary>
     public Func<PredictionOptions?> Options { get; set; } = () => null;
 
@@ -102,9 +143,13 @@ internal sealed class PredictionEngine(TimeProvider time)
         editedAt = time.GetTimestamp();
         immediate = false;
         pending = !ShortcutOnly && !(typedThrough && same);
-        if (flight is not null)
+        lock (gate)
         {
-            lock (gate)
+            // A keystroke ends the far questions: the ones in flight and the ones still to ask
+            farQueue.Clear();
+            farSnapshot = null;
+            farNow = false;
+            if (flight is not null)
             {
                 Stop(counted: true);
                 if (!pending && Status == PredictionStatus.Waiting)
@@ -119,7 +164,10 @@ internal sealed class PredictionEngine(TimeProvider time)
     public void Tick()
     {
         if (!pending || document is null)
+        {
+            TickFar();
             return;
+        }
 
         long now = time.GetTimestamp();
         if (failures >= FAILURES_TO_WAIT && now < retryAt)
@@ -135,6 +183,10 @@ internal sealed class PredictionEngine(TimeProvider time)
         if (!immediate && time.GetElapsedTime(editedAt, now).TotalMilliseconds < options.DebounceMs)
             return;
 
+        // An instruction edit comes first: the request waits, and is asked for when it is over
+        if (InstructActive)
+            return;
+
         pending = false;
         immediate = false;
         if (dismissed || Snapshot(document) is not { } snapshot)
@@ -147,6 +199,13 @@ internal sealed class PredictionEngine(TimeProvider time)
             return;
         }
 
+        StartRun(snapshot, options, asked);
+    }
+
+    // Apart from Tick so the closure the run needs is made only when there is a run: a closure over what Tick holds would be
+    // made at every tick, idle ones too
+    private void StartRun(PredictionSnapshot snapshot, PredictionOptions options, IPredictionProvider asked)
+    {
         Stop(counted: true);
         var cancel = new CancellationTokenSource();
         flight = cancel;
@@ -175,6 +234,7 @@ internal sealed class PredictionEngine(TimeProvider time)
         {
             bool asking = flight is not null && !running.IsCompleted;
             Stop(counted: true);
+            ClearFar(answers: true);
             Volatile.Write(ref ready, null);
             failures = 0;
             retryAt = 0;
@@ -190,9 +250,11 @@ internal sealed class PredictionEngine(TimeProvider time)
         if (ShortcutOnly)
             return;
         this.document = document;
+        editedAt = time.GetTimestamp();
         pending = true;
         immediate = true;
         dismissed = false;
+        farNow = true;
     }
 
     /// <summary>A prediction was dismissed: nothing more is asked for until something is typed.</summary>
@@ -200,7 +262,11 @@ internal sealed class PredictionEngine(TimeProvider time)
     {
         if (!ReferenceEquals(this.document, document))
             return;
-        Stop(counted: true);
+        lock (gate)
+        {
+            Stop(counted: true);
+            ClearFar();
+        }
         Volatile.Write(ref ready, null);
         pending = false;
         dismissed = true;
@@ -224,6 +290,7 @@ internal sealed class PredictionEngine(TimeProvider time)
         lock (gate)
         {
             Stop(counted: false);
+            ClearFar(answers: true);
             Volatile.Write(ref ready, null);
             this.document = null;
             pending = false;
@@ -245,6 +312,8 @@ internal sealed class PredictionEngine(TimeProvider time)
         if (options is not { On: true } || options == warmedFor)
             return;
         warmedFor = options;
+        if (ProviderOverride is null)
+            _ = PredictionModels.Probe(PredictionProviders.Shared, options, CancellationToken.None);
         if ((ProviderOverride ?? Provider(options)) is not OllamaProvider ollama)
             return;
 
@@ -264,6 +333,230 @@ internal sealed class PredictionEngine(TimeProvider time)
                     SetStatus(PredictionStatus.Ok, "");
             }
         });
+    }
+
+    /// <summary>
+    /// The far predictions made, once, on the editor's thread, as suggestions for the document as it is now (<paramref name="text"/>
+    /// at <paramref name="version"/>). One made for an older text is moved along with what was typed since, and let go of
+    /// when that touched it. Those made for another document are dropped.
+    /// </summary>
+    public IReadOnlyList<NextEdit> TakeFar(object document, int version, string text)
+    {
+        lock (gate)
+        {
+            if (farReady.Count == 0)
+                return [];
+            var taken = new List<NextEdit>(farReady.Count);
+            foreach (FarAnswer answer in farReady)
+            {
+                if (!ReferenceEquals(answer.Document, document))
+                    continue;
+                NextEdit? edit = answer.Version == version ? answer.Edit : NextEditMerge.Rebased(answer.Edit, answer.Text, text);
+                if (edit is not null)
+                    taken.Add(edit with { Version = version });
+            }
+            farReady.Clear();
+            Volatile.Write(ref farWaiting, 0);
+            return taken;
+        }
+    }
+
+    // The far questions and, when asked, the answers go. Called with the gate held.
+    private void ClearFar(bool answers = false)
+    {
+        farQueue.Clear();
+        farSnapshot = null;
+        farNow = false;
+        if (answers)
+        {
+            farReady.Clear();
+            Volatile.Write(ref farWaiting, 0);
+        }
+    }
+
+    // The next far question, when nothing else is being asked: no near request waiting or in flight, no instruction edit,
+    // the typing paused (the questions were made at the end of a near request, a tick later than that when it is idle)
+    private void TickFar()
+    {
+        if (farQueue.Count == 0 || InstructActive || ShortcutOnly || document is null)
+            return;
+        if (flight is not null && !running.IsCompleted)
+            return;
+
+        long now = time.GetTimestamp();
+
+        // Far questions are for someone at the keyboard: none are asked in an unfocused window, or after the typing (or the
+        // last prediction taken) has been left for FAR_STALE_MS
+        if (!Active() || time.GetElapsedTime(editedAt, now).TotalMilliseconds > FAR_STALE_MS)
+        {
+            lock (gate)
+                ClearFar();
+            return;
+        }
+
+        if (failures >= FAILURES_TO_WAIT && now < retryAt)
+            return;
+
+        PredictionOptions? options = Options();
+        if (options is not { On: true })
+            return;
+
+        PredictionSnapshot snapshot;
+        string text;
+        PredictionStrategy strategy;
+        NextEditCandidate candidate;
+        lock (gate)
+        {
+            if (farQueue.Count == 0 || farSnapshot is not { } held || farStrategy is not { } how || now < farAt)
+                return;
+            if (!ReferenceEquals(held.Document, document) || held.Version != version)
+            {
+                ClearFar();
+                return;
+            }
+            snapshot = held;
+            text = farText;
+            strategy = how;
+            candidate = farQueue[0];
+            farQueue.RemoveAt(0);
+        }
+
+        IPredictionProvider? asked = ProviderOverride ?? Provider(options);
+        if (asked is null)
+            return;
+
+        StartFar(snapshot, text, candidate, options, strategy, asked);
+    }
+
+    // Apart from TickFar for the same reason as StartRun: no closure at an idle tick
+    private void StartFar(PredictionSnapshot snapshot, string text, NextEditCandidate candidate, PredictionOptions options,
+        PredictionStrategy strategy, IPredictionProvider asked)
+    {
+        Stop(counted: true);
+        var cancel = new CancellationTokenSource();
+        flight = cancel;
+        running = Task.Run(() => RunFar(snapshot, text, candidate, options, strategy, asked, cancel.Token));
+    }
+
+    // At the end of a near request: the places to ask about, the nearest first, started once the typing has been quiet
+    // (at once after a prediction was taken)
+    private void ScheduleFar(PredictionSnapshot snapshot, string text, int caret, PredictionStrategy strategy, PredictionOptions options, CancellationToken cancel)
+    {
+        if (!options.Far || strategy.Far == PredictionFar.None || ShortcutOnly || snapshot.Notebook is not null)
+            return;
+        IReadOnlyList<NextEditCandidate> candidates = NextEditLocator.Candidates(text, History.Events(snapshot.Path), caret, snapshot.Path);
+        if (candidates.Count == 0)
+            return;
+
+        lock (gate)
+        {
+            if (cancel.IsCancellationRequested || dismissed || !ReferenceEquals(snapshot.Document, document) || snapshot.Version != version)
+                return;
+            farQueue.Clear();
+            farQueue.AddRange(candidates);
+            farSnapshot = snapshot;
+            farText = text;
+            farStrategy = strategy;
+            farAt = time.GetTimestamp() + (farNow ? 0 : (long)(FAR_IDLE_MS / 1000.0 * time.TimestampFrequency));
+        }
+    }
+
+    // Off the editor's thread: one far question, the prompt for the region at the candidate's line, the cache, the request
+    // and its answer. An answer that changes nothing is "no edit here"; one that changes something is made ready.
+    private async Task RunFar(PredictionSnapshot snapshot, string text, NextEditCandidate candidate, PredictionOptions options,
+        PredictionStrategy strategy, IPredictionProvider asked, CancellationToken cancel)
+    {
+        long started = time.GetTimestamp();
+        IPredictionFormat format = strategy.Near;
+        try
+        {
+            var input = new PredictionInput(snapshot.Path, snapshot.Language, text, candidate.Start,
+                History.Events(snapshot.Path), snapshot.Related?.Invoke() ?? [], null, History.Renames.Hint(snapshot.Path, text));
+
+            PredictionPrompt? prompt;
+            if (strategy.Far == PredictionFar.Chat)
+            {
+                // The chat prompt needs the turns, which Hex Link can't carry
+                if (asked is LinkProvider)
+                    return;
+                format = ChatEditFormat.Near;
+                prompt = ChatEditFormat.Near.Build(input, options.MaxTokens);
+            }
+            else
+            {
+                var zeta = strategy.Near as Zeta2Format ?? PredictionFormats.Named(PredictionFormats.ZETA21) as Zeta2Format;
+                if (zeta is null)
+                    return;
+                format = zeta;
+                var (regionStart, regionEnd, contextStart, contextEnd) = Zeta2Format.Ranges(text, candidate.Start);
+                prompt = zeta.Build(input, options.MaxTokens, regionStart, regionEnd, contextStart, contextEnd);
+            }
+            if (prompt is null)
+                return;
+
+            // The same region with other history behind it is another question
+            PredictionCache? cache = asked is LinkProvider link ? link.Cache : Cache;
+            string key = PredictionCache.FarKey(prompt.Region, options.Model, format.Name, PredictionHistory.Hash(input.Events));
+            if (cache is not null && cache.TryGet(key, prompt.RegionStart, out IReadOnlyList<PredictionEdit> cached, out _))
+            {
+                FarDone(snapshot, text, candidate, cached, cancel);
+                return;
+            }
+
+            Interlocked.Increment(ref requests);
+            Interlocked.Increment(ref farRequests);
+            PredictionLog.FarAsked();
+            var output = new StringBuilder();
+            PredictionParsed? parsed = null;
+            await foreach (string piece in asked.Complete(prompt.Request, cancel).ConfigureAwait(false))
+            {
+                output.Append(piece);
+                parsed = format.Parse(prompt, output.ToString(), false);
+                if (parsed.Done)
+                    break;
+            }
+
+            cancel.ThrowIfCancellationRequested();
+            if (parsed is not { Done: true })
+                parsed = format.Parse(prompt, output.ToString(), true);
+
+            cache?.Put(key, prompt.RegionStart, parsed.Edits, null);
+            FarDone(snapshot, text, candidate, parsed.Edits, cancel);
+        }
+        catch (OperationCanceledException) when (cancel.IsCancellationRequested)
+        {
+            // A keystroke, a dismissal or a closed document: nothing to say
+        }
+        catch (PredictionException exception)
+        {
+            Fail(exception.Status, exception.Message, started, format, cancel);
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            Fail(PredictionStatus.BadAnswer, "The prediction failed: " + exception.GetType().Name + ".", started, format, cancel);
+        }
+    }
+
+    // A far answer in: nothing changed is "no edit here", a change is kept for the editor's thread to take
+    private void FarDone(PredictionSnapshot snapshot, string text, NextEditCandidate candidate, IReadOnlyList<PredictionEdit> edits, CancellationToken cancel)
+    {
+        NextEdit? made = NextEditMerge.FromModel(snapshot.Path, text, snapshot.Version, edits, candidate.Reason);
+        lock (gate)
+        {
+            if (cancel.IsCancellationRequested)
+                return;
+            failures = 0;
+            // The next question waits for nothing more: this one is over
+            if (farQueue.Count > 0)
+                farAt = time.GetTimestamp();
+            if (made is null)
+                return;
+            PredictionLog.FarFound();
+            farReady.Add(new FarAnswer(snapshot.Document, snapshot.Version, text, made));
+            while (farReady.Count > FAR_KEPT)
+                farReady.RemoveAt(0);
+            Volatile.Write(ref farWaiting, farReady.Count);
+        }
     }
 
     // Cancels the request in flight, which closes its connection
@@ -287,6 +580,7 @@ internal sealed class PredictionEngine(TimeProvider time)
         lock (gate)
         {
             Stop(counted: false);
+            ClearFar(answers: true);
             warmedFor = null;
             pending = false;
             document = null;
@@ -309,15 +603,19 @@ internal sealed class PredictionEngine(TimeProvider time)
     private async Task Run(PredictionSnapshot snapshot, PredictionOptions options, IPredictionProvider asked, CancellationToken cancel)
     {
         long started = time.GetTimestamp();
-        IPredictionFormat format = PredictionFormats.For(options);
+        PredictionStrategy strategy = PredictionStrategy.For(options);
+        IPredictionFormat format = strategy.Near;
         try
         {
             string text = string.Join('\n', snapshot.Lines);
             int caret = Offset(snapshot.Lines, snapshot.CaretLine, snapshot.CaretColumn);
 
-            History.Note(snapshot.Path, text);
+            // Every edit is already noted soon by the glue; this settles those still waiting, then the text as asked for
+            History.Flush();
+            History.Note(snapshot.Path, text, snapshot.CaretLine);
             var input = new PredictionInput(snapshot.Path, snapshot.Language, text, caret,
-                History.Events(snapshot.Path), snapshot.Related?.Invoke() ?? [], snapshot.Notebook);
+                History.Events(snapshot.Path), snapshot.Related?.Invoke() ?? [], snapshot.Notebook,
+                History.Renames.Hint(snapshot.Path, text));
 
             PredictionCache? cache = asked is LinkProvider link ? link.Cache : Cache;
             string? key = cache is null ? null : PredictionCache.Key(text, caret, options.Model, format.Name);
@@ -327,6 +625,7 @@ internal sealed class PredictionEngine(TimeProvider time)
             {
                 var timing = new PredictionTiming(0, Elapsed(started), 0, 0);
                 Finish(snapshot, text, caret, cached, cachedCaret, true, timing, format, cancel);
+                ScheduleFar(snapshot, text, caret, strategy, options, cancel);
                 return;
             }
 
@@ -360,7 +659,8 @@ internal sealed class PredictionEngine(TimeProvider time)
             var took = new PredictionTiming(first, Elapsed(started), PredictionTokens.Of(prompt.Request.Prompt), pieces);
             if (key is not null)
                 cache?.Put(key, caret, parsed.Edits, parsed.CaretAfter);
-            Finish(snapshot, text, caret, parsed.Edits, parsed.CaretAfter, false, took, format, cancel);
+            Finish(snapshot, text, caret, parsed.Edits, parsed.CaretAfter, false, took, format, cancel, parsed.Note ?? "");
+            ScheduleFar(snapshot, text, caret, strategy, options, cancel);
         }
         catch (OperationCanceledException) when (cancel.IsCancellationRequested)
         {
@@ -378,7 +678,7 @@ internal sealed class PredictionEngine(TimeProvider time)
 
     // A prediction made: put where Take finds it, unless it was cancelled or changes nothing
     private void Finish(PredictionSnapshot snapshot, string text, int caret, IReadOnlyList<PredictionEdit> edits, int? caretAfter,
-        bool fromCache, PredictionTiming timing, IPredictionFormat format, CancellationToken cancel)
+        bool fromCache, PredictionTiming timing, IPredictionFormat format, CancellationToken cancel, string note = "")
     {
         PredictionLog.Request(PredictionStatus.Ok, timing, fromCache, edits.Count, format.Name);
         lock (gate)
@@ -387,7 +687,7 @@ internal sealed class PredictionEngine(TimeProvider time)
                 return;
             failures = 0;
             LastTiming = timing;
-            SetStatus(PredictionStatus.Ok, "");
+            SetStatus(PredictionStatus.Ok, note);
             if (edits.Count == 0)
                 return;
             bool ghost = PredictionDiff.IsGhost(edits, text, caret);

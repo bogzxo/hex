@@ -586,6 +586,7 @@ internal sealed partial class DawnScene
 
         StopAgent(chat, withStarted: true);
         privateAgentRoots.TryRemove(chat.Id, out _);
+        ForgetAgentReview(chat);
         agentChats.Remove(chat);
         agentDrafts.Remove(chat);
         if (agentChat == chat)

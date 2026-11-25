@@ -122,7 +122,7 @@ internal sealed partial class HexExtensions
                 if (ReadKey(written) is not { } key || (context.Typing && !key.Control && !key.Alt))
                     continue;
 
-                bool down = keyboard.IsDown(key.Key) && keyboard.Control == key.Control && keyboard.Shift == key.Shift && keyboard.Alt == key.Alt;
+                bool down = keyboard.IsDown(key.Key) && keyboard.Primary == key.Control && keyboard.Shift == key.Shift && keyboard.Alt == key.Alt;
                 bool was = commandKeysDown.GetValueOrDefault(key);
                 commandKeysDown[key] = down;
                 if (!down || was)

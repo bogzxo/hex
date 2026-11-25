@@ -259,8 +259,24 @@ internal sealed partial class DawnScene
             explorer.workspace = workspaceWas ?? new HexWorkspace();
             treeDirty = true;
             ReloadWorkspaceSettings();
-            Directory.Delete(folder, recursive: true);
         });
+
+        // The folder's watchers (the explorer's, the settings file's) are let go of on the editor's next ticks, not as the
+        // workspace changes, so the folder is deleted after them and not held open by them
+        test.Wait();
+        // Tried again on each tick, so the editor goes on letting go of it between tries
+        test.WaitFor(() =>
+        {
+            try
+            {
+                Directory.Delete(folder, recursive: true);
+                return true;
+            }
+            catch (IOException)
+            {
+                return false;
+            }
+        }, 3.0f);
         test.WaitFor(() => !ProblemsOf(folderFile).Any(), 3.0f);
         test.Check("problems: the folder's go with the folder", () => !ProblemsOf(folderFile).Any() && (settings.WorkspacePath is not { } at || !PlatformPaths.Same(at, folderFile)));
 

@@ -440,6 +440,7 @@ internal sealed partial class HexAgentChat(int id, string agent)
     public void Clear()
     {
         Restore(string.Empty, [], 0);
+        HexAgentReviews.Shared.Forget(Id);
         Plan = null;
         Session = null;
         Key = Guid.NewGuid().ToString("N");
@@ -453,6 +454,8 @@ internal sealed partial class HexAgentChat(int id, string agent)
     private HexAgentEntry Add(HexAgentEntry entry)
     {
         entries.Add(entry);
+        if (entry.Kind == HexAgentEntryKind.Tool)
+            HexAgentReviews.Shared.Observe(Id, entry);
         if (entry.Kind == HexAgentEntryKind.User)
             turnTools.Clear();
         else if (entry.Kind == HexAgentEntryKind.Tool && entry.ToolId is { } toolId)
@@ -506,6 +509,15 @@ internal sealed partial class HexAgentChat(int id, string agent)
     /// </summary>
     public HexAgentEntry Steer(string prompt, string? askedText = null, string? contextLocation = null) =>
         Add(new HexAgentEntry(HexAgentEntryKind.User, prompt) { AskedText = askedText, ContextLocation = contextLocation, Queued = true });
+
+    /// <summary>A person's message to a working agent that isn't queued on Hex, kept as their row in the chat, said once.</summary>
+    public HexAgentEntry SayAsPerson(string text)
+    {
+        HexAgentEntry entry = Steer(text);
+        entry.Queued = false;
+        Touch(entry);
+        return entry;
+    }
 
     /// <summary>
     /// Something asked and still queued taken back out of the chat, to be written again, false when it's gone further. The
@@ -639,9 +651,22 @@ internal sealed partial class HexAgentChat(int id, string agent)
         (entry.Kind == HexAgentEntryKind.Approval && entry.Answer is not null) || (entry.Kind == HexAgentEntryKind.Question && entry.Respond is not null);
 
     /// <summary>What the agent said, a row of its own.</summary>
-    public HexAgentEntry Say(string text) => Add(new HexAgentEntry(HexAgentEntryKind.Text, text));
+    public HexAgentEntry Say(string text, bool append = false) => AddOrAppend(HexAgentEntryKind.Text, text, append);
 
-    public HexAgentEntry Think(string text) => Add(new HexAgentEntry(HexAgentEntryKind.Thinking, text));
+    /// <summary>What the agent thought; with <paramref name="append"/> a streamed piece goes on the row before when that is thinking too.</summary>
+    public HexAgentEntry Think(string text, bool append = false) => AddOrAppend(HexAgentEntryKind.Thinking, text, append);
+
+    // A streamed piece joins the last row when it is the same kind, so a turn's thinking is one block and not a row a token
+    private HexAgentEntry AddOrAppend(HexAgentEntryKind kind, string text, bool append)
+    {
+        if (append && entries.Count > 0 && entries[^1] is { } last && last.Kind == kind)
+        {
+            last.Text += text;
+            Touch(last);
+            return last;
+        }
+        return Add(new HexAgentEntry(kind, text));
+    }
 
     public HexAgentEntry Note(string text) => Add(new HexAgentEntry(HexAgentEntryKind.Note, WithoutEscapes(text)));
 
@@ -713,6 +738,7 @@ internal sealed partial class HexAgentChat(int id, string agent)
         tool.State = ok ? HexAgentToolState.Done : HexAgentToolState.Failed;
         tool.Output = output;
         tool.Ended = Environment.TickCount64;
+        HexAgentReviews.Shared.Told(Id, tool);
         tool.Version++;
         Version++;
         return found;

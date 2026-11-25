@@ -87,7 +87,7 @@ internal sealed partial class DuskScene
         test.Settle(0.2f);
         test.Run(() => Shot("settings"));
         test.Check("the settings come up as a page, a row a setting, the terminal's and the editor's", () =>
-            SettingsPage is { } page && page.Settings.Count == TerminalSettings.Described.Length + Hex.Shell.EditorSettingsCatalog.Settings.Length + Hex.Shell.EditorSettingsCatalog.Text.Length
+            SettingsPage is { } page && page.Settings.Count == TerminalSettings.Described.Length + DuskEditorRows.Length + Hex.Shell.EditorSettingsCatalog.Text.Length
                 + new Hex.Shell.WindowsSource().Settings.Count + new Hex.Shell.DefaultTerminalSource().Settings.Count
             && page.ValueOf!("theme") is StringValue && page.RowsShown == page.Settings.Count);
         // Exercise the polling path used when the focused control is not a terminal or text box.

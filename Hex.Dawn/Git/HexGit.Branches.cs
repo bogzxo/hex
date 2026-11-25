@@ -23,7 +23,7 @@ internal sealed partial class HexGit
 
         // How far it is from what it follows is the sync item's to say, next to it
         int conflicts = status.Files.Values.Count(state => state.Change == GitChange.Conflicted);
-        string unresolved = conflicts > 0 ? $" · {HexText.Count("merge conflict", conflicts)}" : "";
+        string unresolved = conflicts > 0 ? $" · {HexText.Count("conflict", conflicts)}" : "";
         return $"{which}$(git-branch) {BranchName(status)}{star}{doing}{unresolved}";
     }
 

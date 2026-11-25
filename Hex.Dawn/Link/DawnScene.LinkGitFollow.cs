@@ -82,7 +82,7 @@ internal sealed partial class DawnScene
             if (peer is null)
                 continue;
             bool on = LinkGitFollowChoice(folder, peer, manual: false)();
-            commands.Add((Said(on ? "link.git_follow.disable" : "link.git_follow.enable", ("folder", folder.Name)), () =>
+            commands.Add((Said(on ? "link.git_follow.disable" : "link.git_follow.enable", ("folder", folder.Name), ("device", OneLine(LinkNameOf(peer.Device.Id, peer.Device.Name), 30))), () =>
             {
                 SetLinkGitFollow(folder.Path, !on);
                 foreach (LinkSyncShown sync in LinkSyncs.Where(sync => sync.Folder == folder.Name))

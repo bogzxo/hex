@@ -123,6 +123,7 @@ internal sealed partial class DawnScene
         if (linkItem is not null || linkServices is not null)
         {
             LinkClaimExplorerRow(row, path);
+            LinkConflictCopyMark(row, path);
             LinkHoldExplorerMark(row, path);
         }
     }

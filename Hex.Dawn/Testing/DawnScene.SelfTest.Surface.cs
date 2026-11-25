@@ -87,6 +87,9 @@ internal sealed partial class DawnScene
             panelPageWas = bottom.Selected;
             ShowPanel(OUTPUT_PAGE);
             panelWanted = 400;
+
+            // The compact find is what a window narrow at 200% has, so on a screen wide at 200% the sides are dragged out to make it
+            NarrowEditor(true, chrome.Root.Bounds.Width * compositor.Scale / 2.0f);
             SetInterfaceSize(2.0f, remember: false);
         });
         test.Settle(0.5f);
@@ -146,7 +149,8 @@ internal sealed partial class DawnScene
             panelWanted = panelHeightWas;
             bottom.Select(panelPageWas);
             bottom.Show(panelShownWas, instantly: true);
-            SetInterfaceSize(findScaleWas, remember: false);
+            NarrowEditor(false, 0.0f);
+        SetInterfaceSize(findScaleWas, remember: false);
         });
         test.Settle(0.5f);
         test.Check("surface: returning to the wide layout keeps the same focused find fields", () =>

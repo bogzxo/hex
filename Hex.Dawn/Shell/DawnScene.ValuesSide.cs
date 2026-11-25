@@ -13,7 +13,8 @@ internal sealed partial class DawnScene
     private void FoldValuesFor(HexDocument shown)
     {
         // A diff is looked at and has no file of its own, it put the side up for nothing every time one was opened
-        bool nothing = shown.DiffOf is not null || shown.IsText && shown.Path is { } path && !path.EndsWith(".hor", StringComparison.OrdinalIgnoreCase);
+        // A merge editor has no path of its own and no values either, so it is folded like a diff
+        bool nothing = shown.DiffOf is not null || shown.Merge is not null || shown.IsText && shown.Path is { } path && !path.EndsWith(".hor", StringComparison.OrdinalIgnoreCase);
         if (nothing && right.Shown && properties?.Pinned != true)
         {
             valuesFoldedForFile = true;

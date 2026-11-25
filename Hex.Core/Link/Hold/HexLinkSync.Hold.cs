@@ -9,6 +9,20 @@ internal sealed partial class HexLinkSync
     {
         get { lock (gate) return [.. remoteHeld.Order(PlatformPaths.Comparer)]; }
     }
+
+    /// <summary>Whether the other side holds this wire path just now: its edits stay on its machine until it releases the file.</summary>
+    public bool IsRemoteHeld(string wire)
+    {
+        lock (gate)
+            return remoteHeld.Contains(wire);
+    }
+
+    /// <summary>Counts every change of what the other side holds, so a surface drawn from it can tell by comparing numbers that it is out of date.</summary>
+    public int RemoteHoldsVersion
+    {
+        get { lock (gate) return remoteHoldsVersion; }
+    }
+    private int remoteHoldsVersion;
     private HashSet<string> holdPaths = new(PlatformPaths.Comparer);
     private readonly HashSet<string> remoteHeld = new(PlatformPaths.Comparer);
     private readonly Dictionary<string, string?> offeredWhileHeld = new(PlatformPaths.Comparer);
@@ -21,14 +35,22 @@ internal sealed partial class HexLinkSync
     // Called under the sync gate.
     private void NoteRemoteHold(string wire, bool held, bool fromNotice = false)
     {
+        bool changed;
         if (held)
-            remoteHeld.Add(wire);
+            changed = remoteHeld.Add(wire);
         else
         {
-            remoteHeld.Remove(wire);
+            changed = remoteHeld.Remove(wire);
             if (offeredWhileHeld.Remove(wire, out string? offered) && fromNotice)
                 releasedPeerOffers[wire] = offered;
         }
+
+        // A hold noticed or released is what a person looks at (a mark on the file's row and tab), so whoever draws this
+        // sync is told at once: the notice path ends here, with nothing after it that would. Changed only posts to the editor's thread
+        if (!changed)
+            return;
+        remoteHoldsVersion++;
+        Notify();
     }
 
     private async Task<bool> ReconcilePeerHold(string wire, string full, HexLinkTreeFile? mine, HexLinkTreeFile? theirs,
@@ -155,7 +177,10 @@ internal sealed partial class HexLinkSync
         if (location.Length != 2 || !HexLinkGit.IsCommitId(location[1]))
             return null;
 
-        string relative = Path.GetRelativePath(location[0], full).Replace('\\', '/');
+        // Git says the top with its links resolved (macOS's /var temp folder is /private/var), so the file would seem to be
+        // outside it; the top spelled as the file is, found by going up from it, is the one to take the path relative to
+        string top = PlatformPaths.IsUnder(full, location[0]) ? location[0] : HexCheckpoints.TopOf(full) ?? location[0];
+        string relative = Path.GetRelativePath(top, full).Replace('\\', '/');
         byte[]? head = await ReadHeadBlob(location[0], location[1], relative, cancel, HexLinkFileTransfer.MaximumLength);
         return head is not null && HexLinkFiles.Hash(head) == agreed.Local
             ? new(head, HexLinkHoldBaseSource.Git, Executable: agreed.Executable) : null;

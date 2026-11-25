@@ -441,7 +441,7 @@ internal sealed partial class DawnScene
             return false;
 
         // Alt+K in the filter starts and stops recording, VS Code's key for it
-        if (keyboard.WasPressed(Key.K) && keyboard.Alt && !keyboard.Control && !keyboard.Shift)
+        if (keyboard.WasPressed(Key.K) && keyboard.Alt && !keyboard.Primary && !keyboard.Shift)
         {
             RecordKeys(!keysRecording);
             return true;
@@ -457,7 +457,7 @@ internal sealed partial class DawnScene
             if (key == Key.Escape || !keyboard.WasPressed(key))
                 continue;
 
-            KeyRecorded(key, keyboard.Control, keyboard.Shift, keyboard.Alt);
+            KeyRecorded(key, keyboard.Primary, keyboard.Shift, keyboard.Alt);
             break;
         }
 

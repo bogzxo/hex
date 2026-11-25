@@ -31,8 +31,10 @@ internal sealed partial class DawnScene
             Group("debugger_path") == EditorSettingsCatalog.RUN && Group("run_to_terminal") == EditorSettingsCatalog.RUN
             && SettingsPage!.Settings.First(setting => setting.Key == "code_zoom") is { Slider: true, Unit: "×", Group: EditorSettingsCatalog.TEXT });
         // Agents, prediction and Link each have a home of their own, and a row that moved is still found by the section it was in
-        test.Check("settings looks: agents, prediction and Link have their own sections, the system files row is Link · Sync", () =>
-            Group("mcp_server") == EditorSettingsCatalog.AGENTS && Group("no_ai") == EditorSettingsCatalog.AGENTS && Group("edit_predictions_model") == EditorSettingsCatalog.AI
+        test.Check("settings looks: agents, Local AI and Link have their own sections, the system files row is Link · Sync", () =>
+            Group("mcp_server") == EditorSettingsCatalog.AGENTS && Group("no_ai") == EditorSettingsCatalog.AGENTS && Group(EditorSettingsCatalog.LOCAL_AI_WINDOW) == EditorSettingsCatalog.AI
+            && !SettingsPage!.Settings.Any(setting => EditorSettingsCatalog.IsLocalAiWindows(setting.Key))
+            && SettingsPage.Settings.Where(setting => setting.Group == EditorSettingsCatalog.AI).Select(setting => setting.Key).SequenceEqual([EditorSettingsCatalog.LOCAL_AI_WINDOW])
             && Group("link") == EditorSettingsCatalog.LINK && Group("link_system_file_folders") == EditorSettingsCatalog.LINK_SYNC
             && Group("interface_size") == EditorSettingsCatalog.INTERFACE && Group("caret_glide") == EditorSettingsCatalog.CARET && Group("visual_studio_keys") == EditorSettingsCatalog.KEYS
             && Group("link_system_file_folders") is { } syncGroup && SettingsPage!.SectionsShown.Contains(syncGroup));
@@ -44,6 +46,28 @@ internal sealed partial class DawnScene
         test.Settle(0.3f);
         test.Check("settings looks: motion finds the caret's glide and the scroll speed", () =>
             SettingsPage!.IsRowShown("caret_glide") && SettingsPage.IsRowShown("scroll_speed"));
+        // Local AI's settings are the Local AI window's; a search for one of them finds the row that opens it
+        test.Run(() => SettingsPage!.Find("temperature"));
+        test.Settle(0.3f);
+        test.Check("settings looks: temperature finds the one row that opens the Local AI window", () =>
+            HexAi.Off || SettingsPage!.IsRowShown(EditorSettingsCatalog.LOCAL_AI_WINDOW) && SettingsPage.RowsShown == 1);
+        test.Run(() => SettingsPage!.Find("llama"));
+        test.Settle(0.3f);
+        test.Check("settings looks: llama finds the row that opens the Local AI window", () =>
+            HexAi.Off || SettingsPage!.IsRowShown(EditorSettingsCatalog.LOCAL_AI_WINDOW));
+        // Only the window leaves them out: MCP's hex_settings_get still reads them, by key and by find, and hex_settings_set still knows them
+        string McpSaid(string name, System.Text.Json.Nodes.JsonObject arguments) =>
+            (name == "get" ? SettingsGet(arguments) : SettingsSet(arguments)).OfType<McpToolResult>().FirstOrDefault()?.AllText() ?? string.Empty;
+        test.Check("settings looks: hex_settings_get still finds local_ai_predict_model and llamacpp_port, which the window doesn't show", () =>
+            !SettingsPage!.Settings.Any(setting => setting.Key is "local_ai_predict_model" or "llamacpp_port")
+            && McpSaid("get", new() { ["key"] = "local_ai_predict_model" }).StartsWith("local_ai_predict_model = ", StringComparison.Ordinal)
+            && McpSaid("get", new() { ["key"] = "llamacpp_port" }).StartsWith("llamacpp_port = ", StringComparison.Ordinal)
+            && McpSaid("get", new() { ["find"] = "edit_predictions_temperature" }).Contains("edit_predictions_temperature = ", StringComparison.Ordinal)
+            && McpSaid("get", new() { ["find"] = "ai_edit" }).Contains("ai_edit_max_tokens = ", StringComparison.Ordinal)
+            && !McpSaid("get", new() { ["key"] = EditorSettingsCatalog.LOCAL_AI_WINDOW }).Contains(" = ", StringComparison.Ordinal));
+        // hex_settings_set still knows them: a value of the wrong kind is refused as that kind, not as a setting there's none of
+        test.Check("settings looks: hex_settings_set still knows llamacpp_port", () =>
+            McpSaid("set", new() { ["key"] = "llamacpp_port", ["value"] = "not a number" }) is var said && said.Contains("a number", StringComparison.Ordinal) && !said.Contains("There's no setting", StringComparison.Ordinal));
         test.Run(() => SettingsPage!.Find(string.Empty));
 
         // Liquid glass, what's under the window comes through, blurred enough that it's colour behind the rows and not words,

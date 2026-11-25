@@ -50,7 +50,11 @@ internal sealed partial class DawnScene
     {
         CodeEditor editor = prepared.Editor;
         editor.TextScale = CODE_TEXT * settings.CodeZoom;
-        editor.OnZoom = notches => ZoomCode(notches > 0.0f ? CODE_ZOOM_STEP : 1.0f / CODE_ZOOM_STEP);
+        editor.OnZoom = steps => ZoomCode(CodeZoomFactor(steps), smooth: MathF.Abs(steps) < 1.0f);
+        editor.OnPinch = factor => ZoomCode(factor, smooth: true);
+        editor.OnSmartZoom = SmartZoomCode;
+        // The numbers down the side stop growing at half as big again as the usual, however far the code is zoomed in
+        editor.MostGutterScale = CODE_TEXT * 1.5f;
         editor.Padding = new UIEdges(4);
         editor.WordWrap = settings.WrapCode;
         editor.TabMovesFocus = tabMovesFocus;

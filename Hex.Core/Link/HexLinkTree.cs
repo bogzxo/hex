@@ -113,7 +113,7 @@ internal sealed partial class HexLinkTree
             long version = Volatile.Read(ref scanVersion), holdRevision = Holds?.Revision ?? 0;
             if (shareFreshScans && reuse && !verify && !provision && lastScan is { } previous &&
                 version == lastScanVersion && holdRevision == lastHoldRevision && ReferenceEquals(linkRules, lastLinkRules) &&
-                Environment.TickCount64 - scannedAt < 250)
+                Environment.TickCount64 - scannedAt < 250 && HeadsStamp() == lastHeadsStamp)
                 return previous;
             LoadCache();
             HexLinkManifest manifest = Scan(verify, provision, linkRules);
@@ -124,6 +124,7 @@ internal sealed partial class HexLinkTree
                 lastScanVersion = version;
                 lastHoldRevision = holdRevision;
                 lastLinkRules = linkRules;
+                lastHeadsStamp = HeadsStamp();
                 scannedAt = Environment.TickCount64;
             }
             return manifest;
@@ -259,8 +260,14 @@ internal sealed partial class HexLinkTree
         // What's cached of files no longer there let go of
         if (hashes.Count > files.Count * 2 + 1000)
         {
-            foreach (string full in hashes.Keys.Where(full => !File.Exists(full)).ToArray())
-                hashes.TryRemove(full, out _);
+            var live = new HashSet<string>(files.Count, StringComparer.Ordinal);
+            foreach (HexLinkTreeFile file in files)
+                live.Add(file.Path);
+            foreach (string key in hashes.Keys)
+            {
+                if (!live.Contains(key))
+                    hashes.TryRemove(key, out _);
+            }
         }
 
         string location = PlatformPaths.Comparison == StringComparison.Ordinal ? Root : Root.ToUpperInvariant();
@@ -322,7 +329,7 @@ internal sealed partial class HexLinkTree
             if (info.Length > HexLinkFiles.MOST_READ && (!streamLarge || info.Length > HexLinkFileTransfer.MaximumLength))
                 return new HexLinkTreeFile(wire, null, info.Length);
 
-            var (hash, text, eol) = HashOf(full, info, verify);
+            var (hash, text, eol) = HashOf(wire, full, info, verify);
             return new HexLinkTreeFile(wire, hash, info.Length, text, eol, Mode(full));
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
@@ -340,7 +347,7 @@ internal sealed partial class HexLinkTree
         var info = new FileInfo(blob);
         if (info.Length > HexLinkFiles.MOST_READ && (!streamLarge || info.Length > HexLinkFileTransfer.MaximumLength))
             return new(hold.Path, null, info.Length);
-        var (_, text, eol) = HashOf(blob, info, verify);
+        var (_, text, eol) = HashOf(blob, blob, info, verify);
         return new(hold.Path, hold.BaseHash, info.Length, text, eol, hold.BaseExecutable);
     }
 
@@ -450,7 +457,7 @@ internal sealed partial class HexLinkTree
     }
 
     internal void ForgetHash(string relative) =>
-        hashes.TryRemove(Path.Combine(Root, relative.Replace('/', Path.DirectorySeparatorChar)), out _);
+        hashes.TryRemove(Folder.Name + "/" + relative, out _);
 
     internal bool ExcludesSystemPath(string relative) =>
         !Folder.IncludeSystemFiles && HexLinkSystemFiles.Matches(relative);
@@ -464,13 +471,30 @@ internal sealed partial class HexLinkTree
         HexExcludes rules = excludes();
         if (rules.Hidden(relative, folder))
             return true;
-        for (int slash = relative.IndexOf('/'); slash >= 0; slash = relative.IndexOf('/', slash + 1))
+        int last = relative.LastIndexOf('/');
+        return last > 0 && HiddenFolder(rules, relative.AsSpan(0, last));
+    }
+
+    // The folders a path is under, each asked of the rules once for as long as these are the rules, not again for each of its files
+    private HexExcludes? hiddenRules;
+    private readonly ConcurrentDictionary<string, bool> hiddenFolders = new(StringComparer.Ordinal);
+
+    private bool HiddenFolder(HexExcludes rules, ReadOnlySpan<char> folder)
+    {
+        if (!ReferenceEquals(Volatile.Read(ref hiddenRules), rules))
         {
-            if (rules.Hidden(relative[..slash], folder: true))
-                return true;
+            hiddenFolders.Clear();
+            Volatile.Write(ref hiddenRules, rules);
         }
 
-        return false;
+        var lookup = hiddenFolders.GetAlternateLookup<ReadOnlySpan<char>>();
+        if (lookup.TryGetValue(folder, out bool known))
+            return known;
+        int slash = folder.LastIndexOf('/');
+        bool hidden = rules.Hidden(folder.ToString(), folder: true) || (slash > 0 && HiddenFolder(rules, folder[..slash]));
+        if (hiddenFolders.Count < 100_000)
+            lookup[folder] = hidden;
+        return hidden;
     }
 
     private void RequireRoot() => RequireRoot(Root);
@@ -506,16 +530,29 @@ internal sealed partial class HexLinkTree
     }
 
     // A path inside the folder that's a plain one, nothing of .git, no .. or a rooted one
-    private static bool Plain(string relative) =>
-        relative.Length > 0 && relative[0] != '/' && !relative.Contains('\\') && !relative.Contains(':')
-        && relative.Split('/').All(part => part.Length > 0 && part != "." && part != ".." && !part.Equals(".git", StringComparison.OrdinalIgnoreCase));
+    private static bool Plain(string relative)
+    {
+        if (relative.Length == 0 || relative[0] == '/' || relative.AsSpan().IndexOfAny('\\', ':') >= 0)
+            return false;
+        ReadOnlySpan<char> rest = relative;
+        while (true)
+        {
+            int slash = rest.IndexOf('/');
+            ReadOnlySpan<char> part = slash < 0 ? rest : rest[..slash];
+            if (part.Length == 0 || part is "." or ".." || part.Equals(".git", StringComparison.OrdinalIgnoreCase))
+                return false;
+            if (slash < 0)
+                return true;
+            rest = rest[(slash + 1)..];
+        }
+    }
 
     // A file's hash, and its text's and line ends when it's text with one kind of them, read only when its length or
     // time written moved since it was last hashed
-    private (string Hash, string? Text, string? Eol) HashOf(string full, FileInfo info, bool verify)
+    private (string Hash, string? Text, string? Eol) HashOf(string key, string full, FileInfo info, bool verify)
     {
         long written = info.LastWriteTimeUtc.Ticks, created = info.CreationTimeUtc.Ticks, length = info.Length;
-        if (!verify && hashes.TryGetValue(full, out HashStamp known) &&
+        if (!verify && hashes.TryGetValue(key, out HashStamp known) &&
             known.Length == length && known.Written == written && known.Created == created)
             return (known.Hash, known.Text, known.Eol);
 
@@ -551,7 +588,10 @@ internal sealed partial class HexLinkTree
             throw new IOException($"{full} changed while Link read its manifest.");
         if (mergeBase is not null)
             HexLinkMerge.RememberBase(hash, mergeBase);
-        hashes[full] = new HashStamp(length, written, created, hash, text, eol);
+        // Most text is the hash of its own bytes (LF, no BOM), one string for both rather than two of 64 characters
+        if (text is not null && text == hash)
+            text = hash;
+        hashes[key] = new HashStamp(length, written, created, hash, text, eol);
         Interlocked.Increment(ref computedHashes);
         return (hash, text, eol);
     }
@@ -784,8 +824,10 @@ internal sealed class HexLinkTreeWatch : IDisposable
     private Dictionary<string, (string? Hash, bool? Executable, bool Unavailable)> known = new(StringComparer.Ordinal);
     private HashSet<string> projectedHolds = new(PlatformPaths.Comparer);
     private bool everything, seeded, disposed, verifyOnScan;
-    private static readonly TimeSpan VerifyEvery = TimeSpan.FromMinutes(5);
-    private long verifyAt = Environment.TickCount64 + (long)VerifyEvery.TotalMilliseconds;
+    // Every file hashed again from its bytes (what the stat-keyed hash cache can't see): a watcher that says nothing was dropped
+    // makes that a rare check, one without it keeps the five minutes
+    private TimeSpan VerifyEvery => watcher is null ? TimeSpan.FromMinutes(5) : TimeSpan.FromMinutes(30);
+    private long verifyAt = Environment.TickCount64 + (long)TimeSpan.FromMinutes(5).TotalMilliseconds;
 
     /// <summary>How long after the last change a batch goes, 150 ms.</summary>
     public TimeSpan Quiet { get; }
@@ -798,6 +840,7 @@ internal sealed class HexLinkTreeWatch : IDisposable
     {
         this.tree = tree;
         this.changed = changed;
+        realRoot = new Lazy<string?>(() => HexLinkTree.RealPath(tree.Root) is { } real && !PlatformPaths.Same(real, tree.Root) ? real : null);
         stopped = stopping.Token;
         Quiet = quietFor ?? TimeSpan.FromMilliseconds(150);
         Rescan = rescanEvery ?? TimeSpan.FromSeconds(15);
@@ -835,6 +878,18 @@ internal sealed class HexLinkTreeWatch : IDisposable
             tree.Holds.Changed += HoldsChanged;
     }
 
+    /// <summary>
+    /// A file written here by the sync, not by a person. What the watcher last saw of it is let go of, so the next look
+    /// says what it is then. Left alone, a change made in the moments after (a git checkout putting back what the file was
+    /// when the watch started, the two events coalesced by the system) was the hash the watcher already had and went
+    /// unsaid, though the sync's own base was now another one.
+    /// </summary>
+    public void Unsee(string wire)
+    {
+        lock (pending)
+            known.Remove(wire);
+    }
+
     private void HoldsChanged()
     {
         lock (pending)
@@ -852,7 +907,7 @@ internal sealed class HexLinkTreeWatch : IDisposable
                 known[file.Path] = (file.Hash, file.Executable, file.Unavailable);
             projectedHolds = new(from.HeldPaths ?? [], PlatformPaths.Comparer);
             seeded = true;
-            TimeSpan interval = watcher is not null && Rescan >= TimeSpan.FromSeconds(15) ? Rescan * 3 : Rescan;
+            TimeSpan interval = watcher is not null && Rescan >= TimeSpan.FromSeconds(15) ? Rescan * 8 : Rescan;
             rescan.Change(interval, interval);
             if (watcher is null)
                 everything = true;
@@ -865,7 +920,7 @@ internal sealed class HexLinkTreeWatch : IDisposable
     {
         if (HexLinkTree.OnlyCase(oldFull, newFull))
         {
-            string before = HexExcludes.Relative(tree.Root, oldFull), after = HexExcludes.Relative(tree.Root, newFull);
+            string before = RelativeOf(oldFull), after = RelativeOf(newFull);
             lock (pending)
             {
                 if (caseMoves.Remove(before, out string? first))
@@ -879,16 +934,36 @@ internal sealed class HexLinkTreeWatch : IDisposable
         Moved(newFull);
     }
 
+    // The root with its links resolved, which is how a watcher may spell what it reports (macOS's temp folder, /var, is
+    // /private/var to FSEvents), null when it is spelled the same
+    private readonly Lazy<string?> realRoot;
+
+    /// <summary>A reported path as a path inside the tree: relative to the root as it's spelled, or as its links resolve.</summary>
+    private string RelativeOf(string full)
+    {
+        string relative = HexLinkTree.RelativeTo(tree.Root, full);
+        if (relative.StartsWith("..", StringComparison.Ordinal) && realRoot.Value is { } real)
+        {
+            string through = HexLinkTree.RelativeTo(real, full);
+            if (!through.StartsWith("..", StringComparison.Ordinal))
+                return through;
+        }
+
+        return relative;
+    }
+
     // Something under the folder moved, looked at once it's been quiet a moment
     private void Moved(string full, bool contentOnly = false)
     {
-        string relative = Path.GetRelativePath(tree.Root, full).Replace(Path.DirectorySeparatorChar, '/');
+        string relative = RelativeOf(full);
         if (relative.StartsWith("..", StringComparison.Ordinal) || HexLinkTree.SyncArtifact(relative) ||
             relative.Split('/').Any(part => part.Equals(".git", StringComparison.OrdinalIgnoreCase)))
             return;
         bool rulesChanged = HexLinkIgnore.IsRulesFile(relative);
         if (rulesChanged)
             tree.LinkIgnore.Invalidate();
+        if (relative.EndsWith(".gitignore", StringComparison.Ordinal))
+            tree.ForgetIgnoreAnswers();
         bool folder = Directory.Exists(full);
         // A folder only changed (its entries written, its time touched): each entry brings an event of its own, and
         // a dropped one an Error and a whole look. Looking the whole tree over for it made a checkout of many files
@@ -1047,7 +1122,7 @@ internal sealed class HexLinkTreeWatch : IDisposable
             }
             else if (paths.Length > 0)
             {
-                HashSet<string> ignored = tree.Ignored(paths);
+                HashSet<string> ignored = tree.IgnoredKept(paths);
                 foreach (string relative in paths)
                 {
                     if (ignored.Contains(relative) || tree.CanonicalCase(relative) != relative)

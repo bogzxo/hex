@@ -10,7 +10,7 @@ internal sealed partial class DawnScene
 {
     private StackPanel? linkEditorNotices;
     private bool linkEditorNoticesDirty = true;
-    private (HexDocument? Document, float Width, LinkClaimMark? Claim, LinkSessionNotice? Session, string? Following) linkEditorNoticeDrawn;
+    private (HexDocument? Document, float Width, LinkClaimMark? Claim, LinkSessionNotice? Session, string? Following, LinkRemoteHolder? Holder) linkEditorNoticeDrawn;
     private float linkEditorNoticeWidth;
 
     private void BuildLinkEditorNotices()
@@ -43,14 +43,15 @@ internal sealed partial class DawnScene
         LinkSessionNotice? session = null;
         if (shown is not null)
             LinkReadSessionNotice(shown, ref session);
-        var pieces = (shown, width, claim, session, session is null ? null : linkFollowing);
+        LinkRemoteHolder? holder = LinkRemoteHolderOf(shown?.Path);
+        var pieces = (shown, width, claim, session, session is null ? null : linkFollowing, holder);
         if (pieces == linkEditorNoticeDrawn)
             return;
 
         linkEditorNoticeDrawn = pieces;
         ClearRows(notices);
         notices.Size = new Vector2(width, 0);
-        notices.Visible = claim is not null || session is not null;
+        notices.Visible = claim is not null || session is not null || holder is not null;
 
         if (session is not null && shown is not null)
         {
@@ -59,7 +60,7 @@ internal sealed partial class DawnScene
         else if (claim is not null && shown?.Path is { } path)
         {
             Button? open = null;
-            string caption = LinkClaimLabel(claim);
+            string caption = LinkClaimLabel(claim, shown.Modified);
             if (claim.CanOpen)
             {
                 open = LinkButton(Said("link.devices_open_shared"), "link", () => OpenLinkClaim(path));
@@ -69,6 +70,10 @@ internal sealed partial class DawnScene
                 caption += ". " + Said("link.devices_claim_cannot_open");
             DrawEditorLinkNotice(notices, caption, "lock", warning: true, width, open);
         }
+
+        // A file a peer holds says so beside any claim: what it changes stays on its machine until it lets go
+        if (holder is not null)
+            DrawEditorLinkNotice(notices, Said("link.held_by_notice", ("device", holder.Name)), "pin", warning: true, width);
     }
 
     private StackPanel DrawEditorLinkNotice(StackPanel notices, string caption, string icon, bool warning, float width, Button? action = null)

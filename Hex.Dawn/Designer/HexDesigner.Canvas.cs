@@ -141,8 +141,12 @@ internal sealed partial class HexDesigner
         var mouse = window.Mouse;
         var keyboard = context.Keyboard;
 
-        if (overCanvas && mouse.Scroll != 0.0f && chrome.Popup is null)
-            ZoomCanvas(MathF.Pow(ZOOM_STEP, mouse.Scroll), inChrome);
+        // The wheel in notches, a trackpad's is the fraction of a notch its points are (Scroll is in SDL's units, a tenth of a
+        // point on a Mac), and its pinch is a change of size
+        if (overCanvas && mouse.ScrollNotches != 0.0f && chrome.Popup is null)
+            ZoomCanvas(MathF.Pow(ZOOM_STEP, mouse.ScrollNotches), inChrome);
+        if (overCanvas && mouse.Magnify != 0.0f && chrome.Popup is null)
+            ZoomCanvas(Horizon.Input.PreciseScroll.PinchFactor(mouse.Magnify), inChrome);
 
         bool spaceDrag = keyboard.IsDown(Key.Space) && compositor.Focus is null && stage.Focus is null;
         bool held = mouse.IsDown(MouseButton.Middle) || (spaceDrag && compositor.Pointer.Down);

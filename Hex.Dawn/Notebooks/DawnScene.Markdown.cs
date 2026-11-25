@@ -27,7 +27,9 @@ internal sealed partial class DawnScene
         markdownScroll = markdownPreview.Add(new NotebookScrollPanel
         {
             Anchor = Origin.TopLeft, Pivot = Origin.TopLeft,
-            Zoom = delta => ZoomCode(delta > 0 ? CODE_ZOOM_STEP : 1 / CODE_ZOOM_STEP)
+            Zoom = steps => ZoomCode(CodeZoomFactor(steps), smooth: MathF.Abs(steps) < 1.0f),
+            Pinch = factor => ZoomCode(factor, smooth: true),
+            SmartZoom = SmartZoomCode
         });
         markdownWritten = markdownScroll.Add(new MarkdownPagePanel
         {

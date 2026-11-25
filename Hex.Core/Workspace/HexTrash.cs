@@ -60,6 +60,10 @@ internal static unsafe partial class HexTrash
             return;
         }
 
+        // A Mac's own call, which the Finder's Put Back understands; the move below is what's left when it won't
+        if (OperatingSystem.IsMacOS() && TryDiscardNative(full, out _, out _))
+            return;
+
         // The freedesktop trash is files/ and info/ under $XDG_DATA_HOME/Trash, a .trashinfo a file saying where it came
         // from and when, which is what the file manager's Restore goes by
         string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);

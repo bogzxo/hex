@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using Hex.Core.Git;
 using Hex.Core.Merge;
 using Horizon.Rendering;
+using Block = Hex.Core.Merge.MergeBlock;
 
 namespace Hex.Dawn;
 
@@ -13,6 +14,7 @@ internal sealed class MergeEditor
     private const int HistoryLimit = 301;
 
     private readonly MergeSession session;
+    private readonly bool isLink;
     private readonly CodeEditor result, mine, theirs, basis;
     private readonly Panel header, body, resultPane, minePane, theirsPane, basePane;
     private readonly List<(int Block, Panel Top, Panel Bottom, Panel Left, Panel Right)> outlines = [];
@@ -28,21 +30,17 @@ internal sealed class MergeEditor
     private readonly Action requestComplete, requestCancel;
     private readonly Func<Vector4> warning, success;
     private string text = "";
-    private bool applying, wide, showingBase;
+    private bool applying, wide, showingBase, compact;
     private Vector2 fitted;
     private (CodeEditor? Editor, int Block) scrolled = (null, -1);
     private int selected;
     private readonly int[] mineLines, theirLines, baseLines;
 
-    private sealed record Block(MergeRegion Region, string Text, bool Resolved, int[]? MarkerOffsets = null)
-    {
-        public bool IsConflict => Region is MergeRegion.Conflict;
-    }
-
     public MergeEditor(MergeSession session, CodeEditor result, Action complete, Action cancel,
         Action<MergeSide> side, Func<Vector4> warning, Func<Vector4> success)
     {
         this.session = session;
+        isLink = session.LinkDevice is not null;
         this.result = result;
         requestComplete = complete;
         requestCancel = cancel;
@@ -58,42 +56,61 @@ internal sealed class MergeEditor
         {
             textActions.Add(AddButton("Previous", "Go to the previous conflict.", 72, () => Go(-1)));
             textActions.Add(AddButton("Next", "Go to the next conflict.", 60, () => Go(1)));
-            textActions.Add(AddButton("Accept all mine", "Resolve every conflict with Mine.", 112, () => AcceptAll(MergeChoice.Mine)));
-            textActions.Add(AddButton("Accept all theirs", "Resolve every conflict with Theirs.", 115, () => AcceptAll(MergeChoice.Theirs)));
+            // Every choice is on the bar above each conflict, the buttons here are for the conflict the caret is in and for all
+            if (!isLink)
+            {
+                textActions.Add(AddButton("Use yours for all", "Resolve every conflict with yours.", 130, () => AcceptAll(MergeChoice.Mine)));
+                textActions.Add(AddButton("Use theirs for all", "Resolve every conflict with theirs.", 130, () => AcceptAll(MergeChoice.Theirs)));
+            }
             if (session.Model.Regions.Any(region => region is MergeRegion.Conflict { BaseLines: not null } or MergeRegion.Clean { BaseLines: not null }))
-                showBase = AddButton("Base", "Show or hide the common ancestor.", 62, ToggleBase);
+                showBase = isLink ? AddButton("Show original", "Show or hide the file as it was before either copy changed.", 104, ToggleBase)
+                    : AddButton("Base", "Show or hide the common ancestor.", 62, ToggleBase);
 
-            foreach (MergeRegion region in session.Model.Regions)
-                blocks.Add(new(region, Lines(Initial(region)), region is MergeRegion.Clean));
+            blocks.AddRange(Block.From(session.Model));
             selected = Math.Max(0, blocks.FindIndex(block => block.IsConflict));
         }
 
-        this.complete = AddButton("Complete merge", "Write the resolved result and close the merge editor.", 124, requestComplete);
-        this.cancel = AddButton("Cancel", "Close the merge editor.", 68, requestCancel);
+        if (isLink)
+        {
+            this.complete = AddButton("Save merged file", "Write the merged file here and on " + session.LinkDevice + ".", 220, requestComplete);
+            this.complete.Primary = true;
+            this.cancel = AddButton("Close without saving", "Close the merge editor and leave both copies as they are.", 150, requestCancel);
+        }
+        else
+        {
+            this.complete = AddButton("Save merged file", "Write the resolved result and close the merge editor.", 220, requestComplete);
+            this.cancel = AddButton("Close without saving", "Close the merge editor and leave the file as it is.", 150, requestCancel);
+        }
 
         if (!session.IsBinary)
         {
-            resolutionActions.Add(AddButton("Accept mine", "Keep Mine in the current conflict.", 94, () => AcceptCurrent(MergeChoice.Mine)));
-            resolutionActions.Add(AddButton("Accept theirs", "Keep Theirs in the current conflict.", 96, () => AcceptCurrent(MergeChoice.Theirs)));
-            resolutionActions.Add(AddButton("Accept both (mine first)", "Keep both versions, with Mine first.", 154, () => AcceptCurrent(MergeChoice.BothMineFirst)));
-            resolutionActions.Add(AddButton("Accept both (theirs first)", "Keep both versions, with Theirs first.", 156, () => AcceptCurrent(MergeChoice.BothTheirsFirst)));
-            resolutionActions.Add(AddButton("Reset this conflict", "Make the current conflict unresolved again.", 132, () => AcceptCurrent(MergeChoice.Unresolved)));
+            string device = session.LinkDevice ?? string.Empty;
+            resolutionActions.Add(AddButton("Use yours", isLink ? "Use your copy for the current conflict." : "Keep yours in the current conflict.", 84, () => AcceptCurrent(MergeChoice.Mine)));
+            resolutionActions.Add(AddButton(isLink ? $"Use {device}'s" : "Use theirs", isLink ? $"Use {device}'s copy for the current conflict." : "Keep theirs in the current conflict.", isLink ? 100 : 90, () => AcceptCurrent(MergeChoice.Theirs)));
+            resolutionActions.Add(AddButton(isLink ? "Use both" : "Use both (yours first)", isLink ? "Keep both copies, yours first. Press it again to put the other copy first." : "Keep both versions, with yours first.", isLink ? 80 : 154, () => AcceptCurrent(MergeChoice.BothMineFirst)));
+            if (!isLink)
+            {
+                resolutionActions.Add(AddButton("Use both (theirs first)", "Keep both versions, with theirs first.", 156, () => AcceptCurrent(MergeChoice.BothTheirsFirst)));
+                resolutionActions.Add(AddButton("Reset this conflict", "Make the current conflict unresolved again.", 132, () => AcceptCurrent(MergeChoice.Unresolved)));
+            }
         }
 
         if (session.IsBinary && session.Model.BinarySides is { } sides)
         {
             this.complete.Visible = false;
             count.Text = session.SideChoices is { MineDeleted: true } or { TheirsDeleted: true } ? "One side deleted the file" : "Choose a file version";
-            AddButton(session.SideChoices is { MineDeleted: true } ? "Delete file" :
-                session.SideChoices is { TheirsDeleted: true } ? "Keep file" : "Keep mine",
-                Describe(session.MineLabel, sides.Mine, session.MineModified, session.SideChoices?.MineDeleted == true), 104, () => side(MergeSide.Mine));
-            AddButton(session.SideChoices is { TheirsDeleted: true } ? "Delete file" :
-                session.SideChoices is { MineDeleted: true } ? "Keep file" : "Take theirs",
-                Describe(session.TheirsLabel, sides.Theirs, session.TheirsModified, session.SideChoices?.TheirsDeleted == true), 104, () => side(MergeSide.Theirs));
+            string mineDescription = session.SideChoices?.MineDescription ?? Describe(session.MineLabel, sides.Mine, session.MineModified, session.SideChoices?.MineDeleted == true);
+            string theirsDescription = session.SideChoices?.TheirsDescription ?? Describe(session.TheirsLabel, sides.Theirs, session.TheirsModified, session.SideChoices?.TheirsDeleted == true);
+            AddButton(session.SideChoices?.MineButton ?? (session.SideChoices is { MineDeleted: true } ? "Delete file" :
+                session.SideChoices is { TheirsDeleted: true } ? "Keep file" : "Keep mine"),
+                mineDescription, 104, () => side(MergeSide.Mine));
+            AddButton(session.SideChoices?.TheirsButton ?? (session.SideChoices is { TheirsDeleted: true } ? "Delete file" :
+                session.SideChoices is { MineDeleted: true } ? "Keep file" : "Take theirs"),
+                theirsDescription, 104, () => side(MergeSide.Theirs));
             foreach (var (description, width) in new[]
             {
-                (Describe(session.MineLabel, sides.Mine, session.MineModified, session.SideChoices?.MineDeleted == true), 300f),
-                (Describe(session.TheirsLabel, sides.Theirs, session.TheirsModified, session.SideChoices?.TheirsDeleted == true), 300f),
+                (mineDescription, 300f),
+                (theirsDescription, 300f),
             })
             {
                 var line = header.Add(new Label { Text = description, Align = Origin.Left, TextScale = 0.135f });
@@ -123,7 +140,7 @@ internal sealed class MergeEditor
             result.Text = text;
             Remember();
             result.Document.Changed += TextChanged;
-            result.OnLensAbovePressed = (lens, _) => PressLens(lens.Id);
+            result.OnLensAbovePressed = (lens, box) => PressLens(lens.Id, box);
             Decorate();
         }
         else
@@ -192,6 +209,13 @@ internal sealed class MergeEditor
     {
         mine.Color = theirs.Color = basis.Color = result.Color;
         PlaceOutlines();
+        // A pane too narrow for the whole header bar gets the short one with a More menu
+        bool narrowBar = result.CodeBounds.Width is > 0 and < 960;
+        if (narrowBar != compact && !session.IsBinary && blocks.Count > 0)
+        {
+            compact = narrowBar;
+            Decorate();
+        }
         if (!wide || session.IsBinary || blocks.Count == 0)
             return;
         CodeEditor from = mine.IsFocused ? mine : theirs.IsFocused ? theirs : basis.IsFocused ? basis : result;
@@ -244,21 +268,44 @@ internal sealed class MergeEditor
 
     internal void Accept(int block, MergeChoice choice)
     {
-        if (Busy || blocks[block].Region is not MergeRegion.Conflict conflict)
+        if (Busy || !blocks[block].IsConflict)
             return;
-        IReadOnlyList<string> lines = choice switch
-        {
-            MergeChoice.Mine => conflict.MineLines,
-            MergeChoice.Theirs => conflict.TheirsLines,
-            MergeChoice.BothMineFirst => [.. conflict.MineLines, .. conflict.TheirsLines],
-            MergeChoice.BothTheirsFirst => [.. conflict.TheirsLines, .. conflict.MineLines],
-            _ => conflict.MarkedLines,
-        };
-        blocks[block] = blocks[block] with { Text = Lines(lines), Resolved = choice != MergeChoice.Unresolved, MarkerOffsets = null };
+        blocks[block] = blocks[block].Choose(choice);
         selected = block;
         WriteBlocks();
         result.GoTo(Math.Min(ResultStarts()[block], result.Document.LineCount - 1));
         result.Focus();
+        // Answered: on to the next conflict still to answer
+        if (choice != MergeChoice.Unresolved)
+            GoToUnresolved(block);
+    }
+
+    /// <summary>Edit by hand: the region becomes resolved with its text as it is (both sides when it has none), the caret in it.</summary>
+    internal void Edit(int block)
+    {
+        if (Busy || !blocks[block].IsConflict)
+            return;
+        if (!blocks[block].Resolved)
+        {
+            blocks[block] = blocks[block].Seed();
+            selected = block;
+            WriteBlocks();
+        }
+        result.GoTo(Math.Min(ResultStarts()[block], result.Document.LineCount - 1));
+        result.Focus();
+    }
+
+    private void GoToUnresolved(int after)
+    {
+        for (int step = 1; step < blocks.Count; step++)
+        {
+            int index = (after + step) % blocks.Count;
+            if (!blocks[index].IsConflict || blocks[index].Resolved)
+                continue;
+            selected = index;
+            Reveal(result, ResultStarts()[index]);
+            return;
+        }
     }
 
     public byte[] ResultBytes() => session.Model.EncodeResult(result.Text);
@@ -269,21 +316,50 @@ internal sealed class MergeEditor
             return;
         for (int i = 0; i < blocks.Count; i++)
         {
-            if (blocks[i].Region is not MergeRegion.Conflict conflict)
-                continue;
-            blocks[i] = blocks[i] with { Text = Lines(choice == MergeChoice.Mine ? conflict.MineLines : conflict.TheirsLines), Resolved = true };
+            if (blocks[i].IsConflict)
+                blocks[i] = blocks[i].Choose(choice);
         }
         WriteBlocks();
     }
 
-    private void PressLens(int id)
+    /// <summary>Opens the menu the narrow header bar has in place of the rest of its choices.</summary>
+    private void ShowMore(int index, UIRect box)
+    {
+        var menu = new Menu("merge_more");
+        menu.Add("Use both (yours first)", () => Accept(index, MergeChoice.BothMineFirst));
+        menu.Add("Use both (theirs first)", () => Accept(index, MergeChoice.BothTheirsFirst));
+        menu.Add("Edit", () => Edit(index));
+        Vector2 at = result.Module is { } module ? module.ToWorld(new Vector2(box.Min.X, box.Min.Y)) : Vector2.Zero;
+        ShowMenu?.Invoke(menu, at);
+    }
+
+    /// <summary>Shows a menu at a point, set by the scene that owns the editor.</summary>
+    public Action<Menu, Vector2>? ShowMenu { get; set; }
+
+    /// <summary>Edit the conflict the caret is in (or the selected one) by hand.</summary>
+    public void EditCurrent()
+    {
+        if (Busy || blocks.Count == 0)
+            return;
+        int current = AtLine(ResultStarts(), result.Document.Caret.Line);
+        if (blocks[current].IsConflict)
+            Edit(current);
+        else if (blocks[selected].IsConflict)
+            Edit(selected);
+    }
+
+    private void PressLens(int id, UIRect box)
     {
         if (Busy || id <= 0)
             return;
-        int index = (id - 1) / 6, action = (id - 1) % 6;
+        int index = (id - 1) / 8, action = (id - 1) % 8;
         if (index >= blocks.Count)
             return;
-        if (action == 5)
+        if (action == 7)
+            ShowMore(index, box);
+        else if (action == 6)
+            Edit(index);
+        else if (action == 5)
         {
             if (blocks[index].Region is MergeRegion.Clean { BaseLines: { } original })
             {
@@ -351,72 +427,14 @@ internal sealed class MergeEditor
         Decorate();
     }
 
-    private void ReplaceRange(int start, int end, string inserted)
-    {
-        int offset = 0;
-        bool placed = false;
-        for (int i = 0; i < blocks.Count; i++)
-        {
-            Block block = blocks[i];
-            int after = offset + block.Text.Length;
-            bool owner = !placed && (start < after || i == blocks.Count - 1);
-            int from = Math.Clamp(start - offset, 0, block.Text.Length), to = Math.Clamp(end - offset, 0, block.Text.Length);
-            if (owner || from < to)
-            {
-                string edited = block.Text[..from] + (owner ? inserted : "") + block.Text[to..];
-                blocks[i] = block.IsConflict && !block.Resolved
-                    ? EditConflict(block, from, to, edited)
-                    : block with { Text = edited };
-                if (block.IsConflict)
-                    selected = i;
-                placed |= owner;
-            }
-            offset = after;
-        }
-    }
-
-    private static Block EditConflict(Block block, int from, int to, string edited)
-    {
-        string[] lines = block.Text.Split('\n');
-        var conflicts = GitConflicts.Find(lines);
-        MergeModel next = MergeModel.FromMarkers(edited);
-        int[] offsets = block.MarkerOffsets ?? [];
-        if (conflicts.Count == 1)
-        {
-            var conflict = conflicts[0];
-            int first = block.Text.AsSpan(0, from).Count('\n');
-            int last = first + block.Text.AsSpan(from, to - from).Count('\n');
-            MergeChoice choice = first > conflict.Start && last < conflict.CurrentEnd ? MergeChoice.Mine :
-                first > conflict.Middle && last < conflict.End ? MergeChoice.Theirs :
-                conflict.Base >= 0 && first > conflict.Base && last < conflict.Middle ? MergeChoice.Custom : MergeChoice.Unresolved;
-            if (choice != MergeChoice.Unresolved && next.Conflicts.Count == 1)
-            {
-                var side = next.Conflicts[0];
-                side.Resolution = new(choice, side.BaseLines);
-                return block with { Text = next.ToText(), Resolved = true, MarkerOffsets = null };
-            }
-
-            // Track only characters belonging to actual delimiter tokens. Literal underlines in user text are valid.
-            var markers = new List<int>();
-            int position = 0;
-            for (int i = 0; i <= conflict.End; i++)
-            {
-                if (i == conflict.Start || i == conflict.Base || i == conflict.Middle || i == conflict.End)
-                    markers.AddRange(Enumerable.Range(position, 7));
-                position += lines[i].Length + 1;
-            }
-            offsets = [.. markers];
-        }
-
-        int delta = edited.Length - block.Text.Length;
-        int[] remaining = offsets.Where(p => p < from || p >= to).Select(p => p < from ? p : p + delta).ToArray();
-        return block with { Text = edited, Resolved = remaining.Length == 0 && next.ConflictCount == 0, MarkerOffsets = remaining };
-    }
+    private void ReplaceRange(int start, int end, string inserted) => Block.ApplyEdit(blocks, start, end, inserted, ref selected);
 
     private void Remember(string? key = null)
     {
         key ??= TextKey(text);
-        if (history.TryAdd(key, [.. blocks]))
+        bool known = history.ContainsKey(key);
+        history[key] = [.. blocks];
+        if (!known)
             historyOrder.Enqueue(key);
         if (historyOrder.Count > HistoryLimit)
             history.Remove(historyOrder.Dequeue());
@@ -427,8 +445,12 @@ internal sealed class MergeEditor
         if (session.IsBinary)
             return;
         int unresolved = UnresolvedCount, total = ConflictCount;
-        count.Text = $"{unresolved} of {total} conflicts left";
+        count.Text = isLink
+            ? unresolved == 0 ? "Ready to save" : unresolved == 1 ? "1 conflict left" : $"{unresolved} conflicts left"
+            : total == 1 ? unresolved == 1 ? "1 conflict left" : "Conflict answered" : $"{unresolved} of {total} conflicts left";
         complete.Enabled = unresolved == 0 && !Busy;
+        // Said on the button itself when it is not ready, so the way to it is in sight
+        complete.Label = "Save merged file" + (unresolved > 0 ? $" ({unresolved} unresolved)" : "");
         foreach (Button action in textActions)
             action.Enabled = total > 0 && !Busy;
         foreach (Button action in resolutionActions)
@@ -437,33 +459,50 @@ internal sealed class MergeEditor
         var lenses = new List<UICodeLensAbove>();
         var tint = new List<UICodeLineHighlight>();
         var markers = new List<UICodeLineChange>();
+        int conflictNumber = 0;
         for (int i = 0; i < blocks.Count; i++)
         {
             Block block = blocks[i];
             int line = Math.Min(starts[i], result.Document.LineCount - 1);
-            int length = Math.Max(1, block.Text.Count(ch => ch == '\n'));
-            if (block.Region is MergeRegion.Conflict conflict)
+            int length = block.Text.Count(ch => ch == '\n');
+            if (block.Region is MergeRegion.Conflict)
             {
-                int id = i * 6 + 1;
-                Vector4 color = (block.Resolved ? success() : warning()) with { W = 0.15f };
-                tint.Add(new(line, length, color));
-                markers.Add(new(line, length, block.Resolved ? UILineChangeKind.Added : UILineChangeKind.Modified));
-                if (!wide && !block.Resolved)
+                // The header bar over the region: an unresolved one offers every answer, a resolved one only takes it back.
+                // Columns only order the lenses of one line, so each block has a range of its own.
+                int id = i * 8 + 1, column = i * 10;
+                conflictNumber++;
+                string theirs = isLink ? $"Use {session.LinkDevice}'s" : "Use theirs";
+                if (length > 0)
                 {
-                    int previewLine = Math.Min(line + 1, result.Document.LineCount - 1);
-                    lenses.Add(new(previewLine, 0, Preview(session.MineLabel, conflict.MineLines), -1));
-                    lenses.Add(new(previewLine, 1, Preview(session.TheirsLabel, conflict.TheirsLines), -1));
+                    Vector4 color = (block.Resolved ? success() : warning()) with { W = block.Resolved ? 0.15f : 0.22f };
+                    tint.Add(new(line, length, color));
+                    markers.Add(new(line, length, block.Resolved ? UILineChangeKind.Added : UILineChangeKind.Modified));
                 }
-                lenses.Add(new(line, 2, "Accept mine", id));
-                lenses.Add(new(line, 3, "Accept theirs", id + 1));
-                lenses.Add(new(line, 4, "Accept both (mine first)", id + 2));
-                lenses.Add(new(line, 5, "Accept both (theirs first)", id + 3));
-                lenses.Add(new(line, 6, "Reset this conflict", id + 4));
+                if (block.Resolved)
+                {
+                    lenses.Add(new(line, column, $"Conflict {conflictNumber} of {total} · resolved", -1));
+                    lenses.Add(new(line, column + 1, "Undo choice", id + 4));
+                }
+                else
+                {
+                    lenses.Add(new(line, column, $"Conflict {conflictNumber} of {total} · unresolved", -1));
+                    lenses.Add(new(line, column + 1, "Use yours", id));
+                    lenses.Add(new(line, column + 2, theirs, id + 1));
+                    if (compact)
+                        lenses.Add(new(line, column + 3, "More…", id + 7));
+                    else
+                    {
+                        lenses.Add(new(line, column + 3, "Use both (yours first)", id + 2));
+                        lenses.Add(new(line, column + 4, "Use both (theirs first)", id + 3));
+                        lenses.Add(new(line, column + 5, "Edit", id + 6));
+                    }
+                }
             }
             else if (block.Region is MergeRegion.Clean { BaseLines: not null })
             {
-                tint.Add(new(line, length, success() with { W = 0.13f }));
-                lenses.Add(new(line, 0, "Use base", i * 6 + 6));
+                if (length > 0)
+                    tint.Add(new(line, length, success() with { W = 0.13f }));
+                lenses.Add(new(line, i * 10, "Use base", i * 8 + 6));
             }
         }
         result.LineHighlights = tint;
@@ -504,7 +543,7 @@ internal sealed class MergeEditor
             int end = Math.Clamp(start + block.Text.Count(ch => ch == '\n') - 1, start, result.Document.LineCount - 1);
             float upper = result.PlaceOf(new(start, 0)).Y + lineHeight * 0.5f;
             float lower = result.PlaceOf(new(end, 0)).Y - lineHeight * 0.5f;
-            bool visible = !block.Resolved && upper > result.CodeBounds.Min.Y && lower < result.CodeBounds.Max.Y;
+            bool visible = !block.Resolved && block.Text.Length > 0 && upper > result.CodeBounds.Min.Y && lower < result.CodeBounds.Max.Y;
             top.Visible = bottom.Visible = first.Visible = last.Visible = visible;
             if (!visible)
                 continue;
@@ -622,10 +661,7 @@ internal sealed class MergeEditor
     }
 
     private static IReadOnlyList<string> Initial(MergeRegion region) =>
-        region is MergeRegion.Clean clean ? clean.Lines : ((MergeRegion.Conflict)region).MarkedLines;
-
-    private static string Preview(string label, IReadOnlyList<string> lines) =>
-        label + "  " + (lines.Count == 0 ? "(empty)" : string.Join("  ", lines));
+        region is MergeRegion.Clean clean ? clean.Lines : ((MergeRegion.Conflict)region).BaseLines ?? [];
 
     private static string TextKey(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 

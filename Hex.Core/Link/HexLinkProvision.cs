@@ -650,7 +650,8 @@ internal static partial class HexLinkProvision
         {
             if (align && remote.Path.Length == 0)
                 throw new InvalidOperationException($"There is no Git checkout at {directory}.");
-            if (Directory.Exists(directory) && Directory.EnumerateFileSystemEntries(directory).Any())
+            // A folder holding only empty folders is as good as empty
+            if (Directory.Exists(directory) && Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories).Any())
                 throw new InvalidOperationException($"The destination {directory} already contains files and has no Git checkout.");
             return new Checkout(remote, directory, null, null, []);
         }

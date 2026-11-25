@@ -501,8 +501,12 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
     void IEditorWindow.AddCodeMenu(Menu menu)
     {
         if (!HexAi.Off)
+        {
+            AddAiEditMenu(menu);
             AddAgentMenu(menu);
+        }
         AddConflictMenu(menu);
+        AddLinkTalkMenu(menu);
         menu.Add(Said("context.run_file"), running.RunCode, "F5", "play").IsVisible = () => document.IsText;
         menu.Add(Said("context.apply_code"), ApplyCode, "Ctrl+Enter", "export").IsVisible = () => !document.IsText;
         menu.Add(Said("context.command_palette"), CommandPalette, "Ctrl+Shift+P", "symbol-misc");

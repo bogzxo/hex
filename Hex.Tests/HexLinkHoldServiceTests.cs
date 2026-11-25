@@ -110,6 +110,19 @@ public sealed class HexLinkHoldServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task A_submit_after_a_resolved_merge_reports_the_paths_that_merge_sent()
+    {
+        PutHeld(A, "base\n", "mine\n", "theirs\n");
+        Assert.Single((await service.Submit()).NeedsMerge);
+        var resolved = await service.ResolveMerge(A, "mine", null);
+        Assert.Equal(A, Assert.Single(resolved.Paths));
+        Assert.False(store.IsHeld(A));
+
+        Assert.Equal(A, Assert.Single((await service.Submit()).Paths));
+        Assert.Empty((await service.Submit()).Paths);
+    }
+
+    [Fact]
     public void A_relative_path_is_placed_in_the_folder_that_has_the_file_never_the_first()
     {
         string first = Directory.CreateDirectory(Path.Combine(root, "first")).FullName, second = Directory.CreateDirectory(Path.Combine(root, "second", "UI")).FullName;

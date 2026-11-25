@@ -10,7 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Using Include="Horizon.Core.Platform" />
-    <Compile Include="../Hex.Core/Prediction/*.cs" Exclude="../Hex.Core/Prediction/PredictionSettings.cs;../Hex.Core/Prediction/PredictionKey.cs;../Hex.Core/Prediction/PredictionStatus.cs;../Hex.Core/Prediction/PredictionTiming.cs" />
+    <Compile Include="../Hex.Core/Prediction/*.cs" Exclude="../Hex.Core/Prediction/PredictionSettings.cs;../Hex.Core/Prediction/PredictionKey.cs;../Hex.Core/Prediction/PredictionStatus.cs;../Hex.Core/Prediction/PredictionTiming.cs;../Hex.Core/Prediction/PredictionTuning.cs" />
     <ProjectReference Include="../Hex.Core/Hex.Core.csproj" />
     <InternalsVisibleTo Include="Hex.Dawn" />
     <InternalsVisibleTo Include="Hex.Shell" />

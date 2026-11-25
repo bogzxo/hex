@@ -300,7 +300,10 @@ internal sealed partial class DawnScene : Scene
         BuildPeek();
         AddLanguageModeCommands();
         if (!HexAi.Off)
+        {
             AddPredictionCommands();
+            AddPickerCommands();
+        }
         commands.Build(menu);
         LoadKeys();
         WireViews();
@@ -401,6 +404,9 @@ internal sealed partial class DawnScene : Scene
         // Every part is made by now, what each tick does is put in order
         DeclareTicks();
 
+        // A Mac's menu bar along the top of the screen, mirrored from the menus that are made by now (DawnScene.MacMenu)
+        BuildMacMenu();
+
         if (options.SelfTest)
             StartSelfTest();
         else if (options.Check.Length == 0)
@@ -466,13 +472,15 @@ internal sealed partial class DawnScene : Scene
     }
 
     /// <summary>Says something in the status bar, and keeps it in the output under the editor.</summary>
-    private void Say(string message, bool error = false)
+    private void Say(string message, bool error = false, string? details = null)
     {
         saidAt = System.Environment.TickCount64;
         saidError = error;
+        // With details the status bar has the short line and the tooltip the rest (the output keeps all of it)
         messageItem.Text = (error ? "$(error) " : string.Empty) + UIRichText.Plain(message);
+        messageItem.Tooltip = details ?? string.Empty;
         messageItem.Color = error ? ErrorColor : null;
-        Note(message, error);
+        Note(details is null ? message : message + " " + details, error);
     }
 
     /* Every frame */
@@ -510,8 +518,14 @@ internal sealed partial class DawnScene : Scene
         Profile.Mark("collection");
 
         UpdateZoomSettings(dt);
+
+        // A three finger swipe of a trackpad goes through the open files, left to the next one and right to the one before
+        if (Engine.Input.Mouse.Swipe is var swiped and not 0 && !options.SelfTest)
+            CycleDocuments(swiped > 0 ? 1 : -1);
         UpdateShortcutHints();
         UpdateWindow(dt);
+        UpdateMacMenu();
+        UpdateAppearance();
         Profile.Mark("window");
         Weigh(0);
         UpdateDesigner(dt);

@@ -200,6 +200,7 @@ internal sealed partial class HexLinkSync
             {
                 if (Ours(change.Path))
                     continue;
+                NoteVacatedBy(change);
                 if (change.Path == linkIgnoreWire)
                 {
                     dirty.AddRange(ignoredByLink);
@@ -263,6 +264,7 @@ internal sealed partial class HexLinkSync
             {
                 if (Ours(change.Path) || (change.Deleted && !remoteCertified))
                     continue;
+                NoteVacatedBy(change);
                 There(change);
                 if (change.HoldNotice is not null)
                 {
@@ -1006,7 +1008,8 @@ internal sealed partial class HexLinkSync
             return;
         }
 
-        // Written in this side's line ends: those of the file it replaces, or for a new one what most files here use
+        // Written in this side's line ends: those of the file it replaces. A new one arrives byte for byte as it was sent
+        // (an LF script stays LF in a CRLF checkout, git's own filters decide what a commit makes of it)
         TextInfo info = TextOf(file.Bytes);
         HexLinkEol here = local is null ? HexLinkEol.Unknown : TextOf(local).Eol;
         if (here is not (HexLinkEol.Lf or HexLinkEol.Crlf))
@@ -1015,8 +1018,6 @@ internal sealed partial class HexLinkSync
                 here = bases.GetValueOrDefault(wire)?.LocalEol ?? HexLinkEol.Unknown;
         }
 
-        if (here is not (HexLinkEol.Lf or HexLinkEol.Crlf) && local is null)
-            here = Most(here: true);
         byte[] written = Converted(file.Bytes, info, here);
 
         try
@@ -1032,6 +1033,7 @@ internal sealed partial class HexLinkSync
 
         lock (gate)
             SetBase(wire, AgreedOf(written, file.Bytes) with { Executable = file.Executable ?? theirs.Executable });
+        KeepBase(written);
 
         Interlocked.Increment(ref received);
         Notify();
@@ -1163,14 +1165,15 @@ internal sealed partial class HexLinkSync
                 }
                 else if (theirs is null && info.Norm is not null)
                 {
-                    // A new file there takes what most files there use
-                    there = Most(here: false);
+                    // A new file there goes exactly as it is
+                    there = HexLinkEol.Unknown;
                 }
 
                 byte[] sending = Converted(bytes, info, there);
                 await PushPacked(wire, theirs, sending, tree.Mode(full), stop, heldSubmission);
                 lock (gate)
                     SetBase(wire, AgreedOf(bytes, sending) with { Executable = tree.Mode(full) });
+                KeepBase(bytes);
             }
 
             if (submission is not null)
@@ -1210,11 +1213,14 @@ internal sealed partial class HexLinkSync
             using var allowed = ReceiveLease(stop);
             hash = await HexLinkFiles.CompareAndReplace(copyFull, copy, null, bytes, allowed?.Token ?? stop);
         }
+        HexLinkSyncAgreed? agreed;
         lock (gate)
         {
-            conflicts[wire] = new HexLinkSyncConflict(wire, kind, copy, hash);
+            agreed = AgreedFor(wire);
+            conflicts[wire] = new HexLinkSyncConflict(wire, kind, copy, hash, agreed?.Local);
             RemoveBase(wire);
         }
+        await KeepConflictBase(full, agreed, stop);
         Save();
         Notify();
     }
@@ -1257,12 +1263,15 @@ internal sealed partial class HexLinkSync
             copyHash = await HexLinkFiles.CompareAndReplace(copyFull, copy, null, file.Bytes, allowed?.Token ?? stop);
         }
 
+        HexLinkSyncAgreed? agreed;
         lock (gate)
         {
-            conflicts[wire] = new HexLinkSyncConflict(wire, kind, copy, copyHash);
+            agreed = AgreedFor(wire);
+            conflicts[wire] = new HexLinkSyncConflict(wire, kind, copy, copyHash, agreed?.Local);
             RemoveBase(wire);
         }
 
+        await KeepConflictBase(full, agreed, stop);
         Save();
         Notify();
     }

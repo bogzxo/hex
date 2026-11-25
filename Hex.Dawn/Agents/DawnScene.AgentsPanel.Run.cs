@@ -116,7 +116,20 @@ internal sealed partial class DawnScene
     /// process counts until TakeAgentLines has read its last lines and removed it, so a new turn can't start while the old
     /// run's Done is still to come and land on it. What is asked meanwhile waits in its mail and AfterAgentTurn starts it.
     /// </summary>
-    private bool AgentRunBusy(HexAgentChat chat) => agentsStarting.Contains(chat) || agentRuns.Any(each => each.Chat == chat);
+    private bool AgentRunBusy(HexAgentChat chat)
+    {
+        if (agentsStarting.Count > 0 && agentsStarting.Contains(chat))
+            return true;
+
+        // A plain loop, a lambda over the chat was a closure made for every chat on every frame
+        for (int i = 0; i < agentRuns.Count; i++)
+        {
+            if (agentRuns[i].Chat == chat)
+                return true;
+        }
+
+        return false;
+    }
 
     private void StartAgent(HexAgentChat chat, HexExtension extension, ObjectValue run, string prompt, string asked,
         string? contextLocation = null, LinkPrivateAgentStart? prepare = null)
@@ -524,6 +537,7 @@ internal sealed partial class DawnScene
         TickStopping();
         TickCompactAfter();
         TickResumeAfterLimits();
+        TickMailResume();
         for (int r = agentRuns.Count - 1; r >= 0; r--)
         {
             AgentRun run = agentRuns[r];

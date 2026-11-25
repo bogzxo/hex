@@ -690,7 +690,9 @@ internal static partial class HexLinkFiles
     /// A file written whole or not at all: into a temp file beside it, then moved over it, so a reader or a crash
     /// halfway sees the old file or the new one, never half of one.
     /// </summary>
-    public static void WriteAtomic(string full, byte[] bytes)
+    public static void WriteAtomic(string full, byte[] bytes) => WriteAtomic(full, (ReadOnlySpan<byte>)bytes);
+
+    public static void WriteAtomic(string full, ReadOnlySpan<byte> bytes)
     {
         string temp = Path.Combine(Path.GetDirectoryName(full) ?? ".", $".{Path.GetFileName(full)}.{Guid.NewGuid():N}.hexlink");
         try

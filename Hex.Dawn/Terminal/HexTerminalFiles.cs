@@ -47,8 +47,29 @@ internal sealed class HexTerminalFiles
     }
 
     /// <summary>Which of the terminal's files a document is, none for every other.</summary>
-    internal TerminalFileKind TerminalKindOf(HexDocument of) =>
-        of.IsText && of.Path is { } path ? TerminalFileKnowledge.KindOf(path, of.Editor.Text) : TerminalFileKind.None;
+    // Worked out once a version of a document. It was asked for every word the pointer went over, and each time put the whole
+    // file together as one string and looked through it, the most of a tick's work while scrolling a long file
+    internal TerminalFileKind TerminalKindOf(HexDocument of)
+    {
+        if (!of.IsText || of.Path is not { } path)
+            return TerminalFileKind.None;
+
+        KindSeen seen = kinds.GetOrCreateValue(of);
+        int version = of.Editor.Document.Version;
+        if (seen.Version != version || !string.Equals(seen.Path, path, StringComparison.Ordinal))
+            (seen.Path, seen.Version, seen.Kind) = (path, version, TerminalFileKnowledge.KindOf(path, of.Editor.Text));
+
+        return seen.Kind;
+    }
+
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<HexDocument, KindSeen> kinds = [];
+
+    private sealed class KindSeen
+    {
+        public string? Path;
+        public int Version = -1;
+        public TerminalFileKind Kind;
+    }
 
     /// <summary>What there is to write at the caret of a terminal file, null to leave it to the editor's own.</summary>
     // A completion source's, handled for a terminal file whatever there is

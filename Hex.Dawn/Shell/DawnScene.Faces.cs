@@ -111,7 +111,7 @@ internal sealed partial class DawnScene
 
         // Ctrl+Alt+Shift, the start of both of the switch's keys (D and N)
         var keys = Engine.Input.Keyboard;
-        if (keys.Control && keys.Alt && keys.Shift)
+        if (keys.Primary && keys.Alt && keys.Shift)
         {
             WarmFace(Face == HexFace.Noon ? HexFace.Dawn : HexFace.Noon);
             WarmFace(HexFace.Dusk);

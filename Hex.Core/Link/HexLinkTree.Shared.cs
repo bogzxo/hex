@@ -169,6 +169,9 @@ internal sealed class HexLinkTreeSubscription : IDisposable
         }
     }
 
+    /// <summary>A file the sync itself wrote here, so the watcher no longer takes what it last saw of it as what is on disk.</summary>
+    public void Wrote(string wire) => shared.Watch.Unsee(wire);
+
     public void Seed(HexLinkManifest snapshot)
     {
         lock (delivery)

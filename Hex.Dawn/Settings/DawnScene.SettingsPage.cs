@@ -77,8 +77,12 @@ internal sealed partial class DawnScene
         // editor's rows a little over the rest. Reset all settings asks first
         settingsView.Page.HomePart = EDITOR_PART;
         settingsView.Page.Common = CommonSettings;
+        // The row to the Local AI window goes with it while AI is off for this run, the window doesn't open then
+        settingsView.Page.HiddenOf = key => key == EditorSettingsCatalog.LOCAL_AI_WINDOW && HexAi.Off;
         settingsView.Page.DisabledReasonOf = key => !settings.GitEnabled && EditorSettingsCatalog.RequiresGit(key)
-            ? Said("settings_catalog.git_required") : null;
+            ? Said("settings_catalog.git_required")
+            : key == "edit_predictions_api_url" && settings.EditPredictionsProvider is HexSettings.LLAMACPP or "link"
+                ? Said("settings_catalog.edit_predictions_api_url_only") : null;
 
         // The page is drawn at the interface size like everything else. It zoomed itself back up when a size under the one
         // the window's height suggested was picked, so the setting that made every word smaller made these bigger
@@ -266,8 +270,12 @@ internal sealed partial class DawnScene
         return $"{choice.Skin.Title}, {char.ToUpperInvariant(named[0])}{named[1..]}";
     }
 
-    /// <summary>The editor section, read from and applied to the editor itself.</summary>
-    private sealed class EditorSource(DawnScene hex) : ISettingsSource
+    /// <summary>
+    /// The editor section, read from and applied to the editor itself. The settings window's has Local AI's rows as the
+    /// one row that opens the Local AI window (<see cref="EditorSettingsCatalog.Shown"/>); MCP's (<paramref name="all"/>)
+    /// has every one of them, hex_settings_get and set read and write them as they always did.
+    /// </summary>
+    private sealed class EditorSource(DawnScene hex, bool all = false) : ISettingsSource
     {
         public string Section => SettingsSections.EDITOR;
 
@@ -275,7 +283,7 @@ internal sealed partial class DawnScene
         [
             new("editor_skin", Said("settings_page.dawn_theme"), UIFormKind.Choice, Said("settings_page.dawn_theme_help"), EditorSettingsCatalog.THEME,
                 [.. EditorSkins().Select(choice => choice.Text)], Buttons: [Said("settings_window.preview_themes")]),
-            .. EditorSettingsCatalog.Settings,
+            .. all ? EditorSettingsCatalog.Settings : EditorSettingsCatalog.Shown,
             EditorSettingsCatalog.RenderNow,
             new(INTERFACE_SIZE, Said("settings_page.interface_size"), UIFormKind.Choice, Said("settings_page.interface_size_help"), PANELS, [.. Scales.Select(DescribeSize)]),
             new("panels", Said("settings.editor.panels"), UIFormKind.Text, Said("settings_page.panels_help"), PANELS, Buttons: [Said("settings_page.put_back")], ButtonsOnly: true),
@@ -324,6 +332,8 @@ internal sealed partial class DawnScene
             "link_port" => new NumberValue(hex.settings.LinkPort),
             "link_name" => new StringValue(hex.settings.LinkName),
             "link_discoverable" => Values.Bool(hex.settings.LinkDiscoverable),
+        "link_talk_open_on_message" => Values.Bool(hex.settings.LinkTalkOpenOnMessage),
+            "link_invite_rights" => new StringValue(hex.settings.LinkInviteRights),
             "no_ai" => Values.Bool(hex.settings.NoAi),
             "agents_resume_after_limit" => Values.Bool(hex.settings.AgentsResumeAfterLimit),
             "agents_auto_settle_seconds" => new NumberValue(hex.settings.AgentsAutoSettleSeconds),
@@ -345,6 +355,8 @@ internal sealed partial class DawnScene
             "backdrop_wrap_margin" => new NumberValue(hex.settings.BackdropWrapMargin),
             "wrap_flow" => new NumberValue(hex.settings.WrapFlow),
             "reopen_last" => Values.Bool(hex.settings.ReopenLast),
+            "macos_native_menu" => Values.Bool(hex.settings.MacNativeMenu),
+            "theme_follow_system" => Values.Bool(hex.settings.ThemeFollowSystem),
             "persistent_process" => Values.Bool(hex.settings.PersistentProcess),
             "persistent_at_login" => Values.Bool(hex.settings.PersistentAtLogin),
             "effects" => new StringValue(hex.settings.Effects),
@@ -382,14 +394,48 @@ internal sealed partial class DawnScene
             EditorSettingsCatalog.PREDICTION_KEY => new StringValue(hex.settings.EditPredictionsApiKey),
             "edit_predictions_model" => new StringValue(hex.settings.EditPredictionsModel),
             "edit_predictions_prompt_format" => new StringValue(hex.settings.EditPredictionsPromptFormat),
-            "edit_predictions_max_tokens" => new NumberValue(hex.settings.EditPredictionsMaxTokens),
+            "edit_predictions_kind" => new StringValue(hex.settings.EditPredictionsKind),
+        "edit_predictions_max_tokens" => new NumberValue(hex.settings.EditPredictionsMaxTokens),
             "edit_predictions_invocation" => new StringValue(hex.settings.EditPredictionsInvocation),
+            "edit_predictions_mode" => new StringValue(hex.settings.EditPredictionsMode),
             "edit_predictions_debounce" => new NumberValue(hex.settings.EditPredictionsDebounce),
             "edit_predictions_disabled_languages" => Natives.List(hex.settings.EditPredictionsDisabledLanguages),
             HexSettings.EDIT_PREDICTIONS_EXCLUDE => Natives.List(hex.settings.EditPredictionsExclude),
             "edit_predictions_workspace" => Values.Bool(hex.settings.EditPredictionsWorkspace),
             "edit_predictions_share" => Values.Bool(hex.settings.EditPredictionsShare),
             "edit_predictions_terminal" => Values.Bool(hex.settings.EditPredictionsTerminal),
+            "edit_predictions_renames" => Values.Bool(hex.settings.EditPredictionsRenames),
+            "edit_predictions_far" => Values.Bool(hex.settings.EditPredictionsFar),
+            "edit_predictions_system_prompt" => new StringValue(hex.settings.EditPredictionsSystemPrompt),
+            "edit_predictions_thinking" => new StringValue(hex.settings.EditPredictionsThinking),
+            "edit_predictions_temperature" => new NumberValue(hex.settings.EditPredictionsTemperature),
+            "edit_predictions_top_p" => new NumberValue(hex.settings.EditPredictionsTopP),
+            "edit_predictions_top_k" => new NumberValue(hex.settings.EditPredictionsTopK),
+            "edit_predictions_repeat_penalty" => new NumberValue(hex.settings.EditPredictionsRepeatPenalty),
+            "edit_predictions_context" => new NumberValue(hex.settings.EditPredictionsContext),
+            "edit_predictions_link_chat" => Values.Bool(hex.settings.EditPredictionsLinkChat),
+            "llamacpp_folder" => new StringValue(hex.settings.LlamaCppFolder),
+            "llamacpp_models" => new StringValue(hex.settings.LlamaCppModels),
+            "llamacpp_server" => new StringValue(hex.settings.LlamaCppServer),
+            "llamacpp_model" => new StringValue(hex.settings.LlamaCppModel),
+            "llamacpp_alias" => new StringValue(hex.settings.LlamaCppAlias),
+            "llamacpp_port" => new NumberValue(hex.settings.LlamaCppPort),
+            "llamacpp_context" => new NumberValue(hex.settings.LlamaCppContext),
+            "llamacpp_offload" => new StringValue(hex.settings.LlamaCppOffload),
+            "llamacpp_extra_args" => new StringValue(hex.settings.LlamaCppExtraArgs),
+            "llamacpp_autostart" => Values.Bool(hex.settings.LlamaCppAutostart),
+        "local_ai_predict_model" => new StringValue(hex.ModelRowText(hex.settings.LocalAiPredictModel)),
+        "local_ai_chat_model" => new StringValue(hex.ModelRowText(hex.settings.LocalAiChatModel)),
+        "local_ai_engine" => new StringValue(hex.settings.LocalAiEngine),
+        "local_ai_model_folders" => new StringValue(hex.settings.LocalAiModelFolders),
+        "local_ai_presets" => new StringValue(hex.settings.LocalAiPresets),
+        "local_ai_favourites" => new StringValue(hex.settings.LocalAiFavourites),
+        "local_ai_ui_mode" => new StringValue(hex.settings.LocalAiUiMode),
+        "local_ai_setup" => new StringValue(hex.settings.LocalAiSetup),
+            "ai_edit_model" => new StringValue(hex.settings.AiEditModel),
+            "ai_edit_thinking" => Values.Bool(hex.settings.AiEditThinking),
+            "ai_edit_max_tokens" => new NumberValue(hex.settings.AiEditMaxTokens),
+            EditorSettingsCatalog.LLAMACPP_SETUP => new StringValue(hex.llamaServer is { } server ? hex.LlamaServerStateText(server) : Said("llamacpp.state_stopped")),
             HexSettings.DISCORD_PRESENCE => Values.Bool(hex.settings.DiscordPresence),
             "discord_show_file" => Values.Bool(hex.settings.DiscordShowFile),
             "discord_show_workspace" => Values.Bool(hex.settings.DiscordShowWorkspace),
@@ -406,7 +452,7 @@ internal sealed partial class DawnScene
         {
             "editor_skin" => hex.settings.EditorSkin != HexSettings.USUAL_SKIN || hex.settings.EditorTheme != HexSettings.USUAL_THEME,
             INTERFACE_SIZE => hex.compositor.Scale != 1.0f,
-            "panels" or "layout_skin" or EditorSettingsCatalog.ARRANGE_BACKDROP or "render_scale_now" => false,
+            "panels" or "layout_skin" or EditorSettingsCatalog.ARRANGE_BACKDROP or EditorSettingsCatalog.LLAMACPP_SETUP or EditorSettingsCatalog.LOCAL_AI_WINDOW or "render_scale_now" => false,
             "disabled_extensions" => hex.extensions.All.Any(extension => !extension.Enabled),
             _ => !SettingValues.Same(Get(key), EditorSettingsCatalog.Usual.GetValueOrDefault(key))
         };
@@ -538,6 +584,12 @@ internal sealed partial class DawnScene
                 case ("link_discoverable", BooleanValue discoverable):
                     settings.LinkDiscoverable = discoverable.Value;
                     hex.ApplyLink();
+                    break;
+                case ("link_talk_open_on_message", BooleanValue openChat):
+                    settings.LinkTalkOpenOnMessage = openChat.Value;
+                    break;
+                case ("link_invite_rights", StringValue { Value: "work_together" or "use_agents" } inviteRights):
+                    settings.LinkInviteRights = inviteRights.Value;
                     break;
                 case ("agents_resume_after_limit", BooleanValue resume):
                 settings.AgentsResumeAfterLimit = resume.Value;
@@ -714,6 +766,14 @@ internal sealed partial class DawnScene
                 case ("reopen_last", BooleanValue reopen):
                     settings.ReopenLast = reopen.Value;
                     break;
+                case ("macos_native_menu", BooleanValue nativeMenu):
+                    settings.MacNativeMenu = nativeMenu.Value;
+                    hex.MacMenuSettingChanged();
+                    break;
+                case ("theme_follow_system", BooleanValue follow):
+                    settings.ThemeFollowSystem = follow.Value;
+                    hex.AppearanceSettingChanged();
+                    break;
                 case ("persistent_process", BooleanValue persistent):
                     settings.PersistentProcess = persistent.Value;
                     // Starting with the system is the persistent process's, it goes when that does
@@ -736,7 +796,7 @@ internal sealed partial class DawnScene
                 case ("edit_predictions", BooleanValue predicts):
                     settings.EditPredictions = predicts.Value;
                     break;
-                case ("edit_predictions_provider", StringValue { Value: "ollama" or "openai" or "link" } provider):
+                case ("edit_predictions_provider", StringValue { Value: "ollama" or "openai" or HexSettings.LLAMACPP or "link" } provider):
                     // Ollama's own address follows the provider to its OpenAI completions and back, any other URL stays
                     settings.EditPredictionsProvider = provider.Value;
                     string url = Hex.Core.PredictionSettings.UrlForProvider(provider.Value, settings.EditPredictionsApiUrl);
@@ -755,14 +815,20 @@ internal sealed partial class DawnScene
                 case ("edit_predictions_model", StringValue predictionModel):
                     settings.EditPredictionsModel = predictionModel.Value.Trim();
                     break;
-                case ("edit_predictions_prompt_format", StringValue { Value: "infer" or "zeta2" or "qwen" or "code_llama" or "star_coder" or "deepseek_coder" or "code_gemma" or "codestral" } format):
+                case ("edit_predictions_prompt_format", StringValue { Value: "infer" or "zeta21" or "zeta2" or "qwen" or "code_llama" or "star_coder" or "deepseek_coder" or "code_gemma" or "codestral" } format):
                     settings.EditPredictionsPromptFormat = format.Value;
+                    break;
+                case ("edit_predictions_kind", StringValue { Value: "auto" or "edit_model" or "fim" or "instruct" or "fim_instruct" } kind):
+                    settings.EditPredictionsKind = kind.Value;
                     break;
                 case ("edit_predictions_max_tokens", NumberValue predictionTokens):
                     settings.EditPredictionsMaxTokens = (int)Math.Clamp(MathF.Round(predictionTokens.Value), 16.0f, 2048.0f);
                     break;
                 case ("edit_predictions_invocation", StringValue { Value: "after_typing" or "shortcut" } invocation):
                     settings.EditPredictionsInvocation = invocation.Value;
+                    break;
+                case ("edit_predictions_mode", StringValue { Value: "eager" or "subtle" } predictionMode):
+                    settings.EditPredictionsMode = predictionMode.Value;
                     break;
                 case ("edit_predictions_debounce", NumberValue predictionPause):
                     settings.EditPredictionsDebounce = (int)Math.Clamp(MathF.Round(predictionPause.Value), 0.0f, 2000.0f);
@@ -785,6 +851,100 @@ internal sealed partial class DawnScene
                     break;
                 case ("edit_predictions_terminal", BooleanValue predictsInTerminal):
                     settings.EditPredictionsTerminal = predictsInTerminal.Value;
+                    break;
+                case ("edit_predictions_renames", BooleanValue followsRenames):
+                    settings.EditPredictionsRenames = followsRenames.Value;
+                    break;
+                case ("edit_predictions_far", BooleanValue predictsFar):
+                    settings.EditPredictionsFar = predictsFar.Value;
+                    break;
+                case ("edit_predictions_system_prompt", StringValue systemPrompt):
+                    settings.EditPredictionsSystemPrompt = systemPrompt.Value.Trim();
+                    break;
+                case ("edit_predictions_thinking", StringValue thinking) when Array.IndexOf(PredictionTuning.Thinkings, thinking.Value) >= 0:
+                    settings.EditPredictionsThinking = thinking.Value;
+                    break;
+                case ("edit_predictions_temperature", NumberValue temperature):
+                    settings.EditPredictionsTemperature = Math.Clamp(temperature.Value, 0.0f, 2.0f);
+                    break;
+                case ("edit_predictions_top_p", NumberValue topP):
+                    settings.EditPredictionsTopP = Math.Clamp(topP.Value, 0.0f, 1.0f);
+                    break;
+                case ("edit_predictions_top_k", NumberValue topK):
+                    settings.EditPredictionsTopK = (int)Math.Clamp(MathF.Round(topK.Value), 0.0f, 200.0f);
+                    break;
+                case ("edit_predictions_repeat_penalty", NumberValue repeatPenalty):
+                    settings.EditPredictionsRepeatPenalty = Math.Clamp(repeatPenalty.Value, 0.0f, 2.0f);
+                    break;
+                case ("edit_predictions_context", NumberValue context):
+                    settings.EditPredictionsContext = (int)Math.Clamp(MathF.Round(context.Value), 0.0f, 262144.0f);
+                    break;
+                case ("edit_predictions_link_chat", BooleanValue answersInChat):
+                    settings.EditPredictionsLinkChat = answersInChat.Value;
+                    break;
+                case ("llamacpp_folder", StringValue llamaFolder):
+                    settings.LlamaCppFolder = llamaFolder.Value.Trim();
+                    break;
+                case ("llamacpp_models", StringValue llamaModels):
+                    settings.LlamaCppModels = llamaModels.Value.Trim();
+                    break;
+                case ("llamacpp_server", StringValue llamaServerPath):
+                    settings.LlamaCppServer = llamaServerPath.Value.Trim();
+                    break;
+                case ("llamacpp_model", StringValue llamaModel):
+                    settings.LlamaCppModel = llamaModel.Value.Trim();
+                    break;
+                case ("llamacpp_alias", StringValue llamaAlias):
+                    settings.LlamaCppAlias = llamaAlias.Value.Trim();
+                    break;
+                case ("llamacpp_port", NumberValue llamaPort):
+                    settings.LlamaCppPort = (int)Math.Clamp(MathF.Round(llamaPort.Value), 1024.0f, 65535.0f);
+                    break;
+                case ("llamacpp_context", NumberValue llamaContext):
+                    settings.LlamaCppContext = (int)Math.Clamp(MathF.Round(llamaContext.Value), 2048.0f, 262144.0f);
+                    break;
+                case ("llamacpp_offload", StringValue offload) when Array.IndexOf(LlamaCppServerArgs.Offloads, offload.Value) >= 0:
+                    settings.LlamaCppOffload = offload.Value;
+                    break;
+                case ("llamacpp_extra_args", StringValue llamaExtra):
+                    settings.LlamaCppExtraArgs = llamaExtra.Value.Trim();
+                    break;
+                case ("local_ai_predict_model", StringValue localPredict):
+            LocalAiRoles.Set(settings, LocalAiRole.Predict, localPredict.Value);
+            break;
+        case ("local_ai_chat_model", StringValue localChat):
+            LocalAiRoles.Set(settings, LocalAiRole.Chat, localChat.Value);
+            break;
+        case ("local_ai_engine", StringValue localEngine) when Array.IndexOf(HexSettings.LocalAiEngines, localEngine.Value) >= 0:
+            settings.LocalAiEngine = localEngine.Value;
+            break;
+        case ("local_ai_model_folders", StringValue localFolders):
+            settings.LocalAiModelFolders = localFolders.Value.Trim();
+            _ = LocalModelLibrary.Shared.Refresh();
+            break;
+        case ("local_ai_presets", StringValue localPresets):
+            settings.LocalAiPresets = localPresets.Value.Trim();
+            break;
+        case ("local_ai_favourites", StringValue localFavourites):
+            settings.LocalAiFavourites = localFavourites.Value.Trim();
+            break;
+        case ("local_ai_ui_mode", StringValue localUiMode) when Array.IndexOf(HexSettings.LocalAiUiModes, localUiMode.Value) >= 0:
+            settings.LocalAiUiMode = localUiMode.Value;
+            break;
+        case ("local_ai_setup", StringValue localSetup):
+            settings.LocalAiSetup = localSetup.Value.Trim();
+            break;
+        case ("llamacpp_autostart", BooleanValue llamaAutostart):
+                    settings.LlamaCppAutostart = llamaAutostart.Value;
+                    break;
+                case ("ai_edit_model", StringValue aiEditModel):
+                    settings.AiEditModel = aiEditModel.Value.Trim();
+                    break;
+                case ("ai_edit_thinking", BooleanValue aiEditThinking):
+                    settings.AiEditThinking = aiEditThinking.Value;
+                    break;
+                case ("ai_edit_max_tokens", NumberValue aiEditMax):
+                    settings.AiEditMaxTokens = (int)Math.Clamp(MathF.Round(aiEditMax.Value), 512.0f, 16384.0f);
                     break;
                 case (HexSettings.DISCORD_PRESENCE, BooleanValue discordOn):
                     settings.DiscordPresence = discordOn.Value;
@@ -868,6 +1028,24 @@ internal sealed partial class DawnScene
                     break;
                 case (EditorSettingsCatalog.ARRANGE_BACKDROP, _):
                     hex.ArrangeBackdrop();
+                    break;
+                case (EditorSettingsCatalog.LOCAL_AI_WINDOW, _):
+                    hex.OpenLocalAiWindow();
+                    break;
+                case ("local_ai_predict_model", EditorSettingsCatalog.MODEL_CHANGE):
+                    hex.PickModelFor(LocalAiRole.Predict);
+                    break;
+                case ("local_ai_chat_model", EditorSettingsCatalog.MODEL_CHANGE):
+                    hex.PickModelFor(LocalAiRole.Chat);
+                    break;
+                case (EditorSettingsCatalog.LLAMACPP_SETUP, EditorSettingsCatalog.LLAMACPP_SET_UP):
+                    hex.OpenLlamaSetup();
+                    break;
+                case (EditorSettingsCatalog.LLAMACPP_SETUP, EditorSettingsCatalog.LLAMACPP_START):
+                    hex.StartLlamaServer();
+                    break;
+                case (EditorSettingsCatalog.LLAMACPP_SETUP, EditorSettingsCatalog.LLAMACPP_STOP):
+                    hex.StopLlamaServer();
                     break;
                 case ("backdrop_image", EditorSettingsCatalog.USUAL_PICTURE):
                     Set(key, new StringValue(string.Empty));

@@ -190,6 +190,103 @@ public class HexLinkWiringTests : IDisposable
     }
 
     [Fact]
+    public void The_endpoint_that_last_linked_is_dialled_first_even_when_it_is_a_vpn_address_and_survives_restart()
+    {
+        var known = new HexLinkKnown(HexLinkTestKit.DeviceB, HexLinkRights.View, DateTime.UtcNow, DateTime.UtcNow, "192.168.1.30", 47900);
+        var staleLan = new HexLinkEndpoint("192.168.1.30", 47900);
+        var otherLan = new HexLinkEndpoint("10.0.0.9", 47900);
+        var tailscale = new HexLinkEndpoint("100.101.1.2", 47900);
+        var redial = new HexLinkRedial();
+        redial.Open(folder, [known.Device.Id]);
+        redial.Remember(known.Device.Id, [staleLan, otherLan, tailscale]);
+
+        // Nothing linked yet: the LAN's before the VPN's, as ever
+        Assert.Equal([staleLan, otherLan, tailscale], DawnScene.LinkDialRoutes(known, [], redial.Addresses(known.Device.Id), redial.LastLinked(known.Device.Id)));
+
+        redial.Linked(known.Device.Id, tailscale);
+        redial.Clear();
+        redial.Open(folder, [known.Device.Id]);
+        Assert.Equal(tailscale, redial.LastLinked(known.Device.Id));
+        Assert.Equal([tailscale, staleLan, otherLan],
+            DawnScene.LinkDialRoutes(known, [], redial.Addresses(known.Device.Id), redial.LastLinked(known.Device.Id)));
+
+        // Even without the address list (it was trimmed away, or never kept) the endpoint that worked is tried
+        Assert.Equal([tailscale, staleLan], DawnScene.LinkDialRoutes(known, [], [], tailscale));
+
+        // Forgotten with the device
+        redial.Forget(known.Device.Id);
+        redial.Open(folder, [known.Device.Id]);
+        Assert.Null(redial.LastLinked(known.Device.Id));
+    }
+
+    [Fact]
+    public void A_pinned_route_is_the_only_one_dialled_whatever_last_linked()
+    {
+        string pinned = Path.Combine(folder, "pinned");
+        Directory.CreateDirectory(pinned);
+        var trust = new HexLinkTrust(pinned);
+        var lan = new HexLinkEndpoint("192.168.0.30", 47900);
+        var vpn = new HexLinkEndpoint("100.80.122.37", 47900);
+        trust.Add(HexLinkTestKit.DeviceB, HexLinkRights.View, vpn.Host, vpn.Port);
+        Assert.True(trust.SetRoute(HexLinkTestKit.DeviceB.Id, lan));
+        Assert.Equal([lan], DawnScene.LinkDialRoutes(trust.Find(HexLinkTestKit.DeviceB.Id)!, [], [vpn], vpn));
+    }
+
+    [Fact]
+    public void Remembered_addresses_stay_bounded_and_the_fresh_ones_come_before_the_stale()
+    {
+        var redial = new HexLinkRedial();
+        redial.Open(folder, ["A"]);
+        HexLinkEndpoint[] old = [.. Enumerable.Range(1, 40).Select(at => new HexLinkEndpoint($"192.168.5.{at}", 47900))];
+        redial.Remember("A", old);
+        Assert.Equal(HexLinkRedial.MOST_KEPT_ENDPOINTS, redial.Addresses("A").Count);
+
+        var fresh = new HexLinkEndpoint("192.168.9.9", 47900);
+        var reached = new HexLinkEndpoint("100.64.0.3", 47900);
+        redial.Remember("A", [fresh], reached);
+        Assert.Equal(HexLinkRedial.MOST_KEPT_ENDPOINTS, redial.Addresses("A").Count);
+        Assert.Equal([reached, fresh, old[0]], redial.Addresses("A").Take(3));
+
+        // What last linked stays at the head however many are seen after it, and isn't trimmed away
+        var worked = new HexLinkEndpoint("100.64.0.99", 47900);
+        redial.Linked("A", worked);
+        redial.Remember("A", [.. old.Take(HexLinkRedial.MOST_KEPT_ENDPOINTS)]);
+        Assert.Equal(worked, redial.Addresses("A")[0]);
+        Assert.Equal(HexLinkRedial.MOST_KEPT_ENDPOINTS, redial.Addresses("A").Count);
+    }
+
+    [Fact]
+    public void A_failed_redial_keeps_a_reason_code_apart_from_what_it_said_and_a_dropped_device_is_reconnecting()
+    {
+        var redial = new HexLinkRedial();
+        DateTime now = DateTime.UtcNow;
+
+        // Right after a drop: no wait yet, but not plain offline either
+        redial.Dropped("A");
+        Assert.True(redial.Due("A", now));
+        HexLinkRedialState? dropped = redial.State("A", dialling: false);
+        Assert.True(HexLinkRedialState.IsReconnecting(dropped, heldOff: false));
+        Assert.False(HexLinkRedialState.IsReconnecting(dropped, heldOff: true));
+
+        // The code is one the offline row recognises (unreachable, timeout, refused...), the message kept beside it
+        redial.Failed("A", now, "unreachable", "100.101.1.2:47900 couldn't be reached, no route to host");
+        HexLinkRedialState? failed = redial.State("A", dialling: false);
+        Assert.Equal("unreachable", failed?.LastFailure);
+        Assert.Equal("100.101.1.2:47900 couldn't be reached, no route to host", failed?.Detail);
+        Assert.True(HexLinkRedialState.IsReconnecting(failed, heldOff: false));
+
+        // A refusal waiting won't mend is said as it is, and a device that never dropped is only offline
+        redial.Failed("A", now, "unknown", "the other device doesn't know this one");
+        Assert.False(HexLinkRedialState.IsReconnecting(redial.State("A", dialling: false), heldOff: false));
+        redial.Failed("B", now, "unreachable");
+        Assert.False(HexLinkRedialState.IsReconnecting(redial.State("B", dialling: false), heldOff: false));
+
+        // Linked again, nothing of it is left
+        redial.Linked("A", new HexLinkEndpoint("192.168.1.30", 47900));
+        Assert.Null(redial.State("A", dialling: false));
+    }
+
+    [Fact]
     public void Link_visibility_filters_every_harness_query_without_reusing_local_answers()
     {
         string hidden = Path.Combine(folder, "concealed");
@@ -360,7 +457,7 @@ public class HexLinkWiringTests : IDisposable
 
         string said = DawnScene.LinkDevicesSaid(pair.LinkA.Peers, known);
         Assert.Contains("- Laptop (BBBBBBBB, macos arm64)", said, StringComparison.Ordinal);
-        Assert.Contains("it lets you: view, steer; you let it: view", said, StringComparison.Ordinal);
+        Assert.Contains("it lets you: view files, use AI agents; you let it: view files", said, StringComparison.Ordinal);
         Assert.Contains("folders: work", said, StringComparison.Ordinal);
         Assert.Contains("agents: 0", said, StringComparison.Ordinal);
         Assert.Contains("Paired, not connected:\n- Tablet (CCCCCCCC), last seen 2026-11-20 09:30 UTC at 192.168.1.6", said, StringComparison.Ordinal);

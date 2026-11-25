@@ -137,7 +137,7 @@ internal sealed partial class HexLinkPeer : IDisposable
 
     internal async ValueTask ToldAsync(string method, JsonObject parameters)
     {
-        if (!await PredictTold(method, parameters))
+        if (!await PredictTold(method, parameters) && !await AiTold(method, parameters))
             Told(method, parameters);
     }
 
@@ -421,9 +421,22 @@ internal sealed partial class HexLinkPeer : IDisposable
         return result;
     }
 
-    /// <summary>Something said to an agent there (hex_agent_send).</summary>
-    public Task<McpToolResult> Send(int chat, string text, CancellationToken cancel = default) =>
-        Call("hex_agent_send", new JsonObject { ["id"] = chat, ["text"] = text }, cancel);
+    /// <summary>
+    /// Something said to an agent there (hex_agent_send). <paramref name="person"/>: typed by the person in the chat's box,
+    /// so it stands there as their message (an older device doesn't know the flag and takes it as an agent's instruction).
+    /// </summary>
+    public async Task<McpToolResult> Send(int chat, string text, CancellationToken cancel = default, bool person = false)
+    {
+        var arguments = new JsonObject { ["id"] = chat, ["text"] = text };
+        if (person)
+            arguments["from_person"] = true;
+        McpToolResult sent = await Call("hex_agent_send", arguments, cancel);
+
+        // An older device refuses an argument it doesn't know: said again as it always was, an agent's instruction
+        if (person && sent.IsError && sent.Content.Any(item => item.ToString()?.Contains("from_person", StringComparison.Ordinal) == true))
+            return await Call("hex_agent_send", new JsonObject { ["id"] = chat, ["text"] = text }, cancel);
+        return sent;
+    }
 
     /// <summary>An agent there stopped (hex_agent_stop).</summary>
     public Task<McpToolResult> Stop(int chat, CancellationToken cancel = default) =>

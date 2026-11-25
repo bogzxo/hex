@@ -68,53 +68,68 @@ internal sealed partial class DawnScene
         string id = peer.Device.Id;
         var holder = new StackPanel { Spacing = 2.0f, Fill = UIFill.Horizontal, Padding = new UIEdges(12, 0, 0, 0) };
         var row = holder.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 8.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, LINK_ROW) });
-        row.Add(new Label { Text = $"$(folder) [b]{UIRichText.Literal(OneLine(folder, 25))}[/b]", TextScale = LINK_TEXT, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left, Tooltip = folder });
+        Label folderLabel = row.Add(new Label { Text = $"$(folder) [b]{UIRichText.Literal(OneLine(folder, 25))}[/b]", TextScale = LINK_TEXT, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left, Tooltip = folder });
         HexLinkSyncState state = sync?.State ?? HexLinkSyncState.Off;
-        row.Add(new Badge
-        {
-            Text = pausedOn is null ? Said("link.sync_state_" + state.ToString().ToLowerInvariant()) : Said("link.sync_paused"),
-            Tone = state switch
+        // Paused over there: the card says who paused it, whatever this side's engine says
+        bool pausedThere = peer.PausedSyncFolders.Any(pause => PlatformPaths.Comparer.Equals(pause.Folder, folder));
+        // Nothing is said of a folder that isn't syncing: its button says what to do. "Up to date" is only said when it is
+        bool differ = state == HexLinkSyncState.Idle && sync is { Conflicts: > 0 };
+        // One state at a time: the card's Needs you leads when files are in conflict here, and where the other device runs the
+        // sync it is "sorting out" the files, so the row doesn't also say they differ
+        bool needsYou = LinkConflicts.Any(conflict => conflict.DeviceId.Equals(id, StringComparison.OrdinalIgnoreCase));
+        bool sorting = reportedByOwner && sync is { Conflicts: > 0 };
+        if ((pausedThere || pausedOn is not null || state != HexLinkSyncState.Off) && !needsYou && !sorting)
+            row.Add(new Badge
             {
-                HexLinkSyncState.Idle => UIBadgeTone.Success,
-                HexLinkSyncState.Syncing or HexLinkSyncState.Comparing => UIBadgeTone.Info,
-                HexLinkSyncState.NeedsGit or HexLinkSyncState.PullOnly => UIBadgeTone.Warning,
-                HexLinkSyncState.Failed => UIBadgeTone.Danger,
-                _ => UIBadgeTone.Neutral
-            },
-            Colour = state is HexLinkSyncState.Syncing or HexLinkSyncState.Comparing ? LinkBadgeInfoColour : null,
-            Dot = state is HexLinkSyncState.Syncing or HexLinkSyncState.Comparing, TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left
-        });
+                Text = pausedThere ? Said("link.sync_paused_by", ("device", OneLine(LinkNameOf(id, peer.Device.Name), 30)))
+                    : pausedOn is not null ? Said("link.sync_paused")
+                    : differ ? Said(sync!.Conflicts == 1 ? "link.devices_files_differ_one" : "link.devices_files_differ", ("count", sync.Conflicts.ToString(CultureInfo.InvariantCulture)))
+                    : Said("link.sync_state_" + state.ToString().ToLowerInvariant()),
+                Tone = differ ? UIBadgeTone.Warning : state switch
+                {
+                    HexLinkSyncState.Idle => UIBadgeTone.Success,
+                    HexLinkSyncState.Syncing or HexLinkSyncState.Comparing => UIBadgeTone.Info,
+                    HexLinkSyncState.NeedsGit or HexLinkSyncState.PullOnly => UIBadgeTone.Warning,
+                    HexLinkSyncState.Failed => UIBadgeTone.Danger,
+                    _ => UIBadgeTone.Neutral
+                },
+                Colour = state is HexLinkSyncState.Syncing or HexLinkSyncState.Comparing ? LinkBadgeInfoColour : null,
+                Dot = true, TextScale = LINK_SMALL, Anchor = Origin.Left, Pivot = Origin.Left,
+                Tooltip = differ ? Said("link.devices_files_differ_tip") : string.Empty
+            });
         if (!reportedByOwner && sync is { PullOnly: true } && state != HexLinkSyncState.PullOnly)
-            row.Add(new Badge { Text = Said("link.sync_state_pullonly"), Tone = UIBadgeTone.Warning, TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left, Tooltip = Said("link.sync_pull_only_tip") });
+            row.Add(new Badge { Text = Said("link.sync_state_pullonly"), Tone = UIBadgeTone.Warning, TextScale = LINK_SMALL, Anchor = Origin.Left, Pivot = Origin.Left, Tooltip = Said("link.sync_pull_only_tip") });
         if (reportedByOwner)
-            holder.Add(LinkLine(Said("link.devices_sync_runs_there", ("device", LinkNameOf(id, peer.Device.Name)))));
-        if (sync is not null && (sync.Sent != 0 || sync.Received != 0 || sync.Conflicts != 0 || sync.Skipped != 0))
+            holder.Add(LinkLine(sorting && !needsYou
+                ? Said(sync!.Conflicts == 1 ? "link.devices_owner_sorting_one" : "link.devices_owner_sorting", ("device", LinkNameOf(id, peer.Device.Name)), ("n", sync.Conflicts.ToString(CultureInfo.InvariantCulture)))
+                : Said("link.devices_sync_runs_there", ("device", LinkNameOf(id, peer.Device.Name)))));
+        // What moved is a detail, not a second state: in the folder's tooltip, with the files that don't travel
+        if (sync is not null && (sync.Sent != 0 || sync.Received != 0 || sync.Skipped != 0))
         {
-            // Only what moved is counted aloud, a zero is noise; files that don't travel say so, with the files in the tooltip
-            var parts = new List<string>(4);
+            var parts = new List<string>(3);
             if (sync.Sent != 0)
                 parts.Add(Said("link.sync_count_sent", ("n", sync.Sent.ToString(CultureInfo.InvariantCulture))));
             if (sync.Received != 0)
                 parts.Add(Said("link.sync_count_received", ("n", sync.Received.ToString(CultureInfo.InvariantCulture))));
-            if (sync.Conflicts != 0)
-                parts.Add($"[color:{HexColour(LinkWarning)}]{UIRichText.Literal(Said("link.sync_count_conflicts", ("n", sync.Conflicts.ToString(CultureInfo.InvariantCulture))))}[/color]");
             if (sync.Skipped != 0)
                 parts.Add(Said("link.sync_count_skipped", ("n", sync.Skipped.ToString(CultureInfo.InvariantCulture))));
-            Label counts = holder.Add(LinkLine(string.Empty));
-            counts.Text = string.Join(" · ", parts.Select(part => part.StartsWith("[color:", StringComparison.Ordinal) ? part : UIRichText.Literal(part)));
-            counts.Padding = new UIEdges(18, 0, 0, 0);
+            folderLabel.Tooltip = folder + "\n" + string.Join(" · ", parts);
             if (!reportedByOwner && sync.Skipped > 0)
-                counts.Tooltip = Said("link.sync_skipped_tip") + "\n" + string.Join("\n", LinkSyncSkipped(id, folder).Take(20).Select(each => each.ToString()));
+                folderLabel.Tooltip += "\n" + Said("link.sync_skipped_tip") + "\n" + string.Join("\n", LinkSyncSkipped(id, folder).Take(20).Select(each => each.ToString()));
         }
 
         bool running = state is HexLinkSyncState.Comparing or HexLinkSyncState.Syncing or HexLinkSyncState.Idle or HexLinkSyncState.PullOnly or HexLinkSyncState.NeedsGit;
         if (!reportedByOwner)
         {
             if (running)
-                row.Add(LinkButton(Said("link.sync_stop"), "debug-stop", () => LinkSyncStop(id, folder))).Tooltip = Said("link.tip_pause_sync");
+                row.Add(LinkButton(Said("link.sync_stop"), "debug-pause", () => LinkSyncStop(id, folder))).Tooltip = Said("link.tip_pause_sync");
             else
-                row.Add(LinkButton(Said(pausedOn is not null ? "link.sync_resume" : state == HexLinkSyncState.Failed ? "link.devices_try_now" : "link.sync_start"),
-                    "sync", () => LinkSyncGo(id, folder, force: false))).Enabled = HexLinkAllowed.Has(peer.Granted, HexLinkRights.View);
+            {
+                Button go = row.Add(LinkButton(Said(pausedOn is not null ? "link.sync_resume" : state == HexLinkSyncState.Failed ? "link.devices_try_now" : "link.sync_start"),
+                    "sync", () => LinkSyncGo(id, folder, force: false)));
+                go.Enabled = HexLinkAllowed.Has(peer.Granted, HexLinkRights.View);
+                go.Primary = true;
+            }
             if (state == HexLinkSyncState.NeedsGit)
                 row.Add(LinkButton(Said("link.sync_anyway"), "warning", () => LinkSyncGo(id, folder, force: true)));
         }
@@ -129,6 +144,7 @@ internal sealed partial class DawnScene
         if (said.Length > 0)
             holder.Add(new Label { Text = UIRichText.Literal(said), TextScale = LINK_SMALL, Dim = true, Wrap = true, Align = Origin.Left, Fill = UIFill.Horizontal, Padding = new UIEdges(18, 0, 0, 0) });
         DrawLinkFolderHolds(holder, peer, folder);
+        DrawLinkResolutions(holder, peer, folder);
         DrawLinkFolderAuthority(holder, peer, folder);
         LinkMissingRepositoryRow(holder, peer, folder, state);
         DrawLinkPrivateWorktreePresence(holder, peer, folder);
@@ -179,8 +195,8 @@ internal sealed partial class DawnScene
             return;
 
         bool here = string.Equals(authority.DeviceId, LinkDevice?.Id, StringComparison.OrdinalIgnoreCase);
-        string name = here ? Said("link.runs_on_here").ToLowerInvariant() : LinkNameOf(authority.DeviceId);
-        holder.Add(LinkLine(Said("link.devices_folder_authority", ("device", name)))).Tooltip = Said("link.tip_source_of_truth");
+        holder.Add(LinkLine(here ? Said("link.devices_wins_here") : Said("link.devices_wins_there", ("device", LinkNameOf(authority.DeviceId)))))
+            .Tooltip = Said("link.tip_source_of_truth");
         if (local is not null && !here)
             LinkActionRow(holder).Add(LinkButton(Said("link.authority_make"), "shield", () => ConfirmLinkFolderAuthority(folder, local)));
     }
@@ -241,14 +257,9 @@ internal sealed partial class DawnScene
         if (linkWindowShare is not { } share)
             return;
         ClearRows(share);
-        IReadOnlyList<LinkConflictShown> conflicts = LinkConflicts;
         IReadOnlyList<LinkPatchOffer> offered = LinkPatchesOffered;
-        if (conflicts.Count > 0)
-        {
-            share.Add(LinkHeading(Said("link.conflicts_heading", ("count", conflicts.Count.ToString(CultureInfo.InvariantCulture)))));
-            foreach (LinkConflictShown conflict in conflicts)
-                share.Add(LinkConflictRow(conflict));
-        }
+        // The files in conflict are said once, on the card of their device (Needs you, with Resolve), and picked one by one
+        // there, not listed a second time here with buttons of their own
 
         // The other devices' files open here, each opened again with a press
         IReadOnlyList<LinkRemoteShown> remote = LinkRemoteFiles;
@@ -267,7 +278,12 @@ internal sealed partial class DawnScene
                 if (file.MovedThere)
                     row.Add(new Badge { Text = Said("link.remote_file_moved"), Tone = UIBadgeTone.Warning, TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left });
                 string device = file.DeviceId, wire = file.Wire;
-                row.Add(LinkButton(Said("link.remote_file_open"), "go-to-file", () => _ = LinkOpenRemote(device, wire)));
+                row.Add(LinkButton(Said("link.remote_file_open"), "go-to-file", () =>
+                {
+                    // The person starts working in the file: the window gets out of the way
+                    CloseLinkWindow();
+                    _ = LinkOpenRemote(device, wire);
+                }));
             }
         }
 
@@ -277,44 +293,6 @@ internal sealed partial class DawnScene
             foreach (LinkPatchOffer offer in offered)
                 share.Add(LinkPatchRow(offer));
         }
-    }
-
-    // A file in conflict: where, what happened, and the three ways out
-    private UIComponent LinkConflictRow(LinkConflictShown conflict)
-    {
-        Panel card = StripedCard(LinkWarning);
-        var column = card.Add(new StackPanel { Spacing = 4.0f, Fill = UIFill.Horizontal });
-        column.Add(new Label
-        {
-            Text = $"[b]{UIRichText.Literal(conflict.Path)}[/b]  {UIRichText.Literal(Said("link.conflict_with", ("device", LinkNameOf(conflict.DeviceId, conflict.DeviceName)), ("kind", conflict.Kind)))}",
-            TextScale = LINK_TEXT, Align = Origin.Left, Fill = UIFill.Horizontal, Tooltip = conflict.Copy ?? string.Empty
-        });
-        var buttons = column.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 8.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, LINK_ROW) });
-        buttons.Add(LinkButton(Said("link.conflict_mine"), "arrow-up", () => LinkResolveGo(conflict, HexLinkSyncKeep.Mine))).Tooltip = Said("link.tip_keep_mine");
-        buttons.Add(LinkButton(Said("link.conflict_theirs"), "arrow-down", () => LinkResolveGo(conflict, HexLinkSyncKeep.Theirs))).Tooltip = Said("link.tip_take_theirs");
-        buttons.Add(LinkButton("Open merge editor", "diff", () => LinkOpenConflictMerge(conflict.DeviceId, conflict.Path))).Tooltip =
-            "Resolve this conflict in the merge editor.";
-        buttons.Add(LinkButton(Said("link.conflict_difference"), "diff", () => LinkOpenConflictDifference(conflict.DeviceId, conflict.Path))).Tooltip = Said("link.tip_difference");
-        return card;
-    }
-
-    private void LinkResolveGo(LinkConflictShown conflict, HexLinkSyncKeep keep)
-    {
-        _ = Task.Run(async () =>
-        {
-            string? why;
-            try
-            {
-                why = await LinkResolve(conflict.DeviceId, conflict.Path, keep);
-            }
-            catch (Exception e)
-            {
-                why = e.Message;
-            }
-
-            if (why is not null)
-                PostLink(() => Say(Said("link.conflict_failed", ("path", conflict.Path), ("why", why)), error: true));
-        });
     }
 
     // Changes another device offered: who, the title, how big, and what to do with them

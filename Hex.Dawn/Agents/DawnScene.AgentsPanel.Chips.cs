@@ -107,6 +107,7 @@ internal sealed partial class DawnScene
     private void BrowseAgentExtensions() => OpenSettings(HexExtensions.AVAILABLE);
 
     private readonly Dictionary<string, (long Checked, string Program, bool Missing)> agentPrograms = [];
+    private readonly Dictionary<string, int> agentMisses = [];
     private const long AGENT_PROGRAM_EVERY = 15_000;
 
     private enum AgentStates { Ready, Running, Missing }
@@ -141,6 +142,13 @@ internal sealed partial class DawnScene
             && (HexExtensions.Text(run.Run, "program") ?? string.Empty) == program
             && (!agentPrograms.TryGetValue(id, out var cached) || cached.Checked <= checkedAt))
         {
+            // A program that was there and isn't found once (a busy disk, the server working, a lookup that raced) isn't gone: it
+            // has to be missing twice running, or the list flickered "Not installed" while a local run went on
+            bool wasThere = agentPrograms.TryGetValue(id, out var before) && before.Program == program && !before.Missing;
+            int misses = missing ? agentMisses.GetValueOrDefault(id) + 1 : 0;
+            agentMisses[id] = misses;
+            if (missing && wasThere && misses < 2)
+                missing = false;
             agentPrograms[id] = (checkedAt, program, missing);
             Engine.WindowManager.RequestFrames();
         }

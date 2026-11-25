@@ -84,6 +84,12 @@ internal sealed partial class DawnScene
             conflicting is [{ Tag: null }] && command(zen)!.Shortcut == "Ctrl+K Z" && command(shortcuts)!.Shortcut == "Ctrl+K Ctrl+S"
             && command(Said("debugging.step_into").TrimEnd('.'))?.Shortcut == "F11");
 
+        // The terminal's Previous Tab owns Ctrl+Shift+Tab (and Ctrl+Tab the next), a command on it also switched tabs
+        test.Run(() => Filter(string.Empty));
+        test.Settle(0.2f);
+        test.Check("keys: no command is on the terminal's tab-switching chords", () =>
+            keysTree!.Items.All(row => row.Detail is not ("Ctrl+Shift+Tab" or "Ctrl+Tab")));
+
         TestKeysChords(test, command, zen, shortcuts);
         TestKeysClashActions(test, command, zen, shortcuts, Row, Clashes);
         TestVisualStudioKeys(test, command);
@@ -101,11 +107,11 @@ internal sealed partial class DawnScene
             Press(Key.K, control: true);
         });
         test.Check("keys: chord works: Ctrl+K waits for the second key and says so", () =>
-            commands.Keys.Pending == "Ctrl+K" && Quiet == wasQuiet && messageItem.Text.Contains(Said("keys_chords.waiting", ("key", "Ctrl+K"))));
+            commands.Keys.Pending == "Ctrl+K" && Quiet == wasQuiet && messageItem.Text.Contains(Said("keys_chords.waiting", ("key", UIShortcutText.Shown("Ctrl+K")))));
         test.Run(() => Press(Key.Z));
         test.Wait();
         test.Check("keys: chord works, and the status bar stops saying it waits", () => Quiet != wasQuiet && commands.Keys.Pending is null
-            && !messageItem.Text.Contains(Said("keys_chords.waiting", ("key", "Ctrl+K"))));
+            && !messageItem.Text.Contains(Said("keys_chords.waiting", ("key", UIShortcutText.Shown("Ctrl+K")))));
         test.Run(() =>
         {
             if (Quiet != wasQuiet)
@@ -115,12 +121,12 @@ internal sealed partial class DawnScene
         test.Run(() => Press(Key.Escape));
         test.Wait();
         test.Check("keys: chord works: Ctrl+K alone then Escape does nothing, and the waiting is taken off", () =>
-            Quiet == wasQuiet && commands.Keys.Pending is null && !messageItem.Text.Contains(Said("keys_chords.waiting", ("key", "Ctrl+K"))));
+            Quiet == wasQuiet && commands.Keys.Pending is null && !messageItem.Text.Contains(Said("keys_chords.waiting", ("key", UIShortcutText.Shown("Ctrl+K")))));
         test.Run(() => Press(Key.K, control: true));
         test.Run(() => Press(Key.Q));
         test.Wait();
         test.Check("keys: chord works: a second key that's no chord says it's not a command", () =>
-            Quiet == wasQuiet && commands.Keys.Pending is null && messageItem.Text.Contains(Said("keys_chords.not_a_command", ("keys", "Ctrl+K Q"))));
+            Quiet == wasQuiet && commands.Keys.Pending is null && messageItem.Text.Contains(Said("keys_chords.not_a_command", ("keys", UIShortcutText.Shown("Ctrl+K Q")))));
 
         // The dialog takes Ctrl+K and then Ctrl+J as one chord (Ctrl+K Ctrl+C is Comment Selection's), the keys file keeps it, reset puts the default back
         string file = Path.Combine(testFolder, "selftest_chord_keys.hor");
@@ -129,7 +135,7 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Run(() => KeyStrokeFor(keyFor!, Key.K, control: true, shift: false, alt: false));
         test.Check("keys: chord recorded: the dialog shows the first key and waits for a second", () =>
-            keyDialog is { IsOpen: true } && keyFor is not null && keyChordLine is { } line && line.Text.Contains("Ctrl+K") && command("Go to File")!.Shortcut == "Ctrl+P");
+            keyDialog is { IsOpen: true } && keyFor is not null && keyChordLine is { } line && line.Text.Contains(UIShortcutText.Shown("Ctrl+K")) && command("Go to File")!.Shortcut == "Ctrl+P");
         test.Run(() => KeyStrokeFor(keyFor!, Key.J, control: true, shift: false, alt: false));
         test.Wait();
         test.Run(() =>
@@ -182,7 +188,7 @@ internal sealed partial class DawnScene
         test.Run(() => keysTree!.Selected = row("Go to File"));
         test.Wait();
         test.Check("keys: conflict actions: the line under the list names the clash", () =>
-            keysHint!.Text == Said("keys_table.clash_line", ("key", "Ctrl+K"), ("other", string.Join(", ", ClashesWith(command("Go to File")!).Select(LabelOf))))
+            keysHint!.Text == Said("keys_table.clash_line", ("key", UIShortcutText.Shown("Ctrl+K")), ("other", string.Join(", ", ClashesWith(command("Go to File")!).Select(LabelOf))))
             && keysHint.Text.Contains(zen) && keysHint.Text.Contains(shortcuts) && keysHint.Color == WarningColor);
         test.Check("keys: conflict actions: a key a chord starts with is a conflict with the chord", () =>
             command("Go to File")!.Shortcut == "Ctrl+K" && row("Go to File") is { } goTo && clashes(goTo) && row(zen) is { } quiet && clashes(quiet)

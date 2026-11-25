@@ -18,6 +18,9 @@ internal sealed partial class DuskScene
     // The part of the settings that's the terminal's, what Dusk's window is for
     private const string TERMINAL_PART = "Terminal";
 
+    /// <summary>The editor's rows Dusk's window shows, those Dawn's does but the one that opens the Local AI window, which Dusk hasn't got.</summary>
+    internal static readonly UISetting[] DuskEditorRows = [.. EditorSettingsCatalog.Shown.Where(row => row.Key != EditorSettingsCatalog.LOCAL_AI_WINDOW)];
+
     /// <summary>The page while it is up, for the self test.</summary>
     internal SettingsPage? SettingsPage => settingsView?.Window.Parent is not null ? settingsView.Page : null;
 
@@ -33,8 +36,9 @@ internal sealed partial class DuskScene
             return;
         }
 
-        // The editor section, written for Dawn, its effects and picture applied here as they change
-        var editor = new FileSectionSource(host.Settings.Path, SettingsSections.EDITOR, EditorSettingsCatalog.Settings, EditorSettingsCatalog.Usual);
+        // The editor section, written for Dawn, its effects and picture applied here as they change. Local AI's rows are
+        // the Local AI window's, which is Dawn's, so neither they nor the row that opens it are here
+        var editor = new FileSectionSource(host.Settings.Path, SettingsSections.EDITOR, DuskEditorRows, EditorSettingsCatalog.Usual);
         editor.Pressed = (key, which) => SettingPressed(editor, key, which);
         editor.Changed = () =>
         {

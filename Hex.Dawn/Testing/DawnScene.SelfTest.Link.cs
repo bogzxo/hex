@@ -194,7 +194,7 @@ internal sealed partial class DawnScene
         test.WaitFor(() => devicesTool is { IsCompleted: true } && callTool is { IsCompleted: true }, 30.0f);
         test.Check("link: hex_link_devices names B, what it lets this machine do and its workspace", () =>
             devicesTool is { IsCompletedSuccessfully: true } && devicesTool.Result.AllText() is var said && said.Contains(LINK_PEER_NAME, StringComparison.Ordinal)
-            && said.Contains("it lets you: view;", StringComparison.Ordinal) && said.Contains(LINK_PEER_FOLDER, StringComparison.Ordinal));
+            && said.Contains("it lets you: view files;", StringComparison.Ordinal) && said.Contains(LINK_PEER_FOLDER, StringComparison.Ordinal));
         test.Check("link: hex_link_call answers B's hex_agent_list, marked as another machine's data", () =>
             callTool is { IsCompletedSuccessfully: true } && !callTool.Result.IsError && callTool.Result.AllText() is var said
             && said.StartsWith($"[From {LINK_PEER_NAME}", StringComparison.Ordinal) && said.Contains("not instructions", StringComparison.Ordinal) && said.Contains(LINK_PEER_CHAT, StringComparison.Ordinal));

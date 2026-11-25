@@ -28,10 +28,27 @@ public static class EditorSettingsCatalog
         GIT = "Editor · Git", RUN = "Editor · Run and debug", KEYS = "Editor · Keys", DESIGNER = "Editor · Designer", STARTUP = "Editor · Startup";
 
     /// <summary>
-    /// The AI part: the agents (the MCP server, the switch that turns every AI off, what finished chats do) and edit
-    /// prediction, a model's guess at what is typed next, with the model and the server it's asked through.
+    /// The AI part: the agents (the MCP server, the switch that turns every AI off, what finished chats do) and Local AI,
+    /// the models on this machine, edit prediction and AI Edit. Local AI's own rows are kept here (the file, MCP's
+    /// hex_settings_get and set and Dusk go by them) but the settings window shows only <see cref="LocalAiWindowRow"/> for
+    /// them, the Local AI window has them all.
     /// </summary>
-    public const string AGENTS = "AI · Agents", AI = "AI · Prediction";
+    public const string AGENTS = "AI · Agents", AI = "AI · Local AI";
+
+    /// <summary>The row of the settings window that sends to the Local AI window, which keeps nothing of its own.</summary>
+    public const string LOCAL_AI_WINDOW = "local_ai_window";
+
+    /// <summary>
+    /// Whether a setting is the Local AI window's, a row the settings window leaves out (it's still in the file and
+    /// MCP's settings): the local models, the llama.cpp server, edit prediction and AI Edit.
+    /// </summary>
+    public static bool IsLocalAiWindows(string key) => key != LOCAL_AI_WINDOW && (key == "edit_predictions" || key.StartsWith("edit_predictions_", StringComparison.Ordinal) || key.StartsWith("llamacpp_", StringComparison.Ordinal)
+        || key.StartsWith("local_ai_", StringComparison.Ordinal) || key.StartsWith("ai_edit_", StringComparison.Ordinal));
+
+    /// <summary>The one row of AI, Local AI the settings window shows, a button to the Local AI window found by every word of what it has.</summary>
+    public static readonly UISetting LocalAiWindowRow = new(LOCAL_AI_WINDOW, HexText.Get("settings_catalog.local_ai_window_title"), UIFormKind.Text,
+        HexText.Get("settings_catalog.local_ai_window_help"), AI, Buttons: [HexText.Get("settings_catalog.local_ai_window_button")], ButtonsOnly: true,
+        Keywords: HexText.Strings.GetValueOrDefault($"settings_keywords.{LOCAL_AI_WINDOW}", string.Empty));
 
     /// <summary>The Discord section of the editor: what Rich Presence shows of what is being edited (docs/discord.md).</summary>
     public const string DISCORD = "Editor · Discord";
@@ -72,7 +89,7 @@ public static class EditorSettingsCatalog
     {
         ["effect_motion"] = "motion", ["caret_glide"] = "motion", ["ui_animation"] = "motion", ["scroll_speed"] = "motion", ["middle_scroll_speed"] = "motion",
         ["mcp_server"] = "run and debug", ["no_ai"] = "run and debug", ["agents_resume_after_limit"] = "run and debug", ["agents_auto_settle_seconds"] = "run and debug",
-        ["link"] = "run and debug", ["link_port"] = "run and debug", ["link_name"] = "run and debug", ["link_discoverable"] = "run and debug",
+        ["link"] = "run and debug", ["link_port"] = "run and debug", ["link_name"] = "run and debug", ["link_discoverable"] = "run and debug", ["link_talk_open_on_message"] = "run and debug",
         ["format_on_type"] = "text", ["format_on_save"] = "files", ["trim_whitespace"] = "files", ["final_newline"] = "files", ["auto_save"] = "files", ["auto_save_delay"] = "files",
         ["reopen_last"] = "files", ["persistent_process"] = "files", ["persistent_at_login"] = "files",
         ["files_exclude"] = "search", ["search_exclude"] = "search", ["search_use_ignore_files"] = "search",
@@ -126,6 +143,25 @@ public static class EditorSettingsCatalog
     private static UISetting AiList(string key) =>
         new(key, HexText.Get($"settings_catalog.{key}_title"), UIFormKind.List, HexText.Get($"settings_catalog.{key}_help"), AI,
             KeyPlaceholder: HexText.Get($"settings_catalog.{key}_placeholder"), ValuePlaceholder: HexText.Get($"settings_catalog.{key}_add"));
+
+    /// <summary>The row of llama.cpp's buttons, Set Up llama.cpp, Start and Stop, which keeps nothing of its own.</summary>
+    public const string LLAMACPP_SETUP = "llamacpp_setup";
+
+    /// <summary>The buttons of llama.cpp's row, which one is which.</summary>
+    public const int LLAMACPP_SET_UP = 0, LLAMACPP_START = 1, LLAMACPP_STOP = 2;
+
+    /// <summary>A text row of llama.cpp's, its words in settings_catalog by its key (_title, _help, _placeholder).</summary>
+    private static UISetting LlamaText(string key) =>
+        new(key, HexText.Get($"settings_catalog.{key}_title"), UIFormKind.Text, HexText.Get($"settings_catalog.{key}_help"), AI,
+            Placeholder: HexText.Get($"settings_catalog.{key}_placeholder"));
+
+    /// <summary>The buttons of a model row, which one is which.</summary>
+    public const int MODEL_CHANGE = 0;
+
+    /// <summary>A role's model row: its name to read, and Change... to open the picker. Its words are in settings_catalog by its key.</summary>
+    private static UISetting ModelRow(string key) =>
+        new(key, HexText.Get($"settings_catalog.{key}_title"), UIFormKind.Text, HexText.Get($"settings_catalog.{key}_help"), AI,
+            Placeholder: HexText.Get($"settings_catalog.{key}_placeholder"), Buttons: [HexText.Get("settings_catalog.local_ai_change_button")], ReadOnly: true);
 
     /// <summary>The key of edit prediction's API key, a secret: listed and handed to agents as set or not, never as it is.</summary>
     public const string PREDICTION_KEY = "edit_predictions_api_key";
@@ -218,6 +254,8 @@ public static class EditorSettingsCatalog
         new("visual_studio_keys", HexText.Get("settings_catalog.visual_studio_keys_title"), UIFormKind.Flag, HexText.Get("settings_catalog.visual_studio_keys_help"), KEYS),
 
         new("reopen_last", HexText.Get("settings_catalog.reopen_last_title"), UIFormKind.Flag, HexText.Get("settings_catalog.reopen_last_help"), STARTUP),
+        new("macos_native_menu", HexText.Get("settings_catalog.macos_native_menu_title"), UIFormKind.Flag, HexText.Get("settings_catalog.macos_native_menu_help"), INTERFACE),
+        new("theme_follow_system", HexText.Get("settings_catalog.theme_follow_system_title"), UIFormKind.Flag, HexText.Get("settings_catalog.theme_follow_system_help"), INTERFACE),
         new("persistent_process", HexText.Get("settings_catalog.persistent_process_title"), UIFormKind.Flag, HexText.Get("settings_catalog.persistent_process_help"), STARTUP),
         new("persistent_at_login", HexText.Get("settings_catalog.persistent_at_login_title"), UIFormKind.Flag, HexText.Get("settings_catalog.persistent_at_login_help"), STARTUP),
         new("trim_whitespace", HexText.Get("settings_catalog.trim_whitespace_title"), UIFormKind.Flag, HexText.Get("settings_catalog.trim_whitespace_help"), SAVE),
@@ -229,7 +267,8 @@ public static class EditorSettingsCatalog
 
         new("edit_predictions", HexText.Get("settings_catalog.edit_predictions_title"), UIFormKind.Flag, HexText.Get("settings_catalog.edit_predictions_help"), AI),
         Choice("edit_predictions_invocation", AI, ["after_typing", "shortcut"]),
-        Choice("edit_predictions_provider", AI, ["ollama", "openai", "link"]),
+        Choice("edit_predictions_mode", AI, ["eager", "subtle"]),
+        Choice("edit_predictions_provider", AI, ["ollama", "openai", Hex.Core.HexSettings.LLAMACPP, "link"]),
         new("edit_predictions_api_url", HexText.Get("settings_catalog.edit_predictions_api_url_title"), UIFormKind.Text, HexText.Get("settings_catalog.edit_predictions_api_url_help"), AI,
             Placeholder: HexText.Get("settings_catalog.edit_predictions_api_url_placeholder")),
         new("edit_predictions_model", HexText.Get("settings_catalog.edit_predictions_model_title"), UIFormKind.Text, HexText.Get("settings_catalog.edit_predictions_model_help"), AI,
@@ -237,7 +276,8 @@ public static class EditorSettingsCatalog
         new(PREDICTION_KEY, HexText.Get("settings_catalog.edit_predictions_api_key_title"),
             UIFormKind.Secret,
             HexText.Get("settings_catalog.edit_predictions_api_key_help"), AI, Placeholder: HexText.Get("settings_catalog.edit_predictions_api_key_placeholder")),
-        Choice("edit_predictions_prompt_format", AI, ["infer", "zeta2", "qwen", "code_llama", "star_coder", "deepseek_coder", "code_gemma", "codestral"]),
+        Choice("edit_predictions_prompt_format", AI, ["infer", "zeta21", "zeta2", "qwen", "code_llama", "star_coder", "deepseek_coder", "code_gemma", "codestral"]),
+        Choice("edit_predictions_kind", AI, ["auto", "edit_model", "fim", "instruct", "fim_instruct"]),
         new("edit_predictions_max_tokens", HexText.Get("settings_catalog.edit_predictions_max_tokens_title"), UIFormKind.Whole, HexText.Get("settings_catalog.edit_predictions_max_tokens_help"), AI, Least: 16.0f, Most: 2048.0f),
         new("edit_predictions_debounce", HexText.Get("settings_catalog.edit_predictions_debounce_title"), UIFormKind.Whole, HexText.Get("settings_catalog.edit_predictions_debounce_help"), AI, Least: 0.0f, Most: 2000.0f, Unit: "ms"),
         AiList("edit_predictions_disabled_languages"),
@@ -245,6 +285,41 @@ public static class EditorSettingsCatalog
         new("edit_predictions_workspace", HexText.Get("settings_catalog.edit_predictions_workspace_title"), UIFormKind.Flag, HexText.Get("settings_catalog.edit_predictions_workspace_help"), AI),
         new("edit_predictions_share", HexText.Get("settings_catalog.edit_predictions_share_title"), UIFormKind.Flag, HexText.Get("settings_catalog.edit_predictions_share_help"), AI),
         new("edit_predictions_terminal", HexText.Get("settings_catalog.edit_predictions_terminal_title"), UIFormKind.Flag, HexText.Get("settings_catalog.edit_predictions_terminal_help"), AI),
+        new("edit_predictions_renames", HexText.Get("settings_catalog.edit_predictions_renames_title"), UIFormKind.Flag, HexText.Get("settings_catalog.edit_predictions_renames_help"), AI),
+        new("edit_predictions_far", HexText.Get("settings_catalog.edit_predictions_far_title"), UIFormKind.Flag, HexText.Get("settings_catalog.edit_predictions_far_help"), AI),
+        new("edit_predictions_system_prompt", HexText.Get("settings_catalog.edit_predictions_system_prompt_title"), UIFormKind.Text, HexText.Get("settings_catalog.edit_predictions_system_prompt_help"), AI,
+            Placeholder: HexText.Get("settings_catalog.edit_predictions_system_prompt_placeholder")),
+        Choice("edit_predictions_thinking", AI, Hex.Core.PredictionTuning.Thinkings),
+        new("edit_predictions_temperature", HexText.Get("settings_catalog.edit_predictions_temperature_title"), UIFormKind.Number, HexText.Get("settings_catalog.edit_predictions_temperature_help"), AI, Least: 0.0f, Most: 2.0f, Step: 0.05f, Slider: true),
+        new("edit_predictions_top_p", HexText.Get("settings_catalog.edit_predictions_top_p_title"), UIFormKind.Number, HexText.Get("settings_catalog.edit_predictions_top_p_help"), AI, Least: 0.0f, Most: 1.0f, Step: 0.01f, Slider: true),
+        new("edit_predictions_top_k", HexText.Get("settings_catalog.edit_predictions_top_k_title"), UIFormKind.Whole, HexText.Get("settings_catalog.edit_predictions_top_k_help"), AI, Least: 0.0f, Most: 200.0f),
+        new("edit_predictions_repeat_penalty", HexText.Get("settings_catalog.edit_predictions_repeat_penalty_title"), UIFormKind.Number, HexText.Get("settings_catalog.edit_predictions_repeat_penalty_help"), AI, Least: 0.0f, Most: 2.0f, Step: 0.05f, Slider: true),
+        new("edit_predictions_context", HexText.Get("settings_catalog.edit_predictions_context_title"), UIFormKind.Whole, HexText.Get("settings_catalog.edit_predictions_context_help"), AI, Least: 0.0f, Most: 262144.0f, Unit: "tokens"),
+        new("edit_predictions_link_chat", HexText.Get("settings_catalog.edit_predictions_link_chat_title"), UIFormKind.Flag, HexText.Get("settings_catalog.edit_predictions_link_chat_help"), AI),
+
+        new(LLAMACPP_SETUP, HexText.Get("settings_catalog.llamacpp_setup_title"), UIFormKind.Text, HexText.Get("settings_catalog.llamacpp_setup_help"), AI,
+            Buttons: [HexText.Get("settings_catalog.llamacpp_setup_button"), HexText.Get("settings_catalog.llamacpp_start_button"), HexText.Get("settings_catalog.llamacpp_stop_button")], ButtonsOnly: true),
+        LlamaText("llamacpp_server"),
+        // The model rows of the local AI (llamacpp_model and ai_edit_model stay readable and are kept in step, but are not shown)
+        ModelRow("local_ai_predict_model"),
+        ModelRow("local_ai_chat_model"),
+        Choice("local_ai_engine", AI, Hex.Core.HexSettings.LocalAiEngines),
+        LlamaText("local_ai_model_folders"),
+        LlamaText("local_ai_presets"),
+        LlamaText("local_ai_favourites"),
+        Choice("local_ai_ui_mode", AI, Hex.Core.HexSettings.LocalAiUiModes),
+        LlamaText("local_ai_setup"),
+        LlamaText("llamacpp_alias"),
+        new("llamacpp_port", HexText.Get("settings_catalog.llamacpp_port_title"), UIFormKind.Whole, HexText.Get("settings_catalog.llamacpp_port_help"), AI, Least: 1024.0f, Most: 65535.0f),
+        new("llamacpp_context", HexText.Get("settings_catalog.llamacpp_context_title"), UIFormKind.Whole, HexText.Get("settings_catalog.llamacpp_context_help"), AI, Least: 2048.0f, Most: 262144.0f, Unit: "tokens"),
+        Choice("llamacpp_offload", AI, Hex.Core.LlamaCppServerArgs.Offloads),
+        LlamaText("llamacpp_extra_args"),
+        new("llamacpp_autostart", HexText.Get("settings_catalog.llamacpp_autostart_title"), UIFormKind.Flag, HexText.Get("settings_catalog.llamacpp_autostart_help"), AI),
+        LlamaText("llamacpp_folder"),
+        LlamaText("llamacpp_models"),
+
+        new("ai_edit_thinking", HexText.Get("settings_catalog.ai_edit_thinking_title"), UIFormKind.Flag, HexText.Get("settings_catalog.ai_edit_thinking_help"), AI),
+        new("ai_edit_max_tokens", HexText.Get("settings_catalog.ai_edit_max_tokens_title"), UIFormKind.Whole, HexText.Get("settings_catalog.ai_edit_max_tokens_help"), AI, Least: 512.0f, Most: 16384.0f, Unit: "tokens"),
 
         new(Hex.Core.HexSettings.DISCORD_PRESENCE, HexText.Get("settings_catalog.discord_presence_title"), UIFormKind.Flag,
             HexText.Get(Hex.Core.HexDiscord.Configured ? "settings_catalog.discord_presence_help" : "settings_catalog.discord_presence_help_unconfigured"), DISCORD),
@@ -277,6 +352,8 @@ public static class EditorSettingsCatalog
         new("link_port", HexText.Get("settings_catalog.link_port_title"), UIFormKind.Whole, HexText.Get("settings_catalog.link_port_help"), LINK, Least: 1024.0f, Most: 65535.0f),
         new("link_name", HexText.Get("settings_catalog.link_name_title"), UIFormKind.Text, HexText.Get("settings_catalog.link_name_help"), LINK, Placeholder: HexText.Get("settings_catalog.link_name_placeholder")),
         new("link_discoverable", HexText.Get("settings_catalog.link_discoverable_title"), UIFormKind.Flag, HexText.Get("settings_catalog.link_discoverable_help"), LINK),
+        new("link_talk_open_on_message", HexText.Get("settings_catalog.link_talk_open_on_message_title"), UIFormKind.Flag, HexText.Get("settings_catalog.link_talk_open_on_message_help"), LINK),
+        Choice("link_invite_rights", LINK, ["work_together", "use_agents"]),
 
         new(LINK_SYSTEM_FILE_FOLDERS, HexText.Get("settings_catalog.link_system_file_folders_title"), UIFormKind.List, HexText.Get("settings_catalog.link_system_file_folders_help"), LINK_SYNC,
             KeyPlaceholder: HexText.Get("settings_catalog.link_system_file_folders_placeholder"), ValuePlaceholder: HexText.Get("settings_catalog.link_system_file_folders_add")),
@@ -284,6 +361,20 @@ public static class EditorSettingsCatalog
         new("snap", HexText.Get("settings_catalog.snap_title"), UIFormKind.Whole, HexText.Get("settings_catalog.snap_help"), DESIGNER, Least: 0.0f, Most: 16.0f),
         new("canvas_handles", HexText.Get("settings_catalog.canvas_handles_title"), UIFormKind.Flag, HexText.Get("settings_catalog.canvas_handles_help"), DESIGNER)
     ]);
+
+    /// <summary>
+    /// The rows of <see cref="Settings"/> the settings window shows, in both modes: all but the Local AI window's, which
+    /// are the one row that opens it, where the first of them was.
+    /// </summary>
+    public static readonly UISetting[] Shown = ShownOf(Settings);
+
+    private static UISetting[] ShownOf(UISetting[] rows)
+    {
+        int first = Array.FindIndex(rows, row => IsLocalAiWindows(row.Key));
+        var shown = rows.Where(row => !IsLocalAiWindows(row.Key)).ToList();
+        shown.Insert(first < 0 ? shown.Count : rows.Take(first).Count(row => !IsLocalAiWindows(row.Key)), LocalAiWindowRow);
+        return [.. shown];
+    }
 
     /// <summary>
     /// Every row given the other words it's searched by, out of settings_keywords by its key (word wrap and wordwrap for
@@ -439,7 +530,11 @@ public static class EditorSettingsCatalog
         ["link_port"] = new NumberValue(47833.0f),
         ["link_name"] = new StringValue(string.Empty),
         ["link_discoverable"] = Values.Bool(true),
+        ["link_talk_open_on_message"] = Values.Bool(true),
+        ["link_invite_rights"] = new StringValue("work_together"),
         ["reopen_last"] = Values.Bool(false),
+        ["macos_native_menu"] = Values.Bool(true),
+        ["theme_follow_system"] = Values.Bool(Hex.Core.HexSettings.ThemeFollowSystemDefault(OperatingSystem.IsMacOS())),
         ["persistent_process"] = Values.Bool(false),
         ["persistent_at_login"] = Values.Bool(false),
         ["trim_whitespace"] = Values.Bool(true),
@@ -459,14 +554,47 @@ public static class EditorSettingsCatalog
         [PREDICTION_KEY] = new StringValue(string.Empty),
         ["edit_predictions_model"] = new StringValue(string.Empty),
         ["edit_predictions_prompt_format"] = new StringValue("infer"),
+        ["edit_predictions_kind"] = new StringValue("auto"),
         ["edit_predictions_max_tokens"] = new NumberValue(256.0f),
         ["edit_predictions_debounce"] = new NumberValue(100.0f),
         ["edit_predictions_invocation"] = new StringValue("after_typing"),
+        ["edit_predictions_mode"] = new StringValue("eager"),
         ["edit_predictions_disabled_languages"] = Horizon.HIDL.Library.Natives.List(Hex.Core.HexSettings.UsualEditPredictionsDisabledLanguages),
         [Hex.Core.HexSettings.EDIT_PREDICTIONS_EXCLUDE] = Horizon.HIDL.Library.Natives.List(Hex.Core.HexSettings.UsualEditPredictionsExclude),
         ["edit_predictions_workspace"] = Values.Bool(true),
         ["edit_predictions_share"] = Values.Bool(false),
         ["edit_predictions_terminal"] = Values.Bool(false),
+        ["edit_predictions_renames"] = Values.Bool(true),
+        ["edit_predictions_far"] = Values.Bool(true),
+        ["edit_predictions_system_prompt"] = new StringValue(string.Empty),
+        ["edit_predictions_thinking"] = new StringValue(Hex.Core.PredictionTuning.THINK_MODEL),
+        ["edit_predictions_temperature"] = new NumberValue(0.0f),
+        ["edit_predictions_top_p"] = new NumberValue(0.0f),
+        ["edit_predictions_top_k"] = new NumberValue(0.0f),
+        ["edit_predictions_repeat_penalty"] = new NumberValue(0.0f),
+        ["edit_predictions_context"] = new NumberValue(0.0f),
+        ["edit_predictions_link_chat"] = Values.Bool(false),
+        ["llamacpp_folder"] = new StringValue(string.Empty),
+        ["llamacpp_models"] = new StringValue(string.Empty),
+        ["llamacpp_server"] = new StringValue(string.Empty),
+        ["llamacpp_model"] = new StringValue(string.Empty),
+        ["llamacpp_alias"] = new StringValue("local"),
+        ["llamacpp_port"] = new NumberValue(Hex.Core.LlamaCppServerArgs.USUAL_PORT),
+        ["llamacpp_context"] = new NumberValue(Hex.Core.LlamaCppServerArgs.USUAL_CONTEXT),
+        ["llamacpp_offload"] = new StringValue(Hex.Core.LlamaCppServerArgs.AUTO),
+        ["llamacpp_extra_args"] = new StringValue(string.Empty),
+        ["local_ai_predict_model"] = new StringValue(string.Empty),
+        ["local_ai_chat_model"] = new StringValue(string.Empty),
+        ["local_ai_engine"] = new StringValue(Hex.Core.HexSettings.LOCAL_AI_LLAMACPP),
+        ["local_ai_model_folders"] = new StringValue(string.Empty),
+        ["local_ai_presets"] = new StringValue(string.Empty),
+        ["local_ai_favourites"] = new StringValue(string.Empty),
+        ["local_ai_ui_mode"] = new StringValue("auto"),
+        ["local_ai_setup"] = new StringValue(string.Empty),
+        ["llamacpp_autostart"] = Values.Bool(true),
+        ["ai_edit_model"] = new StringValue(string.Empty),
+        ["ai_edit_thinking"] = Values.Bool(true),
+        ["ai_edit_max_tokens"] = new NumberValue(Hex.Core.HexSettings.USUAL_AI_EDIT_MAX_TOKENS),
 
         [Hex.Core.HexSettings.DISCORD_PRESENCE] = Values.Bool(false),
         ["discord_show_file"] = Values.Bool(true),

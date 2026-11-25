@@ -59,6 +59,7 @@ internal sealed partial class DawnScene
 
         test.Run(() =>
         {
+            settings.LinkTalkOpenOnMessage = false;
             if (linkTalkPanel?.Children.OfType<Button>().FirstOrDefault(button => button.Icon == "close") is { } close)
                 close.OnPressed?.Invoke();
             SayThere(later);
@@ -94,6 +95,20 @@ internal sealed partial class DawnScene
             received.TryPeek(out HexLinkTalk? said) && said.Text == reply && linkTalkDraft?.Text == string.Empty && RowShows(2, reply) &&
             linkTalkRows!.ComponentOf(2)!.Children.OfType<Label>().Any(label => label.Text.Contains(
                 Said("link.talk.you", ("device", LinkDevice?.Name ?? string.Empty)), StringComparison.Ordinal)));
+
+        // The setting on (its default), a message arriving with the panel closed opens it
+        test.Run(() =>
+        {
+            settings.LinkTalkOpenOnMessage = true;
+            if (linkTalkPanel?.Children.OfType<Button>().FirstOrDefault(button => button.Icon == "close") is { } close)
+                close.OnPressed?.Invoke();
+            SayThere("Opens the chat by itself, see src/app/main.cs:12-20 and @" + (LinkDevice?.Name ?? string.Empty));
+        });
+        test.WaitFor(() => linkTalkPanel?.Visible == true && linkTalkMessages.Count == 4, 8);
+        test.Check("link-talk: with the setting on a message opens the closed panel by itself, its file reference a link", () =>
+            linkTalkPanel?.Visible == true && linkTalkUnread == 0 &&
+            linkTalkRows!.ComponentOf(3)!.Children.OfType<Label>().Any(label => label.Markdown && label.Text.Contains("(ref0)", StringComparison.Ordinal)));
+        test.Run(() => settings.LinkTalkOpenOnMessage = true);
 
         test.Run(() =>
         {

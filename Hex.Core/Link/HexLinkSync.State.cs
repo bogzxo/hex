@@ -112,7 +112,7 @@ internal sealed partial class HexLinkSync
                     if (HexLinkData.String(conflict, "path", HexLinkFiles.MOST_PATH) is not { } path || Ours(path, includeMissing: false))
                         continue;
                     keptConflicts[path] = new HexLinkSyncConflict(path, HexLinkData.String(conflict, "kind", 100) ?? "changed on both",
-                        HexLinkData.String(conflict, "copy", HexLinkFiles.MOST_PATH), HexLinkData.String(conflict, "copy_hash", 64));
+                        HexLinkData.String(conflict, "copy", HexLinkFiles.MOST_PATH), HexLinkData.String(conflict, "copy_hash", 64), HashIn(conflict["base"]));
                 }
             }
         }
@@ -146,6 +146,10 @@ internal sealed partial class HexLinkSync
             foreach (var (path, conflict) in keptConflicts)
                 conflicts[path] = conflict;
         }
+
+        // The stored merge bases still pointed at: what the kept bases agreed on here, and what the kept conflicts were
+        // merging from. The rest nothing will ask for again.
+        mergeBases?.Prune(keptBases.Values.Select(agreed => agreed.Local).Concat(keptConflicts.Values.Select(each => each.Base)).OfType<string>());
     }
 
     // A hash kept in the state file, lower case, null when it isn't one
@@ -176,45 +180,85 @@ internal sealed partial class HexLinkSync
 
     private readonly Lock saving = new();
     private long savedAt, snapshotVersion, writtenVersion;
+    private byte[]? writtenDigest;
     internal Action<long>? BeforeStateWrite { get; init; }
 
     // The bases and the conflicts written, whole or not at all
     internal void Save()
     {
         using var timing = HexLinkSyncTiming.Measure("state.save");
-        JsonObject state;
+        // The buffer of the last save kept for this one (a state of ten thousand files is some megabytes), taken by one save at a time
+        var state = Interlocked.Exchange(ref spareState, null) ?? new System.Buffers.ArrayBufferWriter<byte>(16 * 1024);
+        state.ResetWrittenCount();
+        try
+        {
+            Save(state);
+        }
+        finally
+        {
+            // Not kept when a huge state grew it, so a quiet sync doesn't hold it
+            if (state.Capacity <= MOST_SPARE_STATE_BYTES)
+                Volatile.Write(ref spareState, state);
+        }
+    }
+
+    private const int MOST_SPARE_STATE_BYTES = 8 * 1024 * 1024;
+    private System.Buffers.ArrayBufferWriter<byte>? spareState;
+
+    private void Save(System.Buffers.ArrayBufferWriter<byte> state)
+    {
+        using var timing = HexLinkSyncTiming.Measure("state.write");
         long version;
         lock (gate)
         {
             version = ++snapshotVersion;
-            var said = new JsonObject();
-            foreach (var (path, agreed) in bases.OrderBy(each => each.Key, StringComparer.Ordinal))
+
+            // Streamed, no node tree of a few objects for every file: the same document the nodes made, in the same order
+            using var writer = new Utf8JsonWriter(state);
+            writer.WriteStartObject();
+            writer.WriteNumber("version", STATE_VERSION);
+            writer.WriteString("device", peer.Device.Id);
+            writer.WriteString("folder", folder.Name);
+            writer.WritePropertyName("agreement");
+            if (baseAgreement is null)
+                writer.WriteNullValue();
+            else
+                baseAgreement.WriteTo(writer);
+            writer.WriteStartObject("bases");
+            string[] paths = new string[bases.Count];
+            bases.Keys.CopyTo(paths, 0);
+            Array.Sort(paths, StringComparer.Ordinal);
+            foreach (string path in paths)
             {
-                said[path] = new JsonObject
-                {
-                    ["local"] = agreed.Local,
-                    ["remote"] = agreed.Remote,
-                    ["text"] = agreed.Text,
-                    ["local_eol"] = EolWord(agreed.LocalEol),
-                    ["remote_eol"] = EolWord(agreed.RemoteEol),
-                    ["executable"] = agreed.Executable
-                };
+                HexLinkSyncAgreed agreed = bases[path];
+                writer.WriteStartObject(path);
+                writer.WriteString("local", agreed.Local);
+                writer.WriteString("remote", agreed.Remote);
+                writer.WriteString("text", agreed.Text);
+                writer.WriteString("local_eol", EolWord(agreed.LocalEol));
+                writer.WriteString("remote_eol", EolWord(agreed.RemoteEol));
+                if (agreed.Executable is { } executable)
+                    writer.WriteBoolean("executable", executable);
+                else
+                    writer.WriteNull("executable");
+                writer.WriteEndObject();
             }
-            state = new JsonObject
+
+            writer.WriteEndObject();
+            writer.WriteStartArray("conflicts");
+            foreach (var conflict in conflicts.Values.OrderBy(each => each.Path, StringComparer.Ordinal))
             {
-                ["version"] = STATE_VERSION,
-                ["device"] = peer.Device.Id,
-                ["folder"] = folder.Name,
-                ["agreement"] = baseAgreement?.DeepClone(),
-                ["bases"] = said,
-                ["conflicts"] = new JsonArray([.. conflicts.Values.OrderBy(each => each.Path, StringComparer.Ordinal).Select(conflict => (JsonNode)new JsonObject
-                {
-                    ["path"] = conflict.Path,
-                    ["kind"] = conflict.Kind,
-                    ["copy"] = conflict.Copy,
-                    ["copy_hash"] = conflict.CopyHash
-                })])
-            };
+                writer.WriteStartObject();
+                writer.WriteString("path", conflict.Path);
+                writer.WriteString("kind", conflict.Kind);
+                writer.WriteString("copy", conflict.Copy);
+                writer.WriteString("copy_hash", conflict.CopyHash);
+                writer.WriteString("base", conflict.Base);
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndArray();
+            writer.WriteEndObject();
         }
 
         BeforeStateWrite?.Invoke(version);
@@ -224,9 +268,19 @@ internal sealed partial class HexLinkSync
                 return;
             try
             {
+                // Nothing moved since what's on the disk was written: no write (a settle after a pass that changed nothing)
+                byte[] digest = System.Security.Cryptography.SHA256.HashData(state.WrittenSpan);
+                if (writtenDigest is not null && digest.AsSpan().SequenceEqual(writtenDigest) && File.Exists(StateFile))
+                {
+                    writtenVersion = version;
+                    Volatile.Write(ref savedAt, Environment.TickCount64);
+                    return;
+                }
+
                 Directory.CreateDirectory(Path.GetDirectoryName(StateFile)!);
                 using (HexLinkSyncTiming.Measure("state.serialize-write"))
-                    HexLinkFiles.WriteAtomic(StateFile, Encoding.UTF8.GetBytes(state.ToJsonString()));
+                    HexLinkFiles.WriteAtomic(StateFile, state.WrittenSpan);
+                writtenDigest = digest;
                 writtenVersion = version;
                 Volatile.Write(ref savedAt, Environment.TickCount64);
             }

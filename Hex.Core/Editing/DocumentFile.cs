@@ -31,12 +31,28 @@ internal static class DocumentFile
             newAt = hunk.NewStart + hunk.NewCount;
         }
         while (newAt < after.Length) source[newAt++] = oldAt++;
+        // A line with no original of its own (inserted) takes the ending of the line above it, or of the next original
+        // line when it is first, or else the file's most common ending.
+        int crlfCount = endings.Count(each => each == "\r\n");
+        string dominant = crlfCount * 2 > endings.Count ? "\r\n" : crlfCount * 2 < endings.Count ? "\n" : preferred;
+        string?[] chosen = new string?[after.Length];
+        for (int i = 0; i < after.Length; i++)
+            if (source[i] >= 0 && source[i] < endings.Count)
+                chosen[i] = endings[source[i]];
         var result = new StringBuilder(text.Length + endings.Count);
         for (int i = 0; i < after.Length; i++)
         {
             result.Append(after[i]);
-            if (i < after.Length - 1)
-                result.Append(source[i] >= 0 && source[i] < endings.Count ? endings[source[i]] : preferred);
+            if (i >= after.Length - 1)
+                continue;
+            if (chosen[i] is null)
+            {
+                chosen[i] = i > 0 ? chosen[i - 1] : null;
+                for (int next = i + 1; chosen[i] is null && next < after.Length - 1; next++)
+                    chosen[i] = chosen[next];
+                chosen[i] ??= dominant;
+            }
+            result.Append(chosen[i]);
         }
         return result.ToString();
     }

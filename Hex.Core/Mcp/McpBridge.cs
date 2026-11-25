@@ -141,6 +141,10 @@ internal static partial class McpBridge
     private static McpListing? Resolve(string folder, string[] args) =>
         Select(folder, McpDiscovery.All(), ExplicitFolder(args));
 
+    /// <summary>The pipe to the running Hex that has the folder open, tagged with the agent chat; null when none (never starts one).</summary>
+    internal static Stream? OpenForFolder(string folder, string chat) =>
+        Select(folder, McpDiscovery.All(), true) is { } listing && McpDiscovery.Running(listing.Pid) ? Open(listing, chat) : null;
+
     internal static bool ExplicitFolder(string[] args) => args.Contains("--folder")
         || args.Any(arg => !arg.StartsWith('-') && Directory.Exists(arg));
 

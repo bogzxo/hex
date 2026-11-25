@@ -135,6 +135,11 @@ public sealed class HexLinkTreeCacheTests
         // On disk but missing from the seeded snapshot: only a look over the whole tree reports it.
         File.WriteAllText(Path.Combine(site.Work, "unseen.txt"), "only a whole rescan finds this");
 
+        // macOS's FSEvents also says what happened in the moments before a watch started, which would name the unseen file
+        // as a watcher's event rather than a rescan's; the stream is given the time to forget it
+        if (OperatingSystem.IsMacOS())
+            await Task.Delay(TimeSpan.FromSeconds(2));
+
         var changes = new System.Collections.Concurrent.ConcurrentQueue<HexLinkTreeChange>();
         using var watch = new HexLinkTreeWatch(tree, batch =>
         {

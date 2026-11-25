@@ -83,7 +83,7 @@ internal sealed partial class DawnScene
     // The sources the settings window has that a VS Code setting can land in, the editor's, the text's and the terminal's
     private List<ISettingsSource> ImportSources()
     {
-        var sources = new List<ISettingsSource> { new EditorSource(this) };
+        var sources = new List<ISettingsSource> { new EditorSource(this, all: true) };
         sources.AddRange(settingSources.Select(added => added.Source()));
         sources.Add(new TerminalSettingsSource(terminals, EditorSettingsCatalog.THEME));
         return sources;

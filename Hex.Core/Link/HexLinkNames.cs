@@ -40,6 +40,27 @@ internal static class HexLinkNames
         return name.Length > 0 ? name : null;
     }
 
+    /// <summary>
+    /// The name with a short id tail, <c>BOGZPC · 3F9A2C</c>, when another device in <paramref name="others"/> goes by the same
+    /// name (two Hex instances on one machine both default to the machine's name). The ids may be only a prefix (Nearby
+    /// shows eight characters). A device alone with its name keeps the plain name.
+    /// </summary>
+    public static string Distinct(string? name, string id, IEnumerable<(string? Name, string Id)> others)
+    {
+        string shown = Clean(name) ?? (id.Length > 8 ? id[..8] : id);
+        if (id.Length == 0)
+            return shown;
+        foreach (var (other, otherId) in others)
+        {
+            if (otherId.Length == 0 || !string.Equals(Clean(other), shown, StringComparison.OrdinalIgnoreCase))
+                continue;
+            int common = Math.Min(id.Length, otherId.Length);
+            if (!string.Equals(id[..common], otherId[..common], StringComparison.OrdinalIgnoreCase))
+                return $"{shown} · {id[..Math.Min(6, id.Length)].ToUpperInvariant()}";
+        }
+        return shown;
+    }
+
     // The format characters that change how text around them reads or can't be seen: the direction marks and
     // overrides, the zero-width ones and the byte order mark
     private static bool Hidden(char c) =>

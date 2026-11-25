@@ -26,6 +26,25 @@ integration gates.
   device that has the chats. All of it travels as ordinary `tools/call` requests, so it works on LAN, Tailscale
   and through the one-hop relay (`hex_link_call`). Chats started by a link remember the device that started them
   (`link_device` in the chat file).
+- **Tester leftovers (fixed).**
+  - A shared save no longer leaves a participant modified. Working-tree sync refusing a write while the shared tab had not
+    caught up with the authority's latest receipt is a retry (a CONFLICT without `editor_dirty`), not a held conflict. Every
+    participant also writes the acknowledged receipt to its own disk, not only through a relay. Save on an offline or
+    read-only shared tab says why.
+  - An editing claim made by MCP edits lapses once the buffer has been idle for the 35 s lease; a tab the person typed in keeps
+    its claim while unsaved. An explicit claim is refused, naming the holder, when another device's editing claim or explicit
+    claim covers the path. The check reads the local claim table, so two takers inside one propagation delay can still both
+    succeed until the table converges; there is no authority round trip yet.
+  - Devices with the same name show a short id tail (`BOGZPC · 3F9A2C`; the port for an id-less tailnet entry) in Nearby, the pairing
+    dialog, device cards, the session banner, pickers and command titles. Names are read from the current device record, so a
+    rename shows at once.
+  - An empty folder that only shares a name with the other device's folder is not synced automatically: Hex asks
+    "Get <device>'s <folder> here?" once per session (Get it / Not now). Get Missing Repository says it is checking and what it is getting.
+  - Disconnect by hand sends `link/bye` before closing: the other device holds off dialling, its card says "Disconnected by <device>"
+    with a Connect button, until the presser connects again. Any refusal caused by an open tab (shared or plain) carries
+    `[shared_document_open]`, so Keep Mine / Keep Theirs offers "Close the tab and resolve". Release on an automatic editing claim
+    drops it (unsaved edits stay local). Ports refusals are audited once per kind until the rights move.
+  - "Changed on both … nothing was overwritten" cards close when the conflict is resolved by any path, or the sync stops.
 - **Known limits.** One hop can relay permitted control RPC. Bulk publication requires a direct link to the
   authority. Handle case-only directory renames manually. BOGROG had no Tailscale, and the Mac's Claude CLI
   was signed out. Shared editing can exceed the 50 ms loopback target under CPU saturation.
@@ -61,7 +80,7 @@ the device name and a short identifier. Known devices remember eligible endpoint
 or restart with backoff. The Devices window shows the route, last failure, and retry state where known.
 Disconnect holds off redial. Forget removes trust.
 
-A device can have up to **64 active links**. The listener admits at most four handshakes at once. The initial
+A device can have up to **64 active links**. The listener admits at most twelve handshakes at once and six per source address (a device paired with, dialling from its last address, is not held back by the twelve); a connection that sends nothing is dropped after three seconds. A joiner dials an invite's addresses one after another (a quarter of a second apart, or as soon as one fails) and stops at the first that answers. The initial
 handshake budget is ten seconds before user confirmation. Each link bounds request rate and message sizes and
 checks liveness with pings. A full or inaccessible listener can refuse the connection before sharing workspace
 data.
@@ -114,13 +133,19 @@ devices still explicitly approve their own grants. The optional workspace share 
 | Steer | With View, start and steer agents and answer approvals. An agent can run commands on the host under that host's agent policy. Treat Steer as access to run work on the machine. |
 | Predict | Use a model that the host explicitly shares for autocomplete. Independent of View and off by default. |
 
-**Collaborator** suggests View + Edit. **Build and test worker** suggests View + Edit + Steer. **Viewer**
+**Collaborator** (shown as "Work together") suggests View + Edit when you invite a device, without agent control. In
+the invite's **Change** section, **Use my AI agents** is an explicit tick that adds Steer; the last choice is kept per
+user in `link_invite_rights` (`work_together` by default, or `use_agents`) and starts the next invite. When you join
+with a code and the host proposes no terms, the preset still suggests View + Steer + Edit for what you grant. **Build
+and test worker** suggests View + Edit + Steer. **Viewer**
 suggests View. **Custom** sets the rights individually. The two directions are independent. Only allowlisted MCP
 tools are callable over Link. Direct terminal, debugger, UI input, screenshot, settings, and development-build
 tools stay local.
 
 Rights changes apply to new requests and ongoing work that depends on the revoked right. A loss of Edit makes an
-existing sync pull-only. View regrant restores watches and refreshes their state. Forget removes the pin and
+existing sync pull-only on the device that lost it: its saves stop landing on the device that revoked, and the
+revoking device keeps writing to it. The revoking device also stops applying that device's changes (they are skipped,
+its status line says so, and they arrive when Edit is granted again). View regrant restores watches and refreshes their state. Forget removes the pin and
 closes its connection. Turning off Link closes the listener and sessions. The bounded local audit records
 pairings, refusals, Steer, edits, authority transfers and overrides. Relayed agent calls include the origin and
 each authenticated hop. Invite secrets and model prompt text are kept out of the audit.
@@ -284,9 +309,37 @@ uses a process-wide per-path guard, a fresh base check and atomic replacement as
 or a lost race stops the write instead of clobbering it.
 
 The sync engine recognizes equivalent LF and CRLF text and keeps the destination's line-ending style where
-applicable. Exact byte hashes still protect writes and receipts. `hex_link_sync` can start, stop, report or
+applicable. A file that is new on the receiving side arrives byte for byte as sent, whatever line ends most files
+there use (an LF script stays LF in a CRLF checkout). Exact byte hashes still protect writes and receipts. A clean
+tab open in a shared document closes when the file is deleted or renamed away by the other device; a refusal
+because a shared document hasn't saved a write ends with the marker `[shared_document_open]`
+(`HexLinkSync.IsSharedOpenRefusal`). A device's own editor claims never block its own agents. `hex_link_sync` can start, stop, report or
 flush a folder. A flush can report remaining conflicts, skipped paths or pull-only rights. An explicit alignment
 or recovery decision is required when repository history cannot be reconciled automatically.
+
+**Undo after a resolve.** Keep mine and Use theirs send or write the chosen version, so the other one would be lost.
+Each resolve therefore keeps both versions (bytes and hashes) with the path, time and device in a resolution record
+under the sync's state folder (`resolutions/<device and folder>/<id>`; none when that state sits inside the shared
+folder). The last 50 are kept for 7 days. The resolve notice shows **Undo** for about 30 seconds, and the Devices window
+lists the settled conflicts with **Undo** for later. Undo restores the other version as a normal local change: it goes
+through the same guarded local write (fresh base check, dirty-editor guard, per-path lock) and the sync then sends it
+like any edit. If the file is no longer what the resolve left (edited, deleted or changed since), nothing is written
+and the merge editor opens with the current file, the version that was set aside and the one the resolve kept.
+`hex_link_sync resolutions` lists the records and `hex_link_sync undo {id}` answers `undone`, `needs_merge` (the merge
+editor opens) or an error. Known limit: a file open in a shared document is settled through the room first, so the version kept as "set aside" is what the file held when the sync's resolve ran, not always the original.
+
+### 5.5.1 Empty directories
+
+Empty folders travel both ways beside the files: made, deleted and renamed on one side, the other follows. A
+directory is empty when no file is under it that sync sees; folders left out by `.hex-link-ignore`, Git, the workspace
+excludes or operating-system metadata are never made, removed or counted, and a folder holding any of those is not
+empty. It is a request of its own (`sync/dirs`: `list`, `check`, `make` and `remove`, the last two needing Edit) so the
+file manifests are unchanged and an older peer without it is simply left alone. While the file sync is settled, every
+few seconds each side lists its empty directories and `HexLinkDirs.Plan` compares them with what both had last time
+(kept in `<state>.dirs`): one side's new directory is made on the other; one missing from a side that had it agreed is a
+delete to follow, and so is one that files were taken out of (seen by either watcher), so a folder deleted with its
+files is not brought back by the empty folder its files' deletion left on the other side. A rename is a delete and a
+create. A pull-only side makes directories only from the other. Removing never touches a directory that has anything in it.
 
 ### 5.6 Linked predictions
 
@@ -357,6 +410,84 @@ before ordinary sync proceeds.
 draft and its pending retry, including when the authority is offline. Snapshot cleanup retains bases used by other
 drafts and reclaims obsolete objects as the store grows.
 
+### 5.9 Shared ports
+
+A device shares a local TCP port (a dev server on 127.0.0.1:5173) with one linked device or all of them, like SSH -L
+or Live Share's shared servers. **Link: Share a Port…**, the **Share a port…** button on a device card and
+`hex_link_ports` (`list`, `share`, `unshare`, `open`, `close`) make a share: a name, a port and a target host. Only
+loopback targets are accepted unless the person explicitly allows a LAN host (`allow_lan`, or `lan` in the command).
+At most 16 shares; they are kept in `ports.json` beside the other Link data.
+
+**Right.** A new per-device right **Ports** (`ports`, "Open shared ports", off until ticked in the Devices window's
+rights dialog, takes View with it). It is separate from Steer on purpose: a tunnel runs nothing on the sharer, but it
+reaches whatever listens on the shared port, which Steer does not imply. The sharer decides which ports. A port is
+reachable only when it is shared with that device **and** the device holds Ports, both checked again on every request;
+taking the right away or unsharing closes the live tunnels at once.
+
+**Tunnel.** Bulk streams are one-way and fixed-length, so tunnels ride the same authenticated connection as ordinary
+requests instead (`HexLinkTunnels`): `ports/list`, `ports/connect` (the sharer dials its local port),
+`ports/ready`, `ports/data` (up to 96 KiB, base64) and `ports/close` (half or full), the last two in both directions.
+A chunk is answered once the other end has written it to its socket and the next is not sent before, so a slow
+reader slows its writer. Nothing new is opened, so route, relay rules, admission and pings are the link's own.
+**Open** starts a listener on 127.0.0.1 (the share's port when free, else the next free one) and tunnels each
+accepted connection, full duplex and several at once. The Devices card has Open, Open in browser, Copy address and
+Close. A close at either end, an unshare, a lost right or a disconnect closes the tunnels, and a disconnect removes
+the listeners. The opens are remembered and come back when the link does, on the same local port when free.
+
+**Limits and audit.** At most 64 tunnelled connections per link (the 65th is closed at once), and 24 MiB/s per link
+for tunnels. Link's 60 requests a second still applies, so tunnels wait when it is busy. The audit log records `ports
+share`, `ports open`, `ports use`, `ports connect`, `ports close`, `ports refused` and `ports failed` with the
+device, share and byte counts. Only loopback by default; the tool is local and not on the allow list for linked callers.
+
+### 5.10 Serve AI (AI Edit, agents and @ai over Link)
+
+A device without a model uses the chat models of a linked device that has them, for everything that asks the **Chat role**:
+AI Edit (Ctrl+I) and its quick actions, Explain / Change with Agent, the Local agent and Link Chat's `@ai`.
+
+**Right and gate.** New per-device right **Use my AI models** (`ai`; the one name for it in the Devices dialog, errors and tool output; `hex_link_devices` says it "use AI models", `HexLinkRights.Ai = 64`, off until ticked in the Devices window's
+rights dialog beside Autocomplete and Open shared ports). Like Predict it stands alone: no View needed, the device sees no
+files. The host serves when the device holds the right **and** the host has a chat model it can reach (`ServesAi`; with No
+AI it serves nothing). Hello says `"serves": ["ai"]` and `link/serves` says it again on any change, so the client's
+`HexLinkPeer.ServesAi` follows the right and the host's models. Every request re-checks both.
+
+**Wire.** `ai/models` (the host's chat models: id, name, caps, context, size/quant line, at most 64), `ai/start`
+(`{id, model, body}`, `body` an OpenAI chat-completions request as JSON text, at most 1 MB), notifications `ai/chunk`
+(`{id, data}`, one server-sent `chat.completion.chunk` as the server wrote it, so content, `reasoning_content` and
+`tool_calls` all arrive untouched), `ai/queued` (`{id, place}`), `ai/done` (`{id, ok, error, status}`) and `ai/cancel`. They
+reuse the prediction stream shape (bounded channels, back-pressure, cancel on dispose, the 1024/s legacy-notice budget) and
+the new error code `AI_FAILED` with `data.status` (`refused`, `busy`, `nomodel`, `cancelled`, `failed`).
+
+**Bounds and audit.** The host bounds every body (`HexLinkAiRequest.Bound`): streaming forced, one choice, answer tokens clamped
+to 8192 (2048 when unset), 1 MB request. A device has one chat running; up to two more queue behind it in the order asked and
+are told their place (`ai/queued`: 2 is next); a fourth is refused as busy. Chats of all devices also go through one gate
+on the host's server, and the host's own use shares the same llama-server/Ollama, which queues. Stopping to serve (the right
+taken away, the host's models gone, the link closing) cancels what runs; the asker hears "stopped serving AI" rather than a
+silent cancel. Each start is an audit line (`ai`, `refused`); the card says "Serving AI to Alpha: 1 request".
+
+**Host side.** `DawnScene.LinkAi.cs` forwards the bounded body to the model's own `/v1/chat/completions` (llama-server and
+Ollama both speak it; Hex's llama.cpp is started if needed) and passes each `data:` line on. The models served are the
+host's `AiEditModels.LocalAgentModels` (its chat-capable library models).
+
+**Client side.** Linked models are `LocalModel`s of source `Linked`, ids `link:<device fingerprint>:<model>`, listed after the
+scanned ones (`LocalModelLibrary.SetLinked`) with the host's badges and the fit "runs on <device>". The picker groups them under
+**On <device>**; pick one as the Chat role. `LinkAiRouter` + `LinkChatHandler` make an HTTP handler that sends the request over
+Link and returns the chunks as server-sent events, so `OpenAiChat`/`OpenAiAgentChat` read them with the same code as a local
+server: `LinkChatStreamer : IChatStreamer` and `LinkAgentChat : IAgentChat` (provider `linkai`, `ChatStreams.Make`/`AgentChats.Make`).
+With no model here and exactly one device serving AI, `AiEditModels.Resolve` falls back to it; the AI menu says
+"Model: qwen3.5-9b via Beta". Errors name the device and the next step: "Beta stopped serving AI. Ask Beta to tick Use my AI models
+for this device…", "Beta is busy (queued 2nd)", "Lost the link to Beta. Reconnect it in Devices…".
+
+**Local agent and other tools.** The agent is a process of its own with no Link connection. While linked models exist the
+client Hex runs `LinkAiLoopback`, an OpenAI-compatible endpoint on **127.0.0.1** (random port, bearer token, refuses an `Origin`
+header or a non-loopback `Host`, 1 MB bodies, 8 connections) with `GET /v1/models` and `POST /v1/chat/completions` (streamed
+or whole, tool calls included). Its address, token and models are written to `link-ai/loopback.json` (this user only; named
+by the Hex's process id, ignored once it is gone). `--local-agent` reads it, lists the linked models as agent models and talks to
+the endpoint as to any OpenAI server, so any OpenAI-compatible tool can use a linked model too.
+
+**Explain / Change with Agent.** They use the chosen agent system; with Local and a linked model they work through the loopback.
+With no agent system here but a linked device that may be steered, they offer to run it there (**Run on <device>**: the box's
+Runs on, started with `hex_link_spawn` when sent).
+
 ## 6. Devices and editor UI
 
 The Devices window shows this installation's identity, Invite and Join, nearby devices and cards for known
@@ -365,11 +496,57 @@ the same tint in its card and caret. State and rights have text labels and Steer
 offers retry, disconnect, Forget and recovery for a temporarily unavailable or damaged identity. A destructive
 reset asks for confirmation.
 
+**One-click controls.** A connected device's card has **Pause sync** and **Disconnect**. Pause stops the syncs running
+with that device for every folder (nothing is deleted and the link stays up) and the card says **Paused**; the same
+button then reads **Resume sync** and starts the paused folders again (`HexLinkDevicePause` picks what it acts on).
+Disconnect cuts the link now, the card says **Disconnected by you**, and it is not dialled again until **Connect** is
+pressed. The **More** menu opens under its button, not over it: opened at the button's corner the release of the same
+click landed on the list and closed it at once.
+
+**Rights granted by a peer.** When a peer changes the rights it grants this device, a notice names it and says what
+changes ("Beta no longer lets this device edit there: your saves stay here until it does."), and the Devices window's
+activity list gets a `rights from` line (the audit log has it too).
+
+**Who holds or edits a file.** The Explorer marks each file with an open claim or a hold, by any device, with a dot in
+that device's colour (the presence dots carry them, see `LinkUpdateExplorerPresence`). The tooltip says "Held by Beta"
+or "Being edited by Beta (bogdan)" with the age ("2m ago"; a peer's hold has no age). The file's menu offers **Share my changes**
+for what this device holds (its hold goes through Submit), **Let others edit** for what it has explicitly claimed, and
+**Ask Beta to finish editing** for a peer's: it sends a Link Chat message naming the file. `HexLinkFileMark` is the model.
+
+**Conflicts with the tab open.** The conflict toast, the Link: Sync Conflicts command and the Devices conflict list offer
+Keep mine, Use Beta's and Compare. Compare, Review and the command all open the one Link merge editor, which saves to the
+real file (**Use yours / Use Beta's / Use both**, **Save merged file**, **Close without saving**, the same words the git
+merge editor uses with "Use theirs"); there is no marker-file preview tab. When a resolve is refused and the file is open in a tab, the notice adds **Close the tab and resolve**
+(closing asks about unsaved changes as usual, then the same choice is applied). Once settled, the notice offers
+**Undo** (see 5.5) and the Devices window keeps a short list of settled conflicts with Undo.
+
 In a file, the editor and Explorer show claims and shared-session states. A claim notice can offer
 **Open shared** or explain why that action is unavailable. Session notices and the tab roster identify
 readers, offline sessions and collaborators. **Follow** tracks a named collaborator and local caret movement releases it. Remote
 name tags fade while carets remain. The native review covered narrow and scaled layouts. Colour contrast
 measurement remains open.
+
+### 6.1 Link Chat for code
+
+Link Chat carries code, not only words. All of it rides optional fields of the `talk/say` message, so an older peer
+ignores them and shows the plain `text`, which always says the same in words.
+
+- **Share Selection in Link Chat** (editor context menu, palette, `Ctrl+K L`) sends a `ref` of kind `code`: the wire
+  path (`folder-name/relative/path`), 1-based `line` and `toLine`, a `snippet` capped at 60 lines and 4 KB, and an
+  optional `note`. The chat draws a code card: `path:lines`, the snippet coloured by the file's language, and **Open**.
+- **Ask `<device>` to Look Here** (context menu and palette, one entry per device) sends a `ref` of kind `look` with `to`
+  set to the device. That device gets a notice, "`<device>` asks you to look at `file:line`" with **Go** and
+  **Dismiss**, chat open or not. Every device shows it as a chat row.
+- **Open** and **Go** use one path, `LinkOpenReference`: this device's own file, the local file when the folder is
+  synced, otherwise the remote file as a remote tab (`LinkOpenRemote`), so it needs View like remote files. A path
+  without a workspace folder in front is looked for in the sender's folders, then in this device's.
+- `path/to/file.ext:123` and `file.ext:12-20` in any message are links to the same path, with `/` or `\`.
+- `@DeviceName` is picked out in the chat and notifies that device even with its panel closed. Typing `@` in the
+  input offers the linked devices and `ai`.
+- The last 500 messages are kept in `talk-history.json` in the Link data folder and read back when Link starts.
+
+Code: `HexLinkTalkRef.cs` (wire, caps, text parsing, history), `DawnScene.LinkTalk.Code.cs` (UI). Tests:
+`HexLinkTalkCodeTests`.
 
 ## 7. Verification
 

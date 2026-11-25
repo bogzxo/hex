@@ -293,7 +293,7 @@ internal sealed unsafe partial class HexAgentGroup : IDisposable
 
             try
             {
-                watcher = Start("/bin/sh", ["-c", Script], "/", Environment.GetEnvironmentVariables().Cast<System.Collections.DictionaryEntry>()
+                watcher = Start("/bin/sh", ["-c", Script.ReplaceLineEndings("\n")], "/", Environment.GetEnvironmentVariables().Cast<System.Collections.DictionaryEntry>()
                     .Select(variable => KeyValuePair.Create((string)variable.Key, (string?)variable.Value)), printed: false, watched: false);
                 to = new StreamWriter(watcher.Input!, new UTF8Encoding(false));
                 foreach (int group in live)

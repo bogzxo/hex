@@ -2,11 +2,21 @@ using System.Text.Json.Nodes;
 
 namespace Hex.Core;
 
-/// <summary>A message said by a person on Link, with the id all its copies carry.</summary>
-internal sealed record HexLinkTalk(Guid Id, HexLinkDevice Sender, string Text, DateTimeOffset SentAt)
+/// <summary>
+/// A message said on Link, with the id all its copies carry: by a person, or by the model of the sender's device answering
+/// a question put to it in the chat, when <see cref="Model"/> names that model. A model's answer may carry what the model
+/// thought before it, shown folded above the answer.
+/// </summary>
+internal sealed record HexLinkTalk(Guid Id, HexLinkDevice Sender, string Text, DateTimeOffset SentAt, string? Model = null, string? Thinking = null, HexLinkTalkRef? Ref = null)
 {
     /// <summary>The most characters a message may have.</summary>
     public const int MOST_TEXT = 2000;
+
+    /// <summary>The most characters of a model's name a message carries.</summary>
+    public const int MOST_MODEL = 128;
+
+    /// <summary>The most characters of a model's thinking a message carries.</summary>
+    public const int MOST_THINKING = 8000;
 
     /// <summary>The most messages kept in one Link session, their ids kept as long as the transcript.</summary>
     public const int MOST_MESSAGES = 4096;
@@ -18,6 +28,12 @@ internal sealed record HexLinkTalk(Guid Id, HexLinkDevice Sender, string Text, D
     public JsonObject ToJson(bool relayed = false)
     {
         var said = new JsonObject { ["id"] = Id.ToString("N"), ["text"] = Text, ["sentAt"] = SentAt.ToUnixTimeMilliseconds() };
+        if (Model is not null)
+            said["model"] = Model;
+        if (Model is not null && Thinking is not null)
+            said["thinking"] = Thinking;
+        if (Ref is not null)
+            said["ref"] = Ref.ToJson();
         if (relayed)
             said["device"] = new JsonObject { ["id"] = Sender.Id, ["name"] = Sender.Name };
         return said;
@@ -31,8 +47,29 @@ internal sealed record HexLinkTalk(Guid Id, HexLinkDevice Sender, string Text, D
             || HexLinkData.Long(said, "sentAt") is not { } at || at is < 0 or > 253_402_300_799_999)
             return null;
 
+        // A model's name is shown as a name is, so it is cleaned the same way; one that isn't a name is no message
+        string? model = null;
+        if (said.ContainsKey("model"))
+        {
+            if (HexLinkData.String(said, "model", MOST_MODEL + 1) is not { Length: <= MOST_MODEL } named || HexLinkNames.Clean(named) is not { } shown)
+                return null;
+            model = shown;
+        }
+
+        // Thinking only comes with a model's answer, and is held to what any message may hold but for its length
+        string? thinking = null;
+        if (said.ContainsKey("thinking"))
+        {
+            if (model is null || HexLinkData.String(said, "thinking", MOST_THINKING + 1) is not { } thought || !ValidThinking(thought))
+                return null;
+            thinking = thought;
+        }
+
+        // A reference that isn't a good one is left off, the text it came with says it in words
+        HexLinkTalkRef? reference = HexLinkTalkRef.Of(HexLinkData.Object(said, "ref"));
+
         if (!said.ContainsKey("device"))
-            return new(parsed, direct, text, DateTimeOffset.FromUnixTimeMilliseconds(at));
+            return new(parsed, direct, text, DateTimeOffset.FromUnixTimeMilliseconds(at), model, thinking, reference);
 
         JsonObject? device = HexLinkData.Object(said, "device");
         if (HexLinkData.String(device, "id", 65) is not { Length: 64 } who || !who.All(char.IsAsciiHexDigit)
@@ -40,12 +77,17 @@ internal sealed record HexLinkTalk(Guid Id, HexLinkDevice Sender, string Text, D
             || HexLinkNames.Clean(name) is not { } clean)
             return null;
 
-        return new(parsed, new HexLinkDevice(who.ToUpperInvariant(), clean), text, DateTimeOffset.FromUnixTimeMilliseconds(at));
+        return new(parsed, new HexLinkDevice(who.ToUpperInvariant(), clean), text, DateTimeOffset.FromUnixTimeMilliseconds(at), model, thinking, reference);
     }
 
     /// <summary>Whether there is text to show in a message and it fits the limit.</summary>
-    public static bool Valid(string text) => text.Length <= MOST_TEXT && !string.IsNullOrWhiteSpace(text)
-        && !text.Any(c => char.IsControl(c) && c is not ('\n' or '\t'));
+    public static bool Valid(string text) => text.Length <= MOST_TEXT && Shown(text);
+
+    /// <summary>Whether a model's thinking is text to show and fits its limit.</summary>
+    public static bool ValidThinking(string text) => text.Length <= MOST_THINKING && Shown(text);
+
+    // Something to see, with no control characters but new lines and tabs
+    private static bool Shown(string text) => !string.IsNullOrWhiteSpace(text) && !text.Any(c => char.IsControl(c) && c is not ('\n' or '\t'));
 }
 
 internal enum HexLinkTalkResult { Sent, Invalid, NoView, TooFast, Full }
@@ -76,17 +118,30 @@ internal sealed partial class HexLink
         }
     }
 
-    /// <summary>A message queued for the devices that let this one speak, or the reason it could not be queued.</summary>
-    public HexLinkTalkResult SayTalk(string text)
+    /// <summary>
+    /// A message queued for the devices that let this one speak, or the reason it could not be queued. With
+    /// <paramref name="model"/> it is that model's answer, said from this device and shown as the model's, with what the
+    /// model thought when <paramref name="thinking"/> says.
+    /// </summary>
+    public HexLinkTalkResult SayTalk(string text, string? model = null, string? thinking = null) => SayTalk(text, model, thinking, null);
+
+    /// <summary>A shared selection or a look-here ping said to the devices that let this one speak, its text the words a peer without the field shows.</summary>
+    public HexLinkTalkResult SayTalk(HexLinkTalkRef reference) => SayTalk(reference.Fallback(), null, null, reference);
+
+    private HexLinkTalkResult SayTalk(string text, string? model, string? thinking, HexLinkTalkRef? reference)
     {
         if (!HexLinkTalk.Valid(text))
+            return HexLinkTalkResult.Invalid;
+        if (model is not null && (model.Length > HexLinkTalk.MOST_MODEL || HexLinkNames.Clean(model) is null))
+            return HexLinkTalkResult.Invalid;
+        if (thinking is not null && (model is null || !HexLinkTalk.ValidThinking(thinking)))
             return HexLinkTalkResult.Invalid;
 
         Joined[] to = [.. All().Where(link => link.Hello && !link.Peer.IsClosed && HexLinkAllowed.Has(link.Peer.Granted, HexLinkRights.View))];
         if (to.Length == 0)
             return HexLinkTalkResult.NoView;
 
-        var message = new HexLinkTalk(Guid.NewGuid(), services.Device, text, DateTimeOffset.UtcNow);
+        var message = new HexLinkTalk(Guid.NewGuid(), services.Device, text, DateTimeOffset.UtcNow, model is null ? null : HexLinkNames.Clean(model), thinking, reference);
         lock (talkGate)
         {
             if (talkSeen.Count >= HexLinkTalk.MOST_MESSAGES)

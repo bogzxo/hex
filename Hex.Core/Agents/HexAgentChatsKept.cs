@@ -64,7 +64,9 @@ internal sealed class HexAgentChatsKept
         // What moved made into text here, on the thread that owns the chats, and written to the disk on a thread of its own
         // in the order it was made. Written here, a streaming agent's chat was a file write every few seconds on the
         // editor's thread
-        var writes = new List<(string Path, string? Text)>();
+        // Only the chat's rows are copied into a tree of nodes here (a snapshot nothing else holds), the text of it, the
+        // costly part of a big chat, is written out on the thread that writes it
+        var writes = new List<(string Path, JsonNode? Node, string? Text)>();
         var keys = new JsonArray();
         var now = new HashSet<string>(StringComparer.Ordinal);
         foreach (HexAgentChat chat in chats)
@@ -75,7 +77,7 @@ internal sealed class HexAgentChatsKept
             if (written.TryGetValue(chat.Key, out long was) && was == stamp)
                 continue;
 
-            writes.Add((FileOf(chat.Key), HexAgentChatStore.Write(chat).ToJsonString()));
+            writes.Add((FileOf(chat.Key), HexAgentChatStore.Write(chat), null));
             written[chat.Key] = stamp;
         }
 
@@ -83,14 +85,14 @@ internal sealed class HexAgentChatsKept
         foreach (string gone in written.Keys.Where(key => !now.Contains(key)).ToArray())
         {
             written.Remove(gone);
-            writes.Add((FileOf(gone), null));
+            writes.Add((FileOf(gone), null, null));
         }
 
         state["chats"] = keys;
         string list = state.ToJsonString();
         if (list != listWritten)
         {
-            writes.Add((Path.Combine(Folder, LIST), list));
+            writes.Add((Path.Combine(Folder, LIST), null, list));
             listWritten = list;
         }
 
@@ -106,17 +108,17 @@ internal sealed class HexAgentChatsKept
     private Task lastWrite = Task.CompletedTask;
 
     // A batch of writes, a file's text or its deletion for null, never throwing past here
-    private static void WriteAll(string folder, List<(string Path, string? Text)> writes)
+    private static void WriteAll(string folder, List<(string Path, JsonNode? Node, string? Text)> writes)
     {
         try
         {
             Directory.CreateDirectory(folder);
-            foreach (var (path, text) in writes)
+            foreach (var (path, node, text) in writes)
             {
-                if (text is null)
+                if (node is null && text is null)
                     File.Delete(path);
                 else
-                    WriteOver(path, text);
+                    WriteOver(path, text ?? node!.ToJsonString());
             }
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)

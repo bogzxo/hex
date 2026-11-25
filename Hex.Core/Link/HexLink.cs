@@ -62,6 +62,8 @@ internal sealed partial class HexLink(IHexLinkServices services) : IDisposable
         var host = new HexLinkHost(session, services) { WatchEvery = WatchEvery, ClaimExchange = Claims, ClaimChanged = () => Changed?.Invoke() };
         var peer = new HexLinkPeer(session, services.Device);
         host.GitFollowPeer = peer;
+        peer.Tunnels = host.Tunnels;
+        WatchShares();
         var joined = new Joined(session, host, peer);
         Joined? replaced = null;
         lock (links)
@@ -82,10 +84,12 @@ internal sealed partial class HexLink(IHexLinkServices services) : IDisposable
             {
                 replaced = existing;
                 links.Remove(existing!);
+                everyLink = null;
                 if (existing!.Hello)
                     PublishPeers();
             }
             links.Add(joined);
+            everyLink = null;
         }
         replaced?.Session.Close("replaced by the connection both ends keep");
 
@@ -99,6 +103,8 @@ internal sealed partial class HexLink(IHexLinkServices services) : IDisposable
                 return links.Any(link => link.Session.Connection.Device.Id == id);
         };
         host.PresenceSaid = Said;
+        host.PortsChanged = () => services.Ports?.PeerUp(peer);
+        peer.RightsChanged += () => services.Ports?.PeerUp(peer);
         peer.Changed = () => Changed?.Invoke();
         session.Closed += (_, why) => Gone(joined, why);
         session.Start();
@@ -119,8 +125,26 @@ internal sealed partial class HexLink(IHexLinkServices services) : IDisposable
             PublishPeers();
         }
         Claims.Join(peer);
+        services.Ports?.PeerUp(peer);
         Changed?.Invoke();
         return peer;
+    }
+
+    private int watchingShares;
+
+    // Shares moving is told to every link: it closes what's no longer shared with its device and says so
+    private void WatchShares()
+    {
+        if (services.Ports is not { } ports || Interlocked.Exchange(ref watchingShares, 1) != 0)
+            return;
+        ports.Audit ??= services.Audit;
+        ports.SharesChanged += SharesMoved;
+    }
+
+    private void SharesMoved()
+    {
+        foreach (Joined link in All())
+            link.Host.Tunnels.Revalidate();
     }
 
     // Where a device's person is, heard by its link's host half: its peer told, and the other devices that may see here
@@ -143,8 +167,12 @@ internal sealed partial class HexLink(IHexLinkServices services) : IDisposable
         bool stillLinked;
         lock (links)
         {
-            if (links.Remove(joined) && joined.Hello)
-                PublishPeers();
+            if (links.Remove(joined))
+            {
+                everyLink = null;
+                if (joined.Hello)
+                    PublishPeers();
+            }
             // A connection replaced by the one both ends keep goes without the device going, so nothing is told it went
             stillLinked = links.Any(link => link.Session.Connection.Device.Id == joined.Session.Connection.Device.Id);
         }
@@ -152,7 +180,12 @@ internal sealed partial class HexLink(IHexLinkServices services) : IDisposable
         joined.Host.Dispose();
         joined.Peer.Dispose();
         if (!stillLinked)
+        {
+            if (joined.Session.PeerSaidBye)
+                ByeHeard?.Invoke(joined.Session.Connection.Device);
+            services.Ports?.PeerDown(joined.Session.Connection.Device.Id);
             Closed?.Invoke(joined.Session.Connection.Device, why);
+        }
         Changed?.Invoke();
     }
 
@@ -164,19 +197,44 @@ internal sealed partial class HexLink(IHexLinkServices services) : IDisposable
     }
 
     /// <summary>A device's link cut (forgotten, or the person said so), false when it wasn't linked.</summary>
-    public bool Remove(string deviceId, string why = "it was cut here")
+    public bool Remove(string deviceId, string why = "it was cut here", bool bye = false)
     {
         Joined? found;
         lock (links)
             found = links.FirstOrDefault(link => link.Session.Connection.Device.Id == deviceId);
-        found?.Session.Close(why);
-        return found is not null;
+        if (found is null)
+            return false;
+        if (!bye)
+        {
+            found.Session.Close(why);
+            return true;
+        }
+
+        // Told first that this was by hand, so the other end holds off dialling and says who cut it
+        HexLinkSession session = found.Session;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await session.TellAsync(HexLinkSession.BYE).AsTask().WaitAsync(TimeSpan.FromSeconds(1));
+                await Task.Delay(150);
+            }
+            catch (Exception) { }
+            finally { session.Close(why); }
+        });
+        return true;
     }
+
+    /// <summary>A device whose person cut the link by hand (it said so before closing): not to be dialled again until it connects.</summary>
+    public Action<HexLinkDevice>? ByeHeard { get; set; }
+
+    // The links as an array, made again only after one came or went, so the editor's every-tick pump copies nothing
+    private Joined[]? everyLink;
 
     private Joined[] All()
     {
         lock (links)
-            return [.. links];
+            return everyLink ??= [.. links];
     }
 
     /// <summary>The hub's snapshot moved, the fleet sent on to the devices watching it.</summary>
@@ -227,6 +285,12 @@ internal sealed partial class HexLink(IHexLinkServices services) : IDisposable
     public bool Pump()
     {
         bool moved = false;
+        lock (links)
+        {
+            if (links.Count == 0)
+                return false;
+        }
+
         foreach (Joined link in All())
             moved |= link.Peer.Pump();
         return moved;
@@ -236,6 +300,8 @@ internal sealed partial class HexLink(IHexLinkServices services) : IDisposable
     public void Dispose()
     {
         workspaceNotices?.Dispose();
+        if (Volatile.Read(ref watchingShares) != 0 && services.Ports is { } ports)
+            ports.SharesChanged -= SharesMoved;
         foreach (Joined link in All())
             link.Session.Close("Link was turned off");
     }

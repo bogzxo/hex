@@ -20,7 +20,7 @@ internal sealed partial class DawnScene
     private const float AGENTS_BUBBLE = 0.86f;
 
     // The rows on screen, each with the entry and the version of it it was made from
-    private readonly List<(HexAgentEntry Entry, int Version, UIComponent Row)> agentRowsShown = [];
+    private readonly List<(HexAgentEntry Entry, int Version, UIComponent Row, int Seen)> agentRowsShown = [];
     private (HexAgentChat? Chat, int Dropped, bool Narrow, object? Skin, float Motion) agentRowsFor;
     private Panel? agentsTyping;
 
@@ -155,6 +155,7 @@ internal sealed partial class DawnScene
             agentRowsFor = key;
             agentRowsShown.Clear();
             agentsRunningTimes.Clear();
+            runningSecondsShown.Clear();
             agentsGroupTimes.Clear();
             agentsQuestionTimes.Clear();
             agentRowFits.Clear();
@@ -178,7 +179,7 @@ internal sealed partial class DawnScene
         if (chat is null)
             return;
 
-        for (int i = 0; i < chat.Entries.Count; i++)
+        for (int i = AgentRowsFrom(chat, fresh); i < chat.Entries.Count; i++)
         {
             HexAgentEntry entry = chat.Entries[i];
 
@@ -192,13 +193,27 @@ internal sealed partial class DawnScene
             if (i < agentRowsShown.Count)
             {
                 if (agentRowsShown[i].Version == version)
+                {
+                    if (agentRowsShown[i].Seen != entry.Version)
+                        agentRowsShown[i] = agentRowsShown[i] with { Seen = entry.Version };
                     continue;
+                }
+
+                // The words being streamed are laid out again at most four times a second, each a whole Markdown parse and a new
+                // tree of labels for the row. What's left unmade is asked for again on the next look, and the last one, when the
+                // agent stops, is made at once (Running is no longer true)
+                if (!fresh && i == chat.Entries.Count - 1 && chat.Running && entry.Kind is HexAgentEntryKind.Text or HexAgentEntryKind.Thinking
+                    && ReferenceEquals(agentStreamRow, entry) && System.Environment.TickCount64 - agentStreamAt < STREAM_REBUILD_MS)
+                {
+                    agentsDrawn = (-1, -1);
+                    continue;
+                }
 
                 // A call that's become part of a group, or one that's left one, is made again as what it is now
                 bool wasMember = agentRowsShown[i].Row is Panel { Visible: false, Children.Count: 0 };
                 if (member && wasMember)
                 {
-                    agentRowsShown[i] = (entry, version, agentRowsShown[i].Row);
+                    agentRowsShown[i] = (entry, version, agentRowsShown[i].Row, entry.Version);
                     continue;
                 }
 
@@ -206,7 +221,7 @@ internal sealed partial class DawnScene
                 UIComponent was = agentRowsShown[i].Row;
                 if (!member && agentsRows.IsWaiting(was))
                 {
-                    agentRowsShown[i] = (entry, version, was);
+                    agentRowsShown[i] = (entry, version, was, entry.Version);
                     continue;
                 }
 
@@ -214,7 +229,9 @@ internal sealed partial class DawnScene
                 UIComponent made = member ? GroupedPlace() : FittedRowOf(chat, entry);
                 agentsRows.Replace(was, made);
                 agentRowFits.Remove(was);
-                agentRowsShown[i] = (entry, version, made);
+                agentRowsShown[i] = (entry, version, made, entry.Version);
+                agentStreamRow = entry;
+                agentStreamAt = System.Environment.TickCount64;
                 // A tool of its own that finished gives a little pop, a group changing as its calls come and go doesn't
                 if (entry.Kind == HexAgentEntryKind.Tool && !Groupable(entry) && entry.State != HexAgentToolState.Running)
                     PopRow(made);
@@ -229,13 +246,13 @@ internal sealed partial class DawnScene
             {
                 UIComponent place = new Panel { Size = Vector2.Zero, Color = Vector4.Zero };
                 agentsRows.InsertLater(at, place, entry, () => MadeLater(chat, entry, place));
-                agentRowsShown.Add((entry, version, place));
+                agentRowsShown.Add((entry, version, place, entry.Version));
                 continue;
             }
 
             UIComponent row = member ? GroupedPlace() : FittedRowOf(chat, entry);
             agentsRows.Insert(at, row, entry);
-            agentRowsShown.Add((entry, version, row));
+            agentRowsShown.Add((entry, version, row, entry.Version));
 
             // A row that just came slides in on its own, what was asked from the right where its bubble is
             if (member)
@@ -253,6 +270,43 @@ internal sealed partial class DawnScene
 
         ShowTyping(chat, still);
         FitAgentRows();
+    }
+
+    // The words row made again last while streaming, and when
+    private const long STREAM_REBUILD_MS = 250;
+    private HexAgentEntry? agentStreamRow;
+    private long agentStreamAt;
+
+    /// <summary>
+    /// Where the rows have to be looked at again from: the first entry that's new or whose version moved since its row was
+    /// made, taken back to the start of its group of calls and to the row before that, whose turn's end can move with it.
+    /// What's before is not looked at, so a line streamed in goes through the tail and not the whole chat.
+    /// </summary>
+    private int AgentRowsFrom(HexAgentChat chat, bool fresh)
+    {
+        IReadOnlyList<HexAgentEntry> entries = chat.Entries;
+        if (fresh || agentRowsShown.Count == 0 || entries.Count == 0)
+            return 0;
+
+        int first = Math.Min(agentRowsShown.Count, entries.Count - 1);
+        for (int i = 0; i < first; i++)
+        {
+            if (agentRowsShown[i].Seen != entries[i].Version || !ReferenceEquals(agentRowsShown[i].Entry, entries[i]))
+            {
+                first = i;
+                break;
+            }
+        }
+
+        first = GroupStart(chat, first);
+        return first == 0 ? 0 : GroupStart(chat, first - 1);
+    }
+
+    private static int GroupStart(HexAgentChat chat, int index)
+    {
+        while (index > 0 && InToolGroup(chat, index))
+            index--;
+        return index;
     }
 
     // How long after a chat comes on screen the rows made for it slide in, and how many have so far
@@ -569,13 +623,21 @@ internal sealed partial class DawnScene
         return holder;
     }
 
+    // The whole seconds each running call's label says, and how a running time is written
+    private readonly Dictionary<HexAgentEntry, int> runningSecondsShown = [];
+    private static string RunningSeconds(double seconds) => ((int)seconds).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
     /// <summary>The times of the tools still running brought up to now, a few times a second.</summary>
     private void TickRunningTimes()
     {
         foreach (var (entry, label) in agentsRunningTimes)
         {
-            if (entry.State == HexAgentToolState.Running)
-                label.Text = Said("agents_panel.tool_running", ("seconds", entry.Seconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)));
+            // Whole seconds, so the label is written (and laid out) once a second, not ten times
+            if (entry.State == HexAgentToolState.Running && (int)entry.Seconds != runningSecondsShown.GetValueOrDefault(entry, -1))
+            {
+                runningSecondsShown[entry] = (int)entry.Seconds;
+                label.Text = Said("agents_panel.tool_running", ("seconds", RunningSeconds(entry.Seconds)));
+            }
         }
 
         // A group's time, how long any of its calls was going, going on while one of them runs

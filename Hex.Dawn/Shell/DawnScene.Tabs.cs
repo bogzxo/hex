@@ -160,8 +160,7 @@ internal sealed partial class DawnScene
         shown.Add(Said("tabs.copy_path"), () => UIClipboard.Copy(tab.Path ?? tab.Name), "Shift+Alt+C", "link").IsEnabled = () => tab.Path is not null;
         shown.Add(Said("tabs.copy_relative_path"), () => UIClipboard.Copy(tab.Path is { } path ? Relative(path) : tab.Name), icon: "file-symlink-file").IsEnabled = () => tab.Path is not null;
         shown.Add(Said("tabs.reveal_in_explorer"), () => RevealInExplorer(tab), icon: "files").IsEnabled = () => tab.Path is not null;
-        AddLinkClaimMenu(shown, tab.Path);
-        AddLinkHoldMenu(shown, tab.Path);
+        AddLinkMenu(shown, tab.Path);
         shown.AddSeparator();
         shown.Add(Said("file_properties.menu"), () => ShowPropertiesOf(tab.Path is { } path ? [path] : null), "Alt+Enter", "info");
         ContextMenu.ShowAt(chrome, compositor.Pointer.Position, shown);

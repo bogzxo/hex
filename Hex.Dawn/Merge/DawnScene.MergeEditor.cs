@@ -17,10 +17,12 @@ internal sealed partial class DawnScene
     {
         Add("Next conflict", "Ctrl+F7", () => document.Merge?.Go(1));
         Add("Previous conflict", "Ctrl+Shift+F7", () => document.Merge?.Go(-1));
-        Add("Accept mine", "Ctrl+Alt+1", () => document.Merge?.AcceptCurrent(MergeChoice.Mine));
-        Add("Accept theirs", "Ctrl+Alt+2", () => document.Merge?.AcceptCurrent(MergeChoice.Theirs));
-        Add("Accept both", "Ctrl+Alt+3", () => document.Merge?.AcceptCurrent(MergeChoice.BothMineFirst));
-        Add("Complete merge", "Ctrl+Shift+Enter", () => CompleteMergeEditor(document));
+        Add("Use yours", "Ctrl+Alt+1", () => document.Merge?.AcceptCurrent(MergeChoice.Mine));
+        Add("Use theirs", "Ctrl+Alt+2", () => document.Merge?.AcceptCurrent(MergeChoice.Theirs));
+        Add("Use both", "Ctrl+Alt+3", () => document.Merge?.AcceptCurrent(MergeChoice.BothMineFirst));
+        Add("Use both, theirs first", "Ctrl+Alt+4", () => document.Merge?.AcceptCurrent(MergeChoice.BothTheirsFirst));
+        Add("Edit conflict", "Ctrl+Alt+5", () => document.Merge?.EditCurrent());
+        Add("Save merged file", "Ctrl+Shift+Enter", () => CompleteMergeEditor(document));
 
         void Add(string name, string shortcut, Action action)
         {
@@ -33,6 +35,13 @@ internal sealed partial class DawnScene
     {
         if (Split)
             Unsplit();
+        // The floating Devices window sat over the editor the merge opens in: put away, the editor gets the keys
+        if (linkWindow is { } devices)
+        {
+            devices.Close();
+            linkWindow = null;
+        }
+
         var tab = new HexDocument($"Merge: {session.Title}", stage.CreateModule())
         {
             IsText = true,
@@ -49,6 +58,7 @@ internal sealed partial class DawnScene
         var merge = new MergeEditor(session, tab.Editor, () => CompleteMergeEditor(tab), () => CancelMergeEditor(tab),
             side => CompleteMergeEditor(tab, side), () => WarningColor,
             () => compositor.Skin?.Palette.Success ?? WarningColor);
+        merge.ShowMenu = (menu, at) => contextMenu = ContextMenu.ShowAt(chrome, at, menu);
         tab.Merge = merge;
         tab.SavedCode = tab.Editor.Text;
         documents.Add(tab);
@@ -61,8 +71,21 @@ internal sealed partial class DawnScene
 
     private void CompleteMergeEditor(HexDocument tab, MergeSide? side = null)
     {
-        if (tab.Merge is not { Busy: false } merge || (side is null && !merge.CanComplete))
+        if (tab.Merge is { Busy: true })
+        {
+            // A second press while the first is still being saved: said, never a silent nothing
+            Say(Said("link.merge_saving", ("name", Path.GetFileName(tab.Merge.Session.Path))));
             return;
+        }
+        if (tab.Merge is not { Busy: false } merge)
+            return;
+        if (side is null && !merge.CanComplete)
+        {
+            // Never a silent nothing: say what is in the way
+            if (merge.UnresolvedCount > 0)
+                Say(Said(merge.UnresolvedCount == 1 ? "link.merge_unresolved_one" : "link.merge_unresolved", ("count", merge.UnresolvedCount.ToString(System.Globalization.CultureInfo.InvariantCulture))), error: true);
+            return;
+        }
         MergeSession session = merge.Session;
         byte[]? result = side is null ? merge.ResultBytes() : null;
         merge.SetBusy(true);
@@ -77,7 +100,12 @@ internal sealed partial class DawnScene
                     await session.Complete(binary == MergeSide.Mine ? files.Mine : files.Theirs);
                 else if (result is not null)
                     await session.Complete(result);
-                PostLink(() => CloseMergeTab(tab));
+                PostLink(() =>
+                {
+                    CloseMergeTab(tab);
+                    if (session.LinkDevice is { } device)
+                        NotifyDone(Said("link.merge_saved", ("name", Path.GetFileName(session.Path)), ("device", device)));
+                });
             }
             catch (MergeCheckFailed failed)
             {
@@ -104,7 +132,8 @@ internal sealed partial class DawnScene
             void Failed(Exception error)
             {
                 merge.SetBusy(false);
-                Say(error.Message, error: true);
+                // A card, not the status bar line, which is easy to miss while the editor is in front
+                NotifyError(Said("link.merge_failed", ("name", Path.GetFileName(session.Path)), ("why", error.Message)));
             }
         });
     }
@@ -116,9 +145,9 @@ internal sealed partial class DawnScene
         if (!merge.Changed)
             Cancel();
         else
-            UIDialog.Show(chrome, "Cancel merge?", "Your resolutions in this merge editor will be discarded.",
-                new DialogChoice("Discard resolutions", Cancel, Risky: true),
-                new DialogChoice("Continue merging"));
+            UIDialog.Show(chrome, "Close without saving?", $"Your choices for {Path.GetFileName(merge.Session.Path)} will be lost.",
+                new DialogChoice("Close without saving", Cancel, Risky: true),
+                new DialogChoice("Keep merging"));
 
         void Cancel()
         {

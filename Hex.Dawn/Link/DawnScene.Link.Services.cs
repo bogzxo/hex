@@ -64,6 +64,8 @@ internal sealed partial class DawnScene
 
         public HexLinkAuthorityStore FolderAuthorities { get; } = new(Path.Combine(hex.linkData, "folder-authority.json"));
 
+          public HexLinkPorts Ports { get; } = new(Path.Combine(hex.linkData, "ports.json"));
+
         public HexLinkWorkspace Workspace
         {
             get
@@ -160,6 +162,7 @@ internal sealed partial class DawnScene
         public void Presence(HexLinkDevice device, HexLinkPresence? presence) => hex.PostLink(() =>
         {
             hex.linkPresence[device.Id] = new LinkPresenceSeen(device, presence, DateTime.UtcNow);
+            hex.linkPresenceVersion++;
             hex.linkDirty = true;
             hex.LinkUpdateExplorerPresence();
         });
@@ -184,6 +187,15 @@ internal sealed partial class DawnScene
         public bool ServesPredictions => hex.LinkPredictServes();
 
         public IAsyncEnumerable<string> Predict(HexLinkPrediction request, CancellationToken cancel) => hex.LinkPredictMake(request, cancel);
+
+        // Serve AI (DawnScene.LinkAi), off the editor's thread
+        public bool ServesAi => hex.LinkAiServes();
+
+        public Task<IReadOnlyList<HexLinkAiModel>> AiModels(CancellationToken cancel) => hex.LinkAiModelsListed();
+
+        public IAsyncEnumerable<string> Ai(HexLinkDevice device, HexLinkAiRequest request, CancellationToken cancel) => hex.LinkAiServe(device, request, cancel);
+
+        public void AiServing(HexLinkDevice device, int requests) => hex.LinkAiServingChanged(device, requests);
     }
 
     internal Task<string?> LinkCompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes,
@@ -209,6 +221,24 @@ internal sealed partial class DawnScene
                         incoming.Text, before.DiskText, HexDocFileBasis.EncodingOf(incoming.Encoding),
                         cancel, executable, directories).ConfigureAwait(false);
             }
+            if (bytes is null && !before.Dirty)
+            {
+                // The file was deleted or renamed away over the link while a saved tab has it open: the tab has nothing
+                // that would be lost, so it closes with the file (a rename's new name arrives as its own file)
+                string? deleted = await HexLinkFiles.CompareAndReplace(full, wire, baseHash, null, cancel, executable, directories).ConfigureAwait(false);
+                await OnEditorForLink(() =>
+                {
+                    if (Context.Documents.Find(full) is { } open && !HasChanges(open))
+                        CloseDocument(open);
+                    return true;
+                }).ConfigureAwait(false);
+                return deleted;
+            }
+
+            // A shared tab that has simply not caught up with the authority's latest save is not a conflict to hold:
+            // the next save (or the room's receipt) makes the same bytes acceptable, so ask for a later retry.
+            if (bytes is not null && await OnEditorForLink(() => shared.Draft is null && LinkLiveOf(shared.Tab) == shared).ConfigureAwait(false))
+                throw LinkLiveSaveLagging(wire);
             throw LinkLiveSaveConflict(full, wire);
         }
         if (before.Dirty)

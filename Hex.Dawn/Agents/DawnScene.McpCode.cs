@@ -814,6 +814,9 @@ internal sealed partial class DawnScene
         if (dryRun)
             return said.Finish("ask with a bigger max_chars");
 
+        // Every file it's about to change, as it is, for the agent's changes to be reviewed against
+        ReviewObserveEdits(made.Select(each => (each.Path, each.Was)));
+
         var written = new List<(string Path, string Was, bool Bom)>();
         foreach (var (file, open, was, now, bom) in made)
         {

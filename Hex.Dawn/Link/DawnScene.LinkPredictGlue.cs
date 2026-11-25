@@ -49,8 +49,11 @@ internal sealed partial class DawnScene
     // Never Hex Link itself, a device asked over a link is never passed on to another
     internal static PredictionOptions? MakeShareOptions(HexSettings from) =>
         !HexAi.Off && PredictionSettings.Configured(from) && from.EditPredictionsProvider != PredictionProviders.LINK
-            ? new PredictionOptions(true, from.EditPredictionsProvider, from.EditPredictionsApiUrl, PredictionSettings.ApiKey(from),
-                from.EditPredictionsModel, from.EditPredictionsPromptFormat, from.EditPredictionsMaxTokens, from.EditPredictionsDebounce)
+            ? new PredictionOptions(true, from.EditPredictionsProvider, PredictionSettings.ApiUrl(from), PredictionSettings.ApiKey(from),
+                PredictionSettings.Model(from), from.EditPredictionsPromptFormat, from.EditPredictionsMaxTokens, from.EditPredictionsDebounce)
+            {
+                Tuning = from.TuningFor(LocalAiRole.Predict), SystemPrompt = from.EditPredictionsSystemPrompt
+            }
             : null;
 
     // The device that serves this one now, or none, handed to the relay; on the editor's thread

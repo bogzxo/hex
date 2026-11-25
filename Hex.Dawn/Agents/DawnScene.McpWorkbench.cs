@@ -246,7 +246,8 @@ internal sealed partial class DawnScene
     /// <summary>The settings an agent can read and change, the editor's, its text's and the terminal's. Not Windows's own.</summary>
     private List<ISettingsSource> McpSettingsSources()
     {
-        var sources = new List<ISettingsSource> { new EditorSource(this) };
+        // Every editor setting, Local AI's too: the window shows those as one row to the Local AI window, agents still read and set them
+        var sources = new List<ISettingsSource> { new EditorSource(this, all: true) };
         sources.AddRange(settingSources.Select(added => added.Source()));
         sources.Add(new TerminalSettingsSource(terminals, Hex.Shell.EditorSettingsCatalog.THEME));
         return sources;

@@ -124,7 +124,23 @@ internal sealed partial class HexLinkPeer
         bool moved = false;
         Mirror[] all;
         lock (mirrors)
+        {
+            // Every frame: nothing queued, nothing copied
+            bool waiting = false;
+            foreach (Mirror each in mirrors.Values)
+            {
+                if (each.Queued.Count > 0)
+                {
+                    waiting = true;
+                    break;
+                }
+            }
+
+            if (!waiting)
+                return false;
             all = [.. mirrors.Values];
+        }
+
         foreach (Mirror mirror in all)
         {
             while (true)

@@ -342,10 +342,10 @@ internal sealed partial class DawnScene
 
             // Escape is the question's own, it cancels it. Closed here first, the same press went on to the window under
             // it and closed that too
-            if (key == Key.Escape && !keyboard.Control && !keyboard.Shift && !keyboard.Alt)
+            if (key == Key.Escape && !keyboard.Primary && !keyboard.Shift && !keyboard.Alt)
                 return true;
 
-            KeyStrokeFor(keyFor, key, keyboard.Control, keyboard.Shift, keyboard.Alt);
+            KeyStrokeFor(keyFor, key, keyboard.Primary, keyboard.Shift, keyboard.Alt);
             break;
         }
 
@@ -443,7 +443,7 @@ internal sealed partial class DawnScene
         // from a terminal are terminal commands (DawnScene.Terminal) and go through it. While the picture behind the code is
         // laid out by hand the keys are the overlay's, Enter and Escape and the arrows, and a menu that's open has the keys
         // to itself, Escape shuts it and nothing else
-        if (compositor.Focus is not (TerminalView or ArrangeOverlay) && !compositor.KeysToPopup && !SettingsFindPressed())
+        if (compositor.Focus is not (TerminalView or ArrangeOverlay) && !compositor.KeysToPopup && !SettingsFindPressed() && !LocalAiKeyPressed())
         {
             var keyboard = Engine.Input.Keyboard;
             // Option+Right takes a word of the Mac editor's ghost before Go Forward can consume it.
@@ -471,6 +471,6 @@ internal sealed partial class DawnScene
     private bool SettingsFindPressed()
     {
         var keyboard = Engine.Input.Keyboard;
-        return keyboard.Control && keyboard.WasPressed(Key.F) && SettingsPage?.HasKeyboard() == true;
+        return keyboard.Primary && keyboard.WasPressed(Key.F) && SettingsPage?.HasKeyboard() == true;
     }
 }

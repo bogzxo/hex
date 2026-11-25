@@ -120,8 +120,8 @@ internal sealed partial class DawnScene
                 Text = UIRichText.Literal(Said("link.provision.repositories_missing_there", ("device", peer.Device.Name), ("paths", string.Join(", ", missing.There.Take(8))))),
                 TextScale = LINK_SMALL, Dim = true, Wrap = true
             });
-        if (missing is { Here.Count: > 0 } || state is HexLinkSyncState.Off or HexLinkSyncState.Failed)
-            panel.Add(LinkButton(Said("link.provision.get_repository"), "download", () => LinkPickMissingRepository(peer, folder)));
+        if (missing is { Here.Count: > 0 })
+            panel.Add(LinkButton(Said("link.provision.get_repository"), "cloud-download", () => LinkPickMissingRepository(peer, folder)));
     }
 
     private void LinkPickMissingRepository(HexLinkPeer peer, string folder)
@@ -130,6 +130,7 @@ internal sealed partial class DawnScene
             return;
         IReadOnlyList<string>? paths = null;
         string title = Said("link.provision.get_repository"), id = peer.Device.Id;
+        Say(Said("link.provision.get_repository_started", ("device", LinkDeviceLabel(peer.Device))));
         Context.Work.Start($"link-missing-check-{id}-{folder}", title, async work =>
         {
             HexLinkManifest remote = await peer.Manifest(folder, work.Token);
@@ -144,11 +145,13 @@ internal sealed partial class DawnScene
                     [.. paths.Select(path => (path, (Action)(() => LinkGetMissingRepositoryCommand(id, folder, path))))]);
             else if (done.State == WorkState.Succeeded)
                 Say(Said("link.provision.no_missing_repositories"));
+
         });
     }
 
     private void LinkGetMissingRepositoryCommand(string deviceId, string folder, string path)
     {
+        Say(Said("link.provision.get_repository_working", ("path", path), ("device", LinkNameOf(deviceId))));
         Context.Work.Start($"link-get-repository-{deviceId}-{folder}", Said("link.provision.get_repository_title", ("path", path)), async work =>
         {
             if (await LinkGetMissingRepository(deviceId, folder, path, new Progress<HexLinkProvisionProgress>(update => ReportProvision(work, update)), work.Token) is { } why)

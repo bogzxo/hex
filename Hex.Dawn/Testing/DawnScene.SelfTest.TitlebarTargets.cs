@@ -29,8 +29,9 @@ internal sealed partial class DawnScene
             Vector2 scale = window.PixelScale;
             Vector4 scaleBox = new(scale.X, scale.Y, scale.X, scale.Y);
             Vector4 frame = barPixels / scaleBox;
-            float left = Math.Max(frame.X + 10, 10);
-            float right = Math.Min(frame.X + frame.Z - 10, window.PointSize.X - 10);
+            // A Mac's traffic lights are over the left end of the bar, which the system drags and zooms by itself
+            float left = Math.Max(Math.Max(frame.X + 10, 10), window.FrameInsets.Leading / scale.X + 4);
+            float right = Math.Min(frame.X + frame.Z - 10, window.PointSize.X - 10 - window.FrameInsets.Trailing / scale.X);
             float y = frame.Y + frame.W / 2;
             if (left >= right || y < 9)
                 return false;

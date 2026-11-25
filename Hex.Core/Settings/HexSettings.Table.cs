@@ -60,6 +60,8 @@ internal sealed partial class HexSettings
         Flag("reopen_last", settings => settings.ReopenLast, (settings, value) => settings.ReopenLast = value),
         Flag("persistent_process", settings => settings.PersistentProcess, (settings, value) => settings.PersistentProcess = value),
         Flag("persistent_at_login", settings => settings.PersistentAtLogin, (settings, value) => settings.PersistentAtLogin = value),
+        Flag("macos_native_menu", settings => settings.MacNativeMenu, (settings, value) => settings.MacNativeMenu = value),
+        Flag("theme_follow_system", settings => settings.ThemeFollowSystem, (settings, value) => settings.ThemeFollowSystem = value),
         Flag("backdrop", settings => settings.BackdropOn, (settings, value) => settings.BackdropOn = value),
         Flag("backdrop_wrap", settings => settings.BackdropWrap, (settings, value) => settings.BackdropWrap = value),
         Flag("backdrop_terminal", settings => settings.BackdropTerminal, (settings, value) => settings.BackdropTerminal = value),
@@ -103,6 +105,8 @@ internal sealed partial class HexSettings
         Flag("link_discoverable", settings => settings.LinkDiscoverable, (settings, value) => settings.LinkDiscoverable = value),
         Flag("link_allow_public", settings => settings.LinkAllowPublic, (settings, value) => settings.LinkAllowPublic = value),
         Flag("link_map_public_port", settings => settings.LinkMapPublicPort, (settings, value) => settings.LinkMapPublicPort = value),
+        Flag("link_talk_open_on_message", settings => settings.LinkTalkOpenOnMessage, (settings, value) => settings.LinkTalkOpenOnMessage = value),
+        Choice("link_invite_rights", settings => settings.LinkInviteRights, (settings, value) => settings.LinkInviteRights = value, "work_together", "use_agents"),
         Special("link_system_file_folders",
             (settings, values) =>
             {
@@ -224,6 +228,9 @@ internal sealed partial class HexSettings
             (settings, written) => written.Add("language_server_settings", settings.ServerSettingsObject())),
         Flag("csharp_analyzers_moved", settings => settings.CSharpAnalyzersMoved, (settings, value) => settings.CSharpAnalyzersMoved = value),
         .. PredictionRows,
+        .. LlamaCppRows,
+        .. LocalAiRows,
+        .. AiEditRows,
         .. DiscordRows,
         Special("files_associations",
             (settings, values) =>

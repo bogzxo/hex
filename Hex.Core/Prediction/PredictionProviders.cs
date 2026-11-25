@@ -12,6 +12,12 @@ internal static class PredictionProviders
     public const string OPENAI = "openai";
     public const string LINK = "link";
 
+    /// <summary>A chat model on a linked device (Serve AI, docs/hex-link-plan.md, 5.7): the model is <see cref="LinkAiModelId"/>'s id and the URL isn't used.</summary>
+    public const string LINKAI = "linkai";
+
+    /// <summary>A llama-server Hex runs itself, asked through its OpenAI compatible completions.</summary>
+    public const string LLAMACPP = HexSettings.LLAMACPP;
+
     /// <summary>The client every provider sends with.</summary>
     public static HttpClient Shared { get; } = new(new SocketsHttpHandler
     {
@@ -40,8 +46,13 @@ internal static class PredictionProviders
 
         return provider switch
         {
-            OLLAMA when OllamaUrl(options.ApiUrl) is { } url => new OllamaProvider(Shared, url, model),
-            OPENAI when OpenAiUrl(options.ApiUrl) is { } url => new OpenAiProvider(Shared, url, model, string.IsNullOrWhiteSpace(options.ApiKey) ? null : options.ApiKey.Trim()),
+            OLLAMA when OllamaUrl(options.ApiUrl) is { } url => new OllamaProvider(Shared, url, model) { Tuning = options.Tuning.Clamped(), SystemPrompt = options.SystemPrompt },
+            OPENAI when OpenAiUrl(options.ApiUrl) is { } url => new OpenAiProvider(Shared, url, model, string.IsNullOrWhiteSpace(options.ApiKey) ? null : options.ApiKey.Trim())
+            {
+                Tuning = options.Tuning.Clamped()
+            },
+            // Hex's own llama-server wants no key, and nothing on this machine is sent one
+            LLAMACPP when OpenAiUrl(options.ApiUrl) is { } url => new OpenAiProvider(Shared, url, model, null) { Tuning = options.Tuning.Clamped(), CachePrompt = true, Slot = options.Slot },
             _ => null,
         };
     }

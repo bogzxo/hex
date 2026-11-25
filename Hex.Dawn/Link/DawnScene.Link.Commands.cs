@@ -33,6 +33,7 @@ internal sealed partial class DawnScene
         LinkLiveDocumentCommands(commands);
         LinkHoldPaletteCommands(commands);
         AddLinkTalkCommand(commands);
+        LinkPortsPaletteCommands(commands);
         return commands;
     }
 
@@ -40,12 +41,16 @@ internal sealed partial class DawnScene
     private void LinkSwitch(bool on)
     {
         settings.Link = on;
+        linkFlagTurnedOff = !on && options.Link;
         SaveSettings();
         SettingsPage?.Refresh("link");
         if (on && options.SelfTest && !LinkOn)
             StartLink();
         else
             ApplyLink();
+        // The command used to say nothing and, started by --link, change nothing: now it says what it did
+        if (!on)
+            Say(Said("link.turned_off"));
     }
 
     // The pairing window opened, the notice saying what to type on the other machine

@@ -805,7 +805,7 @@ internal sealed partial class DawnScene
 
             if (!chat.Running || !planTold.Remove(id, out List<string>? said))
                 continue;
-            Deliver(chat, null, "progress", PlanToldText(said), directive: false, fromName: FROM_PERSON);
+            Deliver(chat, null, "progress", PlanToldText(said), directive: false, fromName: FROM_PERSON, resume: false);
             RedrawPlan();
         }
     }

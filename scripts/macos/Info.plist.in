@@ -49,9 +49,156 @@
             <key>LSItemContentTypes</key>
             <array>
                 <string>public.text</string>
+                <string>public.plain-text</string>
                 <string>public.source-code</string>
                 <string>public.data</string>
             </array>
+        </dict>
+        <!-- Hex's own files, the one kind it is the owner of -->
+        <dict>
+            <key>CFBundleTypeName</key><string>Hex HOR file</string>
+            <key>CFBundleTypeRole</key><string>Editor</string>
+            <key>LSHandlerRank</key><string>Owner</string>
+            <key>LSItemContentTypes</key>
+            <array><string>@BUNDLE_ID@.hor</string></array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key><string>C# and F#</string>
+            <key>CFBundleTypeRole</key><string>Editor</string>
+            <key>LSHandlerRank</key><string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array><string>@BUNDLE_ID@.csharp-source</string><string>@BUNDLE_ID@.fsharp-source</string></array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key><string>.NET project and solution</string>
+            <key>CFBundleTypeRole</key><string>Editor</string>
+            <key>LSHandlerRank</key><string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>@BUNDLE_ID@.dotnet-project</string>
+                <string>@BUNDLE_ID@.dotnet-solution</string>
+                <string>@BUNDLE_ID@.dotnet-solution-xml</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key><string>Data and configuration</string>
+            <key>CFBundleTypeRole</key><string>Editor</string>
+            <key>LSHandlerRank</key><string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.json</string>
+                <string>public.yaml</string>
+                <string>public.toml</string>
+                <string>public.xml</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key><string>Markdown</string>
+            <key>CFBundleTypeRole</key><string>Editor</string>
+            <key>LSHandlerRank</key><string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array><string>net.daringfireball.markdown</string></array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key><string>Shell script</string>
+            <key>CFBundleTypeRole</key><string>Editor</string>
+            <key>LSHandlerRank</key><string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.shell-script</string>
+                <string>public.bash-script</string>
+                <string>public.zsh-script</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key><string>Python, JavaScript and TypeScript</string>
+            <key>CFBundleTypeRole</key><string>Editor</string>
+            <key>LSHandlerRank</key><string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.python-script</string>
+                <string>com.netscape.javascript-source</string>
+                <string>com.microsoft.typescript</string>
+                <string>@BUNDLE_ID@.jsx-source</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key><string>C and C++</string>
+            <key>CFBundleTypeRole</key><string>Editor</string>
+            <key>LSHandlerRank</key><string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.c-source</string>
+                <string>public.c-header</string>
+                <string>public.c-plus-plus-source</string>
+                <string>public.c-plus-plus-header</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key><string>Go and Rust</string>
+            <key>CFBundleTypeRole</key><string>Editor</string>
+            <key>LSHandlerRank</key><string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array><string>@BUNDLE_ID@.go-source</string><string>@BUNDLE_ID@.rust-source</string></array>
+        </dict>
+    </array>
+
+    <!-- The kinds of file a Mac has no name for, so the Finder knows .hor, .cs, .csproj and the others are text Hex opens -->
+    <key>UTImportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key><string>@BUNDLE_ID@.hor</string>
+            <key>UTTypeDescription</key><string>Hex HOR file</string>
+            <key>UTTypeConformsTo</key><array><string>public.source-code</string><string>public.plain-text</string></array>
+            <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>hor</string></array></dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>@BUNDLE_ID@.csharp-source</string>
+            <key>UTTypeDescription</key><string>C# source</string>
+            <key>UTTypeConformsTo</key><array><string>public.source-code</string><string>public.plain-text</string></array>
+            <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>cs</string><string>csx</string></array></dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>@BUNDLE_ID@.fsharp-source</string>
+            <key>UTTypeDescription</key><string>F# source</string>
+            <key>UTTypeConformsTo</key><array><string>public.source-code</string><string>public.plain-text</string></array>
+            <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>fsx</string><string>fsi</string></array></dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>@BUNDLE_ID@.dotnet-project</string>
+            <key>UTTypeDescription</key><string>.NET project</string>
+            <key>UTTypeConformsTo</key><array><string>public.xml</string></array>
+            <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>csproj</string><string>fsproj</string><string>vbproj</string><string>props</string><string>targets</string></array></dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>@BUNDLE_ID@.dotnet-solution</string>
+            <key>UTTypeDescription</key><string>.NET solution</string>
+            <key>UTTypeConformsTo</key><array><string>public.plain-text</string></array>
+            <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>sln</string></array></dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>@BUNDLE_ID@.dotnet-solution-xml</string>
+            <key>UTTypeDescription</key><string>.NET solution (XML)</string>
+            <key>UTTypeConformsTo</key><array><string>public.xml</string></array>
+            <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>slnx</string></array></dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>@BUNDLE_ID@.jsx-source</string>
+            <key>UTTypeDescription</key><string>JSX source</string>
+            <key>UTTypeConformsTo</key><array><string>public.source-code</string><string>public.plain-text</string></array>
+            <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>jsx</string></array></dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>@BUNDLE_ID@.go-source</string>
+            <key>UTTypeDescription</key><string>Go source</string>
+            <key>UTTypeConformsTo</key><array><string>public.source-code</string><string>public.plain-text</string></array>
+            <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>go</string></array></dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>@BUNDLE_ID@.rust-source</string>
+            <key>UTTypeDescription</key><string>Rust source</string>
+            <key>UTTypeConformsTo</key><array><string>public.source-code</string><string>public.plain-text</string></array>
+            <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>rs</string></array></dict>
         </dict>
     </array>
 </dict>

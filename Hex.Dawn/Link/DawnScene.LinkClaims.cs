@@ -16,6 +16,7 @@ internal sealed partial class DawnScene
     private Dictionary<(int Chat, string Step), (long Utc, long Monotonic)> linkClaimEtas { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
     private HexLink? linkClaimSession;
     private float linkClaimWait;
+    private int linkClaimsSeenVersion;
 
     private HexLinkWorkspace LinkProvisionExport(string? selection)
     {
@@ -47,6 +48,7 @@ internal sealed partial class DawnScene
         if (linkClaimSession == current)
             return;
         linkClaimSession = current;
+        linkClaimsIdle = false;
         linkExplicitClaims.Clear();
         linkPrivateClaims.Clear();
         linkClaimPlans.Clear();
@@ -54,16 +56,55 @@ internal sealed partial class DawnScene
         linkClaimEtas.Clear();
     }
 
+    // What the last look at the claims found: nothing to claim, and what it was looked at from (see UpdateLinkClaims)
+    private bool linkClaimsIdle;
+    private int linkClaimsSignature;
+
     private void UpdateLinkClaims(float dt)
     {
         if (link is not { } current || (linkClaimWait -= dt) > 0)
             return;
-        linkClaimWait = 0.5f;
+        // With nobody linked there is nobody to tell and nobody racing for a claim: looked at a quarter as often, and at once
+        // (LinkJoined moves the link version) when somebody links
+        linkClaimWait = LinkPeers.Count == 0 && linkClaimsSeenVersion == LinkVersion ? 2.0f : 0.5f;
+        linkClaimsSeenVersion = LinkVersion;
         SetLinkClaimSession(current);
 
         HexLinkClaimExchange exchange = current.Claims;
         exchange.RefreshFolders();
         if (exchange.Folders.Count == 0)
+            return;
+
+        // Nothing to claim last time and nothing that claims anything moved since (no tab typed in or saved, no claim made, no
+        // plan going): the answer is the same empty one, so it's not worked out again. Time only takes claims away.
+        bool planning = false;
+        foreach (HexAgentChat chat in agentChats)
+        {
+            if (chat.Plan is { Unfinished: true })
+            {
+                planning = true;
+                break;
+            }
+        }
+
+        var seen = new HashCode();
+        foreach (HexDocument tab in documents)
+        {
+            if (tab is not { IsText: true, Path: { } tabPath, DiffOf: null })
+                continue;
+            seen.Add(tab);
+            seen.Add(tab.Modified);
+            seen.Add(tab.Editor.Document.Version);
+            seen.Add(tabPath);
+            seen.Add(LinkLiveOf(tab)?.LocalEditVersion);
+        }
+        seen.Add(linkExplicitClaims.Count);
+        seen.Add(linkPrivateClaims.Count);
+        seen.Add(linkMcpEdits.Count);
+        seen.Add(linkEditingReleased.Count);
+        seen.Add(exchange.Folders);
+        int claimSignature = seen.ToHashCode();
+        if (linkClaimsIdle && !planning && claimSignature == linkClaimsSignature)
             return;
 
         long now = System.Environment.TickCount64;
@@ -77,18 +118,52 @@ internal sealed partial class DawnScene
         {
             if (tab is not { IsText: true, Path: { } path, DiffOf: null })
                 continue;
-            long version = tab.Editor.Document.Version;
+            // A shared document changes as the others type into it: only a change made here is this device editing
+            LinkLiveDocument? live = LinkLiveOf(tab);
+            if (live is not null && !tab.Modified)
+                live.LocalEditVersion = 0;
+            long version = live is null ? tab.Editor.Document.Version : live.LocalEditVersion;
             linkClaimEditors.TryGetValue(tab, out ClaimEditorStamp? was);
             long edit = was?.LastEdit ?? 0;
-            if (tab.Modified && (was is null || was.Version != version || was.Path != path))
+            bool typed = live is null || live.LocalEditVersion != 0;
+            if (tab.Modified && typed && (was is null || was.Version != version || was.Path != path))
                 edit = now;
-            linkClaimEditors[tab] = new ClaimEditorStamp(path, version, edit);
-            if ((tab.Modified || edit > 0 && now - edit < 5_000) && ClaimPathOf(exchange.Folders, path, false) is { } shared)
+            if (was is null || was.Path != path || was.Version != version || was.LastEdit != edit)
+                linkClaimEditors[tab] = new ClaimEditorStamp(path, version, edit);
+            bool held = tab.Modified && typed;
+            if (held && LinkEditingClaimLapsed(path, edit, now))
+                held = false;
+            // Released by hand: not claimed again until the buffer changes again or is saved
+            if (linkEditingReleased.TryGetValue(path, out long releasedAt))
+            {
+                if (tab.Modified && version == releasedAt)
+                {
+                    held = false;
+                    edit = 0;
+                }
+                else
+                    linkEditingReleased.Remove(path);
+            }
+
+            if ((held || edit > 0 && now - edit < 5_000) && ClaimPathOf(exchange.Folders, path, false) is { } shared)
                 Add(shared.Scope, new HexLinkClaimDraft(new HexLinkClaimKey(shared.Relative, false, null, HexLinkClaimKind.Editing),
                     System.Environment.UserName));
         }
-        foreach (HexDocument stale in linkClaimEditors.Keys.Where(tab => !documents.Contains(tab)).ToArray())
-            linkClaimEditors.Remove(stale);
+        // A stamp only matters while its buffer's claim can lapse (the lease and a few seconds); older ones are let go
+        if (linkMcpEdits.Count > 0)
+        {
+            foreach (var (path, stamp) in linkMcpEdits.ToArray())
+            {
+                if (now - stamp > 10 * 60_000)
+                    linkMcpEdits.Remove(path);
+            }
+        }
+
+        if (linkClaimEditors.Count > 0)
+        {
+            foreach (HexDocument stale in linkClaimEditors.Keys.Where(tab => !documents.Contains(tab)).ToArray())
+                linkClaimEditors.Remove(stale);
+        }
 
         foreach (HexAgentChat chat in agentChats)
         {
@@ -97,11 +172,16 @@ internal sealed partial class DawnScene
             foreach (ClaimInput entry in PlanClaims(chat, plan, exchange.Folders))
                 Add(entry.Scope, entry.Draft);
         }
-        foreach (int stale in linkClaimPlans.Keys.Where(id => ChatById(id)?.Plan is not { Unfinished: true }).ToArray())
-            linkClaimPlans.Remove(stale);
+        if (linkClaimPlans.Count > 0)
+        {
+            foreach (int stale in linkClaimPlans.Keys.Where(id => ChatById(id)?.Plan is not { Unfinished: true }).ToArray())
+                linkClaimPlans.Remove(stale);
+        }
 
         if (exchange.Update(drafts))
             linkDirty = true;
+        linkClaimsIdle = drafts.Count == 0 && !planning;
+        linkClaimsSignature = claimSignature;
 
         void Add(HexLinkClaimScope scope, HexLinkClaimDraft draft)
         {
@@ -110,6 +190,22 @@ internal sealed partial class DawnScene
             entries.TryAdd(draft.Key, draft);
         }
     }
+
+    // Editing claims the person let go of by hand, by path, with the version of the buffer they were let go at
+    private Dictionary<string, long> linkEditingReleased { get => LazyInitializer.EnsureInitialized(ref field, static () => new(PlatformPaths.Comparer)); }
+
+    private Dictionary<string, long> linkMcpEdits { get => LazyInitializer.EnsureInitialized(ref field, static () => new(PlatformPaths.Comparer)); }
+
+    /// <summary>
+    /// Whether the editing claim of a modified tab has lapsed: its last change came from an MCP edit (the guard saw the
+    /// call just before the buffer changed) and nothing has touched it for a whole lease. A tab the person typed in
+    /// keeps its claim for as long as it is unsaved.
+    /// </summary>
+    internal static bool LinkEditingClaimLapsed(long mcpStamp, long lastEdit, long now) =>
+        mcpStamp > 0 && lastEdit - mcpStamp is >= -1_000 and < 3_000 && now - lastEdit >= HexLinkClaims.LEASE_MS;
+
+    private bool LinkEditingClaimLapsed(string path, long lastEdit, long now) =>
+        linkMcpEdits.TryGetValue(path, out long stamp) && LinkEditingClaimLapsed(stamp, lastEdit, now);
 
     private ClaimInput[] PlanClaims(HexAgentChat chat, HexAgentPlan plan, IReadOnlyList<HexLinkClaimFolder> folders)
     {
@@ -194,8 +290,6 @@ internal sealed partial class DawnScene
         return ClaimPathOf(exchange.Folders, absolutePath, false) is { } path ? exchange.At(path.Scope, path.Relative, false, now) : [];
     }
 
-    internal int LinkClaimCount(string deviceId) => link?.Claims.List(System.Environment.TickCount64).Count(claim => claim.DeviceId == deviceId) ?? 0;
-
     internal bool LinkOpenClaimDocument(HexLinkClaim claim)
     {
         if (claim.Prefix)
@@ -207,20 +301,6 @@ internal sealed partial class DawnScene
         return true;
     }
 
-    internal void LinkPrivateClaim(string folder, int? chatId, string publishId, bool held) => PostLink(() =>
-    {
-        if (!held)
-        {
-            linkPrivateClaims.Remove(publishId);
-            return;
-        }
-
-        if (link?.Claims.Folders.FirstOrDefault(item => item.Scope.Folder == folder) is not { } shared)
-            return;
-        string holder = chatId is { } id && ChatById(id) is { } chat ? ChatName(chat.Id) : System.Environment.UserName;
-        linkPrivateClaims[publishId] = new ClaimInput(shared.Scope,
-            new HexLinkClaimDraft(new HexLinkClaimKey(string.Empty, true, chatId, HexLinkClaimKind.Private), holder, "Publishing a private work tree"));
-    });
 
     private static (string Name, JsonObject Schema) ClaimOverride() =>
         ("override_claim", McpSchema.Flag("Proceed after coordinating with the claim holder. The override is audited."));
@@ -233,13 +313,20 @@ internal sealed partial class DawnScene
         HexLinkDevice? inbound = HexLinkClaimCaller.Of(args);
         string actor = inbound?.Id ?? linkServices?.Device.Id ?? string.Empty;
         var blockers = new List<HexLinkClaim>();
-        foreach (string path in paths)
+        string[] checkedPaths = [.. paths];
+        foreach (string path in checkedPaths)
         {
-            blockers.AddRange(LinkClaimsAt(path).Where(claim => actor != claim.DeviceId || chat is null || claim.ChatId != chat));
+            blockers.AddRange(LinkClaimsAt(path).Where(LinkClaimBlocks(actor, chat)));
         }
 
         if (blockers.Count == 0)
+        {
+            // Remember which files MCP edits touched, so the editing claim they make can lapse once the buffer is idle.
+            long stamp = System.Environment.TickCount64;
+            foreach (string path in checkedPaths)
+                linkMcpEdits[path] = stamp;
             return null;
+        }
         if (args.Flag("override_claim"))
         {
             linkAudit?.Write("claim override", actor,
@@ -252,6 +339,14 @@ internal sealed partial class DawnScene
             + $"{ClaimPlan(first)} Wait for release, {ClaimContact(first)} or work in a private work tree. "
             + "Use override_claim=true only after coordination. Overrides are audited.");
     }
+
+    /// <summary>
+    /// Whether a claim stops a write by <paramref name="actor"/> (a device id) from <paramref name="chat"/>: any other
+    /// device's does, and this device's own only when another of its chats made it. What this device's own editor or user
+    /// claims (no chat) never blocks its own agents, the notes still say who has it.
+    /// </summary>
+    internal static Func<HexLinkClaim, bool> LinkClaimBlocks(string actor, int? chat) =>
+        claim => actor != claim.DeviceId || (claim.ChatId is not null && claim.ChatId != chat);
 
     private static string ClaimHolder(HexLinkClaim claim) => claim.ChatId is { } id
         ? $"#{id} '{claim.Holder}' on {claim.DeviceName}" : $"{claim.Holder} on {claim.DeviceName}";
@@ -269,6 +364,8 @@ internal sealed partial class DawnScene
         var notes = new StringBuilder();
         if (LinkHeldFile(path) is { } held)
             notes.Append($" The file is held on this device since {ClaimTime(held.HeldAt)}{(held.HasIncoming ? $" and {held.IncomingFrom ?? "another device"} changed it too, see hex_link_hold update" : string.Empty)}, hex_link_hold submit sends it.");
+        if (LinkRemoteHolderOf(path) is { } holder)
+            notes.Append(' ' + Said("link.held_by_notice", ("device", holder.Name)));
         string? local = linkServices?.Device.Id;
         foreach (HexLinkClaim claim in LinkClaimsAt(path).Where(claim => claim.DeviceId != local).Take(3))
             notes.Append($" Claimed by {ClaimHolder(claim)} ({claim.Kind.ToString().ToLowerInvariant()}, {ClaimAge(claim)}).");
@@ -419,11 +516,30 @@ internal sealed partial class DawnScene
             yield break;
         }
 
+        string? refused = LinkClaimRival(exchange, requested.Scope, requested.Relative, requested.Prefix, id, supplied);
+        if (refused is not null)
+        {
+            yield return McpToolResult.Error(refused);
+            yield break;
+        }
+
         long? eta = args.Integer("eta_seconds") is >= 0 and <= 43200 and var seconds
             ? System.Environment.TickCount64 + seconds * 1000L : null;
         linkExplicitClaims[(requested.Scope, key)] = new HexLinkClaimDraft(key, ChatName(chat.Id), EtaTick: eta);
         linkClaimWait = 0;
         yield return McpToolResult.Text($"Claimed {supplied}. Release it when finished. Other holders keep their claims.");
+    }
+
+    // An explicit claim is refused when another device's editing claim or explicit claim already covers the path, so two
+    // sides cannot both take it. The check reads the claim table every device converges on; the refusal names the holder.
+    private string? LinkClaimRival(HexLinkClaimExchange exchange, HexLinkClaimScope scope, string relative, bool prefix, int chat, string supplied)
+    {
+        string? local = linkServices?.Device.Id;
+        HexLinkClaim? rival = exchange.At(scope, relative, prefix, System.Environment.TickCount64).FirstOrDefault(claim =>
+            claim.Kind != HexLinkClaimKind.Private && (claim.DeviceId != local || claim.ChatId is not null && claim.ChatId != chat)
+            && (claim.Kind == HexLinkClaimKind.Editing || claim.PlanStep is null));
+        return rival is null ? null : $"{supplied} is already claimed by {ClaimHolder(rival)} ({rival.Kind.ToString().ToLowerInvariant()}, {ClaimAge(rival)}). "
+            + $"Wait for release or {ClaimContact(rival)} then try again.";
     }
 
     // Exactly which condition a path failed to meet for a claim, in the order they're checked

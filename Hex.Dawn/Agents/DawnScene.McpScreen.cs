@@ -345,6 +345,9 @@ internal sealed record HexKeyStroke(Key Key, bool Control, bool Shift, bool Alt,
     /// <summary>Every key of it, the ones held first, for the engine's keyboard.</summary>
     public Key[] Keys => [.. new[] { (Control, Key.ControlLeft), (Shift, Key.ShiftLeft), (Alt, Key.AltLeft), (Super, Key.SuperLeft) }.Where(held => held.Item1).Select(held => held.Item2), Key];
 
+    /// <summary>The key shortcuts written "Ctrl+" are held with here: command on a Mac, control elsewhere (Keyboard.Primary).</summary>
+    public static Key PrimaryKey => Horizon.Input.Keyboard.PrimaryIsCommand ? Key.SuperLeft : Key.ControlLeft;
+
     public static HexKeyStroke? Parse(string written)
     {
         string[] parts = written.Length > 1 && written.EndsWith('+') ? [.. written[..^1].Split('+', StringSplitOptions.RemoveEmptyEntries), "+"] : written.Split('+', StringSplitOptions.RemoveEmptyEntries);
@@ -353,7 +356,8 @@ internal sealed record HexKeyStroke(Key Key, bool Control, bool Shift, bool Alt,
         {
             switch (parts[i].Trim().ToLowerInvariant())
             {
-                case "ctrl" or "control": control = true; break;
+                case "ctrl": if (Horizon.Input.Keyboard.PrimaryIsCommand) super = true; else control = true; break; // the platform's shortcut key, a Mac's command
+                case "control": control = true; break; // the physical key
                 case "shift": shift = true; break;
                 case "alt" or "option": alt = true; break;
                 case "cmd" or "command" or "super" or "win" or "meta": super = true; break;
@@ -397,7 +401,8 @@ internal sealed record HexKeyStroke(Key Key, bool Control, bool Shift, bool Alt,
             // One held alone, Alt tapped by itself lights the menu bar
             "alt" or "option" => Key.AltLeft,
             "shift" => Key.ShiftLeft,
-            "ctrl" or "control" => Key.ControlLeft,
+            "ctrl" => PrimaryKey,
+            "control" => Key.ControlLeft,
             _ => Enum.TryParse(name, ignoreCase: true, out Key key) && key != Key.Unknown ? key : null
         };
     }

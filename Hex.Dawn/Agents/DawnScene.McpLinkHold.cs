@@ -11,7 +11,7 @@ internal sealed partial class DawnScene
             ("action", McpSchema.OneOf("What to do.", "hold", "list", "plan", "submit", "update", "discard", "conflicts", "resolve")),
             ("resolution", McpSchema.OneOf("For resolve, how to settle the one file in paths.", "mine", "theirs", "merged")),
             ("text", McpSchema.String("For resolve with merged, the whole merged text of the file.")),
-            ("folder", McpSchema.String("Name of the shared folder. The first open shared folder is the default.")),
+            ("folder", McpSchema.String("Name of the shared folder. The shared folder is the default (the one synced or holding files, list covers all of them), the workspace's first folder when none is.")),
             ("paths", new JsonObject
             {
                 ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" },
@@ -36,7 +36,18 @@ internal sealed partial class DawnScene
         }
         else if (named.Length == 0)
         {
-            folder = services.Workspace.Folders.FirstOrDefault();
+            IReadOnlyList<HexLinkFolder> shared = LinkSharedFolders(services);
+            if (shared.Count > 1 && (args.String("action") ?? "list") == "list")
+            {
+                // Every shared folder's holds, the paths say which folder each is in
+                return McpToolResult.Text(new JsonObject
+                {
+                    ["held"] = new JsonArray([.. shared.SelectMany(each => LinkHoldServiceFor(each).List()).Select(LinkHeldJson)]),
+                }.ToJsonString());
+            }
+            if (shared.Count > 1)
+                return McpToolResult.Error($"More than one folder is shared ({string.Join(", ", shared.Select(each => each.Name))}), say which with folder.");
+            folder = shared.Count == 1 ? shared[0] : services.Workspace.Folders.FirstOrDefault();
             if (folder is null)
                 return McpToolResult.Error("There is no shared folder.");
         }
@@ -108,7 +119,9 @@ internal sealed partial class DawnScene
             };
             var said = new JsonObject
             {
-                ["passed"] = result.Passed,
+                // Nothing sent while files wait for a merge: that reads as not done, not as a pass over no paths
+                ["passed"] = result.Passed && result.NeedsMerge.Count == 0,
+                ["state"] = result.NeedsMerge.Count > 0 ? "needs_merge" : result.Passed ? "done" : "failed",
                 ["paths"] = new JsonArray([.. result.Paths.Select(path => (JsonNode?)JsonValue.Create(path))]),
                 ["needs_merge_editor"] = new JsonArray([.. result.NeedsMerge.Select(PlanJson)]),
             };
@@ -129,19 +142,42 @@ internal sealed partial class DawnScene
 
         static McpToolResult AsJson(JsonObject json) => McpToolResult.Text(json.ToJsonString());
         static JsonArray NotHeldJson(string[] paths) => new([.. paths.Select(path => (JsonNode?)JsonValue.Create(path))]);
-        static JsonObject HeldJson(HexLinkHold held) => new()
-        {
-            ["path"] = held.Path, ["state"] = "Held", ["held_at"] = LocalTime(held.HeldAt),
-            ["base_hash"] = held.BaseHash, ["base_source"] = held.BaseSource.ToString().ToLowerInvariant(),
-            ["incoming"] = held.HasIncoming, ["incoming_deleted"] = held.IncomingDeleted,
-            ["incoming_from"] = held.IncomingFrom, ["incoming_at"] = held.IncomingAt is { } at ? LocalTime(at) : null,
-        };
-        static string LocalTime(DateTimeOffset time) => time.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz", System.Globalization.CultureInfo.InvariantCulture);
+        static JsonObject HeldJson(HexLinkHold held) => LinkHeldJson(held);
         static JsonObject PlanJson(HexLinkHoldPlanEntry plan) => new()
         {
             ["path"] = plan.Path, ["outcome"] = LinkHoldOutcome(plan.Outcome),
             ["conflicts"] = plan.Session is { } session ? Math.Max(1, session.Model.ConflictCount) : 0,
         };
+    }
+
+    private static JsonObject LinkHeldJson(HexLinkHold held) => new()
+    {
+        ["path"] = held.Path, ["state"] = "Held", ["held_at"] = LinkHeldTime(held.HeldAt),
+        ["base_hash"] = held.BaseHash, ["base_source"] = held.BaseSource.ToString().ToLowerInvariant(),
+        ["incoming"] = held.HasIncoming, ["incoming_deleted"] = held.IncomingDeleted,
+        ["incoming_from"] = held.IncomingFrom, ["incoming_at"] = held.IncomingAt is { } at ? LinkHeldTime(at) : null,
+    };
+
+    private static string LinkHeldTime(DateTimeOffset time) => time.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// The folders that are actually shared: synced with a device or holding files. A tool that's given no folder uses these
+    /// before falling back to the workspace's first folder.
+    /// </summary>
+    internal static IReadOnlyList<HexLinkFolder> LinkSharedFolders(HexLinkWorkspace workspace, Func<HexLinkFolder, HexLinkHoldStore?> holds,
+        IEnumerable<string> synced)
+    {
+        var names = new HashSet<string>(synced, PlatformPaths.Comparer);
+        return [.. workspace.Folders.Where(folder => names.Contains(folder.Name) || holds(folder)?.Count > 0)];
+    }
+
+    private IReadOnlyList<HexLinkFolder> LinkSharedFolders(LinkServices services)
+    {
+        IHexLinkServices contract = services;
+        IEnumerable<string> synced = LinkSyncs.Where(sync => sync.State != HexLinkSyncState.Off).Select(sync => sync.Folder)
+            .Concat(LinkPeers.SelectMany(peer => peer.RemoteSyncReport.Select(report => report.Folder)))
+            .Concat(LinkPeers.SelectMany(peer => contract.ChosenSyncFolders(peer.Device.Id)));
+        return LinkSharedFolders(services.Workspace, folder => services.Holds(folder), synced);
     }
 
     // A waiting conflict as text for an agent: each region's base, mine and theirs lines numbered from where the region
@@ -169,7 +205,7 @@ internal sealed partial class DawnScene
             }
 
             var conflict = (MergeRegion.Conflict)region;
-            regions.Add(new JsonObject
+            regions.Add((JsonNode)new JsonObject
             {
                 ["index"] = ++index,
                 ["draft_line"] = line,

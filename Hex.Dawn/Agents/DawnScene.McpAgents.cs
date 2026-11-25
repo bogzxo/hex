@@ -53,11 +53,11 @@ internal sealed partial class DawnScene
             AgentSpawn),
         AgentApproveTool(),
         new(new McpTool("hex_agent_wait", "Wait for agents",
-            "Wait until agents finish their turn and get what they said. By default every agent you started that's running (every running chat when you aren't a chat of the panel), until all of them are done. any returns when the first is. Messages return at once so you can steer the agents. Messages from the person watching and questions or blockers addressed to you always end the wait. A timeout says what's still running.",
+            "Wait until agents finish their turn and get what they said. By default every agent you started that's running (every running chat when you aren't a chat of the panel), until all of them are done. any returns when the first is. Any message for you (the person, instructions, answers, questions, findings) ends the wait at once so you can steer the agents, unless messages is false, then only the person, instructions and blockers do. A timeout says what's still running.",
             McpSchema.Object([
                 ("ids", new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "integer" }, ["description"] = "The chats to wait for, those you started that are running by default." }),
                 ("mode", McpSchema.OneOf("all (the default) or any.", "all", "any")),
-                ("messages", McpSchema.Flag("Wake on ordinary agent messages, true by default. The person, questions and blockers always wake the wait.")),
+                ("messages", McpSchema.Flag("Wake on any message, true by default. False: only the person, instructions and blockers wake the wait.")),
                 ("timeout", McpSchema.Number($"Seconds, {AGENTS_WAIT} by default, {AGENTS_WAIT_MOST} at the most."))])),
             null, RunAway: AgentWait),
         new(new McpTool("hex_agent_read", "Read an agent's chat",
@@ -67,8 +67,11 @@ internal sealed partial class DawnScene
                 ("full", McpSchema.Flag("The whole chat rather than the last reply.")),
                 ("most", McpSchema.Integer("The most characters, 8000 by default."))], "id")), AgentRead),
         new(new McpTool("hex_agent_send", "Tell an agent more",
-            "Steer a chat's agent, an instruction. A finished one starts another turn with it, going on from where it was. A running one that can be told more takes it in as it works, one that can't finds it in its inbox and starts its next turn with it if it hasn't read it by then. hex_agent_message sends a finding or an answer without it being an instruction.",
-            McpSchema.Object([("id", McpSchema.Integer("The chat.")), ("text", McpSchema.String("What to say."))], "id", "text")), AgentSend),
+            "Steer a chat's agent, an instruction. A finished or stopped one starts another turn with it, going on from where it was, and the answer says it resumed it with your message (hex_agent_message does the same for a message of any kind). One in hex_agent_wait is woken by it at once. One in another tool call that can be told more reads it when that call ends, and the answer says so. One that can't be told more finds it in its inbox and starts its next turn with it if it hasn't read it by then. hex_agent_message sends a finding or an answer without it being an instruction.",
+            McpSchema.Object([
+                ("id", McpSchema.Integer("The chat.")),
+                ("text", McpSchema.String("What to say.")),
+                ("from_person", McpSchema.Flag("A person typed it (Hex Link's chat box), not an agent: it stands in the chat as their message. Ignored from an agent."))], "id", "text")), AgentSend),
         new(new McpTool("hex_agent_stop", "Stop an agent",
             "Stop a chat's agent and everything it started. What it said so far stays in its chat. Over Hex Link, a chat this device started there takes Steer, any other chat takes Manage agents.",
             McpSchema.Object([("id", McpSchema.Integer("The chat."))], "id")), AgentStopTool),
@@ -235,8 +238,23 @@ internal sealed partial class DawnScene
             yield break;
         }
 
-        string agent = args.String("agent") is { Length: > 0 } asked ? asked : parent?.Agent ?? AgentFor(null) ?? string.Empty;
+        bool agentAsked = args.String("agent") is { Length: > 0 };
+        string agent = agentAsked ? args.String("agent")! : parent?.Agent ?? AgentFor(null) ?? string.Empty;
         HexAgentProfile? profile = HexAgentProfiles.All.FirstOrDefault(each => each.Id == agent);
+        if (!agentAsked && parent is null && HexLinkAllowed.AgentCall(args) is not null &&
+            (profile is null || StateOf(profile) == AgentStates.Missing))
+        {
+            // Started from another device without saying which agent system: the panel's choice here may be one that
+            // can't run (a local model that isn't installed), so one that can is taken, or it's refused at once
+            HexAgentProfile? usable = HexAgentProfiles.All.FirstOrDefault(each => extensions.AgentRuns.ContainsKey(each.Id) && StateOf(each) != AgentStates.Missing);
+            if (usable is null)
+            {
+                yield return McpToolResult.Error("No agent system here can be started: none is installed and ready. Name one with agent, hex_agent_list says which there are.");
+                yield break;
+            }
+
+            (agent, profile) = (usable.Id, usable);
+        }
         if (profile is null || !extensions.AgentRuns.TryGetValue(agent, out var run))
         {
             var catalog = CatalogAgents.FirstOrDefault(each => each.Id == agent);
@@ -530,6 +548,17 @@ internal sealed partial class DawnScene
         // inbox of one that can't, starting its next turn if it isn't read by then
         if (chat.Running)
         {
+            // A person's word typed on another machine (Hex Link) has its row in the chat as a typed one has, once, and
+            // goes by the mail when the agent can't take it on its stdin now. One that can is recorded by the steer itself
+            if (caller is null && args.Flag("from_person") && (AgentWaiting(chat) || SteeredRun(chat) is null))
+            {
+                chat.SayAsPerson(text);
+                string said = DeliverFromPerson(chat, text);
+                chat.Note(said);
+                yield return McpToolResult.Text(said);
+                yield break;
+            }
+
             yield return McpToolResult.Text(Deliver(chat, caller is { } from ? ChatById(from) : null, "instruction", text, directive: true));
             yield break;
         }
@@ -543,8 +572,8 @@ internal sealed partial class DawnScene
         string was = StateWord(chat);
         StartAgent(chat, run.Extension, run.Run, text, text);
         yield return McpToolResult.Text(was is "stopped" or "failed"
-            ? $"#{chat.Id} had {was}, it's going again from where it was. hex_agent_wait waits for it."
-            : $"#{chat.Id} is on it. hex_agent_wait waits for it.");
+            ? $"#{chat.Id} had {was}, resumed it with your message, it's going again from where it was. hex_agent_wait waits for it."
+            : $"#{chat.Id} had finished, resumed it with your message. hex_agent_wait waits for it.");
     }
 
     private IEnumerable<McpToolResult?> AgentStopTool(JsonObject args)

@@ -72,7 +72,8 @@ internal sealed partial class DawnScene
         {
             ShortcutOnly = settings.PredictionShortcutOnly,
             Options = PredictionOptionsNow,
-            Snapshot = PredictionSnapshotOf
+            Snapshot = PredictionSnapshotOf,
+            Active = static () => Horizon.Engine.GameEngine.Instance?.WindowManager is not { IsFocused: false }
         });
         AddActivePredictionCommands();
         predictionRecent = new (HexDocument?, int)[3];
@@ -87,6 +88,7 @@ internal sealed partial class DawnScene
         if (predictionItem is null)
             BuildPredictionItem();
         predictionItemWritten = false;
+        predictionItemOffWritten = false;
     }
 
     private void StopPredictions()
@@ -94,6 +96,7 @@ internal sealed partial class DawnScene
         predictions.ShutDown();
         documentClosed -= PredictionClosed;
         ClearShownPrediction();
+        ForgetNextEdits();
         foreach (var open in documents)
             StopEditorPrediction(open.Editor);
         foreach (NotebookCellView view in cellViews)
@@ -101,8 +104,10 @@ internal sealed partial class DawnScene
         predictionSession = null;
         predictionRecent = [];
         predictionAccepting = null;
+        predictionNotePending = null;
         predictionAcceptedIn = predictionAsked = predictionEditingIn = null;
         predictionAllowedFor = null;
+        predictionSeeded = null;
         predictionShownLines = predictionAskedLines = null;
         predictionOptions = null;
         predictionPrivacy = null;
@@ -166,7 +171,104 @@ internal sealed partial class DawnScene
 
         if (changed.Cell is null)
             RememberEdited(changed.Document, text.Caret.Line);
+        NotePredictionHistory(changed);
         QueuePrediction(changed, through);
+    }
+
+    private PredictionTarget? predictionSeeded;
+
+    // The text of the file on screen is the history's starting point before it is typed in, so the first edit counts as a
+    // change (a rename made by typing over a selection, say) rather than being taken as how the file began
+    private void SeedPredictionHistory()
+    {
+        if (PredictionTargetOnScreen() is not { } target)
+        {
+            predictionSeeded = null;
+            return;
+        }
+        if (predictionSeeded == target || target.Document.Path is not { } path || !PredictionAllowed(path))
+            return;
+        predictionSeeded = target;
+
+        UITextDocument text = target.Editor.Document;
+        if (text.LineCount > 20000)
+            return;
+        var lines = new string[text.LineCount];
+        long size = 0;
+        for (int i = 0; i < lines.Length; i++)
+        {
+            lines[i] = text.LineAt(i);
+            size += lines[i].Length + 1;
+        }
+        if (size > PredictionPrivacy.MOST_BYTES)
+            return;
+
+        string sent = HexPredictionGlue.Sent(WorkspaceRoots(), path);
+        if (target.Notebook is { } notebook && target.Cell is { } cell)
+        {
+            sent += "#cell-" + Uri.EscapeDataString(cell.Id);
+            notebook.PredictionPaths.Add(sent);
+        }
+        predictions.History.Seed(sent, lines);
+    }
+
+    // The edit waiting to go into the history, and when it was made. A keystroke only marks the document; its lines are
+    // copied once the typing pauses (or when a prediction, an accept or a close needs the history), so typing allocates
+    // nothing here however long the file is
+    private PredictionTarget? predictionNotePending;
+    private long predictionNoteAt;
+    private const double PREDICTION_NOTE_IDLE_MS = 150;
+
+    // Every edit goes into the history, whether or not a prediction will be asked for (ShortcutOnly, backing off after failures)
+    private void NotePredictionHistory(PredictionTarget changed)
+    {
+        if (predictionNotePending is { } other && other != changed)
+            FlushPredictionHistory();
+        predictionNotePending = changed;
+        predictionNoteAt = System.Diagnostics.Stopwatch.GetTimestamp();
+    }
+
+    // Notes the marked edit now, on the editor's thread
+    private void FlushPredictionHistory()
+    {
+        if (predictionNotePending is not { } changed)
+            return;
+        predictionNotePending = null;
+        if (predictionSession is null)
+            return;
+        NotePredictionHistoryNow(changed);
+    }
+
+    // Typing has paused: what was marked goes into the history
+    private void FlushPredictionHistoryWhenIdle()
+    {
+        if (predictionNotePending is not null && System.Diagnostics.Stopwatch.GetElapsedTime(predictionNoteAt).TotalMilliseconds >= PREDICTION_NOTE_IDLE_MS)
+            FlushPredictionHistory();
+    }
+
+    private void NotePredictionHistoryNow(PredictionTarget changed)
+    {
+        if (changed.Document.Path is not { } path || !PredictionAllowed(path))
+            return;
+
+        UITextDocument text = changed.Editor.Document;
+        var lines = new string[text.LineCount];
+        long size = 0;
+        for (int i = 0; i < lines.Length; i++)
+        {
+            lines[i] = text.LineAt(i);
+            size += lines[i].Length + 1;
+        }
+        if (size > PredictionPrivacy.MOST_BYTES)
+            return;
+
+        string sent = HexPredictionGlue.Sent(WorkspaceRoots(), path);
+        if (changed.Notebook is { } notebook && changed.Cell is { } cell)
+        {
+            sent += "#cell-" + Uri.EscapeDataString(cell.Id);
+            notebook.PredictionPaths.Add(sent);
+        }
+        predictions.History.NoteSoon(sent, text.Version, lines, text.Caret.Line);
     }
 
     private void QueuePrediction(PredictionTarget target, bool through = false)
@@ -186,12 +288,24 @@ internal sealed partial class DawnScene
         {
             if (predictionSession is not null)
                 StopPredictions();
+
+            // Off by the setting, the item stays (dim, "Predictions off") so its menu can turn them on again, as Zed's does
+            if (!HexAi.Off)
+                UpdatePredictionItemOff();
+            else if (predictionItem is not null && predictionItemState != PredictionItemState.Hidden)
+            {
+                // No AI at all: no item either, not even the dim one
+                predictionItemState = PredictionItemState.Hidden;
+                predictionItemOffWritten = false;
+                predictionItemWritten = false;
+            }
             return;
         }
         if (predictionSession is null)
             StartPredictions();
 
         predictions.ShortcutOnly = settings.PredictionShortcutOnly;
+        predictions.History.Renames.Enabled = settings.EditPredictionsRenames;
         SayPredictionsOnce();
 
         if (predictionEditingIn is { } target && (!PredictionFocused(target)
@@ -212,9 +326,15 @@ internal sealed partial class DawnScene
             predictionAcceptedIn = null;
         }
 
+        SeedPredictionHistory();
+        FlushPredictionHistoryWhenIdle();
         predictions.Tick();
         if (predictions.Take() is { } result)
             ShowPrediction(result);
+        UpdateNextEdits();
+        UpdatePredictNowFeedback();
+        if (PredictionTargetOnScreen() is { } shownTarget)
+            shownTarget.Editor.PredictionSubtle = settings.PredictionSubtle;
 
         UpdatePredictionItem();
     }
@@ -227,8 +347,9 @@ internal sealed partial class DawnScene
             return null;
 
         if (predictionOptions is not { } made || !ReferenceEquals(predictionOptionsOf, now) || !ReferenceEquals(predictionKeyOf, now.EditPredictionsApiKey)
-            || made.Provider != now.EditPredictionsProvider || made.ApiUrl != now.EditPredictionsApiUrl || made.Model != now.EditPredictionsModel
-            || made.Format != now.EditPredictionsPromptFormat || made.MaxTokens != now.EditPredictionsMaxTokens || made.DebounceMs != now.EditPredictionsDebounce)
+            || made.Provider != now.EditPredictionsProvider || made.ApiUrl != PredictionSettings.ApiUrl(now) || made.Model != PredictionSettings.Model(now)
+            || made.Format != now.EditPredictionsPromptFormat || made.Kind != now.EditPredictionsKind || made.MaxTokens != now.EditPredictionsMaxTokens || made.DebounceMs != now.EditPredictionsDebounce || made.Far != now.EditPredictionsFar
+            || made.Tuning != now.TuningFor(LocalAiRole.Predict) || made.SystemPrompt != now.EditPredictionsSystemPrompt)
         {
             predictionOptions = MakePredictionOptions(now);
             predictionOptionsOf = now;
@@ -240,8 +361,12 @@ internal sealed partial class DawnScene
     // The options the settings make, null when predictions are off or no provider is set up. Read from any thread
     private static PredictionOptions? MakePredictionOptions(HexSettings from) =>
         PredictionSettings.On(from) && PredictionSettings.Configured(from)
-            ? new PredictionOptions(true, from.EditPredictionsProvider, from.EditPredictionsApiUrl, PredictionSettings.ApiKey(from),
-                from.EditPredictionsModel, from.EditPredictionsPromptFormat, from.EditPredictionsMaxTokens, from.EditPredictionsDebounce)
+            ? new PredictionOptions(true, from.EditPredictionsProvider, PredictionSettings.ApiUrl(from), PredictionSettings.ApiKey(from),
+                PredictionSettings.Model(from), from.EditPredictionsPromptFormat, from.EditPredictionsMaxTokens, from.EditPredictionsDebounce)
+            {
+                Tuning = from.TuningFor(LocalAiRole.Predict), SystemPrompt = from.EditPredictionsSystemPrompt, Kind = from.EditPredictionsKind,
+                  Far = from.EditPredictionsFar
+            }
             : null;
 
     /// <summary>
@@ -251,6 +376,8 @@ internal sealed partial class DawnScene
     /// </summary>
     private PredictionSnapshot? PredictionSnapshotOf(object asked)
     {
+        // The request's history is read off the thread soon, with the edits so far in it
+        FlushPredictionHistory();
         if (predictionEditingIn is not { } target || !ReferenceEquals(asked, target.Key)
             || PredictionGateOf(target) != PredictionGate.Open || target.Document.Path is not { } path)
             return null;
@@ -299,7 +426,7 @@ internal sealed partial class DawnScene
             Code: onScreen,
             Focused: editor.IsFocused,
             ReadOnly: editor.ReadOnly || target.Document.Editor.ReadOnly,
-            Selection: text.HasSelection,
+            Selection: text.HasSelection || AiEditBusy,
             ExtraCarets: text.HasExtraCarets,
             PopupOpen: editor.CompletionOpen || editor.Signature is not null,
             On: PredictionSettings.On(settings),
@@ -401,6 +528,8 @@ internal sealed partial class DawnScene
             || predictionAskedLines is not { } lines || PredictionGateOf(target) != PredictionGate.Open)
             return;
 
+        // The result is taken once; the lines go on only as the shown prediction's
+        predictionAskedLines = null;
         CodeEditor editor = target.Editor;
         UITextDocument text = editor.Document;
         if (text.Version != result.Version || text.Version != predictionAskedVersion)
@@ -419,9 +548,16 @@ internal sealed partial class DawnScene
         predictionShownGhost = result.Ghost;
         predictionShownLines = lines;
         predictionShownPath = predictionAskedPath;
+
+        // The model's prediction takes the editor's place over a suggestion's, which waits in its queue
+        nextEditShownIn = null;
+        nextEditShown = null;
         editor.SetPrediction(new UICodePrediction(edits, HexPredictionGlue.CaretAfter(result.Edits, lines, result.CaretAfter)));
         if (editor.HasPrediction)
+        {
             predictionsShown++;
+            PredictionLog.Shown();
+        }
         else
             predictionShownIn = null;
     }
@@ -434,15 +570,19 @@ internal sealed partial class DawnScene
     /// </summary>
     private void PredictionEnded(PredictionTarget target, bool taken)
     {
-        if (predictionShownIn != target)
+        if (NextEditEnded(target, taken) || predictionShownIn != target)
             return;
         predictionShownIn = null;
 
         UITextDocument text = target.Editor.Document;
         if (taken)
         {
+            // The accept notes the typing before it itself, so what was marked is not noted twice
+            if (predictionNotePending == target)
+                predictionNotePending = null;
             predictionsTaken++;
             string[] before = predictionShownLines ?? [];
+            predictionShownLines = null;
             var after = new string[text.LineCount];
             for (int i = 0; i < after.Length; i++)
                 after[i] = text.LineAt(i);
@@ -454,6 +594,7 @@ internal sealed partial class DawnScene
             return;
         }
 
+        predictionShownLines = null;
         if (text.Version != predictionShownVersion || !PredictionFocused(target))
             return;
         if (predictionShownGhost && (text.Caret != predictionShownCaret || text.HasSelection || text.HasExtraCarets))
@@ -494,6 +635,9 @@ internal sealed partial class DawnScene
     {
         if (predictionEditingIn is { } target && target.Document == closed)
             ForgetPrediction(target);
+        ForgetNextEdits(closed);
+        if (predictionNotePending is { } marked && marked.Document == closed)
+            predictionNotePending = null;
         if (closed.Path is { } path)
             predictions.History.Closed(HexPredictionGlue.Sent(WorkspaceRoots(), path));
         for (int i = 0; i < predictionRecent.Length; i++)

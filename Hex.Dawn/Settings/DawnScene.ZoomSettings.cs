@@ -68,6 +68,8 @@ internal sealed partial class DawnScene
         extensions?.StopWatching();
         StopRemote();
         _ = linkPortMapping?.SetPort(0);
+        // The llama-server Hex started goes with it, its memory and the card let go
+        ShutDownLlamaServer();
         base.DisposeOther();
     }
 }

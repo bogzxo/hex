@@ -32,9 +32,22 @@ internal sealed class PredictionCache
         return string.Concat(model + "\0" + format + "\0", text.AsSpan(start, end - start), "\0" + (caret - start).ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
+    /// <summary>
+    /// The key for a far prediction: the region's text (not where it is) with the hash of the newest history event, so a
+    /// region that is the same but has other history behind it doesn't find the answer (docs/next-edit-plan.md, 4.4).
+    /// Used with the region's start as the caret, so that the edits are kept relative to it.
+    /// </summary>
+    public static string FarKey(string regionText, string model, string format, string historyHash) =>
+        string.Concat("far\0", model, "\0", format, "\0", historyHash, "\0", regionText);
+
+    // What is kept in place of a key's text: 128 bits of its SHA-256, so an entry holds 32 characters, not the 2500 of the text round the caret
+    private static string Digest(string key) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Runtime.InteropServices.MemoryMarshal.AsBytes(key.AsSpan())), 0, 16);
+
     /// <summary>The prediction kept for a key, its edits moved to the caret it's asked for at.</summary>
     public bool TryGet(string key, int caret, out IReadOnlyList<PredictionEdit> edits, out int? caretAfter)
     {
+        key = Digest(key);
         lock (gate)
         {
             if (!entries.TryGetValue(key, out var node))
@@ -62,6 +75,7 @@ internal sealed class PredictionCache
     /// </summary>
     public void Put(string key, int caret, IReadOnlyList<PredictionEdit> edits, int? caretAfter)
     {
+        key = Digest(key);
         var relative = new PredictionEdit[edits.Count];
         for (int i = 0; i < relative.Length; i++)
         {

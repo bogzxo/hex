@@ -14,11 +14,14 @@ namespace Hex.Dawn;
 internal sealed partial class DawnScene
 {
     // What was last sent, so a tick that moved nothing sends nothing
-    private string linkPresenceSent = string.Empty;
+    // (compared as a record, so a tick that moved nothing allocates nothing)
+    private HexLinkPresence? linkPresenceLast;
+    private bool linkPresenceSent;
     private long linkPresenceSampled;
 
     // What was last drawn, so marks are only made again when something of them moved
-    private string linkPresenceDrawnKey = string.Empty;
+    // (a hash of everything the marks come from, null to draw them again)
+    private int? linkPresenceDrawnHash;
 
     // The marks drawn into each tab, so they're taken out again without touching anybody else's
     private HashSet<HexDocument> linkPresenceDrawn { get => LazyInitializer.EnsureInitialized(ref field, static () => []); }
@@ -40,6 +43,9 @@ internal sealed partial class DawnScene
     // The colours devices picked for themselves, by id, this one's included; one that picked none is drawn in its id's
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Vector4> linkPickedColours = new(StringComparer.OrdinalIgnoreCase);
 
+    // Moves whenever a device picks or lets go of a colour, so what is drawn in colours is looked at again
+    private static int linkPickedColoursVersion;
+
     /// <summary>A #rrggbb colour as a colour, null when it isn't one.</summary>
     internal static Vector4? LinkColourOf(string? said) =>
         said is { Length: 7 } && said[0] == '#' && uint.TryParse(said.AsSpan(1), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out uint rgb)
@@ -50,6 +56,7 @@ internal sealed partial class DawnScene
     {
         if (deviceId.Length == 0)
             return;
+        Interlocked.Increment(ref linkPickedColoursVersion);
         if (LinkColourOf(said) is { } colour)
             linkPickedColours[deviceId] = colour;
         else
@@ -158,7 +165,7 @@ internal sealed partial class DawnScene
         {
             if (linkPresenceDrawn.Count > 0)
                 LinkPresenceClear();
-            linkPresenceSent = string.Empty;
+            linkPresenceSent = false;
             return;
         }
 
@@ -171,16 +178,16 @@ internal sealed partial class DawnScene
     private void LinkPresenceSend(IReadOnlyList<HexLinkPeer> peers)
     {
         long now = Environment.TickCount64;
-        if (linkPresenceSent.Length != 0 && now - linkPresenceSampled < 250)
+        if (linkPresenceSent && now - linkPresenceSampled < 250)
             return;
         linkPresenceSampled = now;
         HexLinkPresence? mine = LinkPresenceHere();
         if (mine is not null && !mine.SharedDocument && document.Editor.PointerTextPosition is { } pointer)
             mine = mine with { PointerLine = pointer.Line, PointerColumn = pointer.Column };
-        string key = mine is null ? "-" : $"{mine.File}:{mine.Line}:{mine.Column}:{mine.ToLine}:{mine.ToColumn}:{mine.PointerLine}:{mine.PointerColumn}:{mine.SharedDocument}";
-        if (key == linkPresenceSent)
+        if (linkPresenceSent && Equals(mine, linkPresenceLast))
             return;
-        linkPresenceSent = key;
+        linkPresenceLast = mine;
+        linkPresenceSent = true;
         foreach (HexLinkPeer peer in peers)
         {
             if (HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))
@@ -211,14 +218,24 @@ internal sealed partial class DawnScene
             return shared.Base.Path;
         if (linkRemote.TryGetValue(path, out LinkRemoteTab? remote))
             return remote.Wire;
-        foreach (HexLinkFolder folder in linkServices?.Workspace.Folders ?? [])
+        var folders = linkServices?.Workspace.Folders;
+        // Asked four times a second for the same file: the last answer is kept for as long as the file and the folders are the same
+        if (linkWireCache is { } cached && ReferenceEquals(cached.Folders, folders) && cached.Path == path)
+            return cached.Wire;
+        foreach (HexLinkFolder folder in folders ?? [])
         {
             if (PlatformPaths.IsUnder(path, folder.Path))
-                return folder.Name + "/" + Path.GetRelativePath(folder.Path, path).Replace(Path.DirectorySeparatorChar, '/');
+            {
+                string wire = folder.Name + "/" + Path.GetRelativePath(folder.Path, path).Replace(Path.DirectorySeparatorChar, '/');
+                linkWireCache = (folders, path, wire);
+                return wire;
+            }
         }
 
         return null;
     }
+
+    private (object? Folders, string Path, string Wire)? linkWireCache;
 
     /// <summary>Where a device's wire path is open here, the local file of a workspace folder of that name or the copy of a remote tab; null when it isn't.</summary>
     private HexDocument? LinkDocumentOf(string deviceId, string wire)
@@ -302,6 +319,7 @@ internal sealed partial class DawnScene
                 key.Append(path).Append('|').Append(colour).Append(';');
             }
 
+            LinkFileMarkColours(now, key);
             if (key.ToString() == linkExplorerPresenceKey)
                 return;
             linkExplorerPresenceKey = key.ToString();
@@ -331,26 +349,21 @@ internal sealed partial class DawnScene
     // The others' carets drawn into the tabs that have their files, when something of them moved
     private void LinkPresenceDraw()
     {
-        // Every tick, so only when what the dots are made of (who is in which file, in which colour, in which folders) moved
-        var hash = new HashCode();
-        int sum = 0;
-        foreach (LinkPresenceSeen seen in linkPresence.Values)
-            sum += HashCode.Combine(seen.Device.Id, seen.Presence?.File, LinkDeviceColour(seen.Device.Id));
-        hash.Add(sum);
-        hash.Add(linkPresence.Count);
-        hash.Add(linkServices?.Workspace.Folders);
-        int explorerHash = hash.ToHashCode();
+        // Every tick, so only when what the dots are made of (who is in which file, in which colour, in which folders) moved:
+        // the presence's own version, the colours' and the folders' list stand for all of it, nothing is hashed per frame
+        int explorerHash = HashCode.Combine(linkPresenceVersion, linkPickedColoursVersion, linkServices?.Workspace.Folders);
         if (explorerHash != linkExplorerPresenceInputs)
         {
             linkExplorerPresenceInputs = explorerHash;
             LinkUpdateExplorerPresence();
         }
 
-        string key = string.Join("|", linkPresence.Values.Select(seen => $"{seen.Device.Id}:{seen.Presence?.File}:{seen.Presence?.Line}:{seen.Presence?.Column}:{seen.Presence?.ToLine}:{seen.Presence?.ToColumn}:{seen.Presence?.PointerLine}:{seen.Presence?.PointerColumn}:{seen.Presence?.SharedDocument}:{seen.Device.Name}"))
-            + "#" + documents.Count;
-        if (key == linkPresenceDrawnKey && linkPresenceDrawn.All(documents.Contains))
+        // What the carets are drawn from moved with the presence, the link (names), the tabs or the colours; null (set where a
+        // shared document goes offline and where Link ends) is the way to say draw again
+        int key = HashCode.Combine(linkPresenceVersion, LinkVersion, documents.Count, linkPickedColoursVersion);
+        if (key == linkPresenceDrawnHash && AllStillOpen(linkPresenceDrawn))
             return;
-        linkPresenceDrawnKey = key;
+        linkPresenceDrawnHash = key;
         LinkPresenceClear();
 
         var carets = new Dictionary<HexDocument, List<UICodeRemoteCaret>>();
@@ -371,6 +384,17 @@ internal sealed partial class DawnScene
             open.Editor.RemoteCarets = participants;
             linkPresenceDrawn.Add(open);
         }
+    }
+
+    private bool AllStillOpen(HashSet<HexDocument> drawn)
+    {
+        foreach (HexDocument open in drawn)
+        {
+            if (!documents.Contains(open))
+                return false;
+        }
+
+        return true;
     }
 
     private static UICodeRemoteCaret LinkPresenceCaret(HexLinkDevice device, HexLinkPresence where) =>
@@ -481,15 +505,16 @@ internal sealed partial class DawnScene
     // A device linked: it's told where this machine's person is at once, the next tick
     private void LinkPresenceJoined(HexLinkPeer peer)
     {
-        linkPresenceSent = string.Empty;
-        linkPresenceDrawnKey = string.Empty;
+        linkPresenceSent = false;
+        linkPresenceDrawnHash = null;
     }
 
     // Link going down: the marks taken out, following stopped
     private void LinkPresenceStopAll()
     {
         LinkPresenceClear();
-        linkPresenceDrawnKey = linkPresenceSent = string.Empty;
+        linkPresenceDrawnHash = null;
+        linkPresenceSent = false;
         linkSpying = false;
         linkFollowing = null;
         linkFollowDocument = null;

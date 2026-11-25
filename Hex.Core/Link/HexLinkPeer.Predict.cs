@@ -26,6 +26,7 @@ internal sealed partial class HexLinkPeer
     private readonly ConcurrentDictionary<string, PredictionStream> predictionStreams = new(StringComparer.Ordinal);
     private long predictIds;
     private volatile bool servesPredictions;
+    // Declared with the AI half's (HexLinkPeer.Ai.cs): servesAi
 
     /// <summary>Whether the other machine would make predictions for this one now: it shares them and lets this one ask.</summary>
     public bool ServesPredictions => servesPredictions && !IsClosed;
@@ -33,10 +34,13 @@ internal sealed partial class HexLinkPeer
     // What hello and link/serves say the other machine does for this one
     private void TakeServes(JsonObject said)
     {
-        bool serves = HexLinkData.Strings(said, "serves", 16, 40).Contains("predictions");
-        if (serves == servesPredictions)
+        List<string> says = HexLinkData.Strings(said, "serves", 16, 40);
+        bool serves = says.Contains("predictions");
+        bool serveAi = says.Contains("ai");
+        if (serves == servesPredictions && serveAi == servesAi)
             return;
         servesPredictions = serves;
+        servesAi = serveAi;
         Changed?.Invoke();
     }
 

@@ -367,7 +367,7 @@ internal sealed partial class DawnScene
         string seconds = call.Seconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
         Label time = line.Add(new Label
         {
-            Text = call.State == HexAgentToolState.Running ? Said("agents_panel.tool_running", ("seconds", seconds)) : $"{seconds}s",
+            Text = call.State == HexAgentToolState.Running ? Said("agents_panel.tool_running", ("seconds", RunningSeconds(call.Seconds))) : $"{seconds}s",
             TextScale = 0.125f, Dim = call.State != HexAgentToolState.Failed, Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-8, 0)
         });
         if (call.State == HexAgentToolState.Running)

@@ -87,8 +87,8 @@ internal static class HexAgentChatApi
         // The pictures going with the message being written, { path, media_type, data } each with data its base64, for a
         // system that takes them inline (Claude Code's image blocks) or by their files (Codex's --image)
         ("images", Natives.Function("images", _ => new ListValue([.. chat.Attached.Select(ImageOf).OfType<IRuntimeValue>()]))),
-        ("text", Natives.Action("text", args => chat.Say(args.Text(0, string.Empty)))),
-        ("thinking", Natives.Action("thinking", args => chat.Think(args.Text(0, string.Empty)))),
+        ("text", Natives.Action("text", args => chat.Say(args.Text(0, string.Empty), args.Has(1) && args[1] is BooleanValue { Value: true }))),
+        ("thinking", Natives.Action("thinking", args => chat.Think(args.Text(0, string.Empty), args.Has(1) && args[1] is BooleanValue { Value: true }))),
         ("note", Natives.Action("note", args => chat.Note(args.Text(0, string.Empty)))),
         // The agent system's own to-do list, structured, into the chat's Plan tab: plan({ steps: [{ id, text, status }],
         // title, key, at }) or plan(steps). A step's text can be said as text, content or step, its status in the system's

@@ -91,12 +91,38 @@ internal sealed partial class DawnScene
     /// <summary>The same with rows in their parts, a symbol, a folder or an author dim after, each piece of a commit in its colour.</summary>
     /// <param name="searched">The lists searched off the editor's thread rather than narrowed down, by prefix, Go to All's.</param>
     private void ChooseFrom(string title, string message, List<UIChoice> choices, bool shortestFirst = false,
-        Func<char, List<UIChoice>?>? prefixed = null, UIRecentList? recent = null, string typed = "", Func<char, UIChoiceSearch?>? searched = null)
+        Func<char, List<UIChoice>?>? prefixed = null, UIRecentList? recent = null, string typed = "", Func<char, UIChoiceSearch?>? searched = null,
+        Action? escaped = null, string chosen = "")
     {
         if (textDialog is { IsOpen: true })
             textDialog.Close();
 
-        textDialog = UIChooser.Show(chrome, title, message, choices, "@choose.placeholder", shortestFirst, prefixed, recent, typed, searched);
+        textDialog = UIChooser.Show(chrome, title, message, choices, "@choose.placeholder", shortestFirst, prefixed, recent, typed, searched, escaped, chosen);
+    }
+
+    /// <summary>
+    /// A chooser hung from a place (a status bar item, a chip) rather than from the top of the window, null for the top.
+    /// <paramref name="escaped"/> runs when escape closes it, to go back to what opened it.
+    /// </summary>
+    internal void ChooseAt(string title, string message, List<UIChoice> choices, UIRect? anchor, Action? escaped = null, string typed = "", string chosen = "")
+    {
+        ChooseFrom(title, message, choices, typed: typed, escaped: escaped, chosen: chosen);
+        if (anchor is { IsEmpty: false } where && textDialog is { IsOpen: true } shown)
+            shown.PlaceAt(where.Min, where.Height);
+    }
+
+    /// <summary>The same for rows written the old way.</summary>
+    internal void ChooseAt(string title, string message, List<(string Text, Action Picked)> choices, UIRect? anchor, Action? escaped = null) =>
+        ChooseAt(title, message, UIChooser.Rows(choices), anchor, escaped);
+
+    /// <summary>Where a component is, in the window's units, for anchoring a chooser to it. Null before it has been laid out.</summary>
+    internal UIRect? AnchorOf(UIComponent component)
+    {
+        if (component.Module is not { } from || component.Bounds.IsEmpty)
+            return null;
+
+        Vector2 a = chrome.ToLocal(from.ToWorld(component.Bounds.Min)), b = chrome.ToLocal(from.ToWorld(component.Bounds.Max));
+        return new UIRect(Vector2.Min(a, b), Vector2.Max(a, b));
     }
 
     void IWindows.Choose(string title, string message, List<UIChoice> choices) => ChooseFrom(title, message, choices);

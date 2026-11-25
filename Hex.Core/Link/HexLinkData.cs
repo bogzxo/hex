@@ -140,6 +140,10 @@ internal static class HexLinkData
             words.Add((JsonNode)"predict");
         if (rights.HasFlag(HexLinkRights.Manage))
             words.Add((JsonNode)"manage");
+        if (rights.HasFlag(HexLinkRights.Ports))
+            words.Add((JsonNode)"ports");
+        if (rights.HasFlag(HexLinkRights.Ai))
+            words.Add((JsonNode)"ai");
         return words;
     }
 
@@ -156,6 +160,8 @@ internal static class HexLinkData
                 "edit" => HexLinkRights.Edit,
                 "predict" => HexLinkRights.Predict,
                 "manage" => HexLinkRights.Manage,
+                "ports" => HexLinkRights.Ports,
+                "ai" => HexLinkRights.Ai,
                 _ => HexLinkRights.None
             };
         }
@@ -171,7 +177,24 @@ internal static class HexLinkData
         HexLinkRights.Edit => "edit",
         HexLinkRights.Predict => "predict",
         HexLinkRights.Manage => "manage",
+        HexLinkRights.Ports => "ports",
+        HexLinkRights.Ai => "ai",
         _ => right.ToString().ToLowerInvariant()
+    };
+
+    /// <summary>
+    /// A right's word as the person reads it in the rights dialog ("ports" as "Open my shared ports"), for an audit line and
+    /// an error's message. A word that isn't a right is said as it is.
+    /// </summary>
+    public static string Readable(string word) => word switch
+    {
+        "view" => "See my files",
+        "steer" => "Use my AI agents",
+        "edit" => "Change my files",
+        "predict" => "Use my AI completions",
+        "ports" => "Open my shared ports",
+        "ai" => "Use my AI models",
+        _ => word
     };
 
     /// <summary>A device as the wire says it.</summary>

@@ -40,10 +40,15 @@ internal sealed partial class DawnScene
         test.Run(() =>
         {
             merge!.Fit(new Vector2(720, 480));
-            narrow = merge.IsNarrow && code.LensesAbove.Any(lens => lens.Text.StartsWith("Mine  ", StringComparison.Ordinal))
-                && code.LensesAbove.Any(lens => lens.Text.StartsWith("Theirs  ", StringComparison.Ordinal));
+            narrow = merge.IsNarrow && code.LensesAbove.Any(lens => lens.Text.StartsWith("Conflict 1 of 2", StringComparison.Ordinal))
+                && code.LensesAbove.Any(lens => lens.Text.StartsWith("Conflict 2 of 2", StringComparison.Ordinal));
         });
-        test.Check("merge editor: narrow view shows both inline versions", () => narrow);
+        test.Check("merge editor: the Result pane shows base text and header bars, never marker lines", () =>
+            narrow && code.Text == "start\nfirst base\nbetween\nsecond base\nend\n" && !code.Text.Contains("<<<<<<<"));
+        test.WaitFor(() => code.LensesAbove.Any(lens => lens.Text == "More…"), 5);
+        test.Check("merge editor: a narrow Result pane gets Use yours, Use theirs and a More menu", () =>
+            code.LensesAbove.Any(lens => lens.Text == "More…") && code.LensesAbove.Any(lens => lens.Text == "Use yours")
+            && !code.LensesAbove.Any(lens => lens.Text.StartsWith("Use both", StringComparison.Ordinal)));
         if (Environment.GetEnvironmentVariable("HEX_SELFTEST_SHOTS") is { Length: > 0 } shots)
         {
             test.Run(() => Engine.CaptureScreenshot(Path.Combine(shots, $"merge-editor-{theme}.png")));
@@ -66,8 +71,8 @@ internal sealed partial class DawnScene
         {
             code.GoTo(1);
             merge!.AcceptCurrent(MergeChoice.Mine);
-            int row = Enumerable.Range(0, code.Document.LineCount).First(line => code.Document.LineAt(line) == "second mine");
-            code.Document.Select(new(row, 0), new(row, "second mine".Length));
+            int row = Enumerable.Range(0, code.Document.LineCount).First(line => code.Document.LineAt(line) == "second base");
+            code.Document.Select(new(row, 0), new(row, "second base".Length));
             code.Document.Insert("hand resolved");
         });
         test.Check("merge editor: typing resolves the last conflict and enables Complete merge", () =>

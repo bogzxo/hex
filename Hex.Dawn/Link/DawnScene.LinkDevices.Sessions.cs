@@ -37,19 +37,19 @@ internal sealed partial class DawnScene
         Button? follow = null;
         if (session.CanFollow || linkFollowing is not null)
         {
-            string label = Said("link.devices_session_follow");
-            if (linkFollowing is { } followed)
-            {
-                IReadOnlyList<LinkSessionPerson> people = [];
-                LinkReadSessionPeople(shown, ref people);
-                if (people.FirstOrDefault(person => person.Id == followed) is { } person)
-                    label = Said("link.devices_session_following", ("device", OneLine(person.Name, 24)));
-            }
+            IReadOnlyList<LinkSessionPerson> people = [];
+            LinkReadSessionPeople(shown, ref people);
+            // One other person is named on the button, several are chosen from a list
+            string label = people.Count == 1 ? Said("link.devices_session_follow", ("device", OneLine(people[0].Name, 24))) : Said("link.devices_session_follow_many");
+            string tip = Said("link.devices_session_follow_tip", ("device", people.Count == 1 ? OneLine(people[0].Name, 24) : Said("link.devices_session_follow_them")));
+            if (linkFollowing is { } followed && people.FirstOrDefault(person => person.Id == followed) is { } person)
+                label = Said("link.devices_session_following", ("device", OneLine(person.Name, 24)));
             follow = LinkButton(label, "eye", () => { });
+            follow.Tooltip = tip;
             follow.OnPressed = () => ShowLinkSessionPeople(shown, follow);
         }
 
-        StackPanel card = DrawEditorLinkNotice(notices, title, claim is null ? "link" : "lock", warning: claim is not null, width, follow);
+        StackPanel card = DrawEditorLinkNotice(notices, title, "link", warning: false, width, follow);
         card.Tooltip = roster + "\n" + session.Wire;
     }
 

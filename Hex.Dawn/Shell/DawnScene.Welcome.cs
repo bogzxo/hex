@@ -435,6 +435,7 @@ internal sealed partial class DawnScene
                     HexNewsPlace.Side => "welcome.news_tip_side",
                     HexNewsPlace.Problems => "welcome.news_tip_problems",
                     HexNewsPlace.NewProject => "new_project.title",
+                    HexNewsPlace.LocalAi => "welcome.news_tip_local_ai",
                     _ => "welcome.news_tip_setting"
                 }),
                 OnPressed = () => GoToNews(item)
@@ -464,6 +465,13 @@ internal sealed partial class DawnScene
                 break;
             case HexNewsPlace.NewProject:
                 ShowNewProject();
+                break;
+            case HexNewsPlace.LocalAi:
+                // With every AI off the window doesn't open, and Settings has the switch that turns it back on
+                if (HexAi.Off)
+                    OpenSettings(EditorSettingsCatalog.AGENTS);
+                else
+                    OpenLocalAiWindow(item.Target);
                 break;
         }
     }

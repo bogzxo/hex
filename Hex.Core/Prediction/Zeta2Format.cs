@@ -7,9 +7,24 @@ namespace Hex.Core;
 /// Zed's Zeta 2 (Seed-Coder fine-tuned, Zed's V0211SeedCoder): the file after the editable region first, then other
 /// files' excerpts, the edit history and the file before the region, then the region with the caret marked, and the
 /// model writes the region again with its edit made, ending >>>>>>> UPDATED. The answer is diffed against the old region.
+/// <para>
+/// Zeta 2.1 (multiRegion, Zed's 0323 multi-region format) has the same prompt round the region, but the region is cut
+/// into chunks of a few lines by numbered markers, &lt;|marker_1|&gt; at its start, one at the start of each chunk and
+/// the last at its end, and the model writes back only the chunks it changes: &lt;|marker_i|&gt;, their new text with
+/// the caret marked, &lt;|marker_j|&gt;. That span is put back into the region and the region diffed as before.
+/// </para>
 /// </summary>
-internal sealed class Zeta2Format : IPredictionFormat
+internal sealed partial class Zeta2Format(bool multiRegion = false) : IPredictionFormat
 {
+    // Lines a chunk of Zeta 2.1's region has, Zed's own are a dozen or so; a short region is one chunk
+    private const int CHUNK_LINES = 12;
+
+    /// <summary>The marker before chunk n (from 1), and after the last.</summary>
+    public static string Marker(int n) => $"<|marker_{n.ToString(System.Globalization.CultureInfo.InvariantCulture)}|>";
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"<\|marker_(\d{1,3})\|>")]
+    private static partial System.Text.RegularExpressions.Regex Markers();
+
     public const string SUFFIX = "<[fim-suffix]>";
     public const string PREFIX = "<[fim-prefix]>";
     public const string MIDDLE = "<[fim-middle]>";
@@ -41,11 +56,11 @@ internal sealed class Zeta2Format : IPredictionFormat
     private static readonly string[] tokens = [SUFFIX, PREFIX, MIDDLE, FILE, CURSOR];
     private static readonly string[] markerLines = [CURRENT, SEPARATOR, UPDATED];
 
-    public string Name => PredictionFormats.ZETA2;
+    public string Name => multiRegion ? PredictionFormats.ZETA21 : PredictionFormats.ZETA2;
 
     public PredictionPrompt? Build(PredictionInput input, int maxTokens)
     {
-        if (Ambiguous(input.Text) || input.Caret < 0 || input.Caret > input.Text.Length)
+        if (Ambiguous(input.Text) || multiRegion && input.Text.Contains("<|marker_", StringComparison.Ordinal) || input.Caret < 0 || input.Caret > input.Text.Length)
             return null;
         var (regionStart, regionEnd, contextStart, contextEnd) = Ranges(input.Text, input.Caret);
         return Build(input, maxTokens, regionStart, regionEnd, contextStart, contextEnd);
@@ -67,13 +82,32 @@ internal sealed class Zeta2Format : IPredictionFormat
         EndLine(suffix);
 
         var cursor = new StringBuilder(FILE).Append(Slashed(input.Path)).Append('\n')
-            .Append(text, contextStart, regionStart - contextStart)
-            .Append(CURRENT).Append('\n')
-            .Append(text, regionStart, caret - regionStart)
-            .Append(CURSOR)
-            .Append(text, caret, regionEnd - caret);
-        EndLine(cursor);
-        cursor.Append(SEPARATOR).Append('\n');
+            .Append(text, contextStart, regionStart - contextStart);
+        if (multiRegion)
+        {
+            // The region in chunks, each marker at the start of its chunk's first line, the caret where it is, the last
+            // marker right after the region's last character, as Zed writes them
+            int[] bounds = Chunks(text[regionStart..regionEnd]);
+            for (int i = 0; i + 1 < bounds.Length; i++)
+            {
+                int from = regionStart + bounds[i], to = regionStart + bounds[i + 1];
+                cursor.Append(Marker(i + 1));
+                if (caret >= from && caret < to || caret == to && i + 2 == bounds.Length)
+                    cursor.Append(text, from, caret - from).Append(CURSOR).Append(text, caret, to - caret);
+                else
+                    cursor.Append(text, from, to - from);
+            }
+            cursor.Append(Marker(bounds.Length)).Append('\n');
+        }
+        else
+        {
+            cursor.Append(CURRENT).Append('\n')
+                .Append(text, regionStart, caret - regionStart)
+                .Append(CURSOR)
+                .Append(text, caret, regionEnd - caret);
+            EndLine(cursor);
+            cursor.Append(SEPARATOR).Append('\n');
+        }
 
         string suffixText = suffix.ToString(), cursorText = cursor.ToString();
         int budget = PROMPT_TOKENS * 9 / 10;
@@ -120,6 +154,8 @@ internal sealed class Zeta2Format : IPredictionFormat
     public PredictionParsed Parse(PredictionPrompt prompt, string output, bool complete)
     {
         string answer = output.Contains('\r') ? output.Replace("\r\n", "\n") : output;
+        if (multiRegion)
+            return ParseChunks(prompt, answer, complete);
 
         int end = answer.IndexOf(UPDATED, StringComparison.Ordinal);
         if (end >= 0)
@@ -143,6 +179,53 @@ internal sealed class Zeta2Format : IPredictionFormat
         if (arrived.Length == 0)
             return PredictionParsed.Nothing;
         return Settle(prompt, string.Join('\n', Aligned(old, arrived)));
+    }
+
+    /// <summary>
+    /// Where Zeta 2.1's region is cut into chunks: offsets into the region, 0 first and its length last, each between
+    /// at the start of a line, every <see cref="CHUNK_LINES"/> lines.
+    /// </summary>
+    internal static int[] Chunks(string region)
+    {
+        var bounds = new List<int> { 0 };
+        int lines = 0;
+        for (int i = region.IndexOf('\n'); i >= 0 && i + 1 < region.Length; i = region.IndexOf('\n', i + 1))
+        {
+            if (++lines % CHUNK_LINES == 0)
+                bounds.Add(i + 1);
+        }
+        bounds.Add(region.Length);
+        return [.. bounds];
+    }
+
+    // Zeta 2.1's answer: the chunks from its first marker to the next it writes, put back into the region in place of
+    // the ones they were. Nothing settles until the closing marker has come; an answer that ends without one (the token
+    // limit) or names chunks the region hasn't is no prediction
+    private static PredictionParsed ParseChunks(PredictionPrompt prompt, string answer, bool complete)
+    {
+        int[] bounds = Chunks(prompt.Region);
+        System.Text.RegularExpressions.MatchCollection found = Markers().Matches(answer);
+        if (found.Count < 2)
+            return complete ? PredictionParsed.Nothing : PredictionParsed.Unsettled;
+
+        System.Text.RegularExpressions.Match open = found[0], close = found[1];
+        int first = int.Parse(open.Groups[1].ValueSpan, System.Globalization.CultureInfo.InvariantCulture);
+        int last = int.Parse(close.Groups[1].ValueSpan, System.Globalization.CultureInfo.InvariantCulture);
+        if (first < 1 || last <= first || last > bounds.Length)
+            return PredictionParsed.Nothing;
+
+        string body = answer[(open.Index + open.Length)..close.Index];
+        int from = bounds[first - 1], to = bounds[last - 1];
+
+        // A chunk's text ends at a line's end in the prompt; a model that adds or drops the newline before the marker
+        // keeps the region's
+        string old = prompt.Region[from..to];
+        if (old.EndsWith('\n') && !body.EndsWith('\n'))
+            body += "\n";
+        else if (!old.EndsWith('\n') && body.EndsWith('\n'))
+            body = body[..^1];
+
+        return Settle(prompt, string.Concat(prompt.Region.AsSpan(0, from), body, prompt.Region.AsSpan(to)));
     }
 
     /// <summary>Whether a file's text holds one of the format's tokens, or one of its markers on a line of its own.</summary>
@@ -375,9 +458,11 @@ internal sealed class Zeta2Format : IPredictionFormat
             return PredictionParsed.Nothing;
 
         IReadOnlyList<PredictionEdit> edits = PredictionDiff.Edits(prompt.Region, body, prompt.RegionStart);
+        int? caretAfter = cursorAt >= 0 ? prompt.RegionStart + cursorAt : null;
+        edits = PredictionDiff.WithoutRepeatedIndent(edits, prompt.Region, prompt.RegionStart, prompt.Caret, ref caretAfter);
         if (edits.Count == 0)
             return PredictionParsed.Nothing;
-        return new PredictionParsed(edits, cursorAt >= 0 ? prompt.RegionStart + cursorAt : null, true);
+        return new PredictionParsed(edits, caretAfter, true);
     }
 
     // Whether two texts differ only in whitespace at the ends of lines

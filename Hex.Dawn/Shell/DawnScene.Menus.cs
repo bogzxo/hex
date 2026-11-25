@@ -229,7 +229,8 @@ internal sealed partial class DawnScene
         AddTerminalCommands();
 
         // Closed for real, asking first about anything unsaved, where the window's x only hides a Hex that stays running
-        commands.Add("File/exit", Said("menus.exit"), Quit, "Alt+F4", "close");
+        // A Mac has Hex, Quit Hex in its menu bar for that, and no Alt+F4
+        commands.Add("File/exit", Said("menus.exit"), Quit, "Alt+F4", "close").IsVisible = () => ExitShown(OperatingSystem.IsMacOS(), MacMenuIsNative);
     }
 
     /// <summary>

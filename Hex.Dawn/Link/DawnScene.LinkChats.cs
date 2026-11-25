@@ -209,7 +209,7 @@ internal sealed partial class DawnScene
             {
                 try
                 {
-                    McpToolResult result = await peer.Send(remote.Id, asked);
+                    McpToolResult result = await peer.Send(remote.Id, asked, person: true);
                     if (result.IsError)
                         PostLink(() => LinkRemoteFailed(remote, result.AllText()));
                 }
@@ -381,7 +381,8 @@ internal sealed partial class DawnScene
             if (peer.IsClosed || peer.Protocol == 0)
                 continue;
             if (linkGrantsSeen.TryGetValue(peer.Device.Id, out HexLinkRights was) && was != peer.Granted)
-                Say(Said("link.rights_changed_there", ("device", LinkNameOf(peer.Device.Id, peer.Device.Name)), ("there", LinkRightsSaid(peer.Granted))));
+                Say(Said("link.rights_changed_short", ("device", OneLine(LinkNameOf(peer.Device.Id, peer.Device.Name), 24))),
+                    details: Said("link.rights_changed_there", ("device", LinkNameOf(peer.Device.Id, peer.Device.Name)), ("there", LinkRightsSaid(peer.Granted))));
             linkGrantsSeen[peer.Device.Id] = peer.Granted;
         }
     }

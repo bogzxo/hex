@@ -39,7 +39,56 @@ internal sealed partial class HexLinkTransport : IDisposable
     private const int HANDSHAKE_MS = 10000;
 
     // How many connections may be in the handshake at once, more are closed straight away
-    private const int MOST_HANDSHAKES = 4;
+    // (a joiner holding an invite dials every address the invite names, so one source may hold several of them)
+    private const int MOST_HANDSHAKES = 12;
+
+    // How many of those one address may hold, so one joiner's parallel dials aren't counted against everybody else
+    private const int MOST_HANDSHAKES_PER_SOURCE = 6;
+
+    // How long a connection that has said nothing at all may sit before it's let go
+    private const int FIRST_BYTES_MS = 3000;
+
+    private bool IsKnownSource(IPAddress from)
+    {
+        try
+        {
+            return trust.Known.Any(known => IPAddress.TryParse(known.Address, out IPAddress? at) && at.Equals(from));
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    private readonly Lock sourceGate = new();
+
+    /// <summary>How many handshakes are in progress now, for tests.</summary>
+    internal int HandshakesHeld => MOST_HANDSHAKES - handshakes.CurrentCount;
+
+    private readonly Dictionary<IPAddress, int> handshakesBySource = [];
+
+    private bool TakeSource(IPAddress from)
+    {
+        lock (sourceGate)
+        {
+            int held = handshakesBySource.GetValueOrDefault(from);
+            if (held >= MOST_HANDSHAKES_PER_SOURCE)
+                return false;
+            handshakesBySource[from] = held + 1;
+            return true;
+        }
+    }
+
+    private void ReleaseSource(IPAddress from)
+    {
+        lock (sourceGate)
+        {
+            if (handshakesBySource.TryGetValue(from, out int held) && held > 1)
+                handshakesBySource[from] = held - 1;
+            else
+                handshakesBySource.Remove(from);
+        }
+    }
 
     // How many links at once
     private const int MOST_LINKS = HexLink.MOST;
@@ -266,8 +315,19 @@ internal sealed partial class HexLinkTransport : IDisposable
             return;
         }
 
-        if (!handshakes.Wait(0))
+        if (!TakeSource(from))
         {
+            Audit?.Write("refused", "", $"{address}, too many handshakes at once from there");
+            socket.Dispose();
+            return;
+        }
+
+        // A device already paired with, dialling from the address it was last at, isn't kept out by strangers holding
+        // every slot (it still counts against its own address's few)
+        bool global = !IsKnownSource(from);
+        if (global && !handshakes.Wait(0))
+        {
+            ReleaseSource(from);
             Audit?.Write("refused", "", $"{address}, too many handshakes at once");
             socket.Dispose();
             return;
@@ -275,17 +335,34 @@ internal sealed partial class HexLinkTransport : IDisposable
 
         bool handshakeHeld = true;
         bool kept = false;
+        bool shook = false;
         Track(socket, true);
         SslStream? ssl = null;
         try
         {
             socket.NoDelay = true;
+            // A connection that sends nothing at all is let go quickly: four idle sockets held every slot for the whole
+            // handshake time. The wait is for the first bytes only, the handshake proper has its own.
+            using (var quiet = CancellationTokenSource.CreateLinkedTokenSource(stop))
+            {
+                quiet.CancelAfter(FIRST_BYTES_MS);
+                try
+                {
+                    await socket.ReceiveAsync(Memory<byte>.Empty, SocketFlags.None, quiet.Token);
+                }
+                catch (OperationCanceledException) when (!stop.IsCancellationRequested)
+                {
+                    return;
+                }
+            }
+
             ssl = new SslStream(new NetworkStream(socket, ownsSocket: true), leaveInnerStreamOpen: false);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(stop);
             timeout.CancelAfter(HANDSHAKE_MS);
 
             string? pin = null;
             await ssl.AuthenticateAsServerAsync(ServerOptions(seen => pin = seen), timeout.Token);
+            shook = true;
             if (pin is null)
                 return;
 
@@ -308,7 +385,9 @@ internal sealed partial class HexLinkTransport : IDisposable
             {
                 kept = await HostInvite(ssl, socket, hello.Device, address, stop, timeout.Token, NegotiateBulk(hello.Bulk), () =>
                 {
-                    handshakes.Release();
+                    if (global)
+                        handshakes.Release();
+                    ReleaseSource(from);
                     handshakeHeld = false;
                 });
                 return;
@@ -317,7 +396,9 @@ internal sealed partial class HexLinkTransport : IDisposable
             if (hello.Mode == "pair")
             {
                 // The person takes as long as they take, this connection stops counting against the handshakes
-                handshakes.Release();
+                if (global)
+                    handshakes.Release();
+                ReleaseSource(from);
                 handshakeHeld = false;
                 kept = await HostPairing(ssl, socket, hello.Device, address, stop, NegotiateBulk(hello.Bulk));
                 return;
@@ -334,12 +415,19 @@ internal sealed partial class HexLinkTransport : IDisposable
         }
         catch (Exception e) when (e is IOException or OperationCanceledException or System.Security.Authentication.AuthenticationException or ObjectDisposedException or SocketException or InvalidOperationException)
         {
-            Audit?.Write("refused", "", $"{address}, {Describe(e)}");
+            // A connection closed cleanly before a single TLS byte is the Tailscale browser (HexLinkTailscale) asking whether
+            // anything listens here, which isn't a refusal worth a line in the audit; a reset or a half-said handshake still is
+            if (shook || e is not IOException { InnerException: null })
+                Audit?.Write("refused", "", $"{address}, {Describe(e)}");
         }
         finally
         {
             if (handshakeHeld)
-                handshakes.Release();
+            {
+                if (global)
+                    handshakes.Release();
+                ReleaseSource(from);
+            }
             Track(socket, false);
             if (!kept)
             {

@@ -25,16 +25,17 @@ internal sealed partial class HexLinkTransport
     /// Dials a known device at an address and links to it. When <paramref name="expectId"/> is said, the device that
     /// answers has to be that one, another (a different machine at the address now, or somebody in the middle) is
     /// closed having been told nothing. Throws <see cref="HexLinkRefused"/> with why when it isn't let in or gives up,
-    /// <c>busy</c> when there's a link to the device already.
+    /// <c>busy</c> when there's a link to the device already. A <paramref name="connectWithin"/> bounds the TCP connect
+    /// alone (the redials say it), so a dead address among several costs a few seconds and not the whole handshake's ten.
     /// </summary>
-    public async Task<HexLinkConnection> Dial(string host, int port, string? expectId, CancellationToken cancel)
+    public async Task<HexLinkConnection> Dial(string host, int port, string? expectId, CancellationToken cancel, TimeSpan? connectWithin = null)
     {
         if (expectId is not null && LinkTo(expectId) is not null)
             throw new HexLinkRefused("busy", "there's a link to that device already");
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancel);
         timeout.CancelAfter(HANDSHAKE_MS);
-        (SslStream ssl, Socket socket, string pin, string address) = await Connect(host, port, timeout.Token);
+        (SslStream ssl, Socket socket, string pin, string address) = await Connect(host, port, timeout.Token, connectWithin: connectWithin);
         bool kept = false;
         try
         {
@@ -114,21 +115,30 @@ internal sealed partial class HexLinkTransport
     }
 
     /// <summary>A TCP connection and the TLS handshake as the client, the server's pin noted, nothing yet said.</summary>
-    private async Task<(SslStream Ssl, Socket Socket, string Pin, string Address)> Connect(string host, int port, CancellationToken cancel, Func<string, bool>? accepts = null)
+    private async Task<(SslStream Ssl, Socket Socket, string Pin, string Address)> Connect(string host, int port, CancellationToken cancel, Func<string, bool>? accepts = null, TimeSpan? connectWithin = null)
     {
-        var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+        Socket? socket = null;
         SslStream? ssl = null;
         try
         {
+            // The connect's own budget when one is said, the handshake's whole one otherwise
+            using var connecting = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+            if (connectWithin is { } within)
+                connecting.CancelAfter(within);
             try
             {
                 IPAddress[] resolved = IPAddress.TryParse(host, out var literal)
-                    ? [literal] : await Dns.GetHostAddressesAsync(host, cancel);
-                await socket.ConnectAsync(DialAddresses(resolved), port, cancel);
+                    ? [literal] : await Dns.GetHostAddressesAsync(host, connecting.Token);
+                var ordered = HexLinkAddresses.Preferred(DialAddresses(resolved), HexLinkAddresses.LocalNetworks());
+                socket = await ConnectFirst(ordered, port, ADDRESS_CONNECT_BUDGET, connecting.Token);
             }
             catch (SocketException e)
             {
                 throw new HexLinkRefused("unreachable", $"{host}:{port} couldn't be reached, {e.Message}", e);
+            }
+            catch (OperationCanceledException) when (!cancel.IsCancellationRequested && connecting.IsCancellationRequested)
+            {
+                throw new HexLinkRefused("unreachable", $"{host}:{port} didn't answer in time");
             }
 
             string address = socket.RemoteEndPoint is IPEndPoint remote ? HexLinkAddresses.Show(remote.Address) : host;
@@ -154,9 +164,51 @@ internal sealed partial class HexLinkTransport
             if (ssl is not null)
                 await ssl.DisposeAsync();
             else
-                socket.Dispose();
+                socket?.Dispose();
             throw;
         }
+    }
+
+    internal static readonly TimeSpan ADDRESS_CONNECT_BUDGET = TimeSpan.FromMilliseconds(1500);
+
+    /// <summary>
+    /// A TCP connection to the first of the addresses that answers. Every address but the last gets only perAddress, so
+    /// one that never answers (a virtual switch's) doesn't eat the whole budget; the last gets what the token has left.
+    /// </summary>
+    internal static async Task<Socket> ConnectFirst(IReadOnlyList<IPAddress> addresses, int port, TimeSpan perAddress, CancellationToken cancel)
+    {
+        if (addresses.Count == 0)
+            throw new HexLinkRefused("unreachable", "The host has no IP addresses.");
+        SocketException? failed = null;
+        for (int at = 0; at < addresses.Count; at++)
+        {
+            bool last = at == addresses.Count - 1;
+            var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+            try
+            {
+                using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+                if (!last)
+                    attempt.CancelAfter(perAddress);
+                await socket.ConnectAsync(new IPEndPoint(addresses[at], port), attempt.Token);
+                return socket;
+            }
+            catch (SocketException e) when (!last)
+            {
+                socket.Dispose();
+                failed = e;
+            }
+            catch (OperationCanceledException) when (!last && !cancel.IsCancellationRequested)
+            {
+                socket.Dispose();
+            }
+            catch
+            {
+                socket.Dispose();
+                throw;
+            }
+        }
+
+        throw new HexLinkRefused("unreachable", "The host couldn't be reached.", failed);
     }
 
     // The other end's answer to a first line, a refusal it said thrown as one, and the end of the stream (a refusal on

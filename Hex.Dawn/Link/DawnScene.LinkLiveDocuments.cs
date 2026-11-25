@@ -36,6 +36,9 @@ internal sealed partial class DawnScene
         public (UITextPosition Caret, UITextPosition Anchor, UITextPosition? Pointer)? LastPresence;
         public LinkLiveRevision? RevisionReply;
         public bool HoldEditsForTest, ApplyingRemote;
+
+        /// <summary>The buffer's version at the last change made on this device, 0 for none since the last save: what an editing claim is for.</summary>
+        public long LocalEditVersion;
         public Action? TextChanged;
         public CancellationTokenSource? RevisionWait;
         public long RevisionWaitRetryAt;
@@ -56,6 +59,10 @@ internal sealed partial class DawnScene
     private HashSet<string> linkLivePaused { get => LazyInitializer.EnsureInitialized(ref field, static () => new(PlatformPaths.Comparer)); }
     private Dictionary<string, long> linkLiveRetry { get => LazyInitializer.EnsureInitialized(ref field, static () => new(PlatformPaths.Comparer)); }
     private float linkLiveScan;
+    private int linkLiveScanStamp;
+
+    // How often a shared document with its revision wait armed and nothing to do here asks the authority anyway, in milliseconds
+    private const int KEEPALIVE_MS = 15_000;
     private uint linkLiveRelayCursor;
 
     private void LinkLiveDocumentCommands(List<(string Text, Action Picked)> commands)
@@ -67,14 +74,14 @@ internal sealed partial class DawnScene
                 commands.Add((Said("link.doc_compare"), () => OpenDiff(shared.Tab.Path!, "link-document", Said("link.doc_compare"),
                     GitDiffText.Of(draft.SharedText, shared.Tab.Editor.Text), -1)));
             foreach (var member in shared.Participants.Where(p => p.Author != shared.Replica.Author && p.Caret is not null))
-                commands.Add((Said("link.command_follow", ("device", member.Name)), () => LinkFollow(member.Device)));
+                commands.Add((Said("link.command_follow", ("device", LinkDeviceLabel(member.Device, member.Name))), () => LinkFollow(member.Device)));
             return;
         }
 
         if (document is { IsText: true, Path: { } path, DiffOf: null } && !(remoteTabs?.ContainsKey(path) == true) && LinkWireOf(path) is { } wire)
             commands.Add((Said("link.doc_host", ("path", wire)), () => LinkLiveDocumentHost(document, wire, explicitly: true)));
         foreach (HexLinkPeer peer in LinkPeers.Where(p => HexLinkAllowed.Has(p.Granted, HexLinkRights.View)))
-            commands.Add((Said("link.doc_join", ("device", peer.Device.Name)), () =>
+            commands.Add((Said("link.doc_join", ("device", LinkDeviceLabel(peer.Device))), () =>
                 AskText(Said("link.doc_title"), Said("link.doc_prompt"), string.Empty, Said("link.doc_button"),
                     path => LinkDocumentJoin(peer, path.Trim()))));
     }
@@ -117,8 +124,19 @@ internal sealed partial class DawnScene
     private HexLinkFolder? LiveFolder(string wire)
     {
         int slash = wire.IndexOf('/');
-        return slash > 0 ? linkServices?.Workspace.Folders.FirstOrDefault(folder =>
-            PlatformPaths.Comparer.Equals(folder.Name, wire[..slash])) : null;
+        if (slash <= 0 || linkServices?.Workspace.Folders is not { } folders)
+            return null;
+        // The folder's name is the wire's first part, looked for without making a copy of it or a closure (asked every tick per shared document)
+        string? first = null;
+        foreach (HexLinkFolder folder in folders)
+        {
+            if (folder.Name.Length == slash && wire.AsSpan(0, slash).SequenceEqual(folder.Name))
+                return folder;
+            if (folder.Name.Length == slash && PlatformPaths.Comparer.Equals(folder.Name, first ??= wire[..slash]))
+                return folder;
+        }
+
+        return null;
     }
 
     private async Task<HexLinkDocumentRoom> LinkLiveOpenRoom(LinkServices services, string wire, string full, HexLinkDevice caller,
@@ -307,13 +325,15 @@ internal sealed partial class DawnScene
         {
             if (!shared.ApplyingRemote)
             {
+                // Only what this device's person or agents change counts as editing, never the text others sent
+                shared.LocalEditVersion = buffer.Version;
                 shared.TestTiming?.Invoke(LinkLiveTiming.LocalChange, buffer.Text, Stopwatch.GetTimestamp());
                 LinkLiveFlush(shared, urgent: true);
             }
         };
         buffer.Changed += shared.TextChanged;
         LinkLiveStartRevisionWait(shared);
-        linkPresenceDrawnKey = string.Empty;
+        linkPresenceDrawnHash = null;
         shared.Tab.Editor.RemoteCarets = LinkCaretsForShared(shared, LiveCarets(shared.Shown, shared.Participants, shared.Replica.Author));
         tabsDirty = true;
     }
@@ -331,7 +351,7 @@ internal sealed partial class DawnScene
     private void LinkLiveDraft(LinkLiveDocument shared, string reason, string? authorityText = null)
     {
         shared.Draft = new(authorityText ?? shared.Replica.View.Text, reason);
-        linkPresenceDrawnKey = string.Empty;
+        linkPresenceDrawnHash = null;
         LinkLiveStopRevisionWait(shared);
         if (shared.TextChanged is { } changed)
         {
@@ -370,7 +390,7 @@ internal sealed partial class DawnScene
         shared.Tab.Editor.Document.SharedUndo = null;
         shared.Tab.Editor.ReadOnly = shared.OriginalReadOnly;
         shared.Tab.Editor.RemoteCarets = [];
-        linkPresenceDrawnKey = string.Empty;
+        linkPresenceDrawnHash = null;
         tabsDirty = true;
     }
 
@@ -391,17 +411,29 @@ internal sealed partial class DawnScene
         linkDocumentStaleJoins.Clear();
     }
 
+    private readonly List<LinkLiveDocument> linkLiveWalk = [];
+
     private void UpdateLinkLiveDocuments(float dt)
     {
         if (linkServices is not { } services)
             return;
-        if ((linkLiveScan -= dt) <= 0)
+        // Which tabs could be shared is only looked at when what it depends on moved (the tabs, the link, where the others are),
+        // and every few seconds otherwise to retry a join that was refused
+        int scanStamp = HashCode.Combine(documents.Count, LinkVersion, linkLiveDocuments.Count, linkPresenceVersion);
+        bool scanMoved = scanStamp != linkLiveScanStamp;
+        if ((linkLiveScan -= dt) <= 0 || scanMoved)
         {
-            linkLiveScan = 0.25f;
+            linkLiveScanStamp = scanStamp;
+            linkLiveScan = scanMoved ? 0.25f : 3f;
             foreach (HexDocument tab in documents)
                 LinkLiveAutoOpen(services, tab);
         }
-        foreach (var shared in linkLiveDocuments.Values.ToArray())
+        if (linkLiveDocuments.Count == 0)
+            return;
+        // A copy to walk (closing one changes the dictionary), kept between ticks so an idle tick makes nothing
+        linkLiveWalk.Clear();
+        linkLiveWalk.AddRange(linkLiveDocuments.Values);
+        foreach (var shared in linkLiveWalk)
         {
             if (!documents.Contains(shared.Tab))
             {
@@ -439,7 +471,7 @@ internal sealed partial class DawnScene
             if (!shared.Offline)
             {
                 shared.Offline = true;
-                linkPresenceDrawnKey = string.Empty;
+                linkPresenceDrawnHash = null;
                 while (shared.AgentEdits.TryDequeue(out var request))
                     request.Done.TrySetResult("The shared document's owner is offline.");
                 shared.Tab.Editor.RemoteCarets = [];
@@ -476,7 +508,12 @@ internal sealed partial class DawnScene
         }
 
         if (!useReplay)
-            shared.MaintenanceAt = now + (peer is not null && peer == shared.RevisionWaitUnsupported ? 50 : 250);
+        {
+            // With the long-poll armed and nothing to do here, the authority pushes what happens (a reply to the wait wakes this
+            // at once), so the step is only a slow keepalive and not one every quarter second
+            bool pushed = !localWork && !updatePresence && !connecting && shared.RevisionWait is not null;
+            shared.MaintenanceAt = now + (peer is not null && peer == shared.RevisionWaitUnsupported ? 50 : pushed ? KEEPALIVE_MS : 250);
+        }
         shared.Busy = true;
         shared.ActiveStep = LinkLiveStep(shared, peer, changed ? buffer.Text : shared.Shown.Text, buffer.Version, cursor,
             !shared.Tab.Editor.ReadOnly, updatePresence, useReplay ? wake : null, linkCancel?.Token ?? default);
@@ -613,7 +650,9 @@ internal sealed partial class DawnScene
         string? localPath = shared.Tab.Path;
         string? diskText = shared.Tab.DiskText;
         HexDocSaved? diskSave = shared.DiskSave;
-        bool retryRelayedSave = peer is not null && LinkLiveRelay(shared.Authority, peer) is not null
+        // A participant writes the acknowledged save to its own disk too (not only through a relay): working-tree sync
+        // alone can refuse while the tab is modified, which left the tab modified for good.
+        bool retryRelayedSave = peer is not null
             && localPath is not null && shared.DiskSaveRetryAt <= Environment.TickCount64;
         var diskEncoding = shared.Tab.DiskEncoding;
         bool diskCrLf = shared.Tab.SavedCrLf;
@@ -905,6 +944,12 @@ internal sealed partial class DawnScene
         if (shared.Draft is not null)
         {
             Say(Said("link.doc_draft"), error: true);
+            return true;
+        }
+        if (shared.Offline || shared.Tab.Editor.ReadOnly)
+        {
+            Say(shared.Offline ? Said("link.doc_offline", ("path", shared.Wire))
+                : $"{shared.Wire} is shared read-only here, so it cannot be saved. Ask for Edit rights, or use Link: Sync > resolve.", error: true);
             return true;
         }
         shared.SaveRequested = true;

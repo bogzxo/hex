@@ -28,7 +28,21 @@ internal enum HexLinkRights
     /// Manage the agents here that this device did not start: stop, restart, rename, close and delete them. It takes
     /// Steer (and View) with it. A device that only has Steer still manages the chats it started itself.
     /// </summary>
-    Manage = 16
+    Manage = 16,
+
+    /// <summary>
+    /// Open the TCP ports this machine shares with the device (shared ports, docs/hex-link-plan.md). A port is reachable
+    /// only when it is both shared to the device here and this right is ticked, off until the person ticks it. It takes View
+    /// with it, not Steer: a tunnel to a local server runs nothing on this machine, but it does reach whatever listens there.
+    /// </summary>
+    Ports = 32,
+
+    /// <summary>
+    /// Use this machine's chat models (AI Edit, the agents, Link Chat's @ai) when this machine serves AI (docs/hex-link-plan.md,
+    /// 5.7). Like Predict it takes nothing else, not even View: the device sees no files, it only sends the conversation it
+    /// wants answered. Off until the person ticks it, per device.
+    /// </summary>
+    Ai = 64
 }
 
 /// <summary>
