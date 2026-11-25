@@ -1,0 +1,858 @@
+== dawn-0 (discarded warmup)
+[Info] [Startup] main at 21 ms.
+[Info] [Startup] vulkan: loader configured at 26 ms.
+[Info] [Startup] engine made at 89 ms.
+[Info] [Startup] editor: camera at 89 ms.
+[Info] [Startup] editor: stage compositor at 105 ms.
+[Info] [Startup] editor: editor compositor at 105 ms.
+[Info] [Startup] editor: compositors and backdrop at 105 ms.
+[Info] [Startup] editor: strings at 109 ms.
+[Info] [Startup] editor: editor layout loaded at 109 ms.
+[Info] [Startup] editor: settings at 110 ms.
+[Info] [Startup] editor: parts up to the status bar at 110 ms.
+[Info] [Startup] editor: status bar, panel, find bar at 110 ms.
+[Info] [Startup] editor: terminal and agents at 192 ms.
+[Info] [Startup] editor: side tree, tabs at 193 ms.
+[Info] [Startup] editor: commands, debugger, tests, properties at 194 ms.
+[Info] [Startup] editor: views, keys, scale at 195 ms.
+[Info] [Startup] editor: extensions found, first document at 197 ms.
+[Info] [Startup] editor: workspace and chats at 198 ms.
+[Info] [Startup] vulkan: instance made at 204 ms.
+[Info] [Startup] vulkan: card picked at 205 ms.
+[Info] [Startup] editor: files and backups at 224 ms.
+[Info] [Startup] editor: extensions started, MCP at 228 ms.
+[Info] [Startup] editor made at 228 ms.
+[Info] [Startup] window being made at 228 ms.
+[Info] [Startup] device made ahead of the window at 305 ms.
+[Info] [Startup] window made at 317 ms.
+[Info] [Startup] device made at 341 ms.
+[Info] [Startup] window shown with the loading screen at 347 ms.
+[Info] [Startup] warm-up turn 0 drawn, unfinished at 552 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] a CodeEditor updated in 93.5 ms, 2525 KB
+[Info] [Startup] module of StackPanel and 3 more updated in 93.7 ms, 2527 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 1 KB
+[Info] [Startup] module of StackPanel and 3 more laid out in 0.2 ms, 13 KB, painted in 1.5 ms, 799 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 0 updated at 765 ms.
+[Info] [Startup] warm-up turn 1 drawn, unfinished at 877 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 5 more updated in 0.1 ms, 0 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 5 more laid out in 0.1 ms, 0 KB, painted in 1.0 ms, 1907 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 1 updated at 879 ms.
+[Info] [Startup] warm-up turn 2 drawn at 1045 ms.
+[Info] [Startup] scene set up at 1045 ms.
+[Info] [Startup] first frame of the scene shown at 1075 ms.
+== dawn-1
+[Info] [Startup] main at 13 ms.
+[Info] [Startup] vulkan: loader configured at 19 ms.
+[Info] [Startup] engine made at 32 ms.
+[Info] [Startup] editor: camera at 32 ms.
+[Info] [Startup] editor: stage compositor at 48 ms.
+[Info] [Startup] editor: editor compositor at 48 ms.
+[Info] [Startup] editor: compositors and backdrop at 48 ms.
+[Info] [Startup] editor: strings at 52 ms.
+[Info] [Startup] editor: editor layout loaded at 53 ms.
+[Info] [Startup] editor: settings at 54 ms.
+[Info] [Startup] editor: parts up to the status bar at 54 ms.
+[Info] [Startup] editor: status bar, panel, find bar at 54 ms.
+[Info] [Startup] vulkan: instance made at 160 ms.
+[Info] [Startup] vulkan: card picked at 162 ms.
+[Info] [Startup] editor: terminal and agents at 164 ms.
+[Info] [Startup] editor: side tree, tabs at 164 ms.
+[Info] [Startup] editor: commands, debugger, tests, properties at 165 ms.
+[Info] [Startup] editor: views, keys, scale at 166 ms.
+[Info] [Startup] editor: extensions found, first document at 168 ms.
+[Info] [Startup] editor: workspace and chats at 169 ms.
+[Info] [Startup] editor: files and backups at 191 ms.
+[Info] [Startup] editor: extensions started, MCP at 193 ms.
+[Info] [Startup] editor made at 193 ms.
+[Info] [Startup] window being made at 193 ms.
+[Info] [Startup] device made ahead of the window at 258 ms.
+[Info] [Startup] window made at 270 ms.
+[Info] [Startup] device made at 291 ms.
+[Info] [Startup] window shown with the loading screen at 298 ms.
+[Info] [Startup] warm-up turn 0 drawn, unfinished at 342 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] a CodeEditor updated in 80.8 ms, 2525 KB
+[Info] [Startup] module of StackPanel and 3 more updated in 81.0 ms, 2526 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more laid out in 0.2 ms, 9 KB, painted in 1.5 ms, 799 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 0 updated at 451 ms.
+[Info] [Startup] warm-up turn 1 drawn, unfinished at 451 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 5 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 5 more laid out in 0.1 ms, 0 KB, painted in 0.9 ms, 1907 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 1 updated at 453 ms.
+[Info] [Startup] warm-up turn 2 drawn at 455 ms.
+[Info] [Startup] scene set up at 455 ms.
+[Info] [Startup] first frame of the scene shown at 455 ms.
+== dawn-2
+[Info] [Startup] main at 13 ms.
+[Info] [Startup] vulkan: loader configured at 19 ms.
+[Info] [Startup] engine made at 31 ms.
+[Info] [Startup] editor: camera at 31 ms.
+[Info] [Startup] editor: stage compositor at 51 ms.
+[Info] [Startup] editor: editor compositor at 51 ms.
+[Info] [Startup] editor: compositors and backdrop at 51 ms.
+[Info] [Startup] editor: strings at 55 ms.
+[Info] [Startup] editor: editor layout loaded at 56 ms.
+[Info] [Startup] editor: settings at 57 ms.
+[Info] [Startup] editor: parts up to the status bar at 57 ms.
+[Info] [Startup] editor: status bar, panel, find bar at 57 ms.
+[Info] [Startup] vulkan: instance made at 150 ms.
+[Info] [Startup] vulkan: card picked at 152 ms.
+[Info] [Startup] editor: terminal and agents at 154 ms.
+[Info] [Startup] editor: side tree, tabs at 154 ms.
+[Info] [Startup] editor: commands, debugger, tests, properties at 156 ms.
+[Info] [Startup] editor: views, keys, scale at 156 ms.
+[Info] [Startup] editor: extensions found, first document at 158 ms.
+[Info] [Startup] editor: workspace and chats at 159 ms.
+[Info] [Startup] editor: files and backups at 181 ms.
+[Info] [Startup] editor: extensions started, MCP at 183 ms.
+[Info] [Startup] editor made at 183 ms.
+[Info] [Startup] window being made at 183 ms.
+[Info] [Startup] device made ahead of the window at 249 ms.
+[Info] [Startup] window made at 261 ms.
+[Info] [Startup] device made at 283 ms.
+[Info] [Startup] window shown with the loading screen at 291 ms.
+[Info] [Startup] warm-up turn 0 drawn, unfinished at 337 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] a CodeEditor updated in 85.5 ms, 2525 KB
+[Info] [Startup] module of StackPanel and 3 more updated in 85.6 ms, 2527 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more laid out in 0.3 ms, 9 KB, painted in 2.0 ms, 799 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 0 updated at 450 ms.
+[Info] [Startup] warm-up turn 1 drawn, unfinished at 450 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 5 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 5 more laid out in 0.1 ms, 0 KB, painted in 0.7 ms, 1907 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 1 updated at 451 ms.
+[Info] [Startup] warm-up turn 2 drawn at 453 ms.
+[Info] [Startup] scene set up at 453 ms.
+[Info] [Startup] first frame of the scene shown at 454 ms.
+== dawn-3
+[Info] [Startup] main at 14 ms.
+[Info] [Startup] vulkan: loader configured at 22 ms.
+[Info] [Startup] engine made at 35 ms.
+[Info] [Startup] editor: camera at 36 ms.
+[Info] [Startup] editor: stage compositor at 56 ms.
+[Info] [Startup] editor: editor compositor at 56 ms.
+[Info] [Startup] editor: compositors and backdrop at 56 ms.
+[Info] [Startup] editor: strings at 62 ms.
+[Info] [Startup] editor: editor layout loaded at 63 ms.
+[Info] [Startup] editor: settings at 64 ms.
+[Info] [Startup] editor: parts up to the status bar at 64 ms.
+[Info] [Startup] editor: status bar, panel, find bar at 64 ms.
+[Info] [Startup] editor: terminal and agents at 156 ms.
+[Info] [Startup] editor: side tree, tabs at 156 ms.
+[Info] [Startup] editor: commands, debugger, tests, properties at 158 ms.
+[Info] [Startup] editor: views, keys, scale at 159 ms.
+[Info] [Startup] editor: extensions found, first document at 160 ms.
+[Info] [Startup] editor: workspace and chats at 161 ms.
+[Info] [Startup] vulkan: instance made at 164 ms.
+[Info] [Startup] vulkan: card picked at 166 ms.
+[Info] [Startup] editor: files and backups at 183 ms.
+[Info] [Startup] editor: extensions started, MCP at 186 ms.
+[Info] [Startup] editor made at 186 ms.
+[Info] [Startup] window being made at 186 ms.
+[Info] [Startup] device made ahead of the window at 270 ms.
+[Info] [Startup] window made at 280 ms.
+[Info] [Startup] device made at 300 ms.
+[Info] [Startup] window shown with the loading screen at 306 ms.
+[Info] [Startup] warm-up turn 0 drawn, unfinished at 346 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] a CodeEditor updated in 76.2 ms, 2525 KB
+[Info] [Startup] module of StackPanel and 3 more updated in 76.3 ms, 2526 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more laid out in 0.2 ms, 9 KB, painted in 1.5 ms, 799 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 0 updated at 448 ms.
+[Info] [Startup] warm-up turn 1 drawn, unfinished at 448 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 5 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 5 more laid out in 0.0 ms, 0 KB, painted in 0.7 ms, 1907 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 1 updated at 449 ms.
+[Info] [Startup] warm-up turn 2 drawn at 451 ms.
+[Info] [Startup] scene set up at 451 ms.
+[Info] [Startup] first frame of the scene shown at 451 ms.
+== dawn-4
+[Info] [Startup] main at 12 ms.
+[Info] [Startup] vulkan: loader configured at 18 ms.
+[Info] [Startup] engine made at 30 ms.
+[Info] [Startup] editor: camera at 31 ms.
+[Info] [Startup] editor: stage compositor at 48 ms.
+[Info] [Startup] editor: editor compositor at 48 ms.
+[Info] [Startup] editor: compositors and backdrop at 48 ms.
+[Info] [Startup] editor: strings at 53 ms.
+[Info] [Startup] editor: editor layout loaded at 53 ms.
+[Info] [Startup] editor: settings at 54 ms.
+[Info] [Startup] editor: parts up to the status bar at 55 ms.
+[Info] [Startup] editor: status bar, panel, find bar at 55 ms.
+[Info] [Startup] vulkan: instance made at 148 ms.
+[Info] [Startup] vulkan: card picked at 150 ms.
+[Info] [Startup] editor: terminal and agents at 157 ms.
+[Info] [Startup] editor: side tree, tabs at 157 ms.
+[Info] [Startup] editor: commands, debugger, tests, properties at 159 ms.
+[Info] [Startup] editor: views, keys, scale at 160 ms.
+[Info] [Startup] editor: extensions found, first document at 161 ms.
+[Info] [Startup] editor: workspace and chats at 163 ms.
+[Info] [Startup] editor: files and backups at 185 ms.
+[Info] [Startup] editor: extensions started, MCP at 188 ms.
+[Info] [Startup] editor made at 188 ms.
+[Info] [Startup] window being made at 188 ms.
+[Info] [Startup] device made ahead of the window at 248 ms.
+[Info] [Startup] window made at 261 ms.
+[Info] [Startup] device made at 282 ms.
+[Info] [Startup] window shown with the loading screen at 289 ms.
+[Info] [Startup] warm-up turn 0 drawn, unfinished at 329 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] a CodeEditor updated in 87.1 ms, 2525 KB
+[Info] [Startup] module of StackPanel and 3 more updated in 87.3 ms, 2527 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more laid out in 0.2 ms, 9 KB, painted in 1.5 ms, 799 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 0 updated at 442 ms.
+[Info] [Startup] warm-up turn 1 drawn, unfinished at 443 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 5 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 5 more laid out in 0.1 ms, 0 KB, painted in 0.8 ms, 1907 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 1 updated at 445 ms.
+[Info] [Startup] warm-up turn 2 drawn at 446 ms.
+[Info] [Startup] scene set up at 446 ms.
+[Info] [Startup] first frame of the scene shown at 447 ms.
+== dawn-5
+[Info] [Startup] main at 14 ms.
+[Info] [Startup] vulkan: loader configured at 20 ms.
+[Info] [Startup] engine made at 34 ms.
+[Info] [Startup] editor: camera at 34 ms.
+[Info] [Startup] editor: stage compositor at 52 ms.
+[Info] [Startup] editor: editor compositor at 52 ms.
+[Info] [Startup] editor: compositors and backdrop at 52 ms.
+[Info] [Startup] editor: strings at 57 ms.
+[Info] [Startup] editor: editor layout loaded at 58 ms.
+[Info] [Startup] editor: settings at 59 ms.
+[Info] [Startup] editor: parts up to the status bar at 60 ms.
+[Info] [Startup] editor: status bar, panel, find bar at 60 ms.
+[Info] [Startup] vulkan: instance made at 163 ms.
+[Info] [Startup] vulkan: card picked at 164 ms.
+[Info] [Startup] editor: terminal and agents at 173 ms.
+[Info] [Startup] editor: side tree, tabs at 173 ms.
+[Info] [Startup] editor: commands, debugger, tests, properties at 175 ms.
+[Info] [Startup] editor: views, keys, scale at 175 ms.
+[Info] [Startup] editor: extensions found, first document at 177 ms.
+[Info] [Startup] editor: workspace and chats at 178 ms.
+[Info] [Startup] editor: files and backups at 200 ms.
+[Info] [Startup] editor: extensions started, MCP at 203 ms.
+[Info] [Startup] editor made at 203 ms.
+[Info] [Startup] window being made at 203 ms.
+[Info] [Startup] device made ahead of the window at 265 ms.
+[Info] [Startup] window made at 278 ms.
+[Info] [Startup] device made at 298 ms.
+[Info] [Startup] window shown with the loading screen at 305 ms.
+[Info] [Startup] warm-up turn 0 drawn, unfinished at 343 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] a CodeEditor updated in 86.6 ms, 2525 KB
+[Info] [Startup] module of StackPanel and 3 more updated in 86.8 ms, 2526 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more laid out in 0.2 ms, 9 KB, painted in 1.6 ms, 799 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 0 updated at 455 ms.
+[Info] [Startup] warm-up turn 1 drawn, unfinished at 455 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 5 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 5 more laid out in 0.0 ms, 0 KB, painted in 0.7 ms, 1907 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 1 updated at 457 ms.
+[Info] [Startup] warm-up turn 2 drawn at 458 ms.
+[Info] [Startup] scene set up at 458 ms.
+[Info] [Startup] first frame of the scene shown at 459 ms.
+== dawn-6
+[Info] [Startup] main at 12 ms.
+[Info] [Startup] vulkan: loader configured at 18 ms.
+[Info] [Startup] engine made at 30 ms.
+[Info] [Startup] editor: camera at 31 ms.
+[Info] [Startup] editor: stage compositor at 49 ms.
+[Info] [Startup] editor: editor compositor at 49 ms.
+[Info] [Startup] editor: compositors and backdrop at 49 ms.
+[Info] [Startup] editor: strings at 53 ms.
+[Info] [Startup] editor: editor layout loaded at 53 ms.
+[Info] [Startup] editor: settings at 54 ms.
+[Info] [Startup] editor: parts up to the status bar at 55 ms.
+[Info] [Startup] editor: status bar, panel, find bar at 55 ms.
+[Info] [Startup] editor: terminal and agents at 140 ms.
+[Info] [Startup] editor: side tree, tabs at 141 ms.
+[Info] [Startup] editor: commands, debugger, tests, properties at 142 ms.
+[Info] [Startup] editor: views, keys, scale at 143 ms.
+[Info] [Startup] editor: extensions found, first document at 144 ms.
+[Info] [Startup] vulkan: instance made at 146 ms.
+[Info] [Startup] editor: workspace and chats at 146 ms.
+[Info] [Startup] vulkan: card picked at 147 ms.
+[Info] [Startup] editor: files and backups at 169 ms.
+[Info] [Startup] editor: extensions started, MCP at 173 ms.
+[Info] [Startup] editor made at 173 ms.
+[Info] [Startup] window being made at 173 ms.
+[Info] [Startup] device made ahead of the window at 245 ms.
+[Info] [Startup] window made at 259 ms.
+[Info] [Startup] device made at 280 ms.
+[Info] [Startup] window shown with the loading screen at 287 ms.
+[Info] [Startup] warm-up turn 0 drawn, unfinished at 324 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] a CodeEditor updated in 79.5 ms, 2525 KB
+[Info] [Startup] module of StackPanel and 3 more updated in 79.6 ms, 2526 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more laid out in 0.2 ms, 9 KB, painted in 1.7 ms, 799 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 0 updated at 430 ms.
+[Info] [Startup] warm-up turn 1 drawn, unfinished at 430 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 5 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 5 more laid out in 0.1 ms, 0 KB, painted in 0.8 ms, 1907 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 1 updated at 432 ms.
+[Info] [Startup] warm-up turn 2 drawn at 433 ms.
+[Info] [Startup] scene set up at 433 ms.
+[Info] [Startup] first frame of the scene shown at 434 ms.
+== dawn-7
+[Info] [Startup] main at 14 ms.
+[Info] [Startup] vulkan: loader configured at 21 ms.
+[Info] [Startup] engine made at 33 ms.
+[Info] [Startup] editor: camera at 34 ms.
+[Info] [Startup] editor: stage compositor at 53 ms.
+[Info] [Startup] editor: editor compositor at 53 ms.
+[Info] [Startup] editor: compositors and backdrop at 53 ms.
+[Info] [Startup] editor: strings at 58 ms.
+[Info] [Startup] editor: editor layout loaded at 59 ms.
+[Info] [Startup] editor: settings at 60 ms.
+[Info] [Startup] editor: parts up to the status bar at 60 ms.
+[Info] [Startup] editor: status bar, panel, find bar at 60 ms.
+[Info] [Startup] editor: terminal and agents at 155 ms.
+[Info] [Startup] editor: side tree, tabs at 156 ms.
+[Info] [Startup] editor: commands, debugger, tests, properties at 157 ms.
+[Info] [Startup] editor: views, keys, scale at 158 ms.
+[Info] [Startup] editor: extensions found, first document at 159 ms.
+[Info] [Startup] editor: workspace and chats at 160 ms.
+[Info] [Startup] vulkan: instance made at 163 ms.
+[Info] [Startup] vulkan: card picked at 164 ms.
+[Info] [Startup] editor: files and backups at 182 ms.
+[Info] [Startup] editor: extensions started, MCP at 184 ms.
+[Info] [Startup] editor made at 185 ms.
+[Info] [Startup] window being made at 185 ms.
+[Info] [Startup] device made ahead of the window at 261 ms.
+[Info] [Startup] window made at 273 ms.
+[Info] [Startup] device made at 293 ms.
+[Info] [Startup] window shown with the loading screen at 300 ms.
+[Info] [Startup] warm-up turn 0 drawn, unfinished at 338 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] a CodeEditor updated in 80.1 ms, 2525 KB
+[Info] [Startup] module of StackPanel and 3 more updated in 80.2 ms, 2526 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more laid out in 0.2 ms, 9 KB, painted in 1.4 ms, 799 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 0 updated at 445 ms.
+[Info] [Startup] warm-up turn 1 drawn, unfinished at 445 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 5 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 5 more laid out in 0.0 ms, 0 KB, painted in 0.7 ms, 1907 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 1 updated at 446 ms.
+[Info] [Startup] warm-up turn 2 drawn at 448 ms.
+[Info] [Startup] scene set up at 448 ms.
+[Info] [Startup] first frame of the scene shown at 449 ms.
+== dawn-8
+[Info] [Startup] main at 13 ms.
+[Info] [Startup] vulkan: loader configured at 19 ms.
+[Info] [Startup] engine made at 31 ms.
+[Info] [Startup] editor: camera at 32 ms.
+[Info] [Startup] editor: stage compositor at 49 ms.
+[Info] [Startup] editor: editor compositor at 49 ms.
+[Info] [Startup] editor: compositors and backdrop at 49 ms.
+[Info] [Startup] editor: strings at 53 ms.
+[Info] [Startup] editor: editor layout loaded at 54 ms.
+[Info] [Startup] editor: settings at 55 ms.
+[Info] [Startup] editor: parts up to the status bar at 55 ms.
+[Info] [Startup] editor: status bar, panel, find bar at 55 ms.
+[Info] [Startup] vulkan: instance made at 151 ms.
+[Info] [Startup] vulkan: card picked at 154 ms.
+[Info] [Startup] editor: terminal and agents at 159 ms.
+[Info] [Startup] editor: side tree, tabs at 159 ms.
+[Info] [Startup] editor: commands, debugger, tests, properties at 160 ms.
+[Info] [Startup] editor: views, keys, scale at 161 ms.
+[Info] [Startup] editor: extensions found, first document at 163 ms.
+[Info] [Startup] editor: workspace and chats at 164 ms.
+[Info] [Startup] editor: files and backups at 191 ms.
+[Info] [Startup] editor: extensions started, MCP at 195 ms.
+[Info] [Startup] editor made at 195 ms.
+[Info] [Startup] window being made at 195 ms.
+[Info] [Startup] device made ahead of the window at 253 ms.
+[Info] [Startup] window made at 266 ms.
+[Info] [Startup] device made at 290 ms.
+[Info] [Startup] window shown with the loading screen at 303 ms.
+[Info] [Startup] warm-up turn 0 drawn, unfinished at 348 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] a CodeEditor updated in 93.4 ms, 2525 KB
+[Info] [Startup] module of StackPanel and 3 more updated in 93.6 ms, 2526 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more laid out in 0.2 ms, 9 KB, painted in 1.6 ms, 799 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 0 updated at 473 ms.
+[Info] [Startup] warm-up turn 1 drawn, unfinished at 473 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 5 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 5 more laid out in 0.0 ms, 0 KB, painted in 0.9 ms, 1907 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 1 updated at 475 ms.
+[Info] [Startup] warm-up turn 2 drawn at 477 ms.
+[Info] [Startup] scene set up at 477 ms.
+[Info] [Startup] first frame of the scene shown at 478 ms.
+== dawn-9
+[Info] [Startup] main at 15 ms.
+[Info] [Startup] vulkan: loader configured at 21 ms.
+[Info] [Startup] engine made at 35 ms.
+[Info] [Startup] editor: camera at 35 ms.
+[Info] [Startup] editor: stage compositor at 51 ms.
+[Info] [Startup] editor: editor compositor at 51 ms.
+[Info] [Startup] editor: compositors and backdrop at 51 ms.
+[Info] [Startup] editor: strings at 56 ms.
+[Info] [Startup] editor: editor layout loaded at 57 ms.
+[Info] [Startup] editor: settings at 58 ms.
+[Info] [Startup] editor: parts up to the status bar at 59 ms.
+[Info] [Startup] editor: status bar, panel, find bar at 59 ms.
+[Info] [Startup] editor: terminal and agents at 159 ms.
+[Info] [Startup] editor: side tree, tabs at 159 ms.
+[Info] [Startup] editor: commands, debugger, tests, properties at 160 ms.
+[Info] [Startup] vulkan: instance made at 161 ms.
+[Info] [Startup] editor: views, keys, scale at 161 ms.
+[Info] [Startup] editor: extensions found, first document at 163 ms.
+[Info] [Startup] vulkan: card picked at 163 ms.
+[Info] [Startup] editor: workspace and chats at 164 ms.
+[Info] [Startup] editor: files and backups at 187 ms.
+[Info] [Startup] editor: extensions started, MCP at 190 ms.
+[Info] [Startup] editor made at 190 ms.
+[Info] [Startup] window being made at 190 ms.
+[Info] [Startup] device made ahead of the window at 262 ms.
+[Info] [Startup] window made at 273 ms.
+[Info] [Startup] device made at 296 ms.
+[Info] [Startup] window shown with the loading screen at 302 ms.
+[Info] [Startup] warm-up turn 0 drawn, unfinished at 342 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] a CodeEditor updated in 94.0 ms, 2525 KB
+[Info] [Startup] module of StackPanel and 3 more updated in 94.2 ms, 2526 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more laid out in 0.2 ms, 9 KB, painted in 1.5 ms, 799 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 0 updated at 462 ms.
+[Info] [Startup] warm-up turn 1 drawn, unfinished at 462 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 5 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 5 more laid out in 0.0 ms, 0 KB, painted in 0.6 ms, 1907 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 1 updated at 463 ms.
+[Info] [Startup] warm-up turn 2 drawn at 465 ms.
+[Info] [Startup] scene set up at 465 ms.
+[Info] [Startup] first frame of the scene shown at 466 ms.
+== dawn-10
+[Info] [Startup] main at 12 ms.
+[Info] [Startup] vulkan: loader configured at 17 ms.
+[Info] [Startup] engine made at 30 ms.
+[Info] [Startup] editor: camera at 30 ms.
+[Info] [Startup] editor: stage compositor at 47 ms.
+[Info] [Startup] editor: editor compositor at 47 ms.
+[Info] [Startup] editor: compositors and backdrop at 47 ms.
+[Info] [Startup] editor: strings at 51 ms.
+[Info] [Startup] editor: editor layout loaded at 52 ms.
+[Info] [Startup] editor: settings at 52 ms.
+[Info] [Startup] editor: parts up to the status bar at 53 ms.
+[Info] [Startup] editor: status bar, panel, find bar at 53 ms.
+[Info] [Startup] vulkan: instance made at 159 ms.
+[Info] [Startup] editor: terminal and agents at 161 ms.
+[Info] [Startup] vulkan: card picked at 161 ms.
+[Info] [Startup] editor: side tree, tabs at 161 ms.
+[Info] [Startup] editor: commands, debugger, tests, properties at 162 ms.
+[Info] [Startup] editor: views, keys, scale at 163 ms.
+[Info] [Startup] editor: extensions found, first document at 164 ms.
+[Info] [Startup] editor: workspace and chats at 166 ms.
+[Info] [Startup] editor: files and backups at 188 ms.
+[Info] [Startup] editor: extensions started, MCP at 190 ms.
+[Info] [Startup] editor made at 191 ms.
+[Info] [Startup] window being made at 191 ms.
+[Info] [Startup] device made ahead of the window at 261 ms.
+[Info] [Startup] window made at 272 ms.
+[Info] [Startup] device made at 294 ms.
+[Info] [Startup] window shown with the loading screen at 301 ms.
+[Info] [Startup] warm-up turn 0 drawn, unfinished at 342 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] a CodeEditor updated in 75.1 ms, 2525 KB
+[Info] [Startup] module of StackPanel and 3 more updated in 75.2 ms, 2526 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more laid out in 0.2 ms, 9 KB, painted in 2.0 ms, 799 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 0 updated at 443 ms.
+[Info] [Startup] warm-up turn 1 drawn, unfinished at 444 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 5 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 5 more laid out in 0.0 ms, 0 KB, painted in 0.7 ms, 1907 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 1 updated at 445 ms.
+[Info] [Startup] warm-up turn 2 drawn at 446 ms.
+[Info] [Startup] scene set up at 446 ms.
+[Info] [Startup] first frame of the scene shown at 447 ms.
+== dusk-0 (discarded warmup)
+[Info] [Startup] main at 16 ms.
+[Info] [Startup] vulkan: loader configured at 24 ms.
+[Info] [Startup] vulkan: instance made at 149 ms.
+[Info] [Startup] vulkan: card picked at 150 ms.
+[Info] [Startup] window being made at 174 ms.
+[Info] [Startup] device made ahead of the window at 245 ms.
+[Info] [Startup] window made at 254 ms.
+[Info] [Startup] device made at 273 ms.
+[Info] [Startup] window shown with the loading screen at 279 ms.
+[Info] [Startup] warm-up turn 0 drawn, unfinished at 297 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 1 more updated in 0.0 ms, 1 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 1 more laid out in 0.0 ms, 0 KB, painted in 0.7 ms, 659 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 0 updated at 378 ms.
+[Info] [Startup] warm-up turn 1 drawn, unfinished at 379 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more laid out in 0.0 ms, 0 KB, painted in 0.2 ms, 5 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 1 updated at 379 ms.
+[Info] [Startup] warm-up turn 2 drawn at 381 ms.
+[Info] [Startup] scene set up at 381 ms.
+[Info] [Startup] first frame of the scene shown at 381 ms.
+== dusk-1
+[Info] [Startup] main at 15 ms.
+[Info] [Startup] vulkan: loader configured at 23 ms.
+[Info] [Startup] vulkan: instance made at 154 ms.
+[Info] [Startup] vulkan: card picked at 155 ms.
+[Info] [Startup] window being made at 172 ms.
+[Info] [Startup] device made ahead of the window at 245 ms.
+[Info] [Startup] window made at 254 ms.
+[Info] [Startup] device made at 274 ms.
+[Info] [Startup] window shown with the loading screen at 279 ms.
+[Info] [Startup] warm-up turn 0 drawn, unfinished at 295 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 1 more updated in 0.0 ms, 1 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 1 more laid out in 0.0 ms, 0 KB, painted in 0.7 ms, 659 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 0 updated at 320 ms.
+[Info] [Startup] warm-up turn 1 drawn, unfinished at 321 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more laid out in 0.0 ms, 0 KB, painted in 0.2 ms, 5 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 1 updated at 321 ms.
+[Info] [Startup] warm-up turn 2 drawn at 322 ms.
+[Info] [Startup] scene set up at 322 ms.
+[Info] [Startup] first frame of the scene shown at 323 ms.
+== dusk-2
+[Info] [Startup] main at 13 ms.
+[Info] [Startup] vulkan: loader configured at 20 ms.
+[Info] [Startup] vulkan: instance made at 139 ms.
+[Info] [Startup] vulkan: card picked at 140 ms.
+[Info] [Startup] window being made at 156 ms.
+[Info] [Startup] device made ahead of the window at 233 ms.
+[Info] [Startup] window made at 242 ms.
+[Info] [Startup] device made at 262 ms.
+[Info] [Startup] window shown with the loading screen at 268 ms.
+[Info] [Startup] warm-up turn 0 drawn, unfinished at 285 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 1 more updated in 0.1 ms, 1 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 1 more laid out in 0.0 ms, 0 KB, painted in 0.7 ms, 659 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 0 updated at 309 ms.
+[Info] [Startup] warm-up turn 1 drawn, unfinished at 309 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more laid out in 0.0 ms, 0 KB, painted in 0.2 ms, 5 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 1 updated at 309 ms.
+[Info] [Startup] warm-up turn 2 drawn at 310 ms.
+[Info] [Startup] scene set up at 310 ms.
+[Info] [Startup] first frame of the scene shown at 311 ms.
+== dusk-3
+[Info] [Startup] main at 14 ms.
+[Info] [Startup] vulkan: loader configured at 22 ms.
+[Info] [Startup] vulkan: instance made at 150 ms.
+[Info] [Startup] vulkan: card picked at 151 ms.
+[Info] [Startup] window being made at 171 ms.
+[Info] [Startup] device made ahead of the window at 241 ms.
+[Info] [Startup] window made at 250 ms.
+[Info] [Startup] device made at 271 ms.
+[Info] [Startup] window shown with the loading screen at 276 ms.
+[Info] [Startup] warm-up turn 0 drawn, unfinished at 293 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 1 more updated in 0.1 ms, 1 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 1 more laid out in 0.0 ms, 0 KB, painted in 0.7 ms, 659 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 0 updated at 316 ms.
+[Info] [Startup] warm-up turn 1 drawn, unfinished at 317 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more laid out in 0.0 ms, 0 KB, painted in 0.3 ms, 5 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 1 updated at 317 ms.
+[Info] [Startup] warm-up turn 2 drawn at 318 ms.
+[Info] [Startup] scene set up at 318 ms.
+[Info] [Startup] first frame of the scene shown at 319 ms.
+== dusk-4
+[Info] [Startup] main at 12 ms.
+[Info] [Startup] vulkan: loader configured at 20 ms.
+[Info] [Startup] vulkan: instance made at 143 ms.
+[Info] [Startup] vulkan: card picked at 145 ms.
+[Info] [Startup] window being made at 157 ms.
+[Info] [Startup] device made ahead of the window at 229 ms.
+[Info] [Startup] window made at 238 ms.
+[Info] [Startup] device made at 257 ms.
+[Info] [Startup] window shown with the loading screen at 263 ms.
+[Info] [Startup] warm-up turn 0 drawn, unfinished at 280 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 1 more updated in 0.0 ms, 1 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 1 more laid out in 0.0 ms, 0 KB, painted in 0.8 ms, 659 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 0 updated at 317 ms.
+[Info] [Startup] warm-up turn 1 drawn, unfinished at 318 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more laid out in 0.0 ms, 0 KB, painted in 0.3 ms, 5 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 1 updated at 318 ms.
+[Info] [Startup] warm-up turn 2 drawn at 320 ms.
+[Info] [Startup] scene set up at 320 ms.
+[Info] [Startup] first frame of the scene shown at 320 ms.
+== dusk-5
+[Info] [Startup] main at 14 ms.
+[Info] [Startup] vulkan: loader configured at 21 ms.
+[Info] [Startup] vulkan: instance made at 150 ms.
+[Info] [Startup] vulkan: card picked at 151 ms.
+[Info] [Startup] window being made at 166 ms.
+[Info] [Startup] device made ahead of the window at 243 ms.
+[Info] [Startup] window made at 252 ms.
+[Info] [Startup] device made at 272 ms.
+[Info] [Startup] window shown with the loading screen at 277 ms.
+[Info] [Startup] warm-up turn 0 drawn, unfinished at 293 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 1 more updated in 0.0 ms, 1 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 1 more laid out in 0.0 ms, 0 KB, painted in 0.7 ms, 659 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 0 updated at 317 ms.
+[Info] [Startup] warm-up turn 1 drawn, unfinished at 317 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more laid out in 0.0 ms, 0 KB, painted in 0.2 ms, 5 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 1 updated at 317 ms.
+[Info] [Startup] warm-up turn 2 drawn at 319 ms.
+[Info] [Startup] scene set up at 319 ms.
+[Info] [Startup] first frame of the scene shown at 320 ms.
+== dusk-6
+[Info] [Startup] main at 13 ms.
+[Info] [Startup] vulkan: loader configured at 19 ms.
+[Info] [Startup] vulkan: instance made at 136 ms.
+[Info] [Startup] vulkan: card picked at 137 ms.
+[Info] [Startup] window being made at 155 ms.
+[Info] [Startup] device made ahead of the window at 221 ms.
+[Info] [Startup] window made at 230 ms.
+[Info] [Startup] device made at 249 ms.
+[Info] [Startup] window shown with the loading screen at 255 ms.
+[Info] [Startup] warm-up turn 0 drawn, unfinished at 272 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 1 more updated in 0.0 ms, 1 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 1 more laid out in 0.0 ms, 0 KB, painted in 0.8 ms, 659 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 0 updated at 295 ms.
+[Info] [Startup] warm-up turn 1 drawn, unfinished at 295 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more laid out in 0.0 ms, 0 KB, painted in 0.3 ms, 5 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 1 updated at 295 ms.
+[Info] [Startup] warm-up turn 2 drawn at 297 ms.
+[Info] [Startup] scene set up at 297 ms.
+[Info] [Startup] first frame of the scene shown at 298 ms.
+== dusk-7
+[Info] [Startup] main at 13 ms.
+[Info] [Startup] vulkan: loader configured at 21 ms.
+[Info] [Startup] vulkan: instance made at 147 ms.
+[Info] [Startup] vulkan: card picked at 149 ms.
+[Info] [Startup] window being made at 166 ms.
+[Info] [Startup] device made ahead of the window at 242 ms.
+[Info] [Startup] window made at 251 ms.
+[Info] [Startup] device made at 271 ms.
+[Info] [Startup] window shown with the loading screen at 276 ms.
+[Info] [Startup] warm-up turn 0 drawn, unfinished at 293 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 1 more updated in 0.0 ms, 1 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 1 more laid out in 0.0 ms, 0 KB, painted in 0.6 ms, 659 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 0 updated at 318 ms.
+[Info] [Startup] warm-up turn 1 drawn, unfinished at 318 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more laid out in 0.0 ms, 0 KB, painted in 0.2 ms, 5 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 1 updated at 318 ms.
+[Info] [Startup] warm-up turn 2 drawn at 320 ms.
+[Info] [Startup] scene set up at 320 ms.
+[Info] [Startup] first frame of the scene shown at 321 ms.
+== dusk-8
+[Info] [Startup] main at 13 ms.
+[Info] [Startup] vulkan: loader configured at 20 ms.
+[Info] [Startup] vulkan: instance made at 137 ms.
+[Info] [Startup] vulkan: card picked at 139 ms.
+[Info] [Startup] window being made at 158 ms.
+[Info] [Startup] device made ahead of the window at 224 ms.
+[Info] [Startup] window made at 234 ms.
+[Info] [Startup] device made at 253 ms.
+[Info] [Startup] window shown with the loading screen at 260 ms.
+[Info] [Startup] warm-up turn 0 drawn, unfinished at 277 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 1 more updated in 0.0 ms, 1 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 1 more laid out in 0.0 ms, 0 KB, painted in 0.7 ms, 659 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 0 updated at 301 ms.
+[Info] [Startup] warm-up turn 1 drawn, unfinished at 301 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more laid out in 0.0 ms, 0 KB, painted in 0.2 ms, 5 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 1 updated at 301 ms.
+[Info] [Startup] warm-up turn 2 drawn at 303 ms.
+[Info] [Startup] scene set up at 303 ms.
+[Info] [Startup] first frame of the scene shown at 303 ms.
+== dusk-9
+[Info] [Startup] main at 14 ms.
+[Info] [Startup] vulkan: loader configured at 21 ms.
+[Info] [Startup] vulkan: instance made at 147 ms.
+[Info] [Startup] vulkan: card picked at 148 ms.
+[Info] [Startup] window being made at 168 ms.
+[Info] [Startup] device made ahead of the window at 248 ms.
+[Info] [Startup] window made at 258 ms.
+[Info] [Startup] device made at 277 ms.
+[Info] [Startup] window shown with the loading screen at 283 ms.
+[Info] [Startup] warm-up turn 0 drawn, unfinished at 300 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 1 more updated in 0.0 ms, 1 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 1 more laid out in 0.0 ms, 0 KB, painted in 0.7 ms, 659 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 0 updated at 323 ms.
+[Info] [Startup] warm-up turn 1 drawn, unfinished at 323 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more laid out in 0.0 ms, 0 KB, painted in 0.2 ms, 5 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 1 updated at 324 ms.
+[Info] [Startup] warm-up turn 2 drawn at 325 ms.
+[Info] [Startup] scene set up at 325 ms.
+[Info] [Startup] first frame of the scene shown at 326 ms.
+== dusk-10
+[Info] [Startup] main at 13 ms.
+[Info] [Startup] vulkan: loader configured at 21 ms.
+[Info] [Startup] vulkan: instance made at 140 ms.
+[Info] [Startup] vulkan: card picked at 141 ms.
+[Info] [Startup] window being made at 160 ms.
+[Info] [Startup] device made ahead of the window at 238 ms.
+[Info] [Startup] window made at 247 ms.
+[Info] [Startup] device made at 266 ms.
+[Info] [Startup] window shown with the loading screen at 272 ms.
+[Info] [Startup] warm-up turn 0 drawn, unfinished at 289 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 1 more updated in 0.0 ms, 1 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 1 more laid out in 0.0 ms, 0 KB, painted in 0.6 ms, 659 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 0 updated at 314 ms.
+[Info] [Startup] warm-up turn 1 drawn, unfinished at 314 ms.
+[Info] [Startup] module of GlowField and 0 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of Lights and 1 more updated in 0.0 ms, 0 KB
+[Info] [Startup] module of GlowField and 0 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] module of StackPanel and 3 more laid out in 0.0 ms, 0 KB, painted in 0.2 ms, 5 KB
+[Info] [Startup] module of Lights and 1 more laid out in 0.0 ms, 0 KB, painted in 0.0 ms, 0 KB
+[Info] [Startup] warm-up turn 1 updated at 314 ms.
+[Info] [Startup] warm-up turn 2 drawn at 315 ms.
+[Info] [Startup] scene set up at 315 ms.
+[Info] [Startup] first frame of the scene shown at 317 ms.
