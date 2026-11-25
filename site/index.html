@@ -78,7 +78,7 @@
           <li class="noon"><a href="#agents"><b>Agentic</b> your agents</a></li>
         </ul>
         <div class="actions">
-          <a class="button" href="#get-it"><!-- release:button -->Download Hex 3.2.0 Amphetamine<!-- /release:button --></a>
+          <a class="button" href="#get-it"><!-- release:button -->Download Hex 3.5.0 Dexamphetamine<!-- /release:button --></a>
           <a class="button quiet" href="#next-to-the-other">Show me the receipts</a>
         </div>
         <p class="note wip"><a href="https://github.com/bogzxo/hex">Source on GitHub</a>. Hex is a work in progress, more features are always on the way, and you can <button type="button" class="link" commandfor="request" command="show-modal">request one</button> :)</p>
@@ -93,10 +93,10 @@
         </figure>
         <p class="note">Dawn, the editor. Semantic colours, hints, reference counts and blame, live from csharp-ls and git, not a mockup. It follows your system between Solstice and Solstice Day.</p>
 
-        <ul class="receipts" aria-label="Measured on the 3.3.0 build">
-          <li><b>56 ms</b><span>woken from sleep</span></li>
-          <li><b>381 ms</b><span>editor window, cold start</span></li>
-          <li><b>50.6 MiB</b><span>zipped, all three faces</span></li>
+        <ul class="receipts" aria-label="Measured on the 3.5.0 build">
+          <li><b>47 ms</b><span>woken from sleep</span></li>
+          <li><b>303 ms</b><span>editor window, cold start</span></li>
+          <li><b>60.0 MiB</b><span>zipped, all three faces</span></li>
           <li><b>0</b><span>browsers shipped inside</span></li>
         </ul>
         </div>
@@ -320,14 +320,14 @@
         <div class="pair">
           <div>
             <p class="intro">Hex is C# compiled ahead of time to native code and drawn through Vulkan by the <a href="https://github.com/bogzxo/horizon">Horizon engine</a>, a game engine, with no browser underneath.</p>
-            <p class="note">Measured on <strong>Hex 3.3.0 Amphetamine</strong>, the release coming next, on one ordinary Windows machine. The pictures on this page are of it too. How it was all taken is folded under the numbers.</p>
+            <p class="note">Measured on <strong>Hex 3.5.0 Dexamphetamine</strong> on one ordinary Windows machine. The pictures on this page are of it too. How it was all taken is folded under the numbers.</p>
           </div>
           <div>
-            <div class="bars rise" role="img" aria-label="Process start to first rendered scene. Dawn, the editor, 450 milliseconds, ranging 431 to 487. Dusk, the terminal, 405 milliseconds, ranging 394 to 479.">
-              <div><span>Dawn<small>editor</small></span><i style="--ms: 450"></i><span><b>450 ms</b> <small>431–487</small></span></div>
-              <div class="dusk"><span>Dusk<small>terminal</small></span><i style="--ms: 405"></i><span><b>405 ms</b> <small>394–479</small></span></div>
+            <div class="bars rise" role="img" aria-label="Process start to first rendered scene. Dawn, the editor, 345 milliseconds, ranging 339 to 363. Dusk, the terminal, 323 milliseconds, ranging 308 to 347.">
+              <div><span>Dawn<small>editor</small></span><i style="--ms: 345"></i><span><b>345 ms</b> <small>339–363</small></span></div>
+              <div class="dusk"><span>Dusk<small>terminal</small></span><i style="--ms: 323"></i><span><b>323 ms</b> <small>308–347</small></span></div>
             </div>
-            <p class="note">Process start to the first rendered scene, medians, the editor opening an empty folder and the terminal one shell. Opening Hex's own source with a C# file up instead, the editor's first frame comes at 660 ms (571–693), its window up at 381.</p>
+            <p class="note">Process start to the first rendered scene, medians, the editor opening an empty folder and the terminal one shell. Opening Hex's own source with a C# file up instead, the editor's first frame comes at 465 ms (428–485), its window up at 303.</p>
           </div>
         </div>
 
@@ -338,16 +338,16 @@
             <p class="note">The window context and a minimally loaded engine are kept while the threads stay frozen, waiting for an open request.</p>
           </div>
           <div>
-            <div class="bars wake rise" role="img" aria-label="Start to the window on screen. A cold launch 366 milliseconds, ranging 320 to 461. Woken from sleep 56 milliseconds, ranging 40 to 201.">
-              <div><span>Cold</span><i style="--ms: 366"></i><span><b>366 ms</b> <small>320–461</small></span></div>
-              <div><span>Woken</span><i style="--ms: 56"></i><span><b>56 ms</b> <small>40–201</small></span></div>
+            <div class="bars wake rise" role="img" aria-label="Start to the window on screen. A cold launch 302 milliseconds, ranging 289 to 363. Woken from sleep 47 milliseconds, ranging 42 to 74.">
+              <div><span>Cold</span><i style="--ms: 302"></i><span><b>302 ms</b> <small>289–363</small></span></div>
+              <div><span>Woken</span><i style="--ms: 47"></i><span><b>47 ms</b> <small>42–74</small></span></div>
             </div>
             <ul class="receipts rise" aria-label="Hex asleep">
               <li><b>5 MiB</b><span>of RAM in use while it sleeps</span></li>
               <li><b>0.08%</b><span>of one core, 16 ms of CPU in 20 s asleep</span></li>
-              <li><b>6.5×</b><span>sooner on screen woken than launched</span></li>
+              <li><b>6.4×</b><span>sooner on screen woken than launched</span></li>
             </ul>
-            <p class="note">Start to the window on screen, the same build both ways, 7 cold launches and 36 wakes, medians. Asleep, Hex keeps 296 MiB of private memory committed so it can wake without loading anything again, regardless, Windows pages nearly all of it out to disk, and the 5 MiB is what actually stays in RAM.</p>
+            <p class="note">Start to the window on screen, the same build both ways, 7 cold launches and 36 wakes, medians. Asleep, Hex keeps 203 MiB of private memory committed so it can wake without loading anything again, regardless, Windows pages nearly all of it out to disk, and the 5 MiB is what actually stays in RAM.</p>
           </div>
         </div>
 
@@ -357,31 +357,31 @@
             <li>
               <h4>Ready, a small project</h4>
               <p>Start to the editor on screen with the file open</p>
-              <div class="vs-bar"><span>Hex</span><i style="--v: 536; --max: 1268"></i><b>536 ms</b></div>
+              <div class="vs-bar"><span>Hex</span><i style="--v: 396; --max: 1268"></i><b>396 ms</b></div>
               <div class="vs-bar code"><span>The other one</span><i style="--v: 1268; --max: 1268"></i><span>1,268 ms</span></div>
             </li>
             <li>
               <h4>Ready, a large repository</h4>
-              <p>Horizon, 995 C# files and 193,000 lines</p>
-              <div class="vs-bar"><span>Hex</span><i style="--v: 951; --max: 1547"></i><b>951 ms</b></div>
+              <p>Horizon, 1,129 C# files and 219,000 lines</p>
+              <div class="vs-bar"><span>Hex</span><i style="--v: 472; --max: 1547"></i><b>472 ms</b></div>
               <div class="vs-bar code"><span>The other one</span><i style="--v: 1547; --max: 1547"></i><span>1,547 ms</span></div>
             </li>
             <li>
               <h4>Memory, a small project</h4>
               <p>Every process of each, language servers included, 30 s in</p>
-              <div class="vs-bar"><span>Hex</span><i style="--v: 383; --max: 2629"></i><b>383 MiB</b></div>
+              <div class="vs-bar"><span>Hex</span><i style="--v: 262; --max: 2629"></i><b>262 MiB</b></div>
               <div class="vs-bar code"><span>The other one</span><i style="--v: 2629; --max: 2629"></i><span>2,629 MiB</span></div>
             </li>
             <li>
               <h4>Memory, a large repository</h4>
               <p>The same, on Horizon</p>
-              <div class="vs-bar"><span>Hex</span><i style="--v: 473; --max: 3126"></i><b>473 MiB</b></div>
+              <div class="vs-bar"><span>Hex</span><i style="--v: 499; --max: 3126"></i><b>499 MiB</b></div>
               <div class="vs-bar code"><span>The other one</span><i style="--v: 3126; --max: 3126"></i><span>3,126 MiB</span></div>
             </li>
             <li>
               <h4>CPU, a small project</h4>
               <p>Of the whole processor, 12 threads, sat untouched 30 s in</p>
-              <div class="vs-bar"><span>Hex</span><i style="--v: 0.08; --max: 1.3"></i><b>0.08%</b></div>
+              <div class="vs-bar"><span>Hex</span><i style="--v: 0.05; --max: 1.3"></i><b>0.05%</b></div>
               <div class="vs-bar code"><span>The other one</span><i style="--v: 1.3; --max: 1.3"></i><span>1.3%</span></div>
             </li>
             <li>
@@ -399,30 +399,30 @@
             <li>
               <h4>On disk</h4>
               <p>The program as installed, extensions and language servers aside</p>
-              <div class="vs-bar"><span>Hex</span><i style="--v: 116; --max: 1092"></i><b>116 MiB</b></div>
+              <div class="vs-bar"><span>Hex</span><i style="--v: 138; --max: 1092"></i><b>138 MiB</b></div>
               <div class="vs-bar code"><span>The other one</span><i style="--v: 1092; --max: 1092"></i><span>1,092 MiB</span></div>
             </li>
         </ul>
         <details class="fold">
           <summary>Every measurement, and how they were taken</summary>
-          <p>Next to the other editor, Hex's time is its own first frame, the other editor's its own "workbench ready", each from its process starting; both carry on loading their language servers after that. It ran with a fresh profile and the extensions above, Hex with fresh settings. Memory is private bytes summed over each editor's whole tree of processes, CPU the share of the whole processor that tree used over 10 s once each had been open for 30, the other editor's still indexing Horizon then.</p>
-          <p>Fresh measurements of <strong>Hex 3.3.0 Amphetamine</strong>: Release, Windows x64, NativeAOT, self-contained, published the way the download is. Taken on 21 November 2026 on Windows 11, a Ryzen 5 5600X, an RTX 3060 and 32 GB of RAM. Six launches of each face after one that's thrown away, because the first one fills the shader caches.</p>
+          <p>Next to the other editor, Hex's time is its own first frame, the other editor's its own "workbench ready", each from its process starting; both carry on loading their language servers after that. It ran with a fresh profile and the extensions above, Hex with fresh settings. Memory is private bytes summed over each editor's whole tree of processes, CPU the share of the whole processor that tree used over 10 s once each had been open for 30, the other editor's still indexing Horizon then. Hex's rows are from 3.5.0 on 25 November 2026 (107 MiB core on disk, 138 MiB with the optional notebooks and maths module); the other editor's are from 1.147.0 on the same machine on 21 November.</p>
+          <p>Fresh measurements of <strong>Hex 3.5.0 Dexamphetamine</strong>: Release, Windows x64, NativeAOT, self-contained, published the way the download is. Taken on 25 November 2026 on Windows 11, a Ryzen 5 5600X, an RTX 3060 and 32 GB of RAM. Six launches of each face after one that's thrown away, because the first one fills the shader caches.</p>
           <div class="scroller" tabindex="0" role="region" aria-label="What was measured">
             <table style="--label-2: 'Dawn'; --label-3: 'Dusk'">
               <thead>
                 <tr><th scope="col">Measurement</th><th scope="col">Dawn, the editor</th><th scope="col">Dusk, the terminal</th></tr>
               </thead>
               <tbody>
-                <tr><th scope="row">Process start to first rendered scene, median</th><td><strong>660 ms</strong></td><td><strong>405 ms</strong></td></tr>
-                <tr><th scope="row">First-frame range, 6 launches each</th><td>571–693 ms</td><td>394–479 ms</td></tr>
-                <tr><th scope="row">Process start to window shown, median</th><td>381 ms</td><td>333 ms</td></tr>
-                <tr><th scope="row">Working set, 30 s after the first frame, median</th><td><strong>253.8 MiB</strong></td><td><strong>152.6 MiB</strong></td></tr>
-                <tr><th scope="row">Private memory, 30 s after the first frame, median</th><td>349.7 MiB</td><td>247.2 MiB</td></tr>
-                <tr><th scope="row">CPU at rest, median, of one logical core</th><td>2.09%</td><td>0.39%</td></tr>
+                <tr><th scope="row">Process start to first rendered scene, median</th><td><strong>465 ms</strong></td><td><strong>323 ms</strong></td></tr>
+                <tr><th scope="row">First-frame range, 6 launches each</th><td>428–485 ms</td><td>308–347 ms</td></tr>
+                <tr><th scope="row">Process start to window shown, median</th><td>303 ms</td><td>280 ms</td></tr>
+                <tr><th scope="row">Working set, 30 s after the first frame, median</th><td><strong>269.1 MiB</strong></td><td><strong>117.6 MiB</strong></td></tr>
+                <tr><th scope="row">Private memory, 30 s after the first frame, median</th><td>295.8 MiB</td><td>156.8 MiB</td></tr>
+                <tr><th scope="row">CPU at rest, median, of one logical core</th><td>1.23%</td><td>8.60%</td></tr>
               </tbody>
             </table>
           </div>
-          <p class="note">First frame means first frame; it doesn't mean every language server has finished indexing. Memory and CPU cover Hex itself, not child shells or language servers, sampled for 10 s once it had sat for 30. This is one machine, and a busy one, with other agents at work on it. It's not a race rigged against somebody else's editor. <a href="https://github.com/bogzxo/hex/blob/master/docs/benchmarks.md">Method and reproduction commands</a>.</p>
+          <p class="note">First frame means first frame; it doesn't mean every language server has finished indexing. Memory and CPU cover Hex itself, not child shells or language servers, sampled for 10 s once it had sat for 30. This is one machine, not a clean-room lab bench. It's not a race rigged against somebody else's editor. <a href="https://github.com/bogzxo/hex/blob/master/docs/benchmarks.md">Method and reproduction commands</a>.</p>
         </details>
 
       </div>
@@ -432,7 +432,7 @@
       <div class="wrap">
         <p class="eyebrow">Unedited, 1600 × 900</p>
         <h2>The real window, unedited</h2>
-        <p>Every picture is the real Hex window, most of them 3.3.0 with a small sample project open. An agent took them, driving Hex through its own MCP server. Open any screenshot for a closer look.</p>
+        <p>Every picture is the real Hex window, 3.5.0 with a small sample project open. An agent took them, driving Hex through its own MCP server. Open any screenshot for a closer look.</p>
 
         <div class="gallery swipe" data-label="Screenshots">
           <figure class="rise">
@@ -444,7 +444,7 @@
             <figcaption><b>The explorer.</b> Type to find a file. Changes and problems are flagged on their folders.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/welcome-1600.webp"><img src="images/welcome-800.webp" srcset="images/welcome-800.webp 800w, images/welcome-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The welcome page leading with Open Folder and Clone Repository, a Getting started checklist of six with 0 of 6 done, and what's new in 3.3.0 beside it"></a>
+            <a href="images/welcome-1600.webp"><img src="images/welcome-800.webp" srcset="images/welcome-800.webp 800w, images/welcome-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The welcome page in Hex 3.5.0 Dexamphetamine leading with Open Folder and Clone Repository, a Getting started checklist of six, and New Agent beside it"></a>
             <figcaption><b>Welcome.</b> Open a folder and get to work. Setup is six steps, tracked for you.</figcaption>
           </figure>
           <figure class="rise">
@@ -650,11 +650,11 @@
             <h3>Your model, not ours</h3>
             <div class="faces">
               <div class="face front">
-                <p>Hex runs no model and sells none. Point it at Ollama and pick one. Off until you switch it on.</p>
+                <p>Hex sells no model. Point it at Ollama, or let Hex's Local AI window download and run <code>llama.cpp</code> on your GPU. Off until you switch it on.</p>
                 <button type="button" class="face-button" aria-expanded="false" aria-controls="more-models">More<span class="visually-hidden"> about models</span></button>
               </div>
               <div class="face back" id="more-models">
-                <p>Any server with an OpenAI-style completions API works. <strong>Zeta 2</strong> and <strong>Qwen2.5-Coder</strong> are the two tried. And the <a href="#no-ai">No AI</a> switch takes predictions out with the agents: no request, no status bar item.</p>
+                <p>Any server with an OpenAI-style completions API works, in code, notebook cells and terminal prompts. <strong>Zeta 2</strong> and <strong>Qwen2.5-Coder</strong> are the two tried. And the <a href="#no-ai">No AI</a> switch takes predictions out with the agents: no request, no status bar item.</p>
                 <button type="button" class="face-button">Back<span class="visually-hidden"> to models</span></button>
               </div>
             </div>
@@ -724,12 +724,12 @@
           <div>
             <p class="eyebrow">Agentic, the agents' face</p>
             <h2>Bring your own agent. Or don't.</h2>
-            <p>Hex doesn't sell you an AI subscription. <strong>Agentic</strong> runs your installed Claude Code, Codex or Antigravity CLI, with your own account. A fleet of chats side by side, each card saying its model, tokens, cost and how full its context is. Your provider's usage charges still belong to your provider.</p>
+            <p>Hex doesn't sell you an AI subscription. <strong>Agentic</strong> runs your installed Claude Code, Codex or Antigravity CLI with your own account, or a local model on your own machine. A fleet of chats side by side, each card saying its model, tokens, cost and how full its context is. Your provider's usage charges still belong to your provider.</p>
           </div>
           <div class="no-ai" id="no-ai">
             <p class="eyebrow">No AI, one switch</p>
             <h2>None of it. Not even loaded.</h2>
-            <p><strong>No AI</strong> in Settings, or <code>Hex --no-ai</code>, takes the agents out at the root instead of hiding them: Agentic, the agent extensions, their commands and their MCP tools are never loaded, and the first frame comes about 310 ms sooner. The editor, terminal and language servers stay as they are.</p>
+            <p><strong>No AI</strong> in Settings, or <code>Hex --no-ai</code>, takes the agents out at the root instead of hiding them: Agentic, Local AI, the agent extensions, their commands and their MCP tools are never loaded, and optional modules like Link, Notebooks and the Designer have switches of their own too. The editor, terminal and language servers stay as they are.</p>
           </div>
         </div>
         <figure class="shot rise" style="margin: var(--gap) 0 0">
@@ -763,7 +763,7 @@
           </li>
           <li class="rise">
             <h3>One method, not the whole file</h3>
-            <p>Over MCP Hex exposes <strong>80 tools</strong>: repository maps, symbol search, references, focused code reads, screenshots, editor commands, the debugger, notebooks and terminals.</p>
+            <p>Over MCP Hex exposes <strong>82 tools</strong>: repository maps, symbol search, references, focused code reads, screenshots, editor commands, the debugger, notebooks and terminals.</p>
           </li>
           <li class="rise">
             <h3>86% that never went near a context window</h3>
@@ -836,7 +836,7 @@
 
     <section id="get-it">
       <div class="wrap">
-        <p class="eyebrow"><!-- release:title -->Hex 3.2.0 Amphetamine<!-- /release:title --></p>
+        <p class="eyebrow"><!-- release:title -->Hex 3.5.0 Dexamphetamine<!-- /release:title --></p>
         <h2>Get it</h2>
         <p>One download, nothing else to install, not even .NET. On Windows and Linux, Setup adds shortcuts and keeps Hex up to date and Portable is a ZIP you unpack and run. On a Mac it's a disk image with Hex inside, and Hex updates itself.</p>
 
@@ -856,8 +856,8 @@
           <li class="platform" data-os="mac">
               <h3>macOS</h3>
               <p>macOS 14 or newer. Open the disk image and drag Hex to Applications. Hex isn't from an identified developer, so the first time, Control-click Hex, choose Open, then Open. On macOS 15 or newer, open Hex once, then System Settings, Privacy &amp; Security, Open Anyway. Still blocked? Run <code>xattr -dr com.apple.quarantine /Applications/Hex.app</code> in Terminal.</p>
-              <div class="pick"><span>Disk image</span><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-3.4.7-macos-arm64.dmg" data-arch="arm64">Apple silicon</a><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-3.4.7-macos-x64.dmg" data-arch="x64">Intel</a></div>
-              <div class="pick"><span>ZIP</span><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-3.4.7-macos-arm64.zip" data-arch="arm64">Apple silicon</a><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-3.4.7-macos-x64.zip" data-arch="x64">Intel</a></div>
+              <div class="pick"><span>Disk image</span><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-3.5.0-macos-arm64.dmg" data-arch="arm64">Apple silicon</a><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-3.5.0-macos-x64.dmg" data-arch="x64">Intel</a></div>
+              <div class="pick"><span>ZIP</span><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-3.5.0-macos-arm64.zip" data-arch="arm64">Apple silicon</a><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-3.5.0-macos-x64.zip" data-arch="x64">Intel</a></div>
             </li>
 <li class="platform" data-os="linux">
             <h3>Linux</h3>
@@ -872,15 +872,15 @@
           <li><a href="https://github.com/bogzxo/hex/blob/master/docs/installer.md">Installation details</a></li>
         </ul>
         <!-- What's new in the latest release, put in from its notes by .github/site-release.py when the page is published -->
-        <div class="whats-new"><!-- release:notes --><h3>What's new in 3.2.0 Amphetamine</h3>
-<p>Sharper text, a Hex that stays ready in the background, and agents that share their servers, keep their data in one place and get eight new tools.</p>
-<details><summary>Everything in 3.2.0</summary><h4>text</h4>
-<ul><li>letters are made at the size they're drawn instead of out of a distance field, their x height and baseline on whole pixels, so text at 100% and 125% is crisp where it was soft</li><li>subpixel smoothing the way Windows' ClearType draws it, on a screen under 150% when Windows has ClearType on, grey on Mac, Linux, phones and Retina screens; Text smoothing in Settings picks auto, subpixel or grayscale</li><li>text no longer steps at its edges while a window slides or fades in</li><li>one interface size for the whole of Hex, the title bar and its menus included, on top of the screen's own scale; View, Interface Size and Settings pick it, and the code's zoom and the terminal's font go on top of it</li></ul>
-<h4>the editor</h4>
-<ul><li>Persistent Process in Settings (and Speed on the welcome page): closing the window puts Hex to sleep instead of quitting, a few MB of memory and no CPU, and opening Hex again shows a window in well under a second; File, Exit still quits</li><li>Start with Windows starts Hex asleep when you sign in, so the first window is as quick as the rest</li><li>Hex starts quicker, the first frame sooner and the work that can wait done a moment after</li><li>a file with a line a fifth of a megabyte long (an agent's chat saved as JSON) opens and scrolls at once, coloured all along</li><li>every right-click menu is grouped and short enough to read, what throws something away last and in the error colour, the Run menu split into the session, stepping and what's looked at</li><li>a workspace whose .gitignore leaves out the repositories cloned into it has their code indexed again</li><li>the About box shows Hex's icon again</li><li>closing the window while it was idle no longer skips asking about unsaved changes</li><li>the usage limits shown for Claude are the latest it said, and a limit that's been reached shows 100%</li><li>keys that clashed (Properties and Agentic's fleet, Allow and Deny) only answer where they mean something</li><li>many places do less work each frame, and work that blocked the window happens beside it</li></ul>
-<h4>Agentic</h4>
-<ul><li>the Plan tab is a plan to work from: what's being done now, what needs you, what's next, the steps done folded away, filters, a step's note, files and owner a click away, and steps you add, edit, reorder or drop reach the agent</li><li>a chat's title is renamed in place on its card, from its menu, F2 or a double click</li><li>Agent Data in the Agents menu and at the foot of Agentic says how much the chats, pictures and the agents' files take, and clears old chats, pictures nothing mentions and temporary files; it all lives in a data folder next to Hex</li><li>Claude Code agents share Hex's servers instead of each starting its own: one Roslyn navigator for a workspace, no language servers of their own, a gigabyte less for every agent running</li><li>new tools for agents, in any language with a language server: callers and callees a few levels deep, implementations, type hierarchies, a rename across every file at once, a line's fixes, a file's errors, a declaration replaced by name and the projects and what uses what; hex_edit and hex_write answer with the file's errors after</li><li>an agent can show you pictures in the chat, and a tool's row opens or reveals the files it was given from its menu</li><li>the thinking dots no longer make the chat jump</li><li>Claude Code's chat carries on after a /compact instead of failing</li><li>the setting that keeps Claude Code on Hex's tools says plainly what each choice does</li></ul></details>
-<p class="note"><a href="https://github.com/bogzxo/hex/releases/tag/v3.2.0">The release on GitHub</a></p><!-- /release:notes --></div>
+        <div class="whats-new"><!-- release:notes --><h3>What's new in 3.5.0 Dexamphetamine</h3>
+
+<details><summary>Everything in 3.5.0</summary><h4>Scrolling and zoom</h4>
+<ul><li>The trackpad scrolls by the pixel on a Mac, with a glide after a flick that slows the way Safari's does and a rubber band at the ends that holds while your fingers are on it and springs back when they lift. Horizontal scrolling goes the right way.</li><li>A scroller inside another (a code block in a chat) hands the scroll on once it reaches its end, and a bounce off one end no longer catches the next scroll as a stretch at the other.</li><li>Pinch and Cmd+wheel zoom keep the middle of the code view in place, go smoothly with a gentle catch at every 25%, and wrapped code zooms in one piece. Line numbers stop growing at 150%.</li></ul>
+<h4>macOS</h4>
+<ul><li>In full screen the traffic lights stay on Hex's title bar, and the bar is as tall as the system's, which slides down over it.</li><li>Shortcuts written Ctrl mean Command everywhere, and a drag copies with Option, as in Finder.</li></ul>
+<h4>Performance</h4>
+<ul><li>Hex uses far less CPU and power while agents work. When the screen changes with nobody touching it, it updates 24 times a second rather than 120, labels and buttons that haven't changed aren't drawn again, and spinners and pulses step 12 times a second and stop when Hex isn't the front window. Input, scrolling and animations still run at full speed.</li></ul></details>
+<p class="note"><a href="https://github.com/bogzxo/hex/releases/tag/v3.5.0">The release on GitHub</a></p><!-- /release:notes --></div>
       </div>
     </section>
 

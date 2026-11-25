@@ -10,7 +10,7 @@ around them. No Electron. No Chromium in a trench coat. No account to open a tex
 ![Hex's editor in Solstice with a small C# synthesiser open: the explorer, semantic colours, reference counts, git blame on the current line and the minimap](site/images/editor-1600.webp)
 
 *Dawn, the editor, in Solstice. The colours, the reference counts and the blame are csharp-ls and git talking, not a
-mockup. Taken from 3.3.0 at 3200 × 1800 on a 4K screen with the interface at 125%.*
+mockup. Taken from 3.5.0 at 3200 × 1800 on a 4K screen.*
 
 Hex is one program with three faces, each in its own colour: **Dawn**, the code editor, in orange, **Dusk**, the
 terminal, in violet, and **Agentic**, where your agents work, in teal. The title bar switches between them, and
@@ -36,18 +36,17 @@ the GPU's driver, such as `mesa-vulkan-drivers`. macOS needs **14 or newer**. He
 
 ## Fast, with receipts
 
-**450 ms to the editor's first frame, 405 ms to the terminal's, and 56 ms to bring it back once it's asleep.**
+**345 ms to the editor's first frame, 323 ms to the terminal's, and 47 ms to bring it back once it's asleep.**
 
-Fresh measurements of **Hex 3.3.0 Amphetamine**, the same native build you download (Release, Windows x64, NativeAOT,
-self-contained), taken on one ordinary Windows 11 machine, a Ryzen 5 5600X with an RTX 3060 and 32 GB of RAM, busy
-with other work while it ran.
+Fresh measurements of **Hex 3.5.0 Dexamphetamine**, the same native build you download (Release, Windows x64, NativeAOT,
+self-contained), taken on one ordinary Windows 11 machine, a Ryzen 5 5600X with an RTX 3060 and 32 GB of RAM.
 
 | Measurement | Dawn, the editor | Dusk, the terminal |
 | --- | ---: | ---: |
-| Process start to the first rendered scene, median | **450 ms** (431–487), an empty folder | **405 ms** (394–479), one shell |
-| The same, opening Hex's own source with a C# file up | 660 ms (571–693), its window up at 381 | |
-| Private memory 30 s after the first frame, median | 349.7 MiB | 247.2 MiB |
-| CPU at rest, of one logical core, median | 2.09% | 0.39% |
+| Process start to the first rendered scene, median | **345 ms** (339–363), an empty folder | **323 ms** (308–347), one shell |
+| The same, opening Hex's own source with a C# file up | 465 ms (428–485), its window up at 303 | |
+| Private memory 30 s after the first frame, median | 295.8 MiB | 156.8 MiB |
+| CPU at rest, of one logical core, median | 1.23% | 8.60% |
 
 First frame means first frame; it doesn't mean every language server has finished indexing. Memory and CPU here cover
 Hex itself, not child shells or language servers.
@@ -60,10 +59,10 @@ wake rather than a launch. It's off by default, the switch is in Getting started
 
 | Start to the window on screen | Median | Range |
 | --- | ---: | ---: |
-| Launched cold | 366 ms | 320–461 ms |
-| Woken from sleep | **56 ms** | 40–201 ms |
+| Launched cold | 302 ms | 289–363 ms |
+| Woken from sleep | **47 ms** | 42–74 ms |
 
-Asleep it uses **5 MiB** of RAM and **0.08%** of one core, 16 ms of CPU in 20 s. It keeps 296 MiB of private memory
+Asleep it uses **5 MiB** of RAM and **0.08%** of one core, 16 ms of CPU in 20 s. It keeps 203 MiB of private memory
 committed so it can wake without loading anything again, regardless, Windows pages nearly all of it out to disk, and
 the 5 MiB is what actually stays in RAM. Seven cold launches and 36 wakes.
 
@@ -76,14 +75,14 @@ included.
 
 | | Hex | The other one |
 | --- | ---: | ---: |
-| Ready, a small project | **536 ms** | 1,268 ms |
-| Ready, the Horizon repository (995 C# files, 193,000 lines) | **951 ms** | 1,547 ms |
-| Memory, a small project | **383 MiB** | 2,629 MiB |
-| Memory, Horizon | **473 MiB** | 3,126 MiB |
-| CPU 30 s in, a small project, of the whole processor | **0.08%** | 1.3% |
+| Ready, a small project | **396 ms** | 1,268 ms |
+| Ready, the Horizon repository (1,129 C# files, 219,000 lines) | **472 ms** | 1,547 ms |
+| Memory, a small project | **262 MiB** | 2,629 MiB |
+| Memory, Horizon | **499 MiB** | 3,126 MiB |
+| CPU 30 s in, a small project, of the whole processor | **0.05%** | 1.3% |
 | CPU 30 s in, Horizon, of the whole processor | **0.12%** | 9.2% |
 | Processes, Horizon | **3** | 47 |
-| The program on disk, extensions and language servers aside | **116 MiB** | 1,092 MiB |
+| The program on disk, extensions and language servers aside | **138 MiB** | 1,092 MiB |
 
 Hex's time is its own first frame, the other editor's its own "workbench ready", each from its process starting;
 both carry on loading their language servers after that. It's not a race rigged against anybody, it's one machine,
@@ -147,7 +146,7 @@ and whole-file reads would have read 1,077,000.
 
 ## Look at it
 
-Every picture is the real Hex window, 3.3.0 with a small sample project open, taken by an agent driving Hex through
+Every picture is the real Hex window, 3.5.0 with a small sample project open, taken by an agent driving Hex through
 its own MCP server. Click one for the full size.
 
 | | | |
@@ -172,20 +171,21 @@ Dusk your default terminal where the platform supports it; [the setup details ar
 
 ![Agentic: a chat at work with its card, its tool calls, the Changes and Plan tabs, and its model, tokens, cost and context](site/images/agentic-1600.webp)
 
-Hex doesn't sell you an AI subscription. **Agentic** runs your installed Claude Code, Codex or Antigravity CLI, with
-your own account, a fleet of chats side by side, each card saying its model, tokens, cost and how full its context is.
-Your provider's usage charges still belong to your provider.
+Hex doesn't sell you an AI subscription. **Agentic** runs your installed Claude Code, Codex or Antigravity CLI with
+your own account, or a local model on your own machine, a fleet of chats side by side, each card saying its model,
+tokens, cost and how full its context is. Your provider's usage charges still belong to your provider.
 
 - **The fleet.** Every chat is a card, and the ones waiting on you stay on top.
 - **Agents that start agents.** One chat can start others, of any system and model, and they sit under it a step in.
 - **The Inbox.** Every pending agent request in one place, **Ctrl+Alt+Y** allows, **Ctrl+Alt+N** denies.
 - **Every change reversible.** Each turn checkpointed, keep or undo a hunk, or restore the turn.
-- **80 tools over MCP.** Repository maps, symbol search, references, focused code reads, screenshots, editor commands,
+- **82 tools over MCP.** Repository maps, symbol search, references, focused code reads, screenshots, editor commands,
   the debugger, notebooks and terminals, for any MCP client, not only the agents Hex runs. The server is off until you
   switch it on. [Agents, MCP and No AI](docs/agents.md).
 
-**No AI**, in Settings or `Hex --no-ai`, takes the agents out at the root instead of hiding them: Agentic, the agent
-extensions, their commands and their MCP tools are never loaded, and the first frame comes about 310 ms sooner.
+**No AI**, in Settings or `Hex --no-ai`, takes the agents out at the root instead of hiding them: Agentic, Local AI,
+the agent extensions, their commands and their MCP tools are never loaded. Optional modules (Link, Notebooks, the
+Designer) have switches of their own too.
 
 ## Coming from another editor
 

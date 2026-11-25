@@ -4,9 +4,9 @@ These are measurements of the local **Hex 2.8.0 “thickboy” development worki
 to Hex and Horizon. They replace the Hex 2.0.0 figures formerly in the README. They are not measurements of the
 existing `v2.8.0` download, a Debug build, or a self-test session.
 
-The site's figures are newer, from 3.3.0 on 21 November, [further down](#the-sites-numbers-330-against-320--21-november-2026),
-with its Persistent Process figures [just above those](#persistent-process-330--21-november-2026);
-the README's are from 3.1.0 on 18 November, [below those](#the-readmes-numbers-310--18-november-2026).
+The site's and the README's figures are from **Hex 3.5.0 Dexamphetamine** on **25 November 2026**,
+[at the foot of this page](#hex-350-dexamphetamine--25-november-2026) (with the Apple M6 macOS NativeAOT run beside
+them); the earlier 3.3.0, 3.2.0, 3.1.0 and 2.8.0 runs stay here in the order they were taken.
 The method below is the one they were taken by.
 
 ## Results
@@ -395,6 +395,115 @@ launch as a tab and the measured process left before its first frame.
 Evidence: [samples](benchmarks/2026-11-18/samples.json), [machine](benchmarks/2026-11-18/machine.json),
 [package byte counts](benchmarks/2026-11-18/package.json),
 [startup markers](benchmarks/2026-11-18/startup-markers.txt).
+
+## Hex 3.5.0 Dexamphetamine — 25 November 2026
+
+A Release `win-x64` NativeAOT publish of `development` at `cfc771b663dc554db5788a5eaab55da968f86aa0` (Horizon
+`724ed5edd21c78e75c5755ac54a96107635c9dc7`, build 5541) with the glass-pass slot reuse and settings-drag reuse fixes
+included (`Hex.exe` SHA-256 `A8E0F9693939A6C269A25B6F8798527B75CAE5E9D768C5100AC244582FA07EF4`), published the way
+`.github/workflows/build.yml` packages the portable release (`Hex/Hex.csproj` plus `Hex.Notebooks.Render` into
+`modules/`, no `installer/` folder). Same Windows 11 Pro (`26300`) Ryzen 5 5600X / RTX 3060 (`32.0.16.2114`) / 32 GB
+machine as above, `.NET SDK 11.0.100`, with the live Hex closed during the run.
+
+### Standard 10-launch run (`measure-readme.ps1`, 5 s settle, 5 s sample)
+
+Ten measured launches per mode after one discarded warmup of each (`startup.svg`):
+
+| Metric | Dawn median | Dawn min–max | Dusk median | Dusk min–max |
+| --- | ---: | ---: | ---: | ---: |
+| Process start → `main` | 13 ms | 12–15 ms | 13 ms | 12–15 ms |
+| Process start → window shown with the loading screen | 301 ms | 287–306 ms | 274 ms | 255–283 ms |
+| Process start → first rendered scene | **453 ms** | 434–478 ms | **320 ms** | 298–326 ms |
+| Idle working set | **177.6 MiB** | 177.2–178.1 MiB | **117.6 MiB** | 117.5–117.9 MiB |
+| Idle private bytes | 203.0 MiB | 202.4–204.1 MiB | 156.6 MiB | 156.2–158.1 MiB |
+| Idle CPU, % of one logical core | 1.39% | 0.92–1.86% | 5.27% | 0.00–16.09% |
+
+Raw first frames, ms: Dawn `455 454 451 447 459 434 449 478 466 447` (median `452.5`); Dusk `323 311 319 320 320 298
+321 303 326 317` (median `319.5`). Dusk's CPU range reflects PowerShell's prompt/startup activity in some 5 s windows
+(`0%` and `0.62%` on settled launches).
+
+| Published package | Bytes | MiB |
+| --- | ---: | ---: |
+| Full portable publish (`Hex` + `modules/`, 251 files) | 144,630,632 | 137.9 |
+| ZIP of full portable publish (`Optimal`) | 62,876,384 | 60.0 |
+| Core publish (`FolderProfile.pubxml`, no `modules/`, 248 files) | 111,760,552 | 106.6 |
+| ZIP of core publish (`Optimal`) | 49,229,523 | 46.9 |
+| `Hex.exe` within the folder | 62,859,776 | 59.9 |
+
+`modules/` holds `Hex.Notebooks.Render.dll`, `libSkiaSharp.dll` and `libHarfBuzzSharp.dll`, loaded on demand only when
+a notebook or typeset equation is opened.
+
+### Site 30 s-settled run (`-Samples 6 -SettleSeconds 30 -IdleSeconds 10`)
+
+Six measured launches per face after one discarded warmup each, matching the site's table:
+
+| Metric | 3.3.0 Dawn | 3.5.0 Dawn | 3.3.0 Dusk | 3.5.0 Dusk |
+| --- | ---: | ---: | ---: | ---: |
+| First rendered scene, median | 660 ms | **465 ms** | 405 ms | **323 ms** |
+| First rendered scene, range | 571–693 ms | 428–485 ms | 394–479 ms | 308–347 ms |
+| Window shown, median | 381 ms | **303 ms** | 333 ms | **280 ms** |
+| Working set at rest, median | 253.8 MiB | 269.1 MiB | 152.6 MiB | **117.6 MiB** |
+| Private bytes at rest, median | 349.7 MiB | **295.8 MiB** | 247.2 MiB | **156.8 MiB** |
+| CPU at rest, % of one core, median | 2.09% | **1.23%** | 0.39% | 8.60% |
+
+Raw first frames, ms: Dawn `463 428 485 467 468 461`; Dusk `316 308 340 329 347 316` (median `322.5`).
+Opening an empty folder (`--window --fresh --size 1600x900`, one discarded launch, then eight): Dawn median **345 ms**
+(`339–363`; raw `341 363 347 339 351 355 342 343`), down from 3.3.0's `450 ms`.
+An A/B of `--no-ai` on the Hex repository (`DawnScene.cs` open, six alternating pairs after warmups): normal median
+`459 ms` (`452–532`), `--no-ai` median `440.5 ms` (`424–492`), an `18 ms` difference now that agent setup is already off
+the startup path.
+
+### Persistent Process (`HEX_PERSISTENT=1`, 3.5.0)
+
+Seven cold starts and 36 wakes (six per run across six runs):
+
+| Measurement | Median | Range | Samples |
+| --- | ---: | ---: | ---: |
+| Cold start to window, persistent mode on | **302 ms** | 289–363 ms | 7 |
+| Woken from sleep to window | **47 ms** | 42–74 ms | 36 |
+| Working set asleep (after a wake and close) | **5 MiB** | 4–7 MiB | 36 |
+| Working set asleep, 15 s after the first close | 6 MiB | 6 MiB | 6 |
+| Private bytes asleep | **203 MiB** | 178–233 MiB | 42 |
+| CPU time asleep, over 20 s | 15.6 ms (0.08% of a core) | 0–31 ms | 6 |
+| Working set open, 6 s after the cold window | 160 MiB | 159–160 MiB | 6 |
+
+Raw cold windows, ms: `363 302 297 323 331 298 289`. Raw wakes, ms, six to a run: `59 42 43 43 42 56`, `47 58 45 44 45
+44`, `63 62 60 63 58 62`, `47 74 59 64 63 59`, `48 45 60 45 44 45`, `48 45 45 45 47 46`.
+
+### Hex side of "Next to VS Code" (3.5.0)
+
+Hex re-measured with the 21 November procedure (one discarded warmup, then three launches per project, whole process
+tree including `csharp-ls` summed 30 s after start and CPU over the next 10 s); VS Code 1.147.0 figures from the 21
+November run on the same machine. `Horizon` is now 1,129 C# files and 219,356 lines across 16 projects:
+
+| Measurement, median of 3 | Hex 3.3.0 | **Hex 3.5.0** | VS Code 1.147.0 (21 Nov) |
+| --- | ---: | ---: | ---: |
+| Ready, small project | 536 ms | **396 ms** (384–404) | 1,268 ms (1,264–1,301) |
+| Ready, Horizon | 951 ms | **472 ms** (448–508) | 1,547 ms (1,375–1,654) |
+| Private memory, small project | 383 MiB | **262 MiB** | 2,629 MiB |
+| Private memory, Horizon | 473 MiB | **499 MiB** | 3,126 MiB |
+| CPU 30 s in, small project, of one core (whole CPU) | 0.9% (0.08%) | **0.62% (0.05%)** | 15.8% (1.3%) |
+| CPU 30 s in, Horizon, of one core (whole CPU) | 1.4% (0.12%) | **1.41% (0.12%)** | 110.6% (9.2%) |
+| Processes, Horizon | 3 | **3** | 47 |
+| Program folder | 116 MiB | **138 MiB** (107 MiB core) | 1,092 MiB (+2,587 MiB extensions) |
+
+Raw Hex 3.5.0 ready, ms: small `384 396 404`, Horizon `448 508 472`.
+
+### Self-tests and Apple M6 macOS (`osx-arm64` NativeAOT, 3.5.0)
+
+On Windows x64 Release NativeAOT: `typing` C# (18,960 lines) **4.2 ms** median / **5.8 ms** p95, `.hor` (5,001 lines)
+**4.2 ms** / **4.7 ms**; `uicost` paint `0.65 ms` idle, `0.61 ms` typing, `0.54 ms` wheel; `agentic-perf` (12 chats of
+360 rows at 240 Hz) update `0.08 ms` idle, `0.10 ms` switching (`4.8 KB/turn`), `0.11 ms` streaming, `0.08 ms` groups,
+working set `168.7–179.2 MiB`, managed heap `43.7–57.3 MiB`.
+
+On an Apple M6 Mac (`osx-arm64` NativeAOT `Hex.app`, Retina 200%, 120 Hz ProMotion, MoltenVK 1.4.0): warm Dawn first
+frame on the Hex repository **579–582 ms** (`main` `11 ms`), settled RSS **262.0 MiB** (`251.4–272.0 MiB`); Dusk first
+frame **546 ms** (`523–546 ms`), settled RSS **158.6 MiB**; `typing` **4.2 ms** median / **4.4 ms** p95 on C# and
+**4.2 ms** / **4.2 ms** on `.hor`.
+
+Evidence (Windows 3.5.0): [samples](benchmarks/2026-11-25/samples.json), [machine](benchmarks/2026-11-25/machine.json),
+[package byte counts](benchmarks/2026-11-25/package.json),
+[startup markers](benchmarks/2026-11-25/startup-markers.txt).
 
 ## Evidence
 
