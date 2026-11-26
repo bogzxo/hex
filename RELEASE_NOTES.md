@@ -1,3 +1,9 @@
+# Hex 3.5.1 Dexamphetamine
+
+## Engine
+
+- Built on Horizon 1.5.1. Every Horizon library is now a package on nuget.org (bogzxo.Horizon.*): the engine, HIDL, the UI, the terminal, the editor tooling, the desktop, Android and iOS platforms, and the shader pack builder as a dotnet tool. Hex itself works as it did in 3.5.0.
+
 # Hex 3.5.0 Dexamphetamine
 
 ## Scrolling and zoom
