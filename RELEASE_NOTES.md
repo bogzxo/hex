@@ -1,3 +1,11 @@
+# Hex 3.5.2 Dexamphetamine
+
+## Linux
+
+- A laptop's touchpad scrolls by the pixel, on Wayland and X11, with the same glide after a flick and the rubber band at the ends as on a Mac. Resting two fingers stops a glide, and horizontal scrolling goes the right way.
+- Pinch to zoom the code, and swipe with three fingers to go between files.
+- Under Wayland Hex uses the system's SDL, so its window is a Wayland one rather than going through XWayland. Without a system SDL it falls back to the one it brings.
+
 # Hex 3.5.1 Dexamphetamine
 
 ## Engine
