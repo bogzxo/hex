@@ -314,6 +314,8 @@ Workspace-level `../tasks.hor` has Pull all / Push all (refuses commits with Cla
 - `measure-readme.ps1 -PublishedDirectory -Repository -OutputDirectory [-Samples 10]`: Windows benchmark of a published Hex (start to first frame, idle working set, CPU) with one discarded warm-up per mode, normal app mode not selftest; sets `HEX_HOME`, `HORIZON_LOG_STARTUP`, `HEX_PROFILE`.
 - `measure-ux-startup.ps1 -BaselineDirectory -CurrentDirectory`: A/B startup comparison of two builds, 30 samples default, alternating order.
 - `install-desktop.sh`: Linux `.desktop` entry/icon install. `build-engineering-notebook.py`: generates the engineering notebook sample used by notebook tests/docs.
+- `linux/vm-test.ps1 -Mode <sync|build|unit|selftest|dusk|smoke|touchpad|publish|all> [-VideoDriver wayland|x11]`: discovers VMware Workstation `vmrun.exe` and the Ubuntu `.vmx`, syncs `horizon` + `hex` over SSH, runs `linux/run-linux-tests.sh` against the live desktop session (Wayland or X11), and pulls logs/screenshots back to `hex/Hex/bin/Debug/net11.0/data/agents/temp/scratch/linux-vm/`.
+- `linux/smoke-mcp.py` & `linux/test-touchpad-uinput.py`: drive live Linux Hex over `--window --mcp` / `--mcp-connect`; `test-touchpad-uinput.py` injects real kernel multi-touch laptop touchpad gestures via `/dev/uinput` + `libinput` (two-finger vertical/horizontal pixel scroll, kinetic glide, two-finger hold, and pinch-to-zoom) and verifies state and screenshots.
 
 ## 8. Docs that double as evidence
 `docs/benchmarks.md` + `docs/benchmarks/2026-11-04/` (raw samples; numbers in README: 492 ms Dawn / 474 ms Dusk first frame, 45.0 MiB zip), `docs/agent-harness-validation.md` (harness vs grep token savings, 691 files indexed),
