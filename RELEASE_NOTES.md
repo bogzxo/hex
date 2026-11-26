@@ -1,3 +1,27 @@
+# Hex 3.6.0 Dexamphetamine
+
+Built on Horizon 2.0.0, seven passes over the engine for speed and correctness. The numbers are measured against 3.5.2 on the same machine, see `docs/benchmarks.md`.
+
+## Faster
+
+- Hex draws its windows in about half the time: painting is 33 to 51% quicker idle, while typing, scrolling and dragging a window, and a notebook's 38%, with less sent to the GPU each frame.
+- The editor's first frame comes up sooner (380 ms, from 389) and it uses about 9 MiB less memory sitting idle.
+- Text and the glass panels draw faster.
+
+## Code editor
+
+- Fixes to the gutter, scrolling in popups, zooming a step at a time and multiple cursors.
+
+## Terminal
+
+- Fixes to how it reads what programs print (the VT parser) and to resizing.
+
+## Fixes
+
+- Focus goes where it should in the UI, and a reused draw list no longer shows what was drawn before.
+- Language servers and debug adapters start and stop cleanly.
+- Sound no longer works a thread while there's nothing to play.
+
 # Hex 3.5.2 Dexamphetamine
 
 ## Linux
