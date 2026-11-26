@@ -6,7 +6,8 @@ existing `v2.8.0` download, a Debug build, or a self-test session.
 
 The site's and the README's figures are from **Hex 3.5.0 Dexamphetamine** on **25 November 2026**,
 [at the foot of this page](#hex-350-dexamphetamine--25-november-2026) (with the Apple M6 macOS NativeAOT run beside
-them); the earlier 3.3.0, 3.2.0, 3.1.0 and 2.8.0 runs stay here in the order they were taken.
+them, [and the 26 November 3.5.2 & engine-pass runs below it](#hex-352-and-horizon-engine-passes--26-november-2026));
+the earlier 3.3.0, 3.2.0, 3.1.0 and 2.8.0 runs stay here in the order they were taken.
 The method below is the one they were taken by.
 
 ## Results
@@ -504,6 +505,45 @@ frame **546 ms** (`523–546 ms`), settled RSS **158.6 MiB**; `typing` **4.2 ms*
 Evidence (Windows 3.5.0): [samples](benchmarks/2026-11-25/samples.json), [machine](benchmarks/2026-11-25/machine.json),
 [package byte counts](benchmarks/2026-11-25/package.json),
 [startup markers](benchmarks/2026-11-25/startup-markers.txt).
+
+## Hex 3.5.2 and Horizon engine passes — 26 November 2026
+
+Six optimization and correctness passes across Horizon (baseline `6685bfa` to Pass 6 `45f1c45d2b96fcac170346052b681929637a5a21`) paired with a Release `win-x64` NativeAOT publish of `Hex 3.5.2 Dexamphetamine` at `06c51535dc033c3d9f1747b3e9a0116133575293` (build `5543`). Measured on the same Windows 11 Pro (`26300`) Ryzen 5 5600X / RTX 3060 / 32 GB / `.NET SDK 11.0.100` machine, with isolated `HEX_HOME` and `HEX_REMOTE_PIPE`, audio muted (`HORIZON_AUDIO=off`), and VSync off (`HORIZON_VSYNC=off`) so scene frame rates and UI passes run uncapped. Published binary sizes: `Hex.exe` **63,273,472 bytes (60.34 MiB)**, SHA-256 `7A59FB470D444036C31E2B4E3ABCFE9A732AD55960AD50F3476DE0C439A01646`; `Horizon.Testing.exe` **26,168,832 bytes (24.96 MiB)**, SHA-256 `AA09B92FDB9554B5A070269CE223789B5AF7CD3DD7F00DEC2B57F7351CFE51A2`.
+
+### Startup & idle (`--window --fresh` and `--dusk --window`, 1 warmup + 3 launches)
+
+| Metric | Dawn baseline | **Dawn Pass 6** | Dusk baseline | **Dusk Pass 6** |
+| --- | ---: | ---: | ---: | ---: |
+| First rendered scene, median | 389 ms | **391 ms** (`372 404 391`) | 309 ms | **308 ms** (`308 319 308`) |
+| Idle working set, median | 171.4 MiB | **170.1 MiB** | 120.5 MiB | **120.6 MiB** |
+| Idle private bytes, median | 202.8 MiB | **201.4 MiB** | 153.9 MiB | **153.9 MiB** |
+| Idle CPU, % of one logical core | 1.46% | **0.00%** (`0, 0, 1.96%`) | 3.43% | 9.32% (`3.93, 11.29, 9.32%`) |
+
+### Hex `--selftest uicost typing garbage` progression (`Baseline` -> `Pass 6`)
+
+| Scenario / Metric | Baseline | Pass 3 | Pass 5 | **Pass 6** | Change vs baseline |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `idle` Paint / Layout / Draw (ms) | `0.503 / 0.083 / 0.231` | `0.440 / — / 0.270` | `0.432 / 0.090 / 0.170` | **`0.276 / 0.073 / 0.130`** | **-45.1% paint, -43.7% draw** |
+| `typing` Paint / Layout / Draw (ms) | `0.579 / 0.054 / 0.330` | `0.422 / — / 0.308` | `0.354 / 0.043 / 0.238` | **`0.289 / 0.042 / 0.166`** | **-50.1% paint, -49.7% draw** |
+| `wheel` (`585` ticks) Paint / Layout / Draw (ms) | `0.472 / 0.048 / 0.287` | `0.434 / — / 0.249` | `0.427 / — / 0.278` | **`0.331 / 0.042 / 0.179`** | **-29.9% paint, -37.6% draw** |
+| `drag` (`SettingsWindow`) Paint / Layout / Draw (ms) | `0.777 / 0.130 / 0.435` | `0.551 / — / 0.381` | `0.533 / — / 0.359` | **`0.433 / 0.116 / 0.253`** | **-44.3% paint, -41.8% draw** |
+| `notebook` (`444` ticks) Paint / Layout / Draw (ms) | `0.705 / 0.093 / 0.258` | `0.663 / — / 0.228` | `0.636 / — / 0.229` | **`0.504 / 0.081 / 0.163`** | **-28.5% paint, -36.8% draw** |
+| `typing csharp` (119 keys, 18,960 lines) med / p95 / worst | `4.2 / 5.8 / 14.7 ms` | `4.2 / 6.2 / 37.1 ms` | `4.2 / 5.5 / 32.3 ms` | **`4.2 / 5.0 / 11.3 ms`** | **-65.0% worst vs Pass 5** |
+| `typing hor` (119 keys, 5,001 lines) med / p95 / worst | `4.2 / 4.5 / 12.9 ms` | `4.2 / 4.6 / 19.7 ms` | `4.2 / 4.6 / 7.7 ms` | **`4.2 / 4.3 / 5.0 ms`** | **-61.2% worst** |
+| `garbage` (`designer / code / layoutCode`, B/tick) | `98 / 78 / 32` | `98 / 73 / 107` | `98 / 78 / 32` | **`57 / 78 / 32`** | **-41.8% designer** |
+
+### Horizon engine tests, self-checks and scenes (`Baseline` -> `Pass 6`)
+
+`Horizon.Tests` (Release) grew from **2,154 / 2,154** passed at baseline to **2,616 / 2,616** passed (`0` failed); `Horizon.Testing --checks` rose from `845 / 848` (`3` failed) to **`848 / 848` (`0` failed)**.
+
+| Scene (`6.5 s` uncapped) | Metric | Baseline | **Pass 6** | Change |
+| --- | --- | ---: | ---: | ---: |
+| `dungeon` | GPU / Render work / Render FPS | `3.597 ms / 2.890 ms / 354.7 fps` | **`1.847 ms / 1.883 ms / 530.7 fps`** | **-48.7% GPU, +49.6% FPS** |
+| `dungeon` | Sim / Logic allocs per turn | `83.5 B / 73.5 B` | **`22.0 B / 11.2 B`** | **-73.7% Sim / -84.8% Logic** |
+| `fluid` | Sim / Physics allocs per turn | `593.1 B / 569.4 B` | **`23.1 B / 0.0 B`** | **-96.1% Sim / -100% Physics** |
+| `fluid` | Physics work / Render FPS / WS | `0.700 ms` (P5 `0.993`) / `5,295.0 fps` / `151.9 MiB` | **`0.810 ms` / `6,027.3 fps` / `123.9 MiB`** | **-18.4% Physics vs P5** |
+| `meshes` | Startup / Render work / Render FPS / WS | `625 ms / 0.187 ms / 5,661.0 fps / 149.8 MiB` | **`547 ms / 0.150 ms / 6,690.7 fps / 128.0 MiB`** | **+18.2% FPS, -12.5% startup** |
+| `ui-controls` | Startup / Sim allocs / Render FPS / WS | `597 ms / 4,037.9 B / 5,984.7 fps / 133.1 MiB` | **`551 ms / 21.7 B / 6,932.7 fps / 121.0 MiB`** | **-99.46% Sim alloc** |
 
 ## Evidence
 
