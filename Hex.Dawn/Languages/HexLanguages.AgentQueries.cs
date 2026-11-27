@@ -60,7 +60,7 @@ internal sealed partial class HexLanguages
         {
             if (lintIn.Remove(open))
             {
-                linting.Change(full, open.Editor.Text);
+                linting.Change(full, open.Editor.Document.CopyLines());
                 agentSent[full] = System.Environment.TickCount64;
             }
 

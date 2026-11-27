@@ -55,10 +55,11 @@ internal sealed class HexDiskWatch : IDisposable
                     IncludeSubdirectories = false,
                     NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size
                 };
-                watcher.Changed += (_, e) => changed.Enqueue(e.FullPath);
-                watcher.Created += (_, e) => changed.Enqueue(e.FullPath);
-                watcher.Deleted += (_, e) => changed.Enqueue(e.FullPath);
-                watcher.Renamed += (_, e) => changed.Enqueue(e.FullPath);
+                watcher.Changed += (_, e) => { if (!string.IsNullOrEmpty(e.FullPath)) changed.Enqueue(e.FullPath); };
+                watcher.Created += (_, e) => { if (!string.IsNullOrEmpty(e.FullPath)) changed.Enqueue(e.FullPath); };
+                watcher.Deleted += (_, e) => { if (!string.IsNullOrEmpty(e.FullPath)) changed.Enqueue(e.FullPath); };
+                watcher.Renamed += (_, e) => { if (!string.IsNullOrEmpty(e.FullPath)) changed.Enqueue(e.FullPath); };
+                watcher.Error += (_, _) => { };
                 watcher.EnableRaisingEvents = true;
                 watchers[folder] = watcher;
             }

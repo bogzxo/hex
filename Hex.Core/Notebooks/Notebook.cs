@@ -24,6 +24,9 @@ internal sealed class NotebookCell
     /// <summary>What running it came to, each an nbformat output (output_type and the rest), multi line text as one string.</summary>
     public List<JsonObject> Outputs { get; } = [];
 
+    /// <summary>Monotonically incremented whenever <see cref="Outputs"/> or its contents change.</summary>
+    public int OutputsRevision { get; set; }
+
     /// <summary>Which run of the kernel it was, null for never run.</summary>
     public int? ExecutionCount { get; set; }
 

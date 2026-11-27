@@ -277,11 +277,153 @@ internal sealed partial class DawnScene
     // How much of the toolbox's width is left for its scroll bar
     private const float PALETTE_BAR = 10.0f;
 
+    private readonly record struct ChromeFitKey(
+        Vector2 ScreenSize,
+        Vector2 RootPadding,
+        float TopHeight,
+        float StatusHeight,
+        float ActivityWidth,
+        float LeftSlide,
+        float RightSlide,
+        Vector2 SidePaddingX,
+        float CenterPaddingX,
+        float LeftSetting,
+        float RightSetting,
+        bool LeftVisible,
+        bool RightVisible,
+        bool BottomVisible,
+        bool BodyVisible,
+        float PanelWanted,
+        float PanelTaken,
+        float CurrentPanelTakes,
+        bool LayoutTools,
+        HexFace Face,
+        bool LayersVisible,
+        bool LayersParentVisible,
+        float LayersHeight,
+        float PaletteDesiredY,
+        bool TreeVisible,
+        bool SideTreeVisible,
+        bool AgentsVisible,
+        bool ValuesTreeVisible,
+        bool PropertiesVisible,
+        float PropertiesHeight,
+        bool TableVisible,
+        bool ExtensionVisible,
+        bool NotebookVisible,
+        bool MarkdownVisible,
+        bool ImageVisible,
+        bool ShownHasHeight,
+        float ToolbarWidth,
+        bool NameBoxVisible,
+        int TabCount,
+        float TabsWidth,
+        float AllTabsWidth,
+        int TreeChildren,
+        int LayersChildren,
+        int ProblemsChildren,
+        int OutputChildren,
+        int NoticesChildren,
+        Vector2 CodePadding,
+        float CaretLineHeight,
+        bool Split,
+        float ProblemsScrollWidth,
+        float OutputScrollWidth,
+        bool SearchPresent,
+        bool LinkTalkPanelPresent,
+        bool LinkTalkOpen,
+        bool RightShown,
+        bool RightHeadShown,
+        int LinkPeersCount,
+        object? Skin,
+        string LinkColour,
+        UIRect RightBounds,
+        UIRect RightHeadBounds);
+
+    private ChromeFitKey lastChromeFit;
+    private bool hasChromeFit;
+
     private void FitChrome()
     {
         UIRect screen = chrome.Root.Bounds;
         if (screen.IsEmpty || top.Bounds.IsEmpty)
             return;
+
+        UIComponent shown = LayoutTools ? canvas : notebookView.Visible ? notebookView : codeScroll;
+        float currentPanelTakes = PanelTakes();
+        float toolbarWidth = WidthShowing(toolbar);
+        bool linkTalkActive = linkTalkPanel is not null && body.Visible && LinkPeers.Count > 0 && linkTalkOpen && right.Shown && rightHead.IsShownInHierarchy;
+        var fitKey = new ChromeFitKey(
+            screen.Size,
+            root.Padding.Total,
+            top.Bounds.Height,
+            statusBar.Bounds.Height,
+            activity.Bounds.Width,
+            left.SlideAmount,
+            right.SlideAmount,
+            new Vector2(left.Padding.Total.X, right.Padding.Total.X),
+            center.Padding.Total.X,
+            settings.LeftWidth,
+            settings.RightWidth,
+            left.Visible,
+            right.Visible,
+            bottom.Visible,
+            body.Visible,
+            panelWanted,
+            panelTaken,
+            currentPanelTakes,
+            LayoutTools,
+            Face,
+            layersScroll.Visible,
+            layersScroll.Parent is { Visible: true },
+            layersScroll.Size.Y,
+            palette.DesiredSize.Y,
+            treeScroll.Visible,
+            sideTree.Visible,
+            agentsView is { Visible: true },
+            running.ValuesTree.Visible,
+            properties.Page.Visible,
+            properties.Page.Size.Y,
+            running.Table.Visible,
+            extensionViews.Visible,
+            notebookView.Visible,
+            markdownPreview.Visible,
+            imageView.Visible,
+            shown.Bounds.Height > 0.0f,
+            toolbarWidth,
+            nameBox.Visible,
+            docTabs.Tabs.Count,
+            docTabs.TabsWidth,
+            allTabs.Size.X,
+            tree.Children.Count,
+            layers.Children.Count,
+            problems.Children.Count,
+            output.Children.Count,
+            linkEditorNotices is not null ? linkEditorNotices.Children.Count : -1,
+            code.Padding.Total,
+            code.CaretLineHeight,
+            Split,
+            problemsScroll.Bounds.Width,
+            outputScroll.Bounds.Width,
+            searchView is not null,
+            linkTalkPanel is not null,
+            linkTalkOpen,
+            right.Shown,
+            rightHead.IsShownInHierarchy,
+            LinkPeers.Count,
+            Skin,
+            settings.LinkColour,
+            linkTalkActive ? right.Bounds : default,
+            linkTalkActive ? rightHead.Bounds : default);
+
+        if (hasChromeFit && fitKey == lastChromeFit && !SideIsResizing(leftGrips) && !SideIsResizing(rightGrips))
+        {
+            if (!LayoutTools && document.Merge is not null)
+                FitMergeEditor();
+            return;
+        }
+        hasChromeFit = true;
+        lastChromeFit = fitKey;
 
         // Between the title bar with the menus on top and the status bar at the bottom
         float height = screen.Height - root.Padding.Total.Y - top.Bounds.Height - statusBar.Bounds.Height;
@@ -332,7 +474,6 @@ internal sealed partial class DawnScene
         // Not on a tick the code or the canvas hasn't been laid out yet (F7 just swapped them), what it takes isn't known
         // then and the panel was cut to its least for good, a line of terminal in the code of a layout
         float panelBefore = panelTaken;
-        UIComponent shown = LayoutTools ? canvas : notebookView.Visible ? notebookView : codeScroll;
         if (bottom.Visible && shown.Visible && shown.Bounds.Height > 0.0f)
         {
             float others = Spoken(center, shown) - panelBefore;
@@ -367,10 +508,10 @@ internal sealed partial class DawnScene
         tabRow.Direction = stacked ? UIDirection.Vertical : UIDirection.Horizontal;
         if (nameBox.Visible)
         {
-            float otherTools = WidthShowing(toolbar) - WidthShowing(nameBox);
+            float otherTools = toolbarWidth - WidthShowing(nameBox);
             nameBox.Size = nameBox.Size with { X = Math.Clamp(centerWidth - otherTools, 48.0f, 160.0f) };
         }
-        float tabRoom = MathF.Max(MIN_FLEXIBLE, centerWidth - (stacked ? 0.0f : WidthShowing(toolbar)));
+        float tabRoom = MathF.Max(MIN_FLEXIBLE, centerWidth - (stacked ? 0.0f : toolbarWidth));
         docTabs.MaxTabWidth = MathF.Max(MIN_FLEXIBLE, MathF.Min(240.0f, tabRoom - allTabs.Size.X));
         bool overflow = docTabs.Tabs.Count > 1 && docTabs.TabsWidth > tabRoom;
         allTabs.Visible = overflow;

@@ -17,19 +17,44 @@ internal sealed partial class HexCodeEditing
     /// <summary>The font the settings say made (the first time) and handed to every editor of code, null for the skin's.</summary>
     internal void ApplyCodeFont()
     {
-        // A font that isn't there is Hack, a monospace whatever was asked for. A name typed wrong made a font with no lines
-        // in it and took the code down, and then the skin's, which isn't one, and the columns went wandering
-        string name = settings.CodeFont;
-        string? path = name.Length > 0 ? ResolveCodeFontPath(name) : null;
-        if (name.Length > 0 && path is null)
-        {
-            context.Notices.Say(context.Strings.Said("code.no_font", ("name", name)), true);
-            path = ResolveCodeFontPath(HACK) ?? FontFile(HACK);
-        }
+        UIFont? resolved = ResolveConfiguredCodeFont(
+            settings.CodeFont,
+            ResolveCodeFontPath,
+            static path => UIFont.Shared(Path.GetDirectoryName(path)!, Path.GetFileName(path), CODE_FONT_EM),
+            missingName => context.Notices.Say(context.Strings.Said("code.no_font", ("name", missingName)), true));
 
-        codeFont = path is not null ? UIFont.Shared(Path.GetDirectoryName(path)!, Path.GetFileName(path), CODE_FONT_EM) : null;
+        codeFont = resolved;
         foreach (HexDocument open in documents)
             open.Editor.Font = codeFont;
+    }
+
+    internal static UIFont? ResolveConfiguredCodeFont(
+        string configuredName,
+        Func<string, string?> resolvePath,
+        Func<string, UIFont?> loadShared,
+        Action<string>? onMissingOrInvalid = null)
+    {
+        string? path = configuredName.Length > 0 ? resolvePath(configuredName) : null;
+        if (configuredName.Length > 0 && path is null)
+        {
+            onMissingOrInvalid?.Invoke(configuredName);
+            path = resolvePath(HACK) ?? FontFile(HACK);
+        }
+
+        UIFont? resolved = path is not null ? loadShared(path) : null;
+        if (resolved is { IsLoaded: false })
+        {
+            if (configuredName.Length > 0)
+                onMissingOrInvalid?.Invoke(configuredName);
+            string? hackPath = resolvePath(HACK) ?? FontFile(HACK);
+            resolved = hackPath is not null && !PlatformPaths.Same(hackPath, path ?? string.Empty)
+                ? loadShared(hackPath)
+                : null;
+            if (resolved is { IsLoaded: false })
+                resolved = null;
+        }
+
+        return resolved;
     }
 
     /// <summary>Resolves a configured code font name or path, preferring bundled fonts and falling back to platform system monospace fonts.</summary>

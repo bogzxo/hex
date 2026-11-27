@@ -1,3 +1,19 @@
+# Hex 3.6.5 Dexamphetamine
+
+Five more passes over Horizon and Hex. The numbers are measured against 3.6.0 on the same machine, see `docs/benchmarks.md`.
+
+## macOS
+
+- Making a new file no longer crashes Hex on a Mac, with or without a folder open, and a code font that can't be loaded or an error from watching the disk no longer takes it down either.
+
+## Faster
+
+- A frame takes a quarter to a third of the time to draw: 0.04 ms while typing (from 0.16), scrolling and in a notebook, and 0.085 ms dragging a window (from 0.23).
+- Sitting idle, Hex uses half the CPU it did and about 22 MiB less private memory.
+- Typing in a large C# file is steadier, 4.4 ms at the 95th percentile, from 5.5.
+- The agents panel, the command palette's helpers and the embedded terminal are only loaded when first opened, and the terminal (Dusk) shows its first frame in 286 ms, from 302.
+- Language servers' updates and HIDL scripts are quicker.
+
 # Hex 3.6.0 Dexamphetamine
 
 Built on Horizon 2.0.0, seven passes over the engine for speed and correctness. The numbers are measured against 3.5.2 on the same machine, see `docs/benchmarks.md`.

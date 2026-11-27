@@ -293,4 +293,15 @@ for (const play of document.querySelectorAll('.demo-play')) {
     play.textContent = 'Play it again';
   });
 }
+
+// A thank you once a download has started, from any link to a release's file: the cards' and the button made for this
+// system above. The link goes on as it would (GitHub sends the file, the page stays), the dialog is only shown over it
+const thanks = document.getElementById('thanks');
+if (thanks instanceof HTMLDialogElement && typeof thanks.showModal === 'function') {
+  document.addEventListener('click', event => {
+    const link = event.target instanceof Element ? event.target.closest('a[href*="/releases/latest/download/"]') : null;
+    if (!link || event.defaultPrevented || thanks.open) return;
+    thanks.showModal();
+  });
+}
 })();

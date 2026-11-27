@@ -168,6 +168,7 @@ internal sealed partial class DawnScene
     private void MakeCellViews(HexNotebook notebook)
     {
         notebook.Remake = false;
+        notebookFitStamp++;
         bool typing = notebook.Editing;
         ClearCellViews();
         for (int i = 0; i < notebook.Model.Cells.Count; i++)
@@ -285,10 +286,9 @@ internal sealed partial class DawnScene
             PreparePrediction(prediction);
         editor.OnChanged = () =>
         {
-            string source = editor.Text;
-            if (source == cell.Source)
+            if (editor.Document.TextEquals(cell.Source))
                 return;
-            cell.Source = source;
+            cell.Source = editor.Text;
             NotebookChanged(notebook);
             PredictionEdited(prediction);
         };
@@ -397,6 +397,7 @@ internal sealed partial class DawnScene
             // looked at only when it's another string, its text made every tick was every cell's whole source
             if (!ReferenceEquals(view.Shown, cell.Source))
             {
+                notebookFitStamp++;
                 if (!view.Editor.IsFocused)
                     view.Editor.Text = cell.Source;
                 view.Shown = cell.Source;
@@ -413,8 +414,11 @@ internal sealed partial class DawnScene
             // A markdown cell is written out unless it's being typed into, or empty
             if (view.Written is { } written)
             {
-                view.Editor.Visible = editing || cell.Source.Length == 0 && selected;
-                written.Visible = !view.Editor.Visible;
+                bool showEditor = editing || cell.Source.Length == 0 && selected;
+                if (view.Editor.Visible != showEditor || written.Visible == showEditor)
+                    notebookFitStamp++;
+                view.Editor.Visible = showEditor;
+                written.Visible = !showEditor;
             }
 
             if (view.OutputsDrawn != OutputsSignature(cell, notebook.Run.Input))
@@ -427,10 +431,14 @@ internal sealed partial class DawnScene
             bool hasOutputs = view.Outputs.Children.Count > 0;
             if (view.Frame is { } frame)
             {
+                if (frame.Visible != !sourceHidden || view.InputHidden!.Visible != sourceHidden)
+                    notebookFitStamp++;
                 frame.Visible = !sourceHidden;
                 view.InputRail!.Visible = !sourceHidden;
                 view.InputHidden!.Visible = sourceHidden;
             }
+            if (view.OutputRow.Visible != (hasOutputs && !outputsHidden) || view.OutputHidden.Visible != (hasOutputs && outputsHidden))
+                notebookFitStamp++;
             view.OutputRow.Visible = hasOutputs && !outputsHidden;
             view.OutputHidden.Visible = hasOutputs && outputsHidden;
 

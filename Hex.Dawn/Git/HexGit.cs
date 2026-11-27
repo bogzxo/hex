@@ -29,6 +29,8 @@ internal sealed partial class HexGit
     private float lookIn;
     private int unchangedLooks;
     private bool wasFocused = true;
+    private bool probingMoves;
+    private long moveProbeGeneration;
 
     private static bool IsWindowFocused =>
         Horizon.Engine.GameEngine.Instance?.WindowManager is not { IsFocused: false };
@@ -87,6 +89,8 @@ internal sealed partial class HexGit
             StartFollowing();
         else
         {
+            probingMoves = false;
+            moveProbeGeneration++;
             context.Workspace.FilesChanged -= WorkspaceFilesChanged;
             StopLookingDown();
             foreach (Repository repository in repositories.Values)
@@ -136,6 +140,7 @@ internal sealed partial class HexGit
             return;
         lookIn = 0.0f;
         unchangedLooks = 0;
+        moveProbeGeneration++;
         ForgetNone();
         LookDown(again: true);
         foreach (Repository repository in repositories.Values)
@@ -169,29 +174,20 @@ internal sealed partial class HexGit
         }
         wasFocused = focused;
 
-        if ((lookIn -= dt) <= 0.0f)
+        if (!probingMoves && (lookIn -= dt) <= 0.0f)
         {
-            bool moved = false;
-
-            // A folder with no repository is looked at again, a git init after it was opened made one
-            moved |= ForgetNone(all: false);
-            int repoCount = repositories.Count;
-            IReadOnlyList<string> roots = context.Workspace.Roots;
-            for (int i = 0; i < roots.Count; i++)
-                RepositoryOf(roots[i]);
-            if (repositories.Count != repoCount)
-                moved = true;
             LookDown();
-            moved |= LookAtNewFolders();
-            foreach (Repository repository in repositories.Values)
-                moved |= repository.LookForMoves();
 
-            if (moved)
-                unchangedLooks = 0;
-            else if (focused && unchangedLooks < IDLE_AFTER_LOOKS)
-                unchangedLooks++;
+            IReadOnlyList<string> roots = context.Workspace.Roots;
+            List<string>? uncachedRoots = null;
+            for (int i = 0; i < roots.Count; i++)
+            {
+                string rootPath = roots[i];
+                if (!foundForPath.ContainsKey(rootPath))
+                    (uncachedRoots ??= []).Add(rootPath);
+            }
 
-            lookIn = !focused ? LOOK_UNFOCUSED : unchangedLooks >= IDLE_AFTER_LOOKS ? LOOK_IDLE : LOOK_ACTIVE;
+            StartMoveProbe(focused, uncachedRoots);
 
             // The file on screen can be in another repository now, whose merge or rebase the menu follows
             FollowOperation();
@@ -237,6 +233,150 @@ internal sealed partial class HexGit
             foundForPath.Remove(key);
         forgetting.Clear();
         return any;
+    }
+
+    private void StartMoveProbe(bool focused, List<string>? uncachedRoots)
+    {
+        probingMoves = true;
+        long probeGeneration = ++moveProbeGeneration;
+
+        List<(string Folder, string[]? Places)>? nonRepoTargets = null;
+        foreach (var (key, value) in foundFor)
+        {
+            if (value is null)
+            {
+                wouldBe.TryGetValue(key, out string[]? places);
+                (nonRepoTargets ??= []).Add((key, places));
+            }
+        }
+
+        List<string>? newFolderTargets = null;
+        if (newFolders.Count > 0)
+        {
+            long now = Environment.TickCount64;
+            for (int i = newFolders.Count - 1; i >= 0; i--)
+            {
+                var (folder, until) = newFolders[i];
+                if (now > until)
+                {
+                    newFolders.RemoveAt(i);
+                    continue;
+                }
+                (newFolderTargets ??= []).Add(folder);
+            }
+        }
+
+        var repoTargets = repositories.Count == 0
+            ? []
+            : new (Repository Repo, string? Branch, string? Upstream)[repositories.Count];
+        int repoIndex = 0;
+        foreach (Repository repository in repositories.Values)
+            repoTargets[repoIndex++] = (repository, repository.Status?.Branch, repository.Status?.Upstream);
+
+        context.Work.InBackground("git watch", () =>
+        {
+            List<string>? turnedUp = null;
+            if (nonRepoTargets is not null)
+            {
+                foreach (var (folder, places) in nonRepoTargets)
+                {
+                    if (places is null)
+                    {
+                        (turnedUp ??= []).Add(folder);
+                        continue;
+                    }
+                    foreach (string place in places)
+                    {
+                        if (Path.Exists(place))
+                        {
+                            (turnedUp ??= []).Add(folder);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            List<string>? adoptedFolders = null;
+            if (newFolderTargets is not null)
+            {
+                foreach (string folder in newFolderTargets)
+                {
+                    if (Path.Exists(Path.Combine(folder, ".git")))
+                        (adoptedFolders ??= []).Add(folder);
+                }
+            }
+
+            List<Repository>? movedRepos = null;
+            for (int i = 0; i < repoTargets.Length; i++)
+            {
+                var (repo, branch, upstream) = repoTargets[i];
+                if (repo.ProbeMovesOnWorker(branch, upstream))
+                    (movedRepos ??= []).Add(repo);
+            }
+
+            return (TurnedUp: turnedUp, AdoptedFolders: adoptedFolders, MovedRepos: movedRepos);
+        }, result =>
+        {
+            probingMoves = false;
+            if (!Enabled || probeGeneration != moveProbeGeneration)
+                return;
+
+            bool moved = false;
+            if (result.TurnedUp is { Count: > 0 } turnedUp)
+            {
+                foreach (string key in turnedUp)
+                    foundFor.Remove(key);
+                foreach (var (key, value) in foundForPath)
+                    if (value is null) forgetting.Add(key);
+                foreach (string key in forgetting)
+                    foundForPath.Remove(key);
+                forgetting.Clear();
+                moved = true;
+            }
+
+            if (uncachedRoots is not null)
+            {
+                int repoCount = repositories.Count;
+                for (int i = 0; i < uncachedRoots.Count; i++)
+                    RepositoryOf(uncachedRoots[i]);
+                if (repositories.Count != repoCount)
+                    moved = true;
+            }
+
+            if (result.AdoptedFolders is { Count: > 0 } adoptedFolders)
+            {
+                bool anyAdopted = false;
+                for (int i = 0; i < adoptedFolders.Count; i++)
+                {
+                    string folder = adoptedFolders[i];
+                    for (int j = newFolders.Count - 1; j >= 0; j--)
+                    {
+                        if (PlatformPaths.Same(newFolders[j].Folder, folder))
+                            newFolders.RemoveAt(j);
+                    }
+                    anyAdopted |= Adopt(folder);
+                }
+                if (anyAdopted)
+                {
+                    Adopted();
+                    moved = true;
+                }
+            }
+
+            if (result.MovedRepos is { Count: > 0 } movedRepos)
+            {
+                for (int i = 0; i < movedRepos.Count; i++)
+                    movedRepos[i].Dirty(now: true);
+                moved = true;
+            }
+
+            if (moved)
+                unchangedLooks = 0;
+            else if (focused && unchangedLooks < IDLE_AFTER_LOOKS)
+                unchangedLooks++;
+
+            lookIn = !focused ? LOOK_UNFOCUSED : unchangedLooks >= IDLE_AFTER_LOOKS ? LOOK_IDLE : LOOK_ACTIVE;
+        }, quiet: true);
     }
 
     // Whether a .git is there now where there was none, in a folder that had no repository or one above it
@@ -353,48 +493,55 @@ internal sealed partial class HexGit
         /// HEAD, the index, the branch's own ref and the remote's, which a commit, a switch, a stage, a pull or a fetch in
         /// the terminal all touch. A fetch writes FETCH_HEAD and a push the upstream's ref, and a gc packs them into packed-refs.
         /// </summary>
-        public bool LookForMoves()
+        public bool LookForMoves() => LookForMovesWithRefs(Status?.Branch, Status?.Upstream, dirtyNow: true);
+
+        public bool ProbeMovesOnWorker(string? branch, string? upstream) => LookForMovesWithRefs(branch, upstream, dirtyNow: false);
+
+        private readonly Lock watchLock = new();
+
+        private bool LookForMovesWithRefs(string? branch, string? upstream, bool dirtyNow)
         {
-            // Where the files are is worked out once (and the refs when the branch changes), every second it was a read of
-            // the .git file and a handful of paths put together, garbage for a look that finds nothing most times
-            if (commonPath is null)
-            {
-                string dot = DotGit();
-                string common = CommonDir(dot);
-                commonPath = common;
-                watched[HEAD] = Path.Combine(dot, "HEAD");
-                watched[INDEX] = Path.Combine(dot, "index");
-                watched[FETCHED] = Path.Combine(common, "FETCH_HEAD");
-                watched[PACKED] = Path.Combine(common, "packed-refs");
-            }
-
-            string? branch = Status?.Branch;
-            if (!ReferenceEquals(branch, branchFor))
-            {
-                branchFor = branch;
-                watched[BRANCH] = branch is null ? null : Path.Combine(commonPath, "refs", "heads", branch);
-            }
-
-            // origin/main is refs/remotes/origin/main
-            string? upstream = Status?.Upstream;
-            if (!ReferenceEquals(upstream, upstreamFor))
-            {
-                upstreamFor = upstream;
-                watched[UPSTREAM] = upstream is null ? null : Path.Combine(commonPath, "refs", "remotes", upstream);
-            }
-
             bool moved = false;
-            for (int i = 0; i < watched.Length; i++)
+            lock (watchLock)
             {
-                DateTime stamp = watched[i] is { } file ? Stamp(file) : default;
-                if (stamp != stamps[i])
+                // Where the files are is worked out once (and the refs when the branch changes), every second it was a read of
+                // the .git file and a handful of paths put together, garbage for a look that finds nothing most times
+                if (commonPath is null)
                 {
-                    stamps[i] = stamp;
-                    moved = true;
+                    string dot = DotGit();
+                    string common = CommonDir(dot);
+                    commonPath = common;
+                    watched[HEAD] = Path.Combine(dot, "HEAD");
+                    watched[INDEX] = Path.Combine(dot, "index");
+                    watched[FETCHED] = Path.Combine(common, "FETCH_HEAD");
+                    watched[PACKED] = Path.Combine(common, "packed-refs");
+                }
+
+                if (!ReferenceEquals(branch, branchFor))
+                {
+                    branchFor = branch;
+                    watched[BRANCH] = branch is null ? null : Path.Combine(commonPath, "refs", "heads", branch);
+                }
+
+                // origin/main is refs/remotes/origin/main
+                if (!ReferenceEquals(upstream, upstreamFor))
+                {
+                    upstreamFor = upstream;
+                    watched[UPSTREAM] = upstream is null ? null : Path.Combine(commonPath, "refs", "remotes", upstream);
+                }
+
+                for (int i = 0; i < watched.Length; i++)
+                {
+                    DateTime stamp = watched[i] is { } file ? Stamp(file) : default;
+                    if (stamp != stamps[i])
+                    {
+                        stamps[i] = stamp;
+                        moved = true;
+                    }
                 }
             }
 
-            if (moved)
+            if (moved && dirtyNow)
                 Dirty(now: true);
             return moved;
         }

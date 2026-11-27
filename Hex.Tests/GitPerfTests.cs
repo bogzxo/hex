@@ -223,24 +223,30 @@ public sealed class GitPerfTests
         string repoRoot = root;
         int executions = 0;
 
+        using var allStarted = new CountdownEvent(4);
         using var entered = new ManualResetEventSlim(false);
         using var release = new ManualResetEventSlim(false);
 
         Task<int>[] concurrent =
         [
-            .. Enumerable.Range(0, 4).Select(_ => Task.Run(() =>
-                GitRepository.RunCoalesced(table, repoRoot, () =>
+            .. Enumerable.Range(0, 4).Select(_ => Task.Factory.StartNew(() =>
+            {
+                allStarted.Signal();
+                allStarted.Wait(TimeSpan.FromSeconds(5));
+                return GitRepository.RunCoalesced(table, repoRoot, () =>
                 {
                     int n = Interlocked.Increment(ref executions);
                     entered.Set();
                     release.Wait(TimeSpan.FromSeconds(5));
                     return n;
-                })))
+                });
+            }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default))
         ];
 
+        Assert.True(allStarted.Wait(TimeSpan.FromSeconds(5)));
         Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
-        // Give the other 3 tasks a moment to attach to the in-flight leader
-        Thread.Sleep(40);
+        // Give the other 3 dedicated threads a moment to attach to the in-flight leader before releasing it
+        Thread.Sleep(50);
         release.Set();
 
         int[] results = Task.WhenAll(concurrent).GetAwaiter().GetResult();

@@ -609,6 +609,21 @@ button.link {
   }
 }
 
+/* The thank you after a download, the request dialog's shape with its own space for what it says. Its heading is the
+   dialog's width, not the 22ch a section's is kept to */
+.thanks h2 {
+  max-inline-size: none;
+}
+
+.thanks .next {
+  margin-block: 1.25rem;
+  color: var(--dim);
+
+  & > * + * {
+    margin-block-start: 0.6rem;
+  }
+}
+
 .request::backdrop {
   overflow: hidden;
   overscroll-behavior: contain;

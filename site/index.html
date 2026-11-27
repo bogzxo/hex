@@ -11,11 +11,11 @@
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#18171f" media="(prefers-color-scheme: dark)">
   <title>Hex. Modern Motherfucking Code Editor</title>
-  <meta name="description" content="Hex is a native code editor, a proper terminal and a place for your agents. C# compiled to native code, drawn through Vulkan. No Electron, no account, no telemetry.">
+  <meta name="description" content="Hex is a native code editor, a proper terminal and a place for your agents. Compiled .NET AoT, drawn through Vulkan. No Electron, no account, no telemetry.">
   <link rel="canonical" href="https://bogzxo.github.io/hex/">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="Hex. Modern Motherfucking Code Editor">
-  <meta property="og:description" content="It opens, you write code, and it gets the fuck out of your way. A native editor, terminal and agent workspace. No Electron.">
+  <meta property="og:title" content="Hex. Modern Fast Code Editor">
+  <meta property="og:description" content="It opens FAST, you write FAST code, and it gets the fuck out of your way. A native editor, terminal and agent workspace. No Electron.">
   <meta property="og:url" content="https://bogzxo.github.io/hex/">
   <meta property="og:image" content="https://bogzxo.github.io/hex/images/editor-1600.webp">
   <meta name="twitter:card" content="summary_large_image">
@@ -70,7 +70,7 @@
       <div class="wrap">
         <div class="pitch">
         <h1>Modern <em>Motherfucking</em> Code Editor</h1>
-        <p class="lede"><strong>This is Hex: It opens, you write code, and it gets the fuck out of your way.</strong></p>
+        <p class="lede"><strong>Meet Hex: It opens FAST, you write FAST code, and it gets the fuck out of your way, FAST.</strong></p>
         <p class="sub">That's the entire fucking point. A native code editor, a proper terminal, a place for your agents, and the tools around them. No Electron. No Chromium in a trench coat. No account to open a text file. No shaming you by denying access to first-party extensions.</p>
         <ul class="face-chips" aria-label="Hex's three faces, one program">
           <li><a href="#features"><b>Dawn</b> the code editor</a></li>
@@ -917,6 +917,17 @@
       </a>
     </div>
     <button type="button" class="button quiet small" commandfor="request" command="close" autofocus>Never mind</button>
+  </dialog>
+
+  <!-- Said once a download has started, by site.js, from any of the download links. The download goes on behind it,
+       nothing waits for it to be closed -->
+  <dialog id="thanks" class="request thanks" closedby="any" aria-labelledby="thanks-title">
+    <h2 id="thanks-title">Thank you for downloading Hex :)</h2>
+    <div class="next">
+      <p>Hex is a passion project driven by frustration as a result of the unfortunate but very real trend towards software rot and enshittification. In vein attempt of different take on software, note that I will personally see to all issues and feature requests :)</p>
+    </div>
+    <p>Please report any <a href="https://github.com/bogzxo/hex/issues">issues</a> or <button type="button" class="link" commandfor="request" command="show-modal">request features</button>.</p>
+    <button type="button" class="button quiet small" commandfor="thanks" command="close" autofocus>Close</button>
   </dialog>
 
   <footer class="end">

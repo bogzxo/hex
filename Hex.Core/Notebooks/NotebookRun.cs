@@ -123,6 +123,7 @@ internal sealed class NotebookRun
                 if (message.Type == "execute_result")
                     output["execution_count"] = Count(content);
                 cell.Outputs.Add(output);
+                cell.OutputsRevision++;
                 owners[output] = cell;
 
                 if (content["transient"]?["display_id"]?.GetValue<string>() is { Length: > 0 } id)
@@ -146,6 +147,7 @@ internal sealed class NotebookRun
                     ["evalue"] = content["evalue"]?.GetValue<string>() ?? string.Empty,
                     ["traceback"] = content["traceback"]?.DeepClone() ?? new JsonArray()
                 });
+                cell.OutputsRevision++;
                 return cell;
 
             case "clear_output":
@@ -183,6 +185,7 @@ internal sealed class NotebookRun
                         ["evalue"] = content["evalue"]?.GetValue<string>() ?? string.Empty,
                         ["traceback"] = content["traceback"]?.DeepClone() ?? new JsonArray()
                     });
+                    cell.OutputsRevision++;
                 }
                 return cell;
 
@@ -216,6 +219,8 @@ internal sealed class NotebookRun
             displays[id].RemoveAll(output => !owners.ContainsKey(output));
             if (displays[id].Count == 0) displays.Remove(id);
         }
+        if (cell.Outputs.Count > 0)
+            cell.OutputsRevision++;
         cell.Outputs.Clear();
     }
 
@@ -247,14 +252,20 @@ internal sealed class NotebookRun
         if (message.Content["transient"]?["display_id"]?.GetValue<string>() is not { Length: > 0 } id || !displays.TryGetValue(id, out var shown))
             return null;
 
+        NotebookCell? firstOwner = null;
         foreach (JsonObject output in shown)
         {
             output["data"] = message.Content["data"]?.DeepClone() ?? new JsonObject();
             output["metadata"] = message.Content["metadata"]?.DeepClone() ?? new JsonObject();
+            if (owners.TryGetValue(output, out NotebookCell? owningCell))
+            {
+                owningCell.OutputsRevision++;
+                firstOwner ??= owningCell;
+            }
         }
 
         // Which cell doesn't matter much to whoever's drawing, they're all drawn again from their outputs
-        return shown.Select(output => owners.GetValueOrDefault(output)).FirstOrDefault(cell => cell is not null);
+        return firstOwner;
     }
 
     // Helper method to run a stream on, into the last output when that's the same stream
@@ -263,10 +274,12 @@ internal sealed class NotebookRun
         if (cell.Outputs.Count > 0 && cell.Outputs[^1] is { } last && last["output_type"]?.GetValue<string>() == "stream" && last["name"]?.GetValue<string>() == name)
         {
             last["text"] = Carried(last["text"]?.GetValue<string>() ?? string.Empty, text);
+            cell.OutputsRevision++;
             return;
         }
 
         cell.Outputs.Add(new JsonObject { ["output_type"] = "stream", ["name"] = name, ["text"] = Carried(string.Empty, text) });
+        cell.OutputsRevision++;
     }
 
     /// <summary>

@@ -51,27 +51,14 @@ internal sealed partial class DawnScene
     // by the data they came out of, with the outputs waiting to show them
     private readonly Dictionary<JsonNode, (ImagePixels Pixels, List<NotebookPicture> Waiting)> picturesToMake = new(ReferenceEqualityComparer.Instance);
 
-    /// <summary>A number that's the same while a cell's outputs are, what they say included, without making anything.</summary>
-    private static int OutputsSignature(NotebookCell cell, NotebookInput? asking)
-    {
-        var hash = new HashCode();
-        hash.Add(cell.Outputs.Count);
-        hash.Add(asking?.Cell == cell ? RuntimeHelpers.GetHashCode(asking) : 0);
-        foreach (JsonObject output in cell.Outputs)
-        {
-            hash.Add(RuntimeHelpers.GetHashCode(output));
-            if (output["text"] is { } text)
-                hash.Add(RuntimeHelpers.GetHashCode(text));
-            if (output["data"] is { } data)
-                hash.Add(RuntimeHelpers.GetHashCode(data));
-        }
-
-        return hash.ToHashCode();
-    }
+    /// <summary>A number that's the same while a cell's outputs and prompt state haven't changed.</summary>
+    private static int OutputsSignature(NotebookCell cell, NotebookInput? asking) =>
+        HashCode.Combine(cell.OutputsRevision, asking?.Cell == cell ? RuntimeHelpers.GetHashCode(asking) : 0);
 
     // Helper method for a cell's outputs drawn again, as they are now
     private void DrawOutputs(HexNotebook notebook, NotebookCellView view)
     {
+        notebookFitStamp++;
         view.OutputsDrawn = OutputsSignature(view.Cell, notebook.Run.Input);
         List<NotebookPicture> was = cellPictures.TryGetValue(view, out var kept) ? kept : [];
         var now = new List<NotebookPicture>();
@@ -277,6 +264,7 @@ internal sealed partial class DawnScene
         {
             if (!wholeOutputs.Remove(output))
                 wholeOutputs.Add(output, output);
+            view.Cell.OutputsRevision++;
             view.OutputsDrawn = -1;
         };
         var copy = strip.Add(new Button { Icon = "copy", Label = Said("notebook.copy_text"), LabelScale = 0.12f, Size = new Vector2(0.0f, 22.0f) });

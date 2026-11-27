@@ -129,7 +129,8 @@ internal sealed partial class DawnScene
             agentChats.Remove(chat);
         agentChat = null;
         agentDraftContext = null;
-        agentsInput.Text = string.Empty;
+        if (agentsInput is not null)
+            agentsInput.Text = string.Empty;
 
         chatsKept = new HexAgentChatsKept(folder);
         hub.History = chatsKept.History;

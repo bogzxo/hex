@@ -245,9 +245,9 @@ internal sealed partial class DawnScene : Scene
         BuildQuiet();
         Horizon.Core.Diagnostics.StartupTrace.Mark("editor: status bar, panel, find bar");
         BuildTerminal();
-        // The agents' panel and Agentic's commands, never made with Agentic or No AI off; Agentic's own widgets wait until it's shown or warmed (EnsureNoon)
+        // Agentic's commands and wakeups are registered lightweight; its panel widgets and Markdown grammar wait until Agents or Noon is opened
         if (HexModules.IsEnabled(HexModuleId.Agentic))
-            EnsureAgentsPanel();
+            RegisterAgenticCommands();
         Horizon.Core.Diagnostics.StartupTrace.Mark("editor: terminal and agents");
         StartRemote();
         BuildSideTree();

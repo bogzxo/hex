@@ -56,6 +56,7 @@ internal sealed partial class DawnScene
         commands.AddRange(UIChooser.Rows(LinkPaletteCommands()).Select(choice => choice with { Icon = "link" }));
 
         // The terminal's commands, the same ones Dusk has, under a heading of their own, a title once (Dusk's palette has why)
+        terminals.EnsureStarted();
         var titles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         string terminal = Said("palette.terminal");
         foreach (TerminalCommand command in terminals.Commands.All)

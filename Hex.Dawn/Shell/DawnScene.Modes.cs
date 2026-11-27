@@ -116,7 +116,7 @@ internal sealed partial class DawnScene
         ArriveFace(HexFace.Dusk, Face);
 
         if (Face == HexFace.Noon)
-            agentsInput.Focus();
+            agentsInput?.Focus();
         else if (!HexModeSwitch.RestoreFocus(compositor, focusBeforeMode) && (document.View == HexView.Code || document.IsText))
             code.Focus();
         HexModeSwitch.RestoreFocus(stage, stageFocusBeforeMode);

@@ -62,7 +62,7 @@ internal sealed partial class HexLanguages
         if (mergeResults.TryGetValue(of, out var session))
             SynchronizeMergeResult(of, session);
         else if (lintIn.Remove(of))
-            server.Change(path, of.Editor.Text);
+            server.Change(path, of.Editor.Document.CopyLines());
     }
 
     private void SynchronizeMergeResult(HexDocument result, MergeResultLanguageSession session)
@@ -72,7 +72,7 @@ internal sealed partial class HexLanguages
             return;
         if (lintFound.Remove(result))
             context.Documents.DiagnosticsChanged(result);
-        session.Send(version, result.Editor.Text);
+        session.Send(version, result.Editor.Document.CopyLines());
     }
 
     private string? MergeSourceLine(HexDocument? result, LanguageServerPlace place)
@@ -164,6 +164,15 @@ internal sealed class MergeResultLanguageSession(string path, LanguageServer ser
             Server.Open(Path, text);
         else if (!IsCurrent(version))
             Server.Change(Path, text);
+        sentVersion = version;
+    }
+
+    internal void Send(int version, string[] lines)
+    {
+        if (!Opened)
+            Server.Open(Path, lines);
+        else if (!IsCurrent(version))
+            Server.Change(Path, lines);
         sentVersion = version;
     }
 
