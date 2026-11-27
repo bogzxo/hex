@@ -545,6 +545,25 @@ Seven optimization and correctness passes across Horizon (baseline `6685bfa` thr
 | `meshes` | Startup / Render work / Render FPS / WS | `625 ms / 0.187 ms / 5,661.0 fps / 149.8 MiB` | `547 ms / 0.150 ms / 6,690.7 fps / 128.0 MiB` | **`304 ms / 0.137 ms / 7,355.0 fps / 134.5 MiB`** | **-51.4% startup, +29.9% FPS** |
 | `ui-controls` | Startup / Sim allocs / Render FPS / WS | `597 ms / 4,037.9 B / 5,984.7 fps / 133.1 MiB` | `551 ms / 21.7 B / 6,932.7 fps / 121.0 MiB` | **`327 ms / 15.2 B / 9,299.7 fps / 122.9 MiB`** | **-45.2% startup, -99.62% Sim alloc, +55.4% FPS** |
 
+### Passes 8–12 progression (`Baseline` -> `Pass 7` -> `Pass 12`, Release `win-x64` NativeAOT)
+
+Following Pass 7, five additional optimization passes (`horizon` through `de1e3fc` + `Pass 12`, `hex` at `351dc2b6`) hardened verification to **`2,679 / 2,679`** `Horizon.Tests` (`Release`), **`3,419 / 3,421`** `Hex.Tests` (`Debug`, `2` skipped), and **`848 / 848`** `Horizon.Testing --checks` (`0` failed), targeting UI dual-source/glass prefix caching, Vulkan barrier/state caching, raw UTF-8 LSP token streaming, `UIDrawList` whole-pixel translation reuse, bounded PTY pooling, HIDL unboxed numerics/scope pooling, zero-dict UI script application, row-major tilemap occlusion/float SDF envelopes, and sparse static physics resets. Published Pass 12 binaries: `Hex.exe` **60.53 MiB**, `Horizon.Testing.exe` **25.09 MiB**.
+
+| Metric | Baseline (`6685bfa` / `06c51535`) | Pass 7 (`45f1c45` / `ae9857b6`) | **Pass 12 (`pass12`)** | Change vs baseline |
+| --- | ---: | ---: | ---: | --- |
+| Dawn FirstFrame / WS / Priv / Idle CPU | `389 ms / 171.4 MiB / 202.8 MiB / 1.463%` | `380 ms / 162.0 MiB / 194.1 MiB / 0.977%` | **`379 ms / 155.8 MiB / 172.4 MiB / 0.493%`** | **-15.6 MiB WS, -30.4 MiB Priv, -66.3% CPU** |
+| Dusk FirstFrame / WS / Priv | `309 ms / 120.5 MiB / 153.9 MiB` | `302 ms / 122.5 MiB / 155.5 MiB` | **`286 ms / 128.4 MiB / 146.2 MiB`** | **-7.4% startup** |
+| `idle` Paint / Layout / Draw (ms) | `0.503 / 0.083 / 0.231` | `0.244 / 0.044 / 0.128` | **`0.232 / 0.029 / 0.066`** | **-53.9% paint, -71.4% draw** |
+| `typing` Paint / Layout / Draw (ms) | `0.579 / 0.054 / 0.330` | `0.282 / 0.025 / 0.163` | **`0.251 / 0.015 / 0.040`** | **-56.6% paint, -87.9% draw** |
+| `wheel` Paint / Layout / Draw (ms) | `0.472 / 0.048 / 0.287` | `0.315 / 0.026 / 0.170` | **`0.258 / 0.015 / 0.044`** | **-45.3% paint, -84.7% draw** |
+| `drag` Paint / Layout / Draw (ms) | `0.777 / 0.130 / 0.435` | `0.383 / 0.083 / 0.230` | **`0.379 / 0.062 / 0.085`** | **-51.2% paint, -80.5% draw** |
+| `notebook` Paint / Layout / Draw (ms) | `0.705 / 0.093 / 0.258` | `0.434 / 0.041 / 0.139` | **`0.442 / 0.031 / 0.041`** | **-37.3% paint, -84.1% draw** |
+| `typing csharp` / `hor` p95 (ms) | `5.8 / 4.5` | `5.5 / 4.3` | **`4.4 / 4.3`** (`4.2 ms` med) | **-24.1% C# p95** |
+| `dungeon` Startup / GPU / Render FPS | `648 ms / 3.597 ms / 354.7 fps` | `397 ms / 1.840 ms / 614.0 fps` | **`460 ms / 2.033 ms / 584.0 fps`** | **-43.5% GPU, +64.6% FPS** |
+| `fluid` Startup / Physics work / FPS | `641 ms / 0.700 ms / 5,295.0 fps` | `315 ms / 0.613 ms / 6,989.3 fps` | **`319 ms / 0.620 ms / 6,413.0 fps`** | **-50.2% startup, 0.0 B Physics, +21.1% FPS** |
+| `meshes` Startup / Render work / FPS | `625 ms / 0.187 ms / 5,661.0 fps` | `304 ms / 0.137 ms / 7,355.0 fps` | **`296 ms / 0.150 ms / 6,597.7 fps`** | **-52.6% startup, +16.5% FPS** |
+| `ui-controls` Startup / Sim alloc / FPS | `597 ms / 4,037.9 B / 5,984.7 fps` | `327 ms / 15.2 B / 9,299.7 fps` | **`323 ms / 22.4 B / 8,343.0 fps`** | **-45.9% startup, -99.45% Sim alloc, +39.4% FPS** |
+
 ## Evidence
 
 - [All 20 measured samples](benchmarks/2026-11-04/samples.json)
