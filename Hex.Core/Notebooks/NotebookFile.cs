@@ -77,6 +77,8 @@ internal static class NotebookFile
                 if (output is JsonObject one)
                     read.Outputs.Add(Joined(one));
             }
+            if (read.Outputs.Count > 0)
+                read.OutputsRevision++;
         }
 
         foreach (var (name, value) in cell)

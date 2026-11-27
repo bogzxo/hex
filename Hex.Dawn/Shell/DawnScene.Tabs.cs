@@ -15,8 +15,13 @@ internal sealed partial class DawnScene
     private Breadcrumbs crumbs = null!;
 
     // The breadcrumbs' pieces and what a click on each does
+    private static readonly Action NoopCrumb = static () => { };
     private readonly List<string> crumbParts = [];
     private readonly List<Action> crumbActions = [];
+    private readonly List<UIComponent> crumbChain = [];
+    private readonly List<OutlineEntry> crumbOutline = [];
+    private HexDocument? revealCrumbDoc;
+    private Action? revealCrumbAction;
     private (HexDocument? Document, int Version, int Line, UIComponent? Selected, HexView View, string? Path) crumbsFor;
 
     // The folder crumbs of the file on screen, which only its path changes, kept rather than worked out at each move
@@ -269,8 +274,13 @@ internal sealed partial class DawnScene
                         crumbFolders.Add(folder);
             }
 
-            HexDocument here = document;
-            Action reveal = () => RevealInExplorer(here);
+            if (!ReferenceEquals(revealCrumbDoc, document))
+            {
+                HexDocument here = document;
+                revealCrumbDoc = here;
+                revealCrumbAction = () => RevealInExplorer(here);
+            }
+            Action reveal = revealCrumbAction!;
             foreach (string folder in crumbFolders)
             {
                 crumbParts.Add(folder);
@@ -280,17 +290,18 @@ internal sealed partial class DawnScene
 
         string icon = IconOfDocument(document);
         crumbParts.Add($"$({icon}) {(document.IsText && document.Path is { } file ? Path.GetFileName(file) : document.Name)}");
-        crumbActions.Add(() => { });
+        crumbActions.Add(NoopCrumb);
 
         if (LayoutTools)
         {
             // What the selected component is inside of, the outermost first
-            List<UIComponent> chain = [];
+            crumbChain.Clear();
             for (UIComponent? at = document.Selected; at is not null && at != document.Module.Root; at = at.Parent)
-                chain.Insert(0, at);
+                crumbChain.Add(at);
 
-            foreach (UIComponent component in chain)
+            for (int i = crumbChain.Count - 1; i >= 0; i--)
             {
+                UIComponent component = crumbChain[i];
                 crumbParts.Add($"$(symbol-class) {document.NameOf(component)}");
                 crumbActions.Add(() => designer.Select(component));
             }
@@ -298,8 +309,10 @@ internal sealed partial class DawnScene
         else
         {
             // The lets and keys the caret is inside of, by the outline
-            foreach (var entry in OutlineAt(KeptOutline(), code.Document.Caret.Line))
+            OutlineAt(KeptOutline(), code.Document.Caret.Line, crumbOutline);
+            for (int i = 0; i < crumbOutline.Count; i++)
             {
+                OutlineEntry entry = crumbOutline[i];
                 crumbParts.Add(entry.Depth == 0 ? $"$(symbol-variable) {entry.Name}" : $"$(symbol-field) {entry.Name}");
                 crumbActions.Add(() => code.GoTo(entry.Line, entry.Column));
             }
@@ -309,9 +322,9 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>The entries of the outline a line is inside of, the outermost first, by how deep each is.</summary>
-    private static List<OutlineEntry> OutlineAt(List<OutlineEntry> outline, int line)
+    private static void OutlineAt(List<OutlineEntry> outline, int line, List<OutlineEntry> chain)
     {
-        List<OutlineEntry> chain = [];
+        chain.Clear();
         foreach (OutlineEntry entry in outline)
         {
             if (entry.Line > line)
@@ -321,8 +334,6 @@ internal sealed partial class DawnScene
                 chain.RemoveAt(chain.Count - 1);
             chain.Add(entry);
         }
-
-        return chain;
     }
 
     /// <summary>

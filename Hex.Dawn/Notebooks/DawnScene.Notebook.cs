@@ -36,6 +36,9 @@ internal sealed partial class DawnScene
     // The notebook whose cells are on screen, null while none is
     private HexNotebook? notebookShown;
     private bool notebookViewBuilt;
+    private int notebookFitStamp;
+    private (HexNotebook? Notebook, Vector2 Size, float Zoom, bool Wrap, float Flow, int Cells, float BgScale, float BgAcross, float BgUp, float BgStretch, float BgOpacity, float BgMargin, object? BgShape, Horizon.Graphics.Texture? BgPicture, int Stamp) lastNotebookFit;
+    private (UIRect BackdropBounds, UIRect FrameBounds, float ScrollOffset, float Flow, int Stamp) lastNotebookWrapFit;
 
     /// <summary>Whether a file is a Jupyter notebook, by its name.</summary>
     internal static bool IsNotebookFile(string? path) => path is not null && path.EndsWith(".ipynb", StringComparison.OrdinalIgnoreCase);
@@ -356,6 +359,44 @@ internal sealed partial class DawnScene
     private void FitNotebook()
     {
         Vector2 size = notebookView.Size;
+        var fitKey = (
+            notebookShown,
+            size,
+            settings.CodeZoom,
+            settings.WrapCode,
+            settings.WrapFlow,
+            cellViews.Count,
+            settings.BackdropScale,
+            settings.BackdropAcross,
+            settings.BackdropUp,
+            settings.BackdropStretch,
+            settings.BackdropOpacity,
+            settings.BackdropWrapMargin,
+            (object?)backdropShape,
+            backdropPicture,
+            notebookFitStamp);
+        bool wrapActive = backdropShape is not null && backdropPicture is { IsValid: true } && settings.BackdropOpacity > 0.0f;
+        var wrapKey = (
+            notebookBackdrop.Bounds,
+            notebookBackdrop.Module?.Frame ?? default,
+            notebookScroll.Offset,
+            settings.WrapFlow,
+            notebookFitStamp);
+
+        if (lastNotebookFit == fitKey)
+        {
+            if (wrapActive && lastNotebookWrapFit != wrapKey)
+            {
+                lastNotebookWrapFit = wrapKey;
+                for (int i = 0; i < cellViews.Count; i++)
+                    FitNotebookWrap(cellViews[i].Editor);
+            }
+            return;
+        }
+
+        lastNotebookFit = fitKey;
+        lastNotebookWrapFit = wrapKey;
+
         Vector2 scrollSize = new(size.X, MathF.Max(40.0f, size.Y - NOTEBOOK_BAR));
         if (notebookScroll.Size != scrollSize && NotebookShown)
             ((NotebookScrollPanel)notebookScroll).PreserveCentre(cellViews.Select(cell => (UIComponent)cell.Card));
@@ -364,8 +405,8 @@ internal sealed partial class DawnScene
         // Share the one viewport backdrop with the existing alpha-aware row wrapper.
         // WrapAreas are relative to each editor's text area, while the picture stays
         // fixed in the notebook viewport as cells scroll past it.
-        foreach (NotebookCellView view in cellViews)
-            FitNotebookWrap(view.Editor);
+        for (int i = 0; i < cellViews.Count; i++)
+            FitNotebookWrap(cellViews[i].Editor);
         notebookProblem.Size = notebookProblem.Size with { X = MathF.Max(100.0f, size.X - 32.0f) };
         float cells = MathF.Max(200.0f, size.X - notebookCells.Padding.Total.X - 14.0f);
         FitCellViews(cells);
@@ -375,17 +416,23 @@ internal sealed partial class DawnScene
     // Also called after each cell is arranged: scrolling changes the text origin after measurement.
     private void FitNotebookWrap(NotebookCellEditor editor)
     {
-        editor.WrapAreas.Clear();
-        editor.FlowRate = settings.WrapFlow;
         if (backdropShape is { } shape && backdropPicture is { IsValid: true } picture &&
             settings.BackdropOpacity > 0 && editor.BackdropRoom is { } room)
         {
+            editor.WrapAreas.Clear();
+            editor.FlowRate = settings.WrapFlow;
             UIRect placed = CodeEditor.PlaceBackdrop(notebookBackdrop.Bounds,
                 notebookBackdrop.Module?.Frame ?? notebookBackdrop.Bounds, picture,
                 settings.BackdropScale, new Vector2(settings.BackdropAcross, settings.BackdropUp), settings.BackdropStretch);
             editor.WrapAreas.Add(new UIWrapArea(shape,
                 new UIRect(placed.Min - room.Min, placed.Max - room.Min), settings.BackdropWrapMargin));
+            return;
         }
+
+        if (editor.WrapAreas.Count > 0)
+            editor.WrapAreas.Clear();
+        if (editor.FlowRate != settings.WrapFlow)
+            editor.FlowRate = settings.WrapFlow;
     }
 
 }

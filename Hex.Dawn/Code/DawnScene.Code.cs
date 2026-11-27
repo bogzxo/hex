@@ -155,7 +155,7 @@ internal sealed partial class DawnScene
         {
             if (fresh)
                 into.Editor.Text = text;
-            else if (into.Editor.Text != text)
+            else if (!into.Editor.Document.TextEquals(text))
                 into.Editor.Document.Replace(text);
         }
         finally

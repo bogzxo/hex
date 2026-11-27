@@ -42,7 +42,7 @@ internal sealed partial class HexLanguages
     {
         foreach (var (doc, owner) in linters)
             if (ReferenceEquals(owner, server) && doc.Path is { } path && lintIn.Remove(doc))
-                server.Change(path, doc.Editor.Text);
+                server.Change(path, doc.Editor.Document.CopyLines());
     }
     private sealed class PendingEditCommand(EditSnapshot snapshot)
     {

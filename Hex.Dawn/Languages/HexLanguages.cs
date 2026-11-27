@@ -340,7 +340,7 @@ internal sealed partial class HexLanguages
         linters[of] = server;
         lintSolutions[of] = solution;
         ServersChanged++;
-        server.Open(path, of.Editor.Text);
+        server.Open(path, of.Editor.Document.CopyLines());
         Console.WriteLine($"[Hex] {Path.GetFileName(path)} is linted by {server.Name}, started in {root}.");
 
         // A list waiting on a server that went (started again for a project, the file moved) is asked of this one
@@ -413,7 +413,7 @@ internal sealed partial class HexLanguages
             return;
 
         if (lintIn.Remove(saved))
-            server.Change(path, saved.Editor.Text);
+            server.Change(path, saved.Editor.Document.CopyLines());
         server.Saved(path);
     }
 
@@ -513,7 +513,7 @@ internal sealed partial class HexLanguages
                 lintIn.Remove(due);
                 if (linters.TryGetValue(due, out LanguageServer? server) && due.Path is { } path)
                 {
-                    server.Change(path, due.Editor.Text);
+                    server.Change(path, due.Editor.Document.CopyLines());
                     agentSent[Path.GetFullPath(path)] = System.Environment.TickCount64;
                 }
             }

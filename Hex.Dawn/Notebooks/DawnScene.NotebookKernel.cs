@@ -221,6 +221,7 @@ internal sealed partial class DawnScene
         notebook.Run.Answered();
         string shown = asked.Password ? new string('·', typed.Length) : typed;
         asked.Cell.Outputs.Add(new JsonObject { ["output_type"] = "stream", ["name"] = "stdout", ["text"] = asked.Prompt + shown + "\n" });
+        asked.Cell.OutputsRevision++;
         NotebookChanged(notebook);
     }
 

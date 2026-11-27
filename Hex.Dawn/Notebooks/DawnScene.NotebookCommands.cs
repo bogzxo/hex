@@ -181,7 +181,11 @@ internal sealed partial class DawnScene
         cell.Kind = kind;
         if (kind != CellKind.Code)
         {
-            cell.Outputs.Clear();
+            if (cell.Outputs.Count > 0)
+            {
+                cell.Outputs.Clear();
+                cell.OutputsRevision++;
+            }
             cell.ExecutionCount = null;
         }
 

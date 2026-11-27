@@ -89,8 +89,8 @@ internal sealed partial class HexGit
         known.DiffIn = 0.0f;
         known.Diffing = true;
         string? before = known.Staged;
-        string after = document.Editor.Text;
-        context.Work.InBackground("git diff", () => before is null ? [] : GitLineDiff.Diff(GitLineDiff.Lines(before), GitLineDiff.Lines(after)), hunks =>
+        string[] after = document.Editor.Document.CopyLines();
+        context.Work.InBackground("git diff", () => before is null ? [] : GitLineDiff.Diff(GitLineDiff.Lines(before), after), hunks =>
         {
             if (!tracked.TryGetValue(document, out Tracked? current) || current != known)
                 return;
