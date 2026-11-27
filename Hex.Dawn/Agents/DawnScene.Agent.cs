@@ -85,6 +85,7 @@ internal sealed partial class DawnScene
             void Draft()
             {
                 // On the device Runs on says: the box holds what was asked, sending it starts the agent there
+                EnsureAgentsPanel();
                 agentDraftContext = captured;
                 agentsInput.Text = asked(spot);
                 ShowAgentsPanel();
@@ -97,6 +98,7 @@ internal sealed partial class DawnScene
             return;
         }
 
+        EnsureAgentsPanel();
         string where = $"{HexSearch.RelativeTo(explorer.workspace.Folders, captured.Path)}:{captured.Line}";
         var chat = new HexAgentChat(++agentChatsMade, agent);
         agentChats.Add(chat);
@@ -148,6 +150,7 @@ internal sealed partial class DawnScene
         if (AgentFor(null) is null && LinkRunsOnPeer() is null && AgentOfferHost(() => RequestAgent(kind)))
             return;
         // Keep an existing draft editable, rather than replacing unsent instructions.
+        EnsureAgentsPanel();
         string instruction = Said(kind == "change" ? "agent.change_prompt" : "agent.explain_prompt");
         agentDraftContext = captured;
         if (string.IsNullOrWhiteSpace(agentsInput.Text) || agentsInput.Text == Said("agent.explain_prompt")

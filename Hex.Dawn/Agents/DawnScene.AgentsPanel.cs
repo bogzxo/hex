@@ -56,17 +56,28 @@ internal sealed partial class DawnScene
     private int agentsWidthDrawn = -1;
     private float agentsSystemsTallDrawn = -1.0f;
 
+    private bool agenticCommandsRegistered;
     private bool agentsPanelBuilt;
+
+    /// <summary>Registers Agentic's commands and process wakeup without building side-bar panel widgets upfront.</summary>
+    private void RegisterAgenticCommands()
+    {
+        if (agenticCommandsRegistered || !AgenticEnabled)
+            return;
+        agenticCommandsRegistered = true;
+        commands.Add("Agents/open", Said("agents_panel.command"), ShowAgentsPanel, "Ctrl+Alt+A", "robot", UIKeyUse.BoundWhileTyping);
+        RegisterNoonCommands();
+        HexAgentProcess.Woken = Engine.WindowManager.Wake;
+    }
 
     /// <summary>Builds the Agents side-bar view and registers Agentic's commands once when the Agentic module is enabled.</summary>
     private void EnsureAgentsPanel()
     {
         if (agentsPanelBuilt || !AgenticEnabled)
             return;
+        RegisterAgenticCommands();
         agentsPanelBuilt = true;
         BuildAgentsPanel();
-        RegisterNoonCommands();
-        HexAgentProcess.Woken = Engine.WindowManager.Wake;
     }
 
     /// <summary>Updates Agentic UI, ticks and activity button when <c>module_agentic</c> is toggled live in Settings.</summary>
@@ -75,7 +86,9 @@ internal sealed partial class DawnScene
         layout.Get<Button>("act_agents").Visible = AgenticEnabled;
         if (AgenticEnabled)
         {
-            EnsureAgentsPanel();
+            RegisterAgenticCommands();
+            if (Side == HexSide.Agents || Face == HexFace.Noon)
+                EnsureAgentsPanel();
             if (chatsKept is null)
                 BringBackChats();
         }
@@ -143,10 +156,19 @@ internal sealed partial class DawnScene
         BuildAgentImages();
 
         // The rows a chat no longer keeps in memory, in Hex's data folder, a self test's in a folder of its own it leaves behind
-        hub.History = new HexAgentHistory(options.SelfTest
-            ? Path.Combine(Path.GetTempPath(), "hex-selftest-history-" + System.Environment.ProcessId)
-            : Hex.Core.HexData.AgentHistory);
-        hub.History.Tidy(TimeSpan.FromDays(2));
+        if (chatsKept is not null)
+        {
+            hub.History = chatsKept.History;
+        }
+        else
+        {
+            var history = new HexAgentHistory(options.SelfTest
+                ? Path.Combine(Path.GetTempPath(), "hex-selftest-history-" + System.Environment.ProcessId)
+                : Hex.Core.HexData.AgentHistory);
+            hub.History = history;
+            if (!options.SelfTest)
+                _ = Task.Run(() => history.Tidy(TimeSpan.FromDays(2)));
+        }
         // What an agent another started asks leave to do goes to that one too (DawnScene.McpAgentApprovals)
         hub.ApprovalAsked = RouteApproval;
         agentsStop = made.Get<Button>("agents_stop");
@@ -183,8 +205,6 @@ internal sealed partial class DawnScene
         agentsNew.OnPressed = NewAgentChat;
         BuildAgentsOptions(made);
         BuildAgentsList();
-
-        commands.Add("Agents/open", Said("agents_panel.command"), ShowAgentsPanel, "Ctrl+Alt+A", "robot", UIKeyUse.BoundWhileTyping);
     }
 
     /// <summary>Whether the optional Agentic module is enabled this run (respects both <c>module_agentic</c> and <see cref="HexAi.Off"/>).</summary>

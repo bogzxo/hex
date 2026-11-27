@@ -53,7 +53,8 @@ internal sealed partial class DawnScene : ITerminalHostUi
             // What a compiler in a terminal says is wrong goes in the Problems panel, until a line is run again
             Problem = (problem, _) => AddTerminalProblem(problem.File, problem.Line, Math.Max(1, problem.Column), problem.Message, problem.Warning, read: true),
             ProblemsCleared = _ => ClearTerminalProblems(),
-            SettingsChanged = ApplyTerminalMotion
+            SettingsChanged = ApplyTerminalMotion,
+            DeferStartup = !options.SelfTest
         });
 
         // The host closes a pane whose shell ended, except a task's, kept so what it printed can still be read
@@ -189,6 +190,8 @@ internal sealed partial class DawnScene : ITerminalHostUi
         // first tick it was half a second of a first launch for a terminal nobody had opened, the code font's box drawing,
         // blocks and braille made into its field
         bool wanted = terminalPanel.Tabs.Count > 0 || (PanelOpen && bottom.Selected == CONSOLE_PAGE);
+        if (wanted)
+            terminals.EnsureStarted();
         if (!terminalFontSet && wanted && Horizon.Graphics.GraphicsDevice.IsAvailable)
         {
             terminalFontSet = true;

@@ -602,7 +602,11 @@ internal sealed partial class DawnScene
     private void DrawAgentsActivity()
     {
         if (agentsActivity is null)
-            return;
+        {
+            if (agentChats.Count == 0)
+                return;
+            agentsActivity = layout.Get<Button>("act_agents");
+        }
         // By their places, every tick, where going through the hub's list made a new enumerator each time
         int working = 0;
         for (int i = 0; i < agentChats.Count; i++)
